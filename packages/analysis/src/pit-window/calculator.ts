@@ -2,12 +2,26 @@
 // (the compound rule applied), the window from which a new set of it reaches the flag; the car's `window` state. Every lap
 // is a stop lap: the lap at whose end the car boxes. Quick (C31). Race only (C14): elsewhere our car's value is
 // `notApplicable`; `notReceived` until the tyre sets arrive.
-import { known, unknown, type CarId, type Known, type PitWindow, type PitWindowSet, type PitWindowState, type VisualCompound } from '@pitwall/domain';
+import {
+  known,
+  NOISE_COMPOUNDS,
+  unknown,
+  type CarId,
+  type Known,
+  type NoiseCompound,
+  type PitWindow,
+  type PitWindowSet,
+  type PitWindowState,
+  type TyreModelCar,
+  type TyreModelOutput,
+  type VisualCompound,
+} from '@pitwall/domain';
 import { openSpansOf, type EngineView, type QuickCalculator } from '@pitwall/engine/readers';
 import { behaviourFor, type BehaviourTable } from '../shared/behaviour.ts';
 import { owesSecondDryCompound } from '../shared/compound-rule.ts';
 import { ourCars } from '@pitwall/domain';
 import { TYRE_LIFE, type TyreLife, type TyreLifeOutput } from '../tyre-life/index.ts';
+import { TYRE_MODEL } from '../tyre-model/id.ts';
 import { PIT_WINDOW_BEHAVIOUR, phaseRow, type PitWindowEffect } from './behaviour.ts';
 import { PIT_WINDOW_CONFIG } from './config.ts';
 import { PIT_WINDOW, type PitWindowOutput } from './index.ts';
@@ -60,15 +74,16 @@ type StateContext = { currentLap: number; windowLeadLaps: number; closed: boolea
  * its window (stop laps `earliest` to `latest`, none when it does not reach the flag or opens after `latest`) and its state.
  */
 function setRow(
-  compound: VisualCompound,
+  compound: NoiseCompound,
   fitted: VisualCompound,
-  life: TyreLife | undefined,
+  model: TyreModelCar | undefined,
   flag: number,
   fromLap: number,
   latest: Known<number>,
   ctx: StateContext,
 ): PitWindowSet {
-  const lifeLaps: Known<number> = life?.freshLifeLaps[compound] ?? INSUFFICIENT;
+  // a fresh set's laps to the limit (`tyre-model`'s, the 70 % hard limit)
+  const lifeLaps: Known<number> = model?.compounds[compound].lapsToLimit ?? INSUFFICIENT;
   const earliest: Known<number> = lifeLaps.known ? known(Math.max(flag - lifeLaps.value, fromLap), lifeLaps.at) : lifeLaps;
   const lifeEnd: Known<number> = !lifeLaps.known ? lifeLaps : !latest.known ? latest : known(latest.value + lifeLaps.value, atOf(latest, lifeLaps));
   const reaches: Known<boolean> = lifeEnd.known ? known(lifeEnd.value >= flag, lifeEnd.at) : lifeEnd;
@@ -104,11 +119,14 @@ const byEarliest = (a: PitWindowSet, b: PitWindowSet): number => {
 };
 
 /** Our car's `pitWindow.car` value. */
-function pitWindowOf(view: EngineView, car: CarId, life: TyreLife | undefined, windowLeadLaps: number): Known<PitWindow> {
+function pitWindowOf(view: EngineView, car: CarId, life: TyreLife | undefined, model: TyreModelCar | undefined, windowLeadLaps: number): Known<PitWindow> {
   const state = view.live.cars[car];
   if (state === undefined) return unknown('notReceived');
   const { tyres } = state;
-  if (!tyres.sets.known) return tyres.sets;
+  // the fresh sets left: `tyre-model`'s judgement (SP4.2 "only new tyre sets"); `notReceived` until the sets arrive
+  if (model === undefined) return unknown('notReceived');
+  const fresh = NOISE_COMPOUNDS.map((c) => [c, model.freshSets[c]] as const);
+  for (const [, n] of fresh) if (!n.known) return n;
   const flag = view.live.session.totalLaps;
   const currentLap = state.timing.lap;
   const fitted = tyres.visualCompound;
@@ -127,17 +145,17 @@ function pitWindowOf(view: EngineView, car: CarId, life: TyreLife | undefined, w
   // a set that runs to the flag is never past its limit: `latest` is only capped at flag − 1 (SP4.2 fix re-review)
   const pastLimit = (lapsToLimit.known && lapsToLimit.value < 1) || (!noStop && latest.known && currentLap > latest.value);
   const stopNeeded: Known<boolean> = latest.known ? known(!noStop, latest.at) : latest;
-  const compounds: VisualCompound[] = [];
+  const compounds: NoiseCompound[] = [];
   if (!noStop) {
-    for (const s of tyres.sets.value.sets) {
-      if (!s.available || s.fitted || s.wearPct !== 0 || compounds.includes(s.visualCompound)) continue;
-      if (owesRule && s.visualCompound === fitted) continue;
-      compounds.push(s.visualCompound);
+    for (const [c, n] of fresh) {
+      if (!n.known || n.value <= 0) continue;
+      if (owesRule && c === fitted) continue;
+      compounds.push(c);
     }
   }
   // every window closes once the fitted set is past its limit or the car boxed since the stint start
   const ctx: StateContext = { currentLap, windowLeadLaps, closed: pastLimit || stoppedSince(view, car, sinceFrame) };
-  const sets = compounds.map((c) => setRow(c, fitted, life, flag, fromLap, latest, ctx)).sort(byEarliest);
+  const sets = compounds.map((c) => setRow(c, fitted, model, flag, fromLap, latest, ctx)).sort(byEarliest);
 
   // the car's window: its first same-type set with a window
   let window: Known<PitWindowState>;
@@ -158,14 +176,14 @@ function pitWindowOf(view: EngineView, car: CarId, life: TyreLife | undefined, w
 
   return known(
     { carId: car, flag, currentLap, stint: { compound: fitted, fromLap, latest, stopNeeded, pastLimit }, sets, window, windowCompound },
-    atOf(tyres.sets, latest),
+    atOf(...fresh.map(([, n]) => n), latest),
   );
 }
 
 export const pitWindowCalculator: QuickCalculator<PitWindowOutput> = {
   id: PIT_WINDOW,
   kind: 'quick',
-  reads: [{ calculator: TYRE_LIFE }, 'identity', 'tyres', 'session', 'laps', 'pitStops', 'stints', 'decisions', 'timing', 'spans:weekend-phase', 'spans:compound-rule', 'spans:car-activity-race'],
+  reads: [{ calculator: TYRE_LIFE }, { calculator: TYRE_MODEL }, 'identity', 'tyres', 'session', 'laps', 'pitStops', 'stints', 'decisions', 'timing', 'spans:weekend-phase', 'spans:compound-rule', 'spans:car-activity-race'],
   cadence: { hz: 4 },
   compute: (view): PitWindowOutput => {
     // the session's row (the weekend phase), over the race's (C14: a pending phase reads as the race)
@@ -181,8 +199,9 @@ export const pitWindowCalculator: QuickCalculator<PitWindowOutput> = {
       return out;
     }
     const lives = view.outputs.get(TYRE_LIFE) as TyreLifeOutput | undefined;
+    const models = view.outputs.get(TYRE_MODEL) as TyreModelOutput | undefined;
     const { windowLeadLaps } = PIT_WINDOW_CONFIG.read(view);
-    for (const car of cars) out[car] = pitWindowOf(view, car, lives?.[car], windowLeadLaps);
+    for (const car of cars) out[car] = pitWindowOf(view, car, lives?.[car], models?.[car], windowLeadLaps);
     return out;
   },
 };

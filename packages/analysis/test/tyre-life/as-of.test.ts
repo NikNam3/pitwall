@@ -8,10 +8,15 @@ import { asOfNow, projectionAsOf, projectionLengths, type AsOfView, type EngineV
 import { describe, expect, it } from 'vitest';
 import { degradationCalculator } from '../../src/degradation/calculator.ts';
 import { DEGRADATION } from '../../src/degradation/index.ts';
+import { trackWetnessCalculator } from '../../src/track-wetness/calculator.ts';
+import { TRACK_WETNESS } from '../../src/track-wetness/index.ts';
 import { tyreLifeCalculator } from '../../src/tyre-life/calculator.ts';
 import { tyreLifeAsOf } from '../../src/tyre-life/index.ts';
 import type { TyreLifeOutput } from '../../src/tyre-life/types.ts';
-import { CORNERS } from '../../src/shared/wear-rate.ts';
+import { TYRE_MODEL, tyreModelCalculator } from '../../src/tyre-model/index.ts';
+
+// ported in SP4.3c Task 12: `shared/wear-rate.ts` (and its `CORNERS`) is deleted; tyre-life's upstream is `tyre-model`
+const CORNERS = ['fl', 'fr', 'rl', 'rr'] as const;
 import { carState, lap } from '../../../../test-support/builders/index.ts';
 import type { BuilderRace } from '../../../../test-support/builders/long-race.ts';
 import { GENERATOR_DEFAULTS, generateRace, type GeneratorParams } from '../../../../test-support/race-generator/index.ts';
@@ -61,8 +66,16 @@ const projectionDerived = (out: TyreLifeOutput) =>
     }),
   );
 
-/** `degradation`'s output from the scheduled run on `view`: the upstream output `tyre-life` reads (R2). */
-const upstreamOn = (view: EngineView): EngineView['outputs'] => new Map([[DEGRADATION, degradationCalculator.compute(view)]]);
+/**
+ * `tyre-model`'s output from the scheduled run on `view` (on `degradation`'s and `track-wetness`'s): the upstream output
+ * `tyre-life` reads (R2; SP4.3c Task 12).
+ */
+const upstreamOn = (view: EngineView): EngineView['outputs'] => {
+  const outputs = new Map<string, unknown>();
+  outputs.set(DEGRADATION, degradationCalculator.compute({ ...view, outputs }));
+  outputs.set(TRACK_WETNESS, trackWetnessCalculator.compute({ ...view, outputs }));
+  return new Map([[TYRE_MODEL, tyreModelCalculator.compute({ ...view, outputs })]]);
+};
 
 /** The scheduled run's view at `frame` (its delta from `from`), with `degradation`'s output on it. */
 const scheduledAt = (frame: FrameNumber, from?: FrameNumber): EngineView => {
@@ -134,7 +147,7 @@ describe('tyre-life as of frame N', () => {
           }),
         );
       const car = carState({ tyres: { age: 3, corners: { fl: { wearPct: known(6 as Percent, 270_000) }, fr: { wearPct: known(6 as Percent, 270_000) }, rl: { wearPct: known(6 as Percent, 270_000) }, rr: { wearPct: known(6 as Percent, 270_000) } } } });
-      const upstream = new Map([[DEGRADATION, {}]]);
+      const upstream = upstreamOn(situatedView({ cars: [car], sessionTime: 270_000, history: { laps: laps(3) } }));
       const before = projectionLengths(situatedView({ history: { laps: laps(5) } }).history);
       const at = (rewind: boolean): EngineView => {
         const view = situatedView({ cars: [car], sessionTime: 270_000, history: { laps: laps(3) }, outputs: upstream });

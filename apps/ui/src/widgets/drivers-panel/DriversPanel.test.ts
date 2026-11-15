@@ -36,6 +36,8 @@ import { formatDay, formatTrack, formatWeekendPhase } from '../../kit/values/for
 import { role } from '../../theme/index.ts';
 import DriversPanel from './DriversPanel.svelte';
 import { cases, key, KUH, kuh, kuhSessions, LIN, MERCEDES, SESSIONS, type PanelData } from './fixtures.ts';
+import { entrySpec } from './rows.ts';
+import { entryLabels } from './text.ts';
 import { widget } from './widget.ts';
 
 afterEach(() => {
@@ -154,15 +156,24 @@ describe('drivers-panel', () => {
       [key.mistakeRate, '0.024', '214', '5', '2026-11-08'],
       [key.mistakeMedian, '1.9', '214', '5', '2026-11-08'],
       [key.mistakeSigmaLog, '0.55', '214', '5', '2026-11-08'],
-      [key.wear('soft'), '3.1', '22', '2', '2026-11-07'],
-      [key.wear('medium'), '2.2', '118', '4', '2026-11-08'],
-      [key.wear('hard'), '1.6', '74', '3', '2026-11-01'],
+      // SP4.3c Task 12: the wear entries are tyre-model's factor k per compound (`tyreModel.wearFactor.*`), two decimals
+      [key.wear('soft'), '1.19', '22', '2', '2026-11-07'],
+      [key.wear('medium'), '1.31', '118', '4', '2026-11-08'],
+      [key.wear('hard'), '1.24', '74', '3', '2026-11-01'],
     ];
     for (const [k, value, laps, ses, newest] of shown) {
       expect(textOf(c, `entry-${KUH}-${k}`), k).toBe(value);
       const row = get(c, `entry-row-${KUH}-${k}`).textContent ?? '';
       expect(row, k).toMatch(new RegExp(`\\b${laps}\\s+${ses}\\s+${formatDay(newest)}`));
     }
+    // the factor's label names k and its compound, no rate unit (a factor, scale-free, spec §5.2)
+    for (const [compound, letter] of [['soft', 'S'], ['medium', 'M'], ['hard', 'H']] as const) {
+      const label = entrySpec(key.wear(compound)).label;
+      expect(label, compound).toMatch(/\bk\b/);
+      expect(label, compound).toContain(letter);
+      expect(label, compound).not.toMatch(/%/);
+    }
+    expect(Object.keys(entryLabels).filter((k) => k.startsWith('driverNoise.wearRatePct.'))).toEqual([]);
     // lin's soft wear is unknown: the kit's mark with the reason on hover
     const softLin = get(c, `entry-${LIN}-${key.wear('soft')}`);
     expect(softLin.textContent?.trim()).toBe(unknownMark.insufficientData);

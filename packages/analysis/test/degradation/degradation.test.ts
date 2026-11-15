@@ -339,6 +339,11 @@ describe('degradation: the stint start without priors (spec 4.1, 4.4)', () => {
     const s = stintsOf(view({ laps: one(), track: known(track, 0), priors }))[0]!;
     expect(s.source).toMatchObject({ kind: 'calibration', setName: 'Zandvoort long runs' });
   });
+
+  it('a stint carries no wear rate any more: the wear rate is tyre-model`s (SP4.3c Task 12, spec §5.2 "Deletes")', () => {
+    const s = stintsOf(view({ laps: one(), track: known(track, 0) }))[0]! as unknown as Record<string, unknown>;
+    expect(s).not.toHaveProperty('wearRatePctPerLap');
+  });
 });
 
 describe('degradation: the fit band and the start prior a stint carries (R19, C43)', () => {

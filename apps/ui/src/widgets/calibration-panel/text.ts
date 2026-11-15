@@ -58,8 +58,7 @@ export const suggestionsTitle = 'SUGGESTIONS';
 export const suggestionsHover = 'our stints on this track not in the set, this weekend first';
 export const noSuggestions = 'none';
 export const valuesTitle = 'VALUES PER COMPOUND';
-export const valuesHover = 'deg s/lap, wear %/lap; ovr = your override';
-export const limitsTitle = 'LIMITS';
+export const valuesHover = 'deg s/lap; ovr = your override';
 export const pitTitle = 'PIT LOSS PER CONDITION';
 export const pitNote = `${separator}s`;
 export const overrideRow = 'ovr';
@@ -94,12 +93,10 @@ export const neverPace = { notForPace: 'other', inLap: 'in', outLap: 'out', neut
 export const neverPaceHover = 'not a pace lap: never used';
 
 /** Headers of the values table by column key. */
-export const valueHeaders = { cmp: 'CMP', offset: 'TO MED', deg: 'DEG/LAP', sd: 'SD', fl: 'FL', fr: 'FR', rl: 'RL', rr: 'RR', n: 'N' } as const;
+export const valueHeaders = { cmp: 'CMP', offset: 'TO MED', deg: 'DEG/LAP', sd: 'SD', n: 'N' } as const;
 /** An entry no source of the set covers. */
 export const noSource = 'no source in this set covers it';
 export const overrideHover = (value: string): string => `your override ${value}`;
-/** The two limits of tyre-life. */
-export const limits = { wearLimit: 'wear limit', ageLossLimit: 'age loss limit' } as const;
 /** The pit-loss conditions and the table's headers. */
 export const conditions = { green: 'green', vsc: 'VSC', sc: 'SC' } as const;
 export const pitHeaders = { cond: 'COND', set: 'SET', stops: 'STOPS', ovr: 'OVR' } as const;

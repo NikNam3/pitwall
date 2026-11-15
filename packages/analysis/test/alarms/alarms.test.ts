@@ -17,6 +17,22 @@ import { TYRE_LIFE } from '../../src/tyre-life/index.ts';
 import { tyreLifeCalculator } from '../../src/tyre-life/calculator.ts';
 import { TYRE_WEAR } from '../../src/tyre-wear/index.ts';
 import { tyreWearCalculator } from '../../src/tyre-wear/calculator.ts';
+import { DEGRADATION } from '../../src/degradation/index.ts';
+import { degradationCalculator } from '../../src/degradation/calculator.ts';
+import { TRACK_WETNESS } from '../../src/track-wetness/index.ts';
+import { trackWetnessCalculator } from '../../src/track-wetness/calculator.ts';
+import { TYRE_MODEL, tyreModelCalculator } from '../../src/tyre-model/index.ts';
+
+/**
+ * `view`'s outputs with `tyre-model`'s on it (on `degradation`'s and `track-wetness`'s): the upstream `tyre-life` reads
+ * (ported in SP4.3c Task 12: tyre-life is a reader of tyre-model).
+ */
+const withTyreModel = (view: EngineView): Map<string, unknown> => {
+  const outputs = new Map<string, unknown>(view.outputs);
+  outputs.set(DEGRADATION, degradationCalculator.compute({ ...view, outputs }));
+  outputs.set(TRACK_WETNESS, trackWetnessCalculator.compute({ ...view, outputs }));
+  return new Map([...view.outputs, [TYRE_MODEL, tyreModelCalculator.compute({ ...view, outputs })]]);
+};
 import { NONE, openSpan, PRACTICE, QUALIFYING, RACE, situatedView } from '../situated.ts';
 import { withSetup } from '../own-car.ts';
 import { scheduled } from '../scheduled.ts';
@@ -334,7 +350,8 @@ describe('alarms calculator', () => {
       const corners = perCorner(() => ({ wearPct: known(76, 0) }));
       const wearParts = { cars: [carState({ tyres: { corners } })], history: { laps: [64, 68, 72].map((w, i) => lap({ lapNumber: i + 1, wearAtEndPct: perCorner(() => known(w, 0)) })) } };
       // tyre-wear publishes from tyre-life's output (spec 4.2): tyre-life computes on the view first
-      const tyreLife = tyreLifeCalculator.compute(situatedView(wearParts));
+      const base = situatedView(wearParts);
+      const tyreLife = tyreLifeCalculator.compute({ ...base, outputs: withTyreModel(base) });
       const wear = tyreWearCalculator.compute(situatedView({ ...wearParts, outputs: new Map([[TYRE_LIFE, tyreLife]]) }))[carId(0)]!;
       expect(wear.corners.fl.lapsToLimit).toMatchObject({ known: true, value: 0 });
       expect(only(viewWith({ wear }), 'wearLimitNear').map((i) => i.key)).toEqual(['wearLimitNear:0:wear.fl', 'wearLimitNear:0:wear.fr', 'wearLimitNear:0:wear.rl', 'wearLimitNear:0:wear.rr']);
@@ -879,7 +896,7 @@ describe('hidden data of one of our cars (Review Focus 5)', () => {
     const remaining: SessionRemaining = { basis: 'laps', lapsLeft: known(10, 0), timeLeftMs: unknown('notApplicable') };
     const base = situatedView({ cars: [carState(), car], history: { laps }, sessionTime: NOW, outputs: new Map([[SESSION_REMAINING, remaining]]) });
     const view: EngineView = { ...base, live: { ...base.live, teammateCar: TEAMMATE } };
-    const tyreLife = tyreLifeCalculator.compute(view);
+    const tyreLife = tyreLifeCalculator.compute({ ...view, outputs: withTyreModel(view) });
     const outputs = new Map<string, unknown>([
       [SESSION_REMAINING, remaining],
       [TYRE_WEAR, tyreWearCalculator.compute({ ...view, outputs: new Map([[TYRE_LIFE, tyreLife]]) })],
@@ -899,7 +916,11 @@ describe('hidden data of one of our cars (Review Focus 5)', () => {
   it("a teammate whose driver withholds the telemetry: wear, fuel and ERS stay unknown('restricted') and raise no alarm", () => {
     const { outputs, alarms } = chain(telemetryRestricted(teammate()), hiddenLaps());
     const wear = (outputs.get(TYRE_WEAR) as Record<number, TyreWear>)[TEAMMATE]!;
-    for (const corner of CORNER_IDS) expect(wear.corners[corner]).toEqual({ wearPct: restricted, ratePctPerLap: restricted, lapsToLimit: restricted });
+    // the rate is tyre-model's (SP4.3c Task 12): unknown with tyre-model's reason; the wear and laps to the limit restricted
+    for (const corner of CORNER_IDS) {
+      expect(wear.corners[corner]).toMatchObject({ wearPct: restricted, lapsToLimit: restricted });
+      expect(wear.corners[corner].ratePctPerLap.known, corner).toBe(false);
+    }
     const fuel = (outputs.get(FUEL) as Record<number, FuelState>)[TEAMMATE]!;
     expect([fuel.kg, fuel.burnKgPerLap, fuel.lapsOfFuel, fuel.marginLaps, fuel.saveTargetKgPerLap]).toEqual([restricted, restricted, restricted, restricted, restricted]);
     const ers = (outputs.get(ERS) as Record<number, ErsState>)[TEAMMATE]!;

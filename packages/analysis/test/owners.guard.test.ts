@@ -50,6 +50,24 @@ function codeMatches(unit: UnitDecl, pattern: RegExp): boolean {
  */
 const LEADER_BY_POSITION = /\bposition(?:AtEnd)?\s*[!=]==?\s*1\b|\b1\s*[!=]==?\s*\w+\.position(?:AtEnd)?\b/;
 
+/** A fresh-set predicate: a set's wear compared with 0 (new), either way round. */
+const FRESH_SET = /\.wearPct\s*[!=]==?\s*0(?![\d.])|(?<![\d.])0\s*[!=]==?\s*[\w.]+\.wearPct\b/;
+
+/** The laps-to-limit rule: the limit less the wear, or the limit over a rate (`limitPct - …`, `limitPct / …`). */
+const LAPS_TO_LIMIT = /\blimitPct\s*[-/]/;
+
+/** A numeric literal 70 (not part of another number: `0.70`, `170`, `70_000`, `7.0` stay out). */
+const LITERAL_70 = /(?<![\w.])70(?![\w.])/;
+
+/** `code` without its string and template literals (a note that quotes "70" is no literal of the limit). */
+const withoutStrings = (code: string): string => code.replace(/'(?:[^'\\\n]|\\.)*'|"(?:[^"\\\n]|\\.)*"|`(?:[^`\\]|\\.)*`/g, "''");
+
+/** Whether the code of a unit's source files, comments and strings left out, matches `pattern`. */
+function literalMatches(unit: UnitDecl, pattern: RegExp): boolean {
+  if (unit.folder === undefined) return false;
+  return sourceFiles(join(ROOT, unit.folder)).some((file) => pattern.test(withoutStrings(codeOf(readFileSync(file, 'utf8')))));
+}
+
 /** The owners (spec §5.2–§5.3); each owner task adds its row. */
 const OWNERS: OwnerRow[] = [
   // SP4.3c Task 5 (O7): which laps count is `lap-classes`' (`isNeutralisedLap`, `touchesNeutralisation`); no other unit
@@ -59,6 +77,35 @@ const OWNERS: OwnerRow[] = [
   // other unit finds the leader now in the raw order (the live timing's position, a lap record's position at its end).
   // `forecast-score` scores past races lap by lap from their stored laps (`forecasts.ts`), not the race now.
   { judgement: 'gaps and order now', owner: 'gaps', source: (u) => codeMatches(u, LEADER_BY_POSITION), allowed: ['forecast-score'] },
+  // SP4.3c Task 12 (O1, spec §5.2): tyre rates, offsets and availability are `tyre-model`'s; no other unit reads the
+  // game's tyre sets (the live state's `tyres.sets`, a lap record's `tyreSets`, or their fields). `track-wetness` may,
+  // only for the slick delta as a wetness reading (O3, research 22 §1.9); `degradation` may, only for its filter prior
+  // through `shared/tyre-prior.ts` (the plan's interface: the game's usable life and loss per %, no unit read).
+  {
+    judgement: 'tyre rates, offsets and availability',
+    owner: 'tyre-model',
+    source: (u) => codeNames(u, ['tyreSets', 'fittedIdx', 'usableLifeLaps', 'lapDeltaMs', 'lifeSpanLaps', 'tyres\\.sets', 'setsNow']),
+    // `forecast-score` only writes `setsNow: null` into the past views it builds (a past frame has no sets now).
+    // `shared/tyre-prior.ts` holds the shared rules over the sets (fix round 2: the fresh-set pick, the game's loss).
+    allowed: ['track-wetness', 'degradation', 'forecast-score', 'shared/tyre-prior.ts'],
+  },
+  // SP4.3c Task 12 fix round 2 (C43): `degradation` reads the game's sets only through `shared/tyre-prior.ts`: it hands
+  // a lap record's `tyreSets` over and names no field of a set (its usable life, its delta, the fitted index).
+  {
+    judgement: "the game's set fields (degradation through shared/tyre-prior)",
+    owner: 'tyre-model',
+    source: (u) => codeNames(u, ['usableLifeLaps', 'lapDeltaMs', 'fittedIdx', 'lifeSpanLaps']),
+    allowed: ['shared/tyre-prior.ts', 'track-wetness'],
+  },
+  // SP4.3c Task 12 fix round 2 (C43): which set is fresh (new, `wearPct === 0`) is decided by `tyre-model` and the shared
+  // pick `bestFreshSet` of `shared/tyre-prior.ts` alone.
+  { judgement: 'the fresh-set pick', owner: 'tyre-model', source: (u) => codeMatches(u, FRESH_SET), allowed: ['shared/tyre-prior.ts'] },
+  // SP4.3c Task 12 fix round 2 (C43): laps to the wear limit ((limit − wear) / rate, 0 at or past it) are computed by
+  // `lapsToLimitOf` of `shared/tyre-prior.ts` alone; tyre-model and tyre-life call it.
+  { judgement: 'laps to the limit', owner: 'shared/tyre-prior.ts', source: (u) => codeMatches(u, LAPS_TO_LIMIT), allowed: [] },
+  // SP4.3c Task 12 fix round 2 (C47, C3): the wear limit 70 % is `tyre-model`'s config key `limitPct` alone; no other
+  // unit has a literal 70 in its code (strings and comments left out).
+  { judgement: 'the wear limit literal', owner: 'tyre-model', source: (u) => literalMatches(u, LITERAL_70), allowed: [] },
 ];
 
 /** A path as the guard shows it: repo-relative with forward slashes. */
@@ -183,6 +230,32 @@ describe('owners guard (spec §5.8)', () => {
       expect(LEADER_BY_POSITION.test(codeOf('if (1 === car.position) x();'))).toBe(true);
       expect(LEADER_BY_POSITION.test(codeOf('// the car with position === 1\nconst p = position === 10;'))).toBe(false);
       expect(LEADER_BY_POSITION.test(codeOf('const g = timing.gridPosition - timing.position;'))).toBe(false);
+    });
+
+    it('fix round 2 patterns: a fresh-set predicate, the laps-to-limit rule, a literal 70 (in code only, not in strings)', () => {
+      expect(FRESH_SET.test(codeOf('const f = s.available && s.wearPct === 0;'))).toBe(true);
+      expect(FRESH_SET.test(codeOf('if (0 == set.wearPct) x();'))).toBe(true);
+      expect(FRESH_SET.test(codeOf('const w = s.wearPct === 0.5; // s.wearPct === 0'))).toBe(false);
+      expect(LAPS_TO_LIMIT.test(codeOf('known((limitPct - wear.value) / rate.value, 0)'))).toBe(true);
+      expect(LAPS_TO_LIMIT.test(codeOf('known(v.c.limitPct / worst.value.value, 0)'))).toBe(true);
+      expect(LAPS_TO_LIMIT.test(codeOf('return (k * limitPct) / usableLife;'))).toBe(false);
+      expect(LITERAL_70.test(withoutStrings(codeOf('const limitPct = car?.limitPct ?? 70;')))).toBe(true);
+      expect(LITERAL_70.test(withoutStrings(codeOf("const note = 'k · 70 / usableLife'; // 70 %")))).toBe(false);
+      expect(LITERAL_70.test(withoutStrings(codeOf('const a = 0.70 + 170 + 70_000 + 7.0;')))).toBe(false);
+    });
+
+    it('fix round 2: degradation and tyre-model both call the shared fresh-set pick; tyre-model and tyre-life the shared laps-to-limit rule', () => {
+      const PRIOR = 'packages/analysis/src/shared/tyre-prior.ts';
+      for (const name of ['degradation', 'tyre-model']) {
+        const u = unit(name);
+        expect(u?.imports, name).toContain(PRIOR);
+        expect(u !== undefined && codeNames(u, ['bestFreshSet']), `${name} calls bestFreshSet`).toBe(true);
+      }
+      for (const name of ['tyre-model', 'tyre-life']) {
+        const u = unit(name);
+        expect(u?.imports, name).toContain(PRIOR);
+        expect(u !== undefined && codeNames(u, ['lapsToLimitOf']), `${name} calls lapsToLimitOf`).toBe(true);
+      }
     });
 
     it('a row names every unit but the owner and the allowed ones that reads its source, by reads or by import', () => {

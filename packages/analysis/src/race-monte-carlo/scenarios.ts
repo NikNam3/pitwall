@@ -1,7 +1,7 @@
 // One scenario (SP4.3b spec §7.1): its neutralisations drawn from `race-hazard`'s tables, and our cars' policies as
 // they play out in it (their triggers fired). Every draw is keyed by (scenario, car, lap, purpose) under the run's base
 // seed (C2, S25), so a scenario is the same for every candidate (common random numbers).
-import type { ForecastResult, NoiseCompound, Policy, Scenario, StartingPoint } from '@pitwall/domain';
+import { tyreIndex, type ForecastResult, type NoiseCompound, type Policy, type Scenario, type StartingPoint } from '@pitwall/domain';
 import type { Rng } from '@pitwall/engine/readers';
 import { drawsInto, normal, PURPOSE, streamKey, uniform, type Draws } from '../race-forecast/draws.ts';
 import { raceForecast } from '../race-forecast/index.ts';
@@ -195,11 +195,12 @@ function wearRateOff(run: Run, id: number): Float64Array {
   const out = new Float64Array(start.cars);
   const draws = drawsInto(run.forecastBase, id, new Int32Array(start.cars));
   for (const c of run.ours) {
-    const deg = start.degMsPerLap[c] ?? 0;
-    const sd = start.degSdMs[c] ?? 0;
+    const t = tyreIndex(c, start.compound[c] ?? 0);
+    const deg = start.tyre.degMsPerLap[t] ?? 0;
+    const sd = start.tyre.degSdMs[t] ?? 0;
     if (!(deg > 0) || sd === 0) continue;
     const drawn = deg + sd * normal(streamKey(draws, c, 0), PURPOSE.deg, 0);
-    out[c] = (start.wearRatePct[c] ?? 0) * (drawn / deg - 1);
+    out[c] = (start.tyre.wearRatePct[t] ?? 0) * (drawn / deg - 1);
   }
   return out;
 }

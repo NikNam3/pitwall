@@ -148,32 +148,23 @@ export type ValueSpec = { key: string; width: number; unit: Unit; slot?: true };
 
 const S3: Unit = { kind: 'seconds', decimals: 3, signed: true, withUnit: false };
 const SD: Unit = { kind: 'seconds', decimals: 3, signed: false, withUnit: false };
-const WEAR: Unit = { kind: 'percent', decimals: 1, withUnit: false };
 
-/** Priors keys, as the units declare them (`priors.ts` of degradation, tyre-life and pit-loss). */
+/** Priors keys, as the units declare them (`priors.ts` of degradation and pit-loss). */
 const degKey = (c: VisualCompound): string => `degradation.nuMsPerLap.${c}`;
-const CORNERS = ['fl', 'fr', 'rl', 'rr'] as const;
 
 /** The compounds of the values table. */
 export const COMPOUNDS = ['soft', 'medium', 'hard'] as const satisfies readonly VisualCompound[];
-export type ValueColumn = 'offset' | 'deg' | 'sd' | (typeof CORNERS)[number];
+export type ValueColumn = 'offset' | 'deg' | 'sd';
 
 /** A compound's row of the values table, by column. */
 export const compoundSpecs = (c: VisualCompound): { column: ValueColumn; spec: ValueSpec }[] => [
   { column: 'offset', spec: { key: `degradation.alphaOffsetMs.${c}`, width: 7, unit: S3, slot: true } },
   { column: 'deg', spec: { key: degKey(c), width: 7, unit: S3, slot: true } },
   { column: 'sd', spec: { key: `degradation.nuSdMs.${c}`, width: 6, unit: SD, slot: true } },
-  ...CORNERS.map((corner) => ({ column: corner, spec: { key: `tyreLife.wearPerLapPct.${c}.${corner}`, width: 4, unit: WEAR } })),
 ];
 export const compoundLabel = compoundLetter;
 /** The key whose samples a compound's N shows: its DEG/LAP's (the three keys of a compound count the same sources). */
 export const samplesKey = degKey;
-
-/** Tyre-life's two per-set limits. */
-export const LIMIT_SPECS: { name: keyof typeof text.limits; spec: ValueSpec }[] = [
-  { name: 'wearLimit', spec: { key: 'tyreLife.wearLimitPct', width: 4, unit: { kind: 'percent', decimals: 0, withUnit: true } } },
-  { name: 'ageLossLimit', spec: { key: 'tyreLife.ageLossLimitMs', width: 7, unit: { kind: 'seconds', decimals: 3, signed: false, withUnit: true } } },
-];
 
 /** Pit loss per condition. */
 export const PIT_SPECS: { condition: keyof typeof text.conditions; spec: ValueSpec }[] = (['green', 'vsc', 'sc'] as const).map((condition) => ({

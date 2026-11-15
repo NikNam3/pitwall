@@ -179,7 +179,7 @@ export function stintOf(c: CarLaps): StintDegradation {
   const laps = carLaps(c);
   const at = laps.at(-1)?.completedAt ?? 0;
   const compound = c.compound ?? 'medium';
-  const rate = c.wear === 'hidden' ? unknown('realism') : known(1, at);
+  // ported in SP4.3c Task 12: a stint carries no wear rate any more (tyre-model's, spec §5.2)
   return {
     stint: 1,
     firstLap: laps[0]?.lapNumber ?? 1,
@@ -191,7 +191,6 @@ export function stintOf(c: CarLaps): StintDegradation {
     nuSdMs: known(5, at),
     basis: c.wear === 'hidden' ? 'age' : 'wear',
     fuelCorrected: true,
-    wearRatePctPerLap: { fl: rate, fr: rate, rl: rate, rr: rate },
     source: { kind: 'session', sessionShare: 1, parts: `${laps.length} laps` },
     cov: known([[100, 0], [0, 1]], at),
     startPrior: { nuMsPerLap: 0, nuSdMs: 30, alphaOffsetMs: known(0, 0), source: { kind: 'default', note: 'test', sessionShare: 0, parts: 'default' } },

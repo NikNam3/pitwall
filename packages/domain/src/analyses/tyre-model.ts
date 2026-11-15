@@ -36,6 +36,12 @@ export type TyreModelCar = {
   freshSets: Record<NoiseCompound, Known<number>>;
   /** The wear limit no stint is planned past, in %. */
   limitPct: number;
+  /** Laps the fitted set has left until `limitPct` from its current wear (the compounds' `lapsToLimit` are a fresh set's); 0 at or past it. */
+  fittedLapsToLimit: Known<number>;
+  /** The fitted set's life span as the game states it (`TyreSet.lifeSpanLaps`). */
+  fittedLifeSpanLaps: Known<number>;
+  /** Our car's used sets left with their wear (the starting point's `sets`); a rival's `unknown('notApplicable')`. */
+  usedSets: Known<{ compound: NoiseCompound; wearPct: number }[]>;
 };
 
 /** `tyre-model`'s output: every car's model. */

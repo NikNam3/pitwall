@@ -40,7 +40,7 @@ import { sourceTitle } from '../../kit/values/source-badge.ts';
 import { role } from '../../theme/index.ts';
 import CalibrationPanel from './CalibrationPanel.svelte';
 import {
-  cases, fp1Kuh, fp2LinSoft, key, leagueDefaults, MONZA, raceKuh, raceLin, SILVERSTONE, TRACK_NOTE, type PanelData,
+  cases, DELETED_KEYS, fp1Kuh, fp2LinSoft, key, leagueDefaults, MONZA, raceKuh, raceLin, SILVERSTONE, TRACK_NOTE, type PanelData,
 } from './fixtures.ts';
 import * as text from './text.ts';
 import { widget } from './widget.ts';
@@ -203,10 +203,16 @@ describe('calibration-panel: each control sends its action with the exact payloa
     expect(sent).toEqual([{ kind: 'calibration.override.set', ...league, key: key.pit('green'), value: 21_500 }]);
   });
 
-  it('a wear override is typed and sent in % per lap', async () => {
-    const { container: c, sent } = mount(cases.activeLeague);
-    await commit(c, `override-${key.wear('medium', 'fl')}`, '2.1');
-    expect(sent).toEqual([{ kind: 'calibration.override.set', ...league, key: key.wear('medium', 'fl'), value: 2.1 }]);
+  // SP4.3c Task 12 (spec §5.2, C43): tyre-life's wear-rate entries, its age-loss limit and its wear limit are deleted
+  // (the wear rate is tyre-model's, the 70 % limit `tyre-model.limitPct` alone); the wear-override test went with them.
+  it('shows no tyre-life value, override field or limits row any more', () => {
+    const { container: c } = mount(cases.activeLeague);
+    for (const k of DELETED_KEYS) {
+      expect(c.querySelector(`[data-testid="value-${k}"]`), k).toBeNull();
+      expect(c.querySelector(`[data-testid="override-${k}"]`), k).toBeNull();
+    }
+    expect(c.innerHTML).not.toContain('tyreLife.');
+    expect(Object.keys(text as Record<string, unknown>)).not.toContain('limits');
   });
 
   it('a field holds the set\'s override; emptying it sends calibration.override.clear', async () => {
@@ -314,10 +320,15 @@ describe('calibration-panel: what a source and a value show', () => {
   });
 
   // Ported (SP4.1a fx3b, C82): soft's DEG/LAP now has a default (R35); a value without a source and without a default
-  // (tyre-life's wear rates declare no fallback) keeps the unknown mark.
+  // keeps the unknown mark. Ported again in SP4.3c Task 12: tyre-life's wear rates (the fixture's key without a default)
+  // are deleted, so the case drops the league set's SC pit-loss default (uncovered, its default gone).
   it('a value no source covers and no default fills shows the unknown mark with why on hover; the panel carries no ᶜ (README Q3 A)', () => {
-    const { container: c } = mount(cases.activeLeague);
-    const cell = get(c, `value-${key.wear('soft', 'fl')}`);
+    const data = structuredClone(cases.activeLeague) as PanelData;
+    const bySet = (data.values as unknown as { bySet: Record<string, { defaults: Record<string, unknown> }> }).bySet;
+    const league = bySet['league']!;
+    league.defaults = Object.fromEntries(Object.entries(league.defaults).filter(([k]) => k !== key.pit('sc')));
+    const { container: c } = mount(data);
+    const cell = get(c, `value-${key.pit('sc')}`);
     expect(cell.textContent?.trim()).toBe(unknownMark.insufficientData);
     expect(cell.closest('[title]')?.getAttribute('title')).toBe(text.noSource);
     expect(c.textContent).not.toContain('ᶜ');
@@ -362,8 +373,8 @@ describe('calibration-panel: what a source and a value show', () => {
     // the headers, wording of the widget's text.ts (C68): `valueHeaders.n` and `pitHeaders.stops`, as the mockup's
     const headers = { n: (text.valueHeaders as Record<string, string>)['n'], stops: (text.pitHeaders as Record<string, string>)['stops'] };
     expect(headers).toEqual({ n: 'N', stops: 'STOPS' });
-    // N after RR, STOPS after SET (the mockup's columns)
-    expect(c.textContent).toMatch(new RegExp(`${text.valueHeaders.rr}\\s+${headers.n}\\b`));
+    // N after SD, STOPS after SET (the mockup's columns)
+    expect(c.textContent).toMatch(new RegExp(`${text.valueHeaders.sd}\\s+${headers.n}\\b`));
     expect(c.textContent).toMatch(new RegExp(`${text.pitHeaders.set}\\s+${headers.stops}\\b`));
     const expected: [string, number][] = [
       [key.deg('soft'), 0], [key.deg('medium'), 3], [key.deg('hard'), 0], [key.pit('green'), 6], [key.pit('vsc'), 1], [key.pit('sc'), 0],

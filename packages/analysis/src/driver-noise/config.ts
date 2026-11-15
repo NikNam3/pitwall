@@ -30,10 +30,6 @@ export const DRIVER_NOISE_CONFIG = defineConfig('driver-noise', {
   humanMistakeRate: 0.06,
   /** A human's median mistake size without a profile (ms). Source: pitwall estimate until profiles exist. */
   humanMistakeMedianMs: 1200,
-  /** A human's tyre wear rate without a profile (% per lap, the worst corner). Source: pitwall estimate until profiles exist. */
-  humanWearRatePct: 2.0,
-  /** The wear rate of a car without a measured, profile or our-car rate (% per lap, the worst corner). Source: pitwall estimate. */
-  defaultWearRatePct: 2.0,
   /** The AI field's lap-to-lap correlation of its residuals. Source: pitwall estimate. */
   aiRho: 0.3,
   /** A human's lap-to-lap correlation without a profile. Source: pitwall estimate until profiles exist. */

@@ -1,5 +1,5 @@
-// `driver-noise` (SP4.3a spec 5.2): per car its lap scatter, correlation, mistakes, big events, retirements and wear
-// rates, AI or human by the car's car-driver span. Quick (C31); its scheduled run is its "as of" form at the current
+// `driver-noise` (SP4.3a spec 5.2): per car its lap scatter, correlation, mistakes, big events and retirements, AI or
+// human by the car's car-driver span (its wear rates moved to `tyre-model`, SP4.3c Task 12). Quick (C31); its scheduled run is its "as of" form at the current
 // frame (spec 6.1).
 import { asOfNow, type EngineView, type QuickCalculator } from '@pitwall/engine/readers';
 import { CAR_STATUS_READS } from '../shared/car-status.ts';
@@ -11,7 +11,7 @@ export const driverNoiseCalculator: QuickCalculator<DriverNoiseOutput> = {
   id: DRIVER_NOISE,
   kind: 'quick',
   // `miniSectors`: the change tag of the crossings list (the brief's `crossings`)
-  // `identity`: our car (`fixed.playerCar`), whose rate a hidden rival's wear falls back to
+  // `identity`: our car (`fixed.playerCar`), what `asOfNow` reads for the as-of view's `fixed`
   // `TIME_LOSS_EXCLUSION_READS`: the race's session-phase spans and car-location, for the human time-loss exclusion
   reads: [
     'laps',

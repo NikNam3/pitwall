@@ -1,6 +1,6 @@
 // The forecast's field (spec 6.3): every car's state as typed arrays, and what happens at a car's line: its lap ends
 // (wear, fuel, a stop's new set) and its next lap starts (its lap time from `lap-model`, its draws for that lap).
-import { NOISE_COMPOUNDS, type LapInput, type NoiseCompound, type Policy, type Scenario, type StartingPoint } from '@pitwall/domain';
+import { NOISE_COMPOUNDS, tyreIndex, type LapInput, type NoiseCompound, type Policy, type Scenario, type StartingPoint } from '@pitwall/domain';
 import { lapTimeMs } from '../lap-model/index.ts';
 import { BIG_EVENT_MAX_MS, BIG_EVENT_MIN_MS } from './constants.ts';
 import { drawsInto, normal, normalOf, PURPOSE, streamKey, streamOf, uniformOf, type Draws } from './draws.ts';
@@ -183,12 +183,23 @@ export function createField(start: StartingPoint, policies: readonly Policy[], s
     // pace level and degradation, drawn once per scenario around their σ (spec 6.3)
     const key = keyOf(draws, c, 0);
     f.paceMs[c] = (start.paceMs[c] ?? 0) + (scenario.plain ? 0 : (start.paceSdMs[c] ?? 0) * normalDraw(key, PURPOSE.pace, 0));
-    f.degMs[c] = (start.degMsPerLap[c] ?? 0) + (scenario.plain ? 0 : (start.degSdMs[c] ?? 0) * normalDraw(key, PURPOSE.deg, 0));
+    f.degMs[c] = degOf(f, c, start.compound[c] ?? 0);
     f.lapOnSet[c] = (start.tyreAge[c] ?? 0) + 1;
     const rho = start.rho[c] ?? 0;
     f.innovationMs[c] = Math.sqrt(1 - rho * rho) * (start.sigmaMs[c] ?? 0);
   }
   return f;
+}
+
+/**
+ * Car `c`'s degradation per % of wear on compound index `k`: the compound's own (`tyreIndex`), drawn once per scenario
+ * around its σ (spec 6.3) with the car's one draw, so a stop changes the compound's terms, not the draw.
+ */
+function degOf(f: Field, c: number, k: number): number {
+  const s = f.start;
+  const t = tyreIndex(c, k);
+  const deg = s.tyre.degMsPerLap[t] ?? 0;
+  return f.plain ? deg : deg + (s.tyre.degSdMs[t] ?? 0) * normalDraw(keyOf(f.draws, c, 0), PURPOSE.deg, 0);
 }
 
 /** The track's wetness on lap `lap` (`Scenario.wetnessByLap`; the starting point's where the scenario has none). */
@@ -280,13 +291,15 @@ export function startLap(f: Field, c: number, lap: number, fromFraction: number,
 export function endLap(f: Field, c: number, lap: number): NoiseCompound | undefined {
   const s = f.start;
   const kind = f.car[c * W + NEUTRAL_AT] ?? NEUTRAL.none;
+  // the compound fitted now: after a stop the new compound's rate (SP4.3c Task 12)
+  const rate = s.tyre.wearRatePct[tyreIndex(c, f.compound[c] ?? 0)] ?? 0;
   if (kind === NEUTRAL.none) {
     // a green lap's factors are 1 (and × 1 is exact)
-    f.wearPct[c] = (f.wearPct[c] ?? 0) + (s.wearRatePct[c] ?? 0);
+    f.wearPct[c] = (f.wearPct[c] ?? 0) + rate;
     f.fuelKg[c] = Math.max(0, (f.fuelKg[c] ?? 0) - (f.burnKg[c] ?? 0));
   } else {
     const factors = kind === NEUTRAL.sc ? s.lapModel.neutralised.sc : s.lapModel.neutralised.vsc;
-    f.wearPct[c] = (f.wearPct[c] ?? 0) + (s.wearRatePct[c] ?? 0) * factors.wearFactor;
+    f.wearPct[c] = (f.wearPct[c] ?? 0) + rate * factors.wearFactor;
     f.fuelKg[c] = Math.max(0, (f.fuelKg[c] ?? 0) - (f.burnKg[c] ?? 0) * factors.fuelFactor);
   }
   f.lapOnSet[c] = (f.lapOnSet[c] ?? 0) + 1;
@@ -301,6 +314,8 @@ export function fitStop(f: Field, c: number, k: number): NoiseCompound {
   f.compound[c] = k;
   f.lapOnSet[c] = 1;
   f.wearPct[c] = 0;
+  // the new compound's degradation, with the scenario's one draw for the car (SP4.3c Task 12: per-compound terms)
+  f.degMs[c] = degOf(f, c, k);
   const used = f.setsUsed.get(c);
   if (used !== undefined) {
     // our car fits its next set of that compound, at that set's wear; a fresh set once none is left

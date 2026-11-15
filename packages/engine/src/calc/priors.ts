@@ -54,7 +54,7 @@ export type PriorDecl = {
   version: number;
   /** The inclusive range of the entry's value; an override outside it is rejected (C73). */
   range: readonly [min: number, max: number];
-  /** Absent for an override-only key (`tyreLife.wearLimitPct`): unknown unless the set overrides it. */
+  /** Absent for an override-only key: unknown unless the set overrides it. */
   aggregate?(sources: readonly StoredSource[], ctx: PriorsCtx): Known<number>;
   /** A source's own entries against the set's (spec 3.2, A23). */
   residual?(source: PriorsEntries, set: PriorsEntries): Known<number>;
