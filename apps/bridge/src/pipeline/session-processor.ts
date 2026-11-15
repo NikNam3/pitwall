@@ -169,6 +169,11 @@ export class SessionProcessor {
     this.#publishActive(this.#runner.state.history.decisions);
   }
 
+  /** The session's storage key (session uid, weekend id, player car), from its first Session packet. */
+  get key(): SessionKey {
+    return this.#key;
+  }
+
   /** The session's track id, from its first Session packet. */
   get trackId(): number {
     return this.#o.session.trackId;

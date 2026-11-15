@@ -216,6 +216,19 @@ export function planCommands(
   ]);
 }
 
+/**
+ * `session.end` (C59, C72): ends the recording of the window's feed's session now; it sends `session.end` for the feed.
+ * The window keeps no copy (C73): the session ends when the bridge ends it.
+ */
+export function sessionEndCommand(ctx: Pick<CommandContext, 'send'> & { feedId: FeedId }): Command {
+  return {
+    id: 'session.end',
+    title: text.commandTitles.sessionEnd,
+    group: text.commandGroups.session,
+    run: () => ctx.send({ kind: 'session.end', feedId: ctx.feedId }),
+  };
+}
+
 /** `layout.edit.toggle`: turns the window's edit mode (window-local, C73) on or off. */
 export function layoutEditCommand(toggle: () => void): Command {
   return { id: 'layout.edit.toggle', title: text.commandTitles.layoutEditToggle, group: text.commandGroups.window, run: toggle };

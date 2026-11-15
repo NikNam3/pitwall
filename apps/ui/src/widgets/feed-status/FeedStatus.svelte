@@ -31,8 +31,14 @@
   </div>
   {#if data.session}
     <div class="line dim">
-      {#if phase !== undefined}{phase}{separator}{/if}<Value value={data.session.session.trackId} format={formatTrack} align="left" />
+      {#if feed.sessionEnded === true}{text.sessionEnded}{separator}{/if}{#if phase !== undefined}{phase}{separator}{/if}<Value
+        value={data.session.session.trackId}
+        format={formatTrack}
+        align="left"
+      />
     </div>
+  {:else if feed.sessionEnded === true}
+    <div class="line dim">{text.sessionEnded}</div>
   {/if}
   {#if full}
     <div class="line">{text.labels.latency} <Value value={feed.latencyMs ?? unknown('notReceived')} format={formatMillis} /></div>

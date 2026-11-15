@@ -17,8 +17,13 @@ const isStale = (feed: FeedMetricsView): boolean => feed.msSinceLastPacket >= FE
 const isLossy = (feed: FeedMetricsView): boolean =>
   feed.lossPercent > FEED_LOSS_PERCENT && (feed.lossWindowFrames ?? FEED_MIN_LOSS_FRAMES) >= FEED_MIN_LOSS_FRAMES;
 
-export const feedStatusOf = (feedId: FeedId, feed: FeedMetricsView): FeedStatus => ({
+/**
+ * `sessionEnded`: whether the feed's session ended and its packets are ignored (C59), as the pipeline knows it; a running
+ * session's feature leaves it out (it reads as `false`).
+ */
+export const feedStatusOf = (feedId: FeedId, feed: FeedMetricsView, sessionEnded?: boolean): FeedStatus => ({
   feedId,
+  ...(sessionEnded !== undefined && { sessionEnded }),
   connected: feed.connected,
   stale: isStale(feed),
   lossPercent: feed.lossPercent,

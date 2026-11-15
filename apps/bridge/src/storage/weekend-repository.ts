@@ -104,6 +104,7 @@ export class WeekendRepository {
         `SELECT ${sessionColumns} ${sessionsFrom} WHERE s.track_id = ? AND s.complete = 1 ORDER BY s.started_at, s.session_uid, s.player_car`,
       ),
       completeSessions: db.prepare(`SELECT ${sessionColumns} ${sessionsFrom} WHERE s.complete = 1 ORDER BY s.started_at, s.session_uid, s.player_car`),
+      incompleteSessions: db.prepare(`SELECT ${sessionColumns} ${sessionsFrom} WHERE s.complete = 0 ORDER BY s.started_at, s.session_uid, s.player_car`),
       newestWeekend: db.prepare(`SELECT weekend_id FROM sessions ORDER BY started_at DESC, session_uid DESC, player_car DESC LIMIT 1`).pluck(),
       session: db.prepare(
         `SELECT ${sessionColumns} ${sessionsFrom} WHERE s.session_uid = @sessionUid AND s.weekend_id = @weekendId AND s.player_car = @playerCar`,
@@ -173,6 +174,11 @@ export class WeekendRepository {
   /** The row stored under `key`, with its cars, rules version and completeness; `undefined` when none is. */
   sessionOf(key: SessionKey): StoredSessionRow | undefined {
     return this.#row(key);
+  }
+
+  /** Every stored session whose log is not complete, of every weekend and feed, in start order (C59). */
+  incompleteSessions(): StoredSessionRow[] {
+    return (this.#statements.incompleteSessions.all() as SessionDbRow[]).map((row) => this.#toSession(row));
   }
 
   /** The weekend's stale sessions (`isStale`) in start order. */

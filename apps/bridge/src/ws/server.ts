@@ -15,6 +15,9 @@ import { StartupError } from '../startup-error.ts';
 /** The uiAction that picks a calibration set (or `defaults`) for a feed's running session (C62a). */
 export type ChooseAction = Extract<UiAction, { kind: 'calibration.choose' }>;
 
+/** The uiAction that ends a feed's session recording now (C59). */
+export type EndSessionAction = Extract<UiAction, { kind: 'session.end' }>;
+
 /** What an action's owner answers: an `actionResult` without its type and id. */
 export type { ActionOutcome } from '@pitwall/contracts';
 import type { ActionOutcome } from '@pitwall/contracts';
@@ -41,6 +44,11 @@ export type WsServerOptions = {
    * to every feed of the team. Without it they are answered with `notSupported`.
    */
   plan?: (action: PlanAction) => ActionOutcome;
+  /**
+   * Takes `session.end` (C59, C73): `serve` hands it to the feed's pipeline (`FeedPipeline.endSession`), never to the UI
+   * state. Without it the action is answered with `notSupported`.
+   */
+  endSession?: (action: EndSessionAction) => ActionOutcome;
   /** The replay transport that `replayControl` messages drive; without it (a live feed), or when its `control` returns `false`, they are answered with `notSupported`. */
   replay?: { control(control: ReplayControl): boolean | undefined };
   /** Default `127.0.0.1`. */
@@ -150,12 +158,14 @@ export class WsServer {
         return;
       case 'uiAction': {
         // A pick is the feed pipeline's (a decision, C76), the other calibration actions the calibration store's (C62a),
-        // a plan the plan routing's (a decision for the team's feeds, C76), every other one the UI state's.
+        // a plan the plan routing's (a decision for the team's feeds, C76), ending a session the feed pipeline's (C59),
+        // every other one the UI state's.
         const { action } = message;
         // The driver-profile actions are the profile store's (C62c).
         const owner = action.kind === 'calibration.choose'
           ? this.options.choose?.(action)
           : isPlanAction(action) ? this.options.plan?.(action)
+          : action.kind === 'session.end' ? this.options.endSession?.(action)
           : isCalibrationAction(action) ? this.options.calibration?.apply(action)
             : isDriverAction(action) ? this.options.drivers?.apply(action) : this.options.uiState?.apply(action);
         const result = owner ?? { ok: false, reason: 'notSupported' } as const;
