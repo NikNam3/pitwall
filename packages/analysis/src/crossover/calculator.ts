@@ -15,11 +15,13 @@ import {
   type LapRecord,
   type Ms,
   type PitLosses,
+  type TrackWetness,
   type TyreType,
 } from '@pitwall/domain';
 import { membershipOf, openSpansOf, type DeepReadonly, type EngineView, type QuickCalculator } from '@pitwall/engine/readers';
 import { isPaceLap, LAP_CLASSES_CONFIG, type LapClassOptions } from '../lap-classes/index.ts';
 import { PIT_LOSS } from '../pit-loss/index.ts';
+import { TRACK_WETNESS } from '../track-wetness/index.ts';
 import { behaviourFor } from '../shared/behaviour.ts';
 import { median } from '../shared/stats.ts';
 import { CROSSOVER_BEHAVIOUR, phaseRow, type CrossoverEffect } from './behaviour.ts';
@@ -104,16 +106,6 @@ function byLapOf(green: readonly TypedLap[], minCars: number): CrossoverLap[] {
     }));
 }
 
-/** The lowest known slick median so far; `insufficientData` until one exists. */
-function dryRefOf(byLap: readonly CrossoverLap[]): Known<Ms> {
-  let best: Known<Ms> = unknown('insufficientData');
-  for (const row of byLap) {
-    const m = row.medianMs.slick;
-    if (m.known && (!best.known || m.value < best.value)) best = m;
-  }
-  return best;
-}
-
 /** A type's latest known median: the one of the highest lap number that has it. */
 function latestMedianOf(byLap: readonly CrossoverLap[], type: TyreType): Known<Ms> | undefined {
   for (const row of [...byLap].reverse()) if (row.medianMs[type].known) return row.medianMs[type];
@@ -141,7 +133,7 @@ function firstFasterOf(car: CarId, ourType: TyreType, green: readonly TypedLap[]
 }
 
 /** Our car's crossover from the session's green laps and medians. */
-function crossoverOf(view: EngineView, car: CarId, green: readonly TypedLap[], byLap: CrossoverLap[], line110: number): Crossover {
+function crossoverOf(view: EngineView, car: CarId, green: readonly TypedLap[], byLap: CrossoverLap[], dryRefMs: Known<Ms>, line110: number): Crossover {
   const ownLaps = currentLaps(view.history.laps as LapRecord[])
     .filter((l) => l.carId === car)
     .sort(byCompletion);
@@ -154,7 +146,6 @@ function crossoverOf(view: EngineView, car: CarId, green: readonly TypedLap[], b
     }
   }
 
-  const dryRefMs = dryRefOf(byLap);
   const line110Ms: Known<Ms> = dryRefMs.known ? known(Math.round(dryRefMs.value * line110), dryRefMs.at) : dryRefMs;
 
   let latest: Lap | undefined;
@@ -191,7 +182,7 @@ function paybackOf(view: EngineView, ourType: Known<TyreType>, latest: Lap | und
 export const crossoverCalculator: QuickCalculator<CrossoverOutput> = {
   id: CROSSOVER,
   kind: 'quick',
-  reads: ['laps', 'identity', { calculator: PIT_LOSS }, 'spans:weekend-phase', 'spans:session-phase-race'],
+  reads: ['laps', 'identity', { calculator: PIT_LOSS }, { calculator: TRACK_WETNESS }, 'spans:weekend-phase', 'spans:session-phase-race'],
   cadence: 'frame',
   compute: (view): CrossoverOutput => {
     // the session's row (the weekend phase), over the grid's (C14: a pending phase reads as the race)
@@ -209,7 +200,9 @@ export const crossoverCalculator: QuickCalculator<CrossoverOutput> = {
     const { minCars, line110 } = CROSSOVER_CONFIG.read(view);
     const green = greenLaps(view, { isRace: session.isRace === true, ...LAP_CLASSES_CONFIG.read(view) });
     const byLap = byLapOf(green, minCars);
-    for (const car of cars) out[car] = crossoverOf(view, car, green, byLap, line110);
+    // the one dry reference is track-wetness's (O3, B3); without its output there is none yet (C3)
+    const dryRefMs = (view.outputs.get(TRACK_WETNESS) as DeepReadonly<TrackWetness> | undefined)?.dryRefMs ?? unknown('insufficientData');
+    for (const car of cars) out[car] = crossoverOf(view, car, green, byLap, dryRefMs, line110);
     return out;
   },
 };

@@ -5,6 +5,8 @@ import type { TrackWetness } from '@pitwall/domain';
 export { TRACK_WETNESS_BEHAVIOUR, type TrackWetnessEffect } from './behaviour.ts';
 export * from './config.ts';
 export { trackWetnessAsOf } from './asof.ts';
+export { DRY_REF_KEY, TRACK_WETNESS_PRIORS } from './dry-reference.ts';
+export { isWet } from './wet.ts';
 
 /** The calculator id. */
 export const TRACK_WETNESS = 'track-wetness';

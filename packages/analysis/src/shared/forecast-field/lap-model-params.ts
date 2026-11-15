@@ -95,7 +95,7 @@ function solve(a: number[][], b: number[]): number[] {
  * the pace was corrected by; the cold-tyre terms of lap 1 and 2 and their wet factor; the neutralised factors; the
  * wetness terms.
  */
-export function lapModelParams(view: AsOfView, outputs: ReadonlyMap<CalculatorId, unknown>): LapModelParams {
+export function lapModelParams(view: Pick<AsOfView, 'config' | 'track'>, outputs: ReadonlyMap<CalculatorId, unknown>): LapModelParams {
   const c = configOf(FORECAST_FIELD_CONFIG, view);
   const slick = configOf(SLICK_CONFIG, view);
   const degradation = (outputs.get(DEGRADATION) as DeepReadonly<DegradationOutput> | undefined)?.stints ?? {};

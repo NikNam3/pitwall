@@ -14,10 +14,10 @@ function tyreMs(p: LapModelParams, car: LapInput): number {
   return car.degMsPerLap * car.wearPct + p.convexMsPerPct2 * past * past;
 }
 
-/** The cold-tyre term on the first two laps of a set, larger on a wet track. */
+/** The cold-tyre term on the first two laps of a set, larger on a wet track (`car.wet`, `track-wetness`'s rule, O3). */
 function coldMs(p: LapModelParams, car: LapInput): number {
   const cold = car.lapOnSet === 1 ? p.coldTyreMs[0] : car.lapOnSet === 2 ? p.coldTyreMs[1] : 0;
-  return car.wetnessMs > 0 ? cold * p.coldTyreWetFactor : cold;
+  return car.wet ? cold * p.coldTyreWetFactor : cold;
 }
 
 /** One car's lap time (ms, floating) under `p`. */

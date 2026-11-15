@@ -11,29 +11,43 @@
 // The state is measured from dry (SP4.3b Task 19c): a slick stint with dry free-air laps against its own first dry ones;
 // every other stint against its car's own dry reference this session, else the field's (`dry-reference.ts`); each lap
 // on the slick scale through the lap model's terms. Without any dry reference the state is `insufficientData` (C3).
-import { known, unknown, type CarId, type Known, type Ms, type TrackWetness, type TyreType } from '@pitwall/domain';
+import { known, unknown, type CarId, type EstimateSource, type Known, type Ms, type TrackWetness, type TyreType } from '@pitwall/domain';
 import type { AsOfView } from '@pitwall/engine/readers';
 import { tyreTypeOf } from '@pitwall/domain';
 import { DEGRADATION, DEGRADATION_CONFIG, fitStint, type DegradationOutput, type StintDegradation } from '../degradation/index.ts';
 import { DRIVER_NOISE_CONFIG } from '../driver-noise/config.ts';
+import { lapModelParams } from '../shared/forecast-field/lap-model-params.ts';
 import { freeAirLaps, type FreeAirLaps } from '../shared/free-air.ts';
 import { median } from '../shared/stats.ts';
 import { sessionEffect } from './behaviour.ts';
-import { slickScaleOf, weekendFieldReference, type SlickScale } from './dry-reference.ts';
+import { calibrationReference, slickDeltaReadings, slickScaleFrom, weekendFieldReference, type SlickScale } from './dry-reference.ts';
 import { TRACK_WETNESS_CONFIG } from './config.ts';
 import { runWetnessFilter, type WetnessFilterConfig } from './kalman.ts';
+import { isWet } from './wet.ts';
 
 const TYPES: readonly TyreType[] = ['slick', 'inter', 'wet'];
 
-// SP4.3c Task 14 (supervisor first): the new fields unfilled until the task's implement phase fills them
-const UNFILLED = {
+/** The dry reference's source while none is known (C3). */
+const NO_DRY_REF: EstimateSource = { kind: 'default', note: 'no dry reference', sessionShare: 0, parts: 'no slick laps' };
+
+const NOT_APPLICABLE: TrackWetness = {
+  byLap: [],
+  state: unknown('notApplicable'),
+  wet: unknown('notApplicable'),
+  dryRefMs: unknown('notApplicable'),
+  dryRefSource: NO_DRY_REF,
+  slickScale: unknown('notApplicable'),
+};
+
+/** Before the race starts or without `degradation`'s output: nothing measured yet. */
+const NOT_YET: TrackWetness = {
+  byLap: [],
+  state: unknown('insufficientData'),
   wet: unknown('insufficientData'),
   dryRefMs: unknown('insufficientData'),
-  dryRefSource: { kind: 'default', note: 'not yet filled', sessionShare: 0, parts: '' },
+  dryRefSource: NO_DRY_REF,
   slickScale: unknown('insufficientData'),
-} as const satisfies Omit<TrackWetness, 'byLap' | 'state'>;
-
-const NOT_APPLICABLE: TrackWetness = { byLap: [], state: unknown('notApplicable'), ...UNFILLED };
+};
 
 type Config = (typeof TRACK_WETNESS_CONFIG)['defaults'];
 type DegradationConfig = (typeof DEGRADATION_CONFIG)['defaults'];
@@ -109,7 +123,7 @@ function wetLaps(byLap: TrackWetness['byLap'], filter: WetnessFilterConfig, wetS
   for (const entry of byLap) {
     zs.push(measurementOf(entry)?.value);
     const state = runWetnessFilter(zs, filter);
-    if (state !== undefined && state.wetnessMs - wetSigmas * state.sdMs > 0) wet.add(entry.lap);
+    if (state !== undefined && isWet(state.wetnessMs, state.sdMs, wetSigmas)) wet.add(entry.lap);
   }
   return wet;
 }
@@ -134,20 +148,32 @@ type Measurement = { value: number; at: Ms } | undefined;
  * the field's (the median of the cars' own references, else the weekend's, `weekendFieldReference`): w = (excess −
  * offset) / slope. On each lap and type the cars with an own reference count, the field's only where none has one.
  */
-function measurementsOf(view: AsOfView, stints: readonly Stint[], nuOf: (s: Stint) => number, wet: ReadonlySet<number>, leaderLap: number, config: Config, scale: SlickScale): Measurement[] {
+function measurementsOf(
+  view: AsOfView,
+  stints: readonly Stint[],
+  nuOf: (s: Stint) => number,
+  wet: ReadonlySet<number>,
+  leaderLap: number,
+  config: Config,
+  scale: SlickScale,
+): { measured: Measurement[]; dryRef: FieldReference | undefined } {
   type Read = { stint: Stint; lap: PaceLap; ms: number };
   const reads = stints.map((stint) => {
     const nu = nuOf(stint);
     return stint.laps.filter((l) => l.free && l.lap <= leaderLap).map((lap): Read => ({ stint, lap, ms: lap.ms - nu * lap.tyreAge }));
   });
   // a slick stint's own reference: the median of its first dry free-air laps
+  const stintAt: Ms[] = [];
   const stintRef = reads.map((rs, i) => {
     const stint = stints[i] as Stint;
+    stintAt.push(0);
     if (stint.type !== 'slick') return undefined;
     const dry = rs.filter((r) => !wet.has(r.lap.lap)).slice(0, config.dryReferenceLaps);
+    stintAt[i] = dry.reduce((at, r) => Math.max(at, r.lap.at), 0);
     return median(dry.map((r) => r.ms));
   });
   const ownByCar = new Map<CarId, number[]>();
+  let ownAt: Ms = 0;
   stintRef.forEach((ref, i) => {
     const stint = stints[i] as Stint;
     const offset = scale.offsetMs(stint.fit.visual, stint.type);
@@ -155,11 +181,12 @@ function measurementsOf(view: AsOfView, stints: readonly Stint[], nuOf: (s: Stin
     const of = ownByCar.get(stint.car) ?? [];
     of.push(ref - offset);
     ownByCar.set(stint.car, of);
+    ownAt = Math.max(ownAt, stintAt[i] ?? 0);
   });
   // a car's list holds the reference that made it
   const own = new Map([...ownByCar].map(([car, refs]) => [car, median(refs) as number] as const));
-  let field = median([...own.values()]);
-  field ??= weekendFieldReference(view, scale);
+  const dryRef = fieldReference(view, [...own.values()], ownAt, scale);
+  const field = dryRef?.ms;
 
   type Slot = { own: number[]; field: number[]; ownAt: Ms; fieldAt: Ms };
   const slots: Partial<Record<TyreType, Slot>>[] = Array.from({ length: leaderLap + 1 }, () => ({}));
@@ -192,7 +219,7 @@ function measurementsOf(view: AsOfView, stints: readonly Stint[], nuOf: (s: Stin
   });
   const out: Measurement[] = [];
   for (let lap = 1; lap <= leaderLap; lap++) {
-    let m: Measurement;
+    let m: Measurement = undefined;
     for (const type of TYPES) {
       const slot = slots[lap]?.[type];
       if (slot === undefined) continue;
@@ -204,7 +231,31 @@ function measurementsOf(view: AsOfView, stints: readonly Stint[], nuOf: (s: Stin
     }
     out.push(m);
   }
-  return out;
+  if (dryRef !== undefined) return { measured: out, dryRef };
+  // no dry reference: the game's slick delta is the reading where no lap measures against a stint's own laps (§1.9)
+  const deltas = slickDeltaReadings(view, leaderLap, scale);
+  return { measured: out.map((m, i) => m ?? deltas[i]), dryRef };
+}
+
+/** The field's dry reference: its value on the medium's scale, where it comes from and since when it is known. */
+type FieldReference = { ms: number; at: Ms; source: EstimateSource };
+
+/**
+ * The field's dry reference (O3, the one dry reference): the median of the cars' own references this session, else the
+ * calibration set's priors entry (C62a), else the weekend's earlier sessions' (`weekendFieldReference`); `undefined`
+ * without any.
+ */
+function fieldReference(view: AsOfView, own: readonly number[], ownAt: Ms, scale: SlickScale): FieldReference | undefined {
+  const session = median(own);
+  if (session !== undefined) return { ms: session, at: ownAt, source: { kind: 'session', sessionShare: 1, parts: `${own.length} cars' slick laps` } };
+  const calibration = calibrationReference(view);
+  if (calibration !== undefined) {
+    const { ms, setName, sources } = calibration;
+    return { ms, at: view.priors.known ? view.priors.at : 0, source: { kind: 'calibration', setName, sources, sessionShare: 0, parts: 'calibration' } };
+  }
+  const weekend = weekendFieldReference(view, scale);
+  if (weekend !== undefined) return { ms: weekend, at: 0, source: { kind: 'default', note: "the weekend's earlier sessions", sessionShare: 0, parts: 'weekend slick stints' } };
+  return undefined;
 }
 
 /**
@@ -224,7 +275,7 @@ export function trackWetnessAsOf(view: AsOfView): TrackWetness {
   const effect = sessionEffect(view);
   if (effect.isRace !== true) return NOT_APPLICABLE;
   const degradation = view.outputs.get(DEGRADATION) as DegradationOutput | undefined;
-  if (effect.started !== true || degradation === undefined) return { byLap: [], state: unknown('insufficientData'), ...UNFILLED };
+  if (effect.started !== true || degradation === undefined) return NOT_YET;
   const config = TRACK_WETNESS_CONFIG.read(view);
   const free = freeAirLaps(view.history, DRIVER_NOISE_CONFIG.read(view).freeAirGapMs);
 
@@ -238,13 +289,19 @@ export function trackWetnessAsOf(view: AsOfView): TrackWetness {
   const nuOf = wet.size === 0 ? (s: Stint) => (s.fit.nuMsPerLap.known ? s.fit.nuMsPerLap.value : s.fit.startPrior.nuMsPerLap) : (s: Stint) => dryNu(s, wet, degradationConfig);
   const byLap = wet.size === 0 ? first : commonModes(stints, nuOf, leaderLap, config);
 
-  const measured = measurementsOf(view, stints, nuOf, wet, leaderLap, config, slickScaleOf(view));
+  const params = lapModelParams(view, view.outputs);
+  const { measured, dryRef } = measurementsOf(view, stints, nuOf, wet, leaderLap, config, slickScaleFrom(params));
   const newestAt = measured.reduce<Ms | undefined>((at, z) => (z === undefined ? at : Math.max(at ?? 0, z.at)), undefined);
   // the forecast enters the prediction step only (ruling R19): the wet-lap pass and the common modes never read it
-  const state = runWetnessFilter(measured.map((z) => z?.value), config, rainNowPct(view));
+  const filtered = runWetnessFilter(measured.map((z) => z?.value), config, rainNowPct(view));
+  const state: TrackWetness['state'] =
+    filtered === undefined || newestAt === undefined ? unknown('insufficientData') : known({ wetnessMs: Math.round(filtered.wetnessMs), sdMs: Math.round(filtered.sdMs) }, newestAt);
   return {
-    ...UNFILLED,
     byLap,
-    state: state === undefined || newestAt === undefined ? unknown('insufficientData') : known({ wetnessMs: Math.round(state.wetnessMs), sdMs: Math.round(state.sdMs) }, newestAt),
+    state,
+    wet: state.known ? known(isWet(state.value.wetnessMs, state.value.sdMs, config.wetSigmas), state.at) : state,
+    dryRefMs: dryRef === undefined ? unknown('insufficientData') : known(Math.round(dryRef.ms), dryRef.at),
+    dryRefSource: dryRef?.source ?? NO_DRY_REF,
+    slickScale: known(params.wetnessMsPerMs.slick, 0),
   };
 }

@@ -416,7 +416,7 @@ function worstRateOf(terms: DeepReadonly<TyreModelCompound> | undefined): DeepRe
 /** The track's wetness (track-wetness's state); without a known state, the declared prior: dry with `priorSdMs` (C3, ruling R40). */
 function wetnessOf(wetness: DeepReadonly<TrackWetness> | undefined, priorSdMs: number): StartingPoint['wetness'] {
   const state = wetness?.state;
-  return state?.known === true ? { wetnessMs: state.value.wetnessMs, sdMs: state.value.sdMs, wet: state.value.wetnessMs > 0 } : { wetnessMs: 0, sdMs: priorSdMs, wet: false };
+  return state?.known === true ? { wetnessMs: state.value.wetnessMs, sdMs: state.value.sdMs, wet: wetness?.wet.known === true && wetness.wet.value } : { wetnessMs: 0, sdMs: priorSdMs, wet: false };
 }
 
 /**
