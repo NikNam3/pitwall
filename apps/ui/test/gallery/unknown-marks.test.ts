@@ -171,6 +171,10 @@ const IN_WORDS: Record<string, { field: string; reason: UnknownReason; rule: str
     { field: 'damage.jumps.*.estimateMsPerLap', reason: 'notApplicable', rule: 'no estimate: the loss text stands alone' },
     { field: 'damage.jumps.*.measuring', reason: 'notApplicable', rule: 'measured or never measurable: the loss text stands alone' },
   ],
+  // the rate's mark stands for it: no marker without a rate (SP4.3c Task 8)
+  'tyre-life-bar': (['fl', 'fr', 'rl', 'rr'] as const).flatMap((c) =>
+    (['insufficientData', 'realism'] as const).map((reason) => ({ field: `wear.wearAtLifeSpanPct.${c}`, reason, rule: "the rate's mark stands for it" })),
+  ),
   'incident-feed': [
     { field: 'feed.*.forUs.*.gapAfterMs', reason: 'notApplicable', rule: 'the other car retired: DNF' },
     { field: 'feed.*.timeLostMs', reason: 'notApplicable', rule: 'not applicable to the entry: a spanning what text may cover its mark' },
