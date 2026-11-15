@@ -11,6 +11,7 @@ import {
   type LapRecord,
   type OpenSpan,
   type PitStopRecord,
+  type Policy,
   type RivalStop,
   type StintRecord,
   type TyreSet,
@@ -34,6 +35,8 @@ import { trackWetnessCalculator } from '../../src/track-wetness/calculator.ts';
 import { TYRE_MODEL, tyreModelCalculator } from '../../src/tyre-model/index.ts';
 import type { TyreModelCar, TyreModelOutput } from '@pitwall/domain';
 import { plainModelCar } from '../tyre-model/support.ts';
+import { startingPoint } from '../race-forecast/start.ts';
+import { startOfStops } from '../race-monte-carlo/rival-plan.ts';
 import { carState, lap } from '../../../../test-support/builders/index.ts';
 import type { BuilderRace } from '../../../../test-support/builders/long-race.ts';
 import { generateRace, GENERATOR_DEFAULTS, type GeneratorParams } from '../../../../test-support/race-generator/index.ts';
@@ -263,6 +266,14 @@ function raceView(cars: CarRace[], o: { phase?: typeof RACE; shaped?: boolean } 
   });
 }
 
+/**
+ * The plain forecast's policies (forecast-score's `forecastPolicies`) on a starting point of `cars` slots that carries
+ * `stops` as forecast-field maps them (`startOfStops`), the leader on lap `completed + 1` of `TOTAL_LAPS` (ported in
+ * SP4.3c Task 18, O9: the policies are the one rival plain policy over the starting point).
+ */
+const plainPolicies = (stops: RivalStopsOutput, cars: number, completed: number): Policy[] =>
+  forecastPolicies(startOfStops(startingPoint({ lap: completed + 1, lapsTotal: TOTAL_LAPS, cars: Array.from({ length: cars }, () => ({})) }), stops));
+
 const stopOf = (out: RivalStopsOutput, car: number): RivalStop => {
   const stop = out[carId(car)];
   expect(stop, `car ${car} has an entry`).toBeDefined();
@@ -464,7 +475,7 @@ describe('rival-stops: overdue windows (SP4.3b Task 7, F3)', () => {
     // the plain forecast's policies (forecast-score's `forecastPolicies`, one stop on the window's mid lap) without the
     // start-lap work-around (no `onLap`, 4.3a F7): the overdue car on lap 26 stops at the end of a later lap
     const stops = rivalStops.compute(raceView(overdueField(25)));
-    const policy = forecastPolicies(stops, 4)[0]!;
+    const policy = plainPolicies(stops, 4, 25)[0]!;
     expect(policy.stops).toHaveLength(1);
     expect(policy.stops[0]!.lap).toBeGreaterThan(26);
   });
@@ -567,7 +578,7 @@ describe('rival-stops: the compound rule met and the median overdue (SP4.3b Task
     expect(stop.basis).toBe('noStop');
     expect(stop.window).toMatchObject({ known: true, value: { toFlag: true, highLap: TOTAL_LAPS } });
     // the plain forecast (forecast-score's policies) does not stop it
-    expect(forecastPolicies(rivalStops.compute(view), 5)[4]!.stops).toEqual([]);
+    expect(plainPolicies(rivalStops.compute(view), 5, 22)[4]!.stops).toEqual([]);
   });
 
   it('row 6: a plain forecast over a builder race where every car has met the rule predicts no further stops', () => {
@@ -575,7 +586,7 @@ describe('rival-stops: the compound rule met and the median overdue (SP4.3b Task
     const cars = [18, 19, 20, 21, 22, 23].map((inLap, car): CarRace => ({ car, stints: MEDIUM_THEN_HARD(inLap), completed: 30, rule: 'required', life: life(22, { medium: 20, hard: 45 }) }));
     const stops = rivalStops.compute(raceView(cars));
     for (const car of cars.keys()) expect(stopOf(stops, car).owesStop, `car ${car}`).toMatchObject({ known: true, value: false });
-    const policies = forecastPolicies(stops, cars.length);
+    const policies = plainPolicies(stops, cars.length, 30);
     expect(policies.map((p) => p.stops)).toEqual(cars.map(() => []));
   });
 
@@ -594,6 +605,61 @@ describe('rival-stops: the compound rule met and the median overdue (SP4.3b Task
     // without the undone stop car 1 owes it again; car 0 still runs to the flag
     expect(stopOf(out, 1).owesStop).toMatchObject({ known: true, value: true });
     expect(stopOf(out, 0).window).toMatchObject({ known: true, value: { toFlag: true } });
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------------
+// SP4.3c Task 18 (O5, research 22 §1.7): a car's tyre-type switch is the lap `tyre-model`'s `typeDeltaMs` of another
+// type (the best fresh set of that type against the fitted set) is below 0: the AI switches on that lap. A car that
+// has completed lap n is on lap n + 1; it switches at the end of it, onto the type whose delta is lowest. A delta of
+// the car's own type (a fresher set of the same type) is no switch; a delta not known gives no switch (unknown: the
+// simulator's lap-model fallback, O5).
+
+/** `l` with `tyre-model`'s type deltas `deltas` (ms; a type not given unknown). */
+function withDeltas(l: Life, deltas: Partial<Record<'slick' | 'inter' | 'wet', number>>): Life {
+  const of = (t: 'slick' | 'inter' | 'wet'): Known<number> => (deltas[t] === undefined ? unknown('notReceived') : K(deltas[t]));
+  return { ...l, model: { ...l.model, typeDeltaMs: { slick: of('slick'), inter: of('inter'), wet: of('wet') } } };
+}
+
+describe("rival-stops: the tyre-type switch from the game's delta (SP4.3c Task 18, O5)", () => {
+  const mediums = (car: number, deltas: Partial<Record<'slick' | 'inter' | 'wet', number>>): CarRace => ({
+    car,
+    stints: MEDIUM_FROM_1,
+    completed: 3,
+    life: withDeltas(life(17, { medium: 20, hard: 30, soft: 12 }), deltas),
+  });
+
+  it('a rival whose inter delta turns −300 ms on lap 4 switches on lap 4, onto the inter', () => {
+    // 3 laps done: on lap 4. Car 0's fresh inter reads −300 ms against its fitted mediums (its wet −100: the inter is lower)
+    const out = rivalStops.compute(raceView([mediums(0, { inter: -300, wet: -100 }), mediums(1, { inter: 300, wet: 2_500 })]));
+    const stop = stopOf(out, 0);
+    expect(stop.switchLap).toMatchObject({ known: true, value: 4 });
+    expect(stop.switchTo).toMatchObject({ known: true, value: 'inter' });
+    // car 1's other types read above 0: no switch
+    expect(stopOf(out, 1).switchLap.known).toBe(false);
+    expect(stopOf(out, 1).switchTo.known).toBe(false);
+  });
+
+  it("a car on inters switches to slicks when the slick delta turns negative; its own type's delta is no switch", () => {
+    const inters = (car: number, deltas: Partial<Record<'slick' | 'inter' | 'wet', number>>): CarRace => ({
+      car,
+      stints: [{ from: 1, compound: 'inter' }],
+      completed: 7,
+      life: withDeltas(life(17, { medium: 20, hard: 30, inter: 25 }), deltas),
+    });
+    const out = rivalStops.compute(raceView([inters(0, { slick: -500, wet: 3_000 }), inters(1, { slick: 1_600, inter: -200, wet: 3_000 })]));
+    expect(stopOf(out, 0).switchLap).toMatchObject({ known: true, value: 8 });
+    expect(stopOf(out, 0).switchTo).toMatchObject({ known: true, value: 'slick' });
+    // car 1: a fresher inter reads −200 ms against its fitted inters; the slick +1.6 s (Silverstone, research 22 §1.8)
+    expect(stopOf(out, 1).switchLap.known).toBe(false);
+  });
+
+  it('without a known delta there is no switch from the game (the lap model decides in the simulator)', () => {
+    const out = rivalStops.compute(raceView([mediums(0, {})]));
+    expect(stopOf(out, 0).switchLap.known).toBe(false);
+    expect(stopOf(out, 0).switchTo.known).toBe(false);
+    // the window and odds stay as before
+    expect(stopOf(out, 0).window.known).toBe(true);
   });
 });
 
