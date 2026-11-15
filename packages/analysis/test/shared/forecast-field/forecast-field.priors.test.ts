@@ -48,10 +48,10 @@ describe('forecast-field declared priors for unknown inputs (F16-1, R40)', () =>
   it('an unknown track-wetness state is the declared prior: wetnessMs 0 with sdMs priorWetnessSdMs (1,500 ms by default)', () => {
     const unknownState = (w: TrackWetness): TrackWetness => ({ ...w, state: unknown('insufficientData') });
     const sp = buildWith<TrackWetness>(TRACK_WETNESS, unknownState);
-    expect(sp.wetness).toEqual({ wetnessMs: 0, sdMs: 1_500 });
+    expect(sp.wetness).toEqual({ wetnessMs: 0, sdMs: 1_500, wet: false });
     // the sd is the config's, overridable
     const overridden = buildWith<TrackWetness>(TRACK_WETNESS, unknownState, { 'forecast-field': { priorWetnessSdMs: 2_000 } });
-    expect(overridden.wetness).toEqual({ wetnessMs: 0, sdMs: 2_000 });
+    expect(overridden.wetness).toEqual({ wetnessMs: 0, sdMs: 2_000, wet: false });
   });
 
   it('an unknown rival-stops window is the uninformative window from the next lap to the flag, stopMid at its middle', () => {

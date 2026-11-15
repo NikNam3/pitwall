@@ -57,6 +57,7 @@ function lapInputOf(sp: StartingPoint, car: CarId): LapInput {
     lapOnSet: 3,
     neutralised: 'none',
     wetnessMs: 0,
+    wet: false,
     scatterMs: 0,
     mistakeMs: 0,
   };

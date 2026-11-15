@@ -137,7 +137,7 @@ function greenRaceMs(input: DpInput, w: number, stops: DpPlan['stops']): number 
   const p = input.carParams;
   const n = input.totalLaps - input.fromLap + 1;
   const burn = p.fuelKg / n;
-  const lap: LapInput = { paceMs: p.paceMs, degMsPerLap: p.degMsPerLap, wearPct: p.wearPct, fuelKg: p.fuelKg, compound: p.compound, lapOnSet: 1, neutralised: 'none', wetnessMs: w, scatterMs: 0, mistakeMs: 0 };
+  const lap: LapInput = { paceMs: p.paceMs, degMsPerLap: p.degMsPerLap, wearPct: p.wearPct, fuelKg: p.fuelKg, compound: p.compound, lapOnSet: 1, neutralised: 'none', wetnessMs: w, wet: w > 0, scatterMs: 0, mistakeMs: 0 };
   let onSet = p.tyreAge;
   let total = 0;
   for (let i = 0; i < n; i++) {

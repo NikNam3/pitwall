@@ -146,7 +146,7 @@ function lapTable(input: DpInput, n: number, fuel: Float64Array, tyre: NoiseComp
   const p = input.carParams;
   const compound = tyre ?? p.compound;
   const rate = p.wearRatePct?.[compound] ?? 0;
-  const lap: LapInput = { paceMs: p.paceMs, degMsPerLap: p.degMsPerLap, wearPct: 0, fuelKg: 0, compound, lapOnSet: 1, neutralised: 'none', wetnessMs: 0, scatterMs: 0, mistakeMs: 0 };
+  const lap: LapInput = { paceMs: p.paceMs, degMsPerLap: p.degMsPerLap, wearPct: 0, fuelKg: 0, compound, lapOnSet: 1, neutralised: 'none', wetnessMs: 0, wet: false, scatterMs: 0, mistakeMs: 0 };
   const table = new Float64Array(CONDITIONS.length * n * n);
   for (let i = 0; i < n; i++) {
     lap.fuelKg = fuel[i] ?? 0;

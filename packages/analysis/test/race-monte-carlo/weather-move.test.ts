@@ -28,7 +28,7 @@ const rainBox = (wetnessMs: number): Trigger => ({ kind: 'rain', wetnessMs, acti
 function field(accuracy: 'perfect' | 'approximate', pct: (lap: number) => number, wetnessMs: number): StartingPoint {
   const cars: CarSpec[] = Array.from({ length: 6 }, (_, i) => ({ ...NOISY, retireRate: 0, gapMs: 1_500 * i, paceMs: 90_000 + 60 * i }));
   const start = startingPoint({ lapsTotal: 14, cars, ours: [2, 3], lapModel: WET_MODEL });
-  start.wetness = { wetnessMs, sdMs: 500 };
+  start.wetness = { wetnessMs, sdMs: 500, wet: wetnessMs > 0 };
   start.weather = known({ byLap: Array.from({ length: 14 }, (_, i) => ({ lap: i + 1, rainPct: pct(i + 1) })), accuracy }, 0);
   for (const sets of Object.values(start.sets)) for (const compound of ['inter', 'wet'] as const) for (let i = 0; i < 5; i++) sets.push({ compound, wearPct: 0 });
   return start;

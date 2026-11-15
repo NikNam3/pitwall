@@ -21,7 +21,7 @@ const GOLDEN = JSON.parse(readFileSync(new URL('./golden.json', import.meta.url)
 /** A three-car field on laps `lap` … `lapsTotal` with wetness `wetnessMs` and the forecast `pct` per lap (perfect). */
 function withForecast(pct: (lap: number) => number, o: { lap?: number; lapsTotal?: number; wetnessMs?: number } = {}): StartingPoint {
   const s = startingPoint({ lap: o.lap ?? 4, lapsTotal: o.lapsTotal ?? 20, cars: [{}, {}, {}], ours: [0] });
-  s.wetness = { wetnessMs: o.wetnessMs ?? 0, sdMs: 400 };
+  s.wetness = { wetnessMs: o.wetnessMs ?? 0, sdMs: 400, wet: (o.wetnessMs ?? 0) > 0 };
   s.weather = known({ byLap: Array.from({ length: s.lapsTotal }, (_, i) => ({ lap: i + 1, rainPct: pct(i + 1) })), accuracy: 'perfect' }, 0);
   return s;
 }

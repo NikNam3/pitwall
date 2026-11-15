@@ -46,6 +46,7 @@ const BASE: LapInput = {
   lapOnSet: 5,
   neutralised: 'none',
   wetnessMs: 0,
+  wet: false,
   scatterMs: 0,
   mistakeMs: 0,
 };
@@ -179,7 +180,7 @@ const carArb: fc.Arbitrary<LapInput> = fc.record({
   wetnessMs: fc.double({ min: 0, max: 5_000, noNaN: true }),
   scatterMs: fc.double({ min: -1_000, max: 1_000, noNaN: true }),
   mistakeMs: fc.double({ min: 0, max: 10_000, noNaN: true }),
-});
+}).map((c) => ({ ...c, wet: c.wetnessMs > 0 }));
 
 describe('lap-model: properties', () => {
   it('a fresh set is never slower than the same set worn', () => {

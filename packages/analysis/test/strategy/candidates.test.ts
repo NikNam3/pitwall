@@ -141,7 +141,7 @@ function weatherField(rainPct: (lap: number) => number, wetnessMs: number): Star
   const start = field();
   start.sets[CAR] = [...(start.sets[CAR] ?? []), ...Array.from({ length: 4 }, () => ({ compound: 'inter' as const, wearPct: 0 })), ...Array.from({ length: 3 }, () => ({ compound: 'wet' as const, wearPct: 0 }))];
   const byLap = Array.from({ length: LAPS - LAP + 1 }, (_, i) => ({ lap: LAP + i, rainPct: rainPct(LAP + i) }));
-  return { ...start, weather: known({ byLap, accuracy: 'perfect' as const }, 0), wetness: { wetnessMs, sdMs: 0 } };
+  return { ...start, weather: known({ byLap, accuracy: 'perfect' as const }, 0), wetness: { wetnessMs, sdMs: 0, wet: wetnessMs > 0 } };
 }
 
 /** A DP result with the dry plans above and three inter/wet plans (second best: a shower hedge), and `rain` at `threshold`. */

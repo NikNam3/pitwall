@@ -32,7 +32,7 @@ function forecast(from: number, to: number, pct: (lap: number) => number, accura
 /** A three-car field from lap `lap` to `lapsTotal` with the given wetness and forecast. */
 function start(lap: number, lapsTotal: number, wetnessMs: number, sdMs: number, weather: StartingPoint['weather']): StartingPoint {
   const s = startingPoint({ lap, lapsTotal, cars: [{}, {}, {}], ours: [1] });
-  s.wetness = { wetnessMs, sdMs };
+  s.wetness = { wetnessMs, sdMs, wet: wetnessMs > 0 };
   s.weather = weather;
   return s;
 }

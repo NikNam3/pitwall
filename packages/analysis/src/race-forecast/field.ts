@@ -99,7 +99,7 @@ export type Field = {
 };
 
 /** One reused lap-model input: the forecast calls the lap model once per car and lap. */
-const input: LapInput = { paceMs: 0, degMsPerLap: 0, wearPct: 0, fuelKg: 0, compound: 'medium', lapOnSet: 1, neutralised: 'none', wetnessMs: 0, scatterMs: 0, mistakeMs: 0 };
+const input: LapInput = { paceMs: 0, degMsPerLap: 0, wearPct: 0, fuelKg: 0, compound: 'medium', lapOnSet: 1, neutralised: 'none', wetnessMs: 0, wet: false, scatterMs: 0, mistakeMs: 0 };
 
 /** A field's typed arrays, by size: per car, per car and lap, per lap. */
 type Arrays = Pick<Field, 'neutralByLap' | 'vscLapMs' | 'stopCompound' | 'car' | 'order' | 'carKeys' | 'lap' | 'lineT' | 'running' | 'paceMs' | 'degMs' | 'scatterMs' | 'innovationMs' | 'compound' | 'wearPct' | 'fuelKg' | 'burnKg' | 'lapOnSet'>;

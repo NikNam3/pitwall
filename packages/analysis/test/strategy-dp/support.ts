@@ -105,7 +105,7 @@ type Neutral = 'none' | 'sc' | 'vsc';
 
 type Car = { compound: NoiseCompound; onSet: number; wearPct: number; fuelKg: number };
 
-const lapInput: LapInput = { paceMs: 0, degMsPerLap: 0, wearPct: 0, fuelKg: 0, compound: 'medium', lapOnSet: 1, neutralised: 'none', wetnessMs: 0, scatterMs: 0, mistakeMs: 0 };
+const lapInput: LapInput = { paceMs: 0, degMsPerLap: 0, wearPct: 0, fuelKg: 0, compound: 'medium', lapOnSet: 1, neutralised: 'none', wetnessMs: 0, wet: false, scatterMs: 0, mistakeMs: 0 };
 
 const burnOf = (input: DpInput): number => input.carParams.fuelKg / (input.totalLaps - input.fromLap + 1);
 
