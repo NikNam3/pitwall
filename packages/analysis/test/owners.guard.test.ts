@@ -59,6 +59,12 @@ const LAPS_TO_LIMIT = /\blimitPct\s*[-/]/;
 /** A numeric literal 70 (not part of another number: `0.70`, `170`, `70_000`, `7.0` stay out). */
 const LITERAL_70 = /(?<![\w.])70(?![\w.])/;
 
+/**
+ * A car's pace from its laps: a lap time less a fuel term (degradation's `gammaMsPerKg`, the lap model's `fuelMsPerKg`)
+ * or less a field median of the laps (`fieldMedian`), on one line of code.
+ */
+const PACE_FROM_LAPS = /\blapTimeMs\s*-[^;\n]*\b(?:gammaMsPerKg|fuelMsPerKg|fieldMedian)\b/;
+
 /** `code` without its string and template literals (a note that quotes "70" is no literal of the limit). */
 const withoutStrings = (code: string): string => code.replace(/'(?:[^'\\\n]|\\.)*'|"(?:[^"\\\n]|\\.)*"|`(?:[^`\\]|\\.)*`/g, "''");
 
@@ -106,6 +112,10 @@ const OWNERS: OwnerRow[] = [
   // SP4.3c Task 12 fix round 2 (C47, C3): the wear limit 70 % is `tyre-model`'s config key `limitPct` alone; no other
   // unit has a literal 70 in its code (strings and comments left out).
   { judgement: 'the wear limit literal', owner: 'tyre-model', source: (u) => literalMatches(u, LITERAL_70), allowed: [] },
+  // SP4.3c Task 13 (O2, spec §5.3): a car's pace (the fuel-corrected base pace, its line, the residuals) is
+  // `degradation`'s; no other unit takes a pace from lap times less fuel or less a field median of the laps
+  // (`forecast-field`'s raw-lap fallback and `race-interaction`'s own residuals are deleted).
+  { judgement: "a car's pace", owner: 'degradation', source: (u) => codeMatches(u, PACE_FROM_LAPS), allowed: [] },
 ];
 
 /** A path as the guard shows it: repo-relative with forward slashes. */
@@ -242,6 +252,16 @@ describe('owners guard (spec §5.8)', () => {
       expect(LITERAL_70.test(withoutStrings(codeOf('const limitPct = car?.limitPct ?? 70;')))).toBe(true);
       expect(LITERAL_70.test(withoutStrings(codeOf("const note = 'k · 70 / usableLife'; // 70 %")))).toBe(false);
       expect(LITERAL_70.test(withoutStrings(codeOf('const a = 0.70 + 170 + 70_000 + 7.0;')))).toBe(false);
+    });
+
+    it("Task 13 pattern: a pace from lap times less fuel or a field median, in code only; degradation's fuel correction matches", () => {
+      expect(PACE_FROM_LAPS.test(codeOf('sp.paceMs[k] = lap.lapTimeMs - (fuel.known ? lapModel.fuelMsPerKg * fuel.value : 0);'))).toBe(true);
+      expect(PACE_FROM_LAPS.test(codeOf('const residual = record.lapTimeMs - nth(fieldMedian, lap);'))).toBe(true);
+      expect(PACE_FROM_LAPS.test(codeOf('known(Math.round(lap.lapTimeMs - config.gammaMsPerKg * fuel.value), at)'))).toBe(true);
+      expect(PACE_FROM_LAPS.test(codeOf('// lap.lapTimeMs - fieldMedian\nconst d = lap.lapTimeMs - fastest;'))).toBe(false);
+      expect(PACE_FROM_LAPS.test(codeOf('const g = p.fuelMsPerKg * car.fuelKg;'))).toBe(false);
+      const degradation = unit('degradation');
+      expect(degradation !== undefined && codeMatches(degradation, PACE_FROM_LAPS)).toBe(true);
     });
 
     it('fix round 2: degradation and tyre-model both call the shared fresh-set pick; tyre-model and tyre-life the shared laps-to-limit rule', () => {

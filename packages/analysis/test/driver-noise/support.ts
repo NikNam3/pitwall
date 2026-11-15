@@ -191,6 +191,7 @@ export function stintOf(c: CarLaps): StintDegradation {
     nuSdMs: known(5, at),
     basis: c.wear === 'hidden' ? 'age' : 'wear',
     fuelCorrected: true,
+    fuelIncluded: false,
     source: { kind: 'session', sessionShare: 1, parts: `${laps.length} laps` },
     cov: known([[100, 0], [0, 1]], at),
     startPrior: { nuMsPerLap: 0, nuSdMs: 30, alphaOffsetMs: known(0, 0), source: { kind: 'default', note: 'test', sessionShare: 0, parts: 'default' } },

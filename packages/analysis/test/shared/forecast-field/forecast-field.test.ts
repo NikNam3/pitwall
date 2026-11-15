@@ -1,8 +1,8 @@
 // `forecast-field` (SP4.3a spec 6.1, plan Task 16; C3, C8, C26, C28, C43, C50): the only builder of the simulators'
 // starting point. Rows 1 to 6 and 8 of the task; row 7 (the budget) is `forecast-field.budget.test.ts`.
 //
-// The live build is `buildStartingPoint` on the view after frame N (uncut, `asOfNow`) with the lap progress at the
-// leader's crossing given; the as-of build is `startingPointAt` on the race's final projection, cut at N. Both views
+// The live build is `buildStartingPoint` on the view after frame N (uncut, `asOfNow`) with `gaps`' output among its
+// outputs (ported in SP4.3c Task 13, R34: the order and gaps now are `gaps`'; the lap-progress argument is gone); the as-of build is `startingPointAt` on the race's final projection, cut at N. Both views
 // carry the time of the leader's crossing as `at` (the moment the scoreboard forecasts from) and the same fixed inputs.
 // The truth of the lap progress is the generator's: each car's distance between its own crossings, and the gap the
 // time since the leader was at that distance.
@@ -37,6 +37,7 @@ import { asOfNow, runAsOf, type AsOfView, type Projection } from '@pitwall/engin
 import { describe, expect, it } from 'vitest';
 import { DEGRADATION, type DegradationOutput, type StintDegradation } from '../../../src/degradation/index.ts';
 import { DRIVER_NOISE } from '../../../src/driver-noise/index.ts';
+import { GAPS } from '../../../src/gaps/index.ts';
 import { PIT_LOSS } from '../../../src/pit-loss/index.ts';
 import { RACE_INTERACTION } from '../../../src/race-interaction/index.ts';
 import { RIVAL_STOPS } from '../../../src/rival-stops/index.ts';
@@ -52,6 +53,7 @@ import {
 } from '../../../src/shared/forecast-field/index.ts';
 import { engineView } from '../../../../../test-support/builders/index.ts';
 import { zandvoortTrack } from '../../../../../test-support/track.ts';
+import { gapsOf } from '../../gaps/output.ts';
 import {
   arraysOf,
   asOfViewAt,
@@ -124,18 +126,26 @@ describe('forecast-field (Task 16)', () => {
     let checked = 0;
     for (let n = 2; n <= g.race.laps; n++) {
       const { frame, leader, at } = leaderCrossing(n);
-      // the live lap progress at the leader's crossing: each car's distance and the time since the leader was there
+      // ported in SP4.3c Task 13 (R34, O10): the live build's order and gaps are `gaps`' (its output among the
+      // outputs, as the strategy input passes it), carried forward by forecast-field; the as-of build extrapolates
+      const liveView = liveViewAt(frame, { at });
+      const liveBuild = buildStartingPoint(liveView, new Map([...runAsOf(FORECAST_UNITS, liveView), [GAPS, gapsOf(g.viewAt(frame))]]));
+      const asOfBuild = startingPointAt(asOfViewAt(g, frame, at), frame);
+      // ported in SP4.3c Task 13 (O2): before every car has a paced stint both builds are insufficientData (no raw-lap pace)
+      if (!liveBuild.known || !asOfBuild.known) {
+        expect(asOfBuild, `lap ${n}: both builds agree`).toEqual(liveBuild);
+        expect(liveBuild, `lap ${n}`).toEqual(unknown('insufficientData'));
+        continue;
+      }
+      const live = liveBuild.value;
+      const asOf = asOfBuild.value;
+      // the truth of the lap progress (the generator's), within the tolerance of both builds' lap fraction and gap
       const leaderCrossings = g.crossingsOf(leader);
-      const lapFraction: number[] = [];
-      const gapMs: number[] = [];
       for (let car = 0; car < cars; car++) {
         const s = segmentsAt(g.crossingsOf(carId(car)), at);
-        lapFraction.push((s % MINI_SECTORS) / MINI_SECTORS);
-        gapMs.push(at - timeAtSegments(leaderCrossings, s));
+        expect(fractionApart(live.lapFraction[car]!, (s % MINI_SECTORS) / MINI_SECTORS) * live.paceMs[car]!, `lap ${n}, car ${car}: live lap fraction`).toBeLessThan(TOLERANCE_MS);
+        expect(Math.abs(live.gapMs[car]! - (at - timeAtSegments(leaderCrossings, s))), `lap ${n}, car ${car}: live gap`).toBeLessThan(TOLERANCE_MS);
       }
-      const liveView = liveViewAt(frame, { at });
-      const live = valueOf(buildStartingPoint(liveView, runAsOf(FORECAST_UNITS, liveView), { lapFraction, gapMs }), `live, lap ${n}`);
-      const asOf = valueOf(startingPointAt(asOfViewAt(g, frame, at), frame), `as of, lap ${n}`);
 
       expect(asOf.cars, `lap ${n}`).toBe(cars);
       const { lapFraction: asOfFraction, gapMs: asOfGap, ...asOfRest } = asOf;
@@ -151,7 +161,8 @@ describe('forecast-field (Task 16)', () => {
       expect(asOfGap[leader], `lap ${n}: the leader's gap`).toBe(liveGap[leader]);
       checked++;
     }
-    expect(checked).toBe(g.race.laps - 1);
+    // every lap from the first on which every car has a paced stint
+    expect(checked).toBeGreaterThan((g.race.laps - 1) / 2);
   });
 
   it("pace σ comes from degradation's posterior covariance", () => {
@@ -340,6 +351,7 @@ describe('forecast-field (Task 16)', () => {
       nuSdMs: known(5, 0),
       basis: 'wear',
       fuelCorrected: true,
+      fuelIncluded: false,
       source: { kind: 'session', sessionShare: 0.9, parts: '12 laps + default' },
       cov: known(
         [

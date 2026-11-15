@@ -4,7 +4,9 @@
 // Constraints: Agreement).
 import type { CarId, Policy } from '@pitwall/domain';
 import { describe, expect, it } from 'vitest';
-import { mcSettingsFrom, policyOf, strategyInputFrom, toDpInput, toMcHazard } from '../../../src/shared/strategy-input/index.ts';
+import { GAPS } from '../../../src/gaps/index.ts';
+import { mcSettingsFrom, policyOf, STRATEGY_INPUT_READS, strategyInputFrom, toDpInput, toMcHazard } from '../../../src/shared/strategy-input/index.ts';
+import { gapsOf, withGaps } from '../../gaps/output.ts';
 import { strategyDp, type DpInput } from '../../../src/strategy-dp/index.ts';
 import { STRATEGY_CONFIG } from '../../../src/strategy/config.ts';
 import { RACE_INTERACTION_CONFIG } from '../../../src/race-interaction/config.ts';
@@ -46,6 +48,19 @@ describe('shared strategy input', () => {
       zTie: d.zTie,
       tieBand: d.tieBand,
     });
+  });
+
+  it("the live build's order is gaps' (SP4.3c Task 13, R34, O10): the strategy input reads gaps and passes its output to forecast-field", () => {
+    expect(STRATEGY_INPUT_READS).toContainEqual({ calculator: GAPS });
+    const view = viewAt(RACE(), SNAPSHOT_LAP);
+    const gaps = gapsOf(view);
+    expect(gaps.intervals.length, 'gaps orders the field').toBeGreaterThan(3);
+    // gaps' order with its 2nd and 3rd car swapped: the starting point follows it
+    const intervals = [...gaps.intervals];
+    [intervals[1], intervals[2]] = [intervals[2]!, intervals[1]!];
+    const input = strategyInputFrom(withGaps(view, { ...gaps, intervals }));
+    expect(input.start.known).toBe(true);
+    if (input.start.known) expect(Array.from(input.start.value.order).slice(0, intervals.length)).toEqual(intervals.map((i) => i.carId));
   });
 
   it("one close gap (SP4.3c Task 3, C43, C47): the cover rule's gap is race-interaction's closeGapMs, filled by mcSettingsFrom; a strategy ruleGapMs is not read", () => {
