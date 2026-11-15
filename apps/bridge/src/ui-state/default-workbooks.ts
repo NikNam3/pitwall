@@ -1,37 +1,52 @@
-import { cp, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { replaceKeepingBackup, sha256 } from './ui-files.ts';
 
 /** The workbooks the bridge ships; the folder sits next to this module, so they travel with the source. */
 export const DEFAULT_WORKBOOKS_DIR = join(import.meta.dirname, 'default-workbooks');
 
-/** The file in the workbooks folder that records which defaults were copied; a dotfile, so it is not a workbook. */
+/**
+ * The file in the workbooks folder that records the sha256 of each default as it was last copied; a dotfile, so it is
+ * not a workbook.
+ */
 export const SEEDED_MARKER = '.seeded-defaults.json';
 
-async function readSeeded(path: string): Promise<Set<string>> {
+/** File name to the recorded hash; `undefined` for a name of an earlier release's list-form marker (hash unknown). */
+type Seeded = Map<string, string | undefined>;
+
+async function readSeeded(path: string): Promise<Seeded> {
+  let parsed: unknown;
   try {
-    const parsed: unknown = JSON.parse(await readFile(path, 'utf8'));
-    return new Set(Array.isArray(parsed) ? parsed.filter((name): name is string => typeof name === 'string') : []);
+    parsed = JSON.parse(await readFile(path, 'utf8'));
   } catch {
-    return new Set();
+    return new Map();
   }
+  if (Array.isArray(parsed)) return new Map(parsed.filter((name): name is string => typeof name === 'string').map((name) => [name, undefined]));
+  if (typeof parsed !== 'object' || parsed === null) return new Map();
+  return new Map(Object.entries(parsed).filter((entry): entry is [string, string] => typeof entry[1] === 'string'));
 }
 
 /**
- * Copies each file of `defaultsDir` into `<uiDir>/workbooks/` once: names recorded in the marker file are never copied
- * again, so a default the user deleted stays deleted, and a file already there is kept (and recorded). A default added
- * in a later release is copied on the next start. `serve` runs it before it opens the UI state.
+ * Brings the shipped defaults of `defaultsDir` into `<uiDir>/workbooks/`. A default that is new, or whose shipped text's
+ * hash differs from the recorded one, is copied over the user's file (a different file there is kept as
+ * `<name>.bak-<now()>`) and its hash recorded; an unchanged default leaves the user's file as it is, so an edit is kept
+ * and a deleted file stays deleted. `serve` runs it before it opens the UI state.
  */
-export async function seedDefaultWorkbooks(uiDir: string, defaultsDir: string): Promise<void> {
+export async function seedDefaultWorkbooks(uiDir: string, defaultsDir: string, now: () => string): Promise<void> {
   const target = join(uiDir, 'workbooks');
   await mkdir(target, { recursive: true });
   const markerPath = join(target, SEEDED_MARKER);
   const seeded = await readSeeded(markerPath);
-  const before = seeded.size;
-  for (const name of await readdir(defaultsDir)) {
-    if (seeded.has(name)) continue;
-    // `force: false` with `errorOnExist: false` keeps an existing file as it is.
-    await cp(join(defaultsDir, name), join(target, name), { force: false, errorOnExist: false });
-    seeded.add(name);
+  const recorded: Record<string, string> = {};
+  let changed = false;
+  for (const name of (await readdir(defaultsDir)).sort()) {
+    const text = await readFile(join(defaultsDir, name), 'utf8');
+    const hash = sha256(text);
+    recorded[name] = hash;
+    if (seeded.get(name) === hash) continue;
+    replaceKeepingBackup(join(target, name), text, now());
+    changed = true;
   }
-  if (seeded.size !== before) await writeFile(markerPath, `${JSON.stringify([...seeded].sort())}\n`);
+  // A name no longer shipped is dropped from the marker.
+  if (changed || [...seeded.keys()].some((name) => !(name in recorded))) await writeFile(markerPath, `${JSON.stringify(recorded, null, 2)}\n`);
 }

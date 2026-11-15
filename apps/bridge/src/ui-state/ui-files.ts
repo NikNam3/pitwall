@@ -1,6 +1,6 @@
 // The files under `PITWALL_DATA_DIR/ui/` (ADR 0013): atomic writes, content hashes, tolerant reads.
 import { createHash } from 'node:crypto';
-import { mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 export const sha256 = (text: string): string => createHash('sha256').update(text).digest('hex');
@@ -39,6 +39,24 @@ export function workbookNames(dir: string): string[] {
   } catch {
     return [];
   }
+}
+
+/** `<path>.bak-<date>`, or with `-2`, `-3`, … appended when that backup exists, so a backup never overwrites another. */
+function backupPath(path: string, date: string): string {
+  const base = `${path}.bak-${date}`;
+  let candidate = base;
+  for (let n = 2; existsSync(candidate); n++) candidate = `${base}-${n}`;
+  return candidate;
+}
+
+/**
+ * Writes `text` to `path`; a different file already there is first kept as a dated backup beside it (`backupPath`).
+ * A shipped default reaching the user (seeding, `workbook.reset`) goes through here.
+ */
+export function replaceKeepingBackup(path: string, text: string, date: string): void {
+  const old = readText(path);
+  if (old !== undefined && old !== text) renameSync(path, backupPath(path, date));
+  writeAtomic(path, text);
 }
 
 export const ensureDir = (dir: string): void => {

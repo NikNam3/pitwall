@@ -22,6 +22,8 @@ export type CommandContext = {
   sendReplay: (control: ReplayControl) => void;
   open: (overlay: ShellOverlay) => void;
   workbookNames: () => readonly string[];
+  /** The name of the workbook the bridge publishes as active; without it, or before one is published, `workbook.reset` does nothing. */
+  activeWorkbook?: () => string | undefined;
   groups: () => readonly LinkGroup[];
   settings: () => Pick<UiSettings, 'realismNextSession'> | undefined;
   /** This window's font size in px. */
@@ -87,6 +89,16 @@ export function defaultCommands(ctx: CommandContext): Command[] {
     })),
     { id: 'workbook.pick', title: t.workbookPick, group: g.workbooks, run: () => ctx.open({ kind: 'workbooks' }) },
     { id: 'workbook.saveAs', title: t.workbookSaveAs, group: g.workbooks, run: () => ctx.open({ kind: 'saveAs' }) },
+    {
+      // The bridge resets the file and publishes the default; the window keeps no copy (C73).
+      id: 'workbook.reset',
+      title: t.workbookReset,
+      group: g.workbooks,
+      run: () => {
+        const name = ctx.activeWorkbook?.();
+        if (name !== undefined) ctx.send({ kind: 'workbook.reset', name });
+      },
+    },
     {
       id: 'alerts.ackAll',
       title: t.alertsAckAll,
