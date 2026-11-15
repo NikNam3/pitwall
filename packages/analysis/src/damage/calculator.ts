@@ -22,14 +22,14 @@ import {
   type SessionTime,
   type Span,
 } from '@pitwall/domain';
-import { openSpansOf, type DeepReadonly, type EngineView, type IncrementalCalculator } from '@pitwall/engine/readers';
+import type { DeepReadonly, EngineView, IncrementalCalculator } from '@pitwall/engine/readers';
 import { classifyLap, LAP_CLASSES_CONFIG, type LapClassOptions } from '../lap-classes/index.ts';
 import { PACE_DELTA_CONFIG } from '../pace-delta/config.ts';
-import { behaviourFor, openSpansByCar } from '../shared/behaviour.ts';
+import { behaviourFor } from '../shared/behaviour.ts';
 import { CAR_STATUS_READS } from '../shared/car-status.ts';
 import { MIN_LAPS } from '../pace-delta/index.ts';
 import { emptyDamageJumps, finishJump, foldDamageJumps, repairedSince, type DamageJumpFold, type FinishedJump } from '../shared/damage-jumps.ts';
-import { isNeutralisation, NEUTRALISATION_MACHINES, NEUTRALISATION_READS } from '../shared/neutralised.ts';
+import { NEUTRALISATION_MACHINES, NEUTRALISATION_READS, timeLossExcludedOf } from '../shared/neutralised.ts';
 import { carSegmentMedian, foldCarSample, type CarSegmentSamples } from '../shared/segment-medians.ts';
 import { DAMAGE_BEHAVIOUR, type DamageEffect } from './behaviour.ts';
 import { DAMAGE, DAMAGE_CONFIG, type DamageOutput } from './index.ts';
@@ -42,11 +42,11 @@ const LOCATION: MachineId = 'car-location';
 /** A crossing of a car; "progress" counts mini-sector boundaries from the race start; `frame`: the frame it describes (C26). */
 type Point = { at: SessionTime; progress: number; frame: FrameNumber };
 
-/** The frames a closed span covers, `startFrame <= f < endFrame` (C26). */
-type Cover = { startFrame: FrameNumber; endFrame: FrameNumber };
-
-/** A mini-sector counted toward a jump's estimate: its end crossing and its loss against the frozen median. */
-type Counted = { endFrame: FrameNumber; at: SessionTime; lossMs: Ms };
+/**
+ * A mini-sector counted toward a jump's estimate: the frames of its start and end crossings, its end time and its loss
+ * against the frozen median.
+ */
+type Counted = { fromFrame: FrameNumber; toFrame: FrameNumber; at: SessionTime; lossMs: Ms };
 
 /**
  * One jump's estimate so far: the segment medians frozen at the jump (set once the first mini-sector ending after its
@@ -79,10 +79,12 @@ type Acc = {
   crossingCount: number;
   /** How many closed spans of each sub-machine with `noSample` rows are folded. */
   closedCount: Record<MachineId, number>;
-  /** The closed neutralisations whose row is `noSample`. */
-  neutralised: Cover[];
-  /** Per car, its closed spans whose row is `noSample` (pit visits, garage spells). */
-  visits: Map<CarId, Cover[]>;
+  /**
+   * The closed spans whose row is `noSample` (the neutralisations, the pit visits and garage spells), by sub-machine:
+   * what the one exclusion (`timeLossExcludedOf`) keeps a mini-sector out of the samples by, through the projection
+   * module's membership (C26).
+   */
+  noSample: Record<MachineId, DeepReadonly<Span>[]>;
   tracks: Map<CarId, Track>;
   jumpPct: number;
   jumpWindowMs: number;
@@ -104,9 +106,6 @@ const rowOf = (machine: MachineId, kind: string): DamageEffect => {
   if (row === undefined) throw new Error(`damage behaviour: no row for ${machine} ${kind}`);
   return row;
 };
-
-/** The mini-sector from `from` to `to` covers frames `from.frame <= f < to.frame`: it shares one with `span` (C26). */
-const sharesFrame = (from: Point, to: Point, span: Cover): boolean => from.frame < span.endFrame && to.frame > span.startFrame;
 
 const emptyTrack = (): Track => ({ points: [], evaluated: 0, samples: [], estimates: [], stale: false });
 
@@ -147,15 +146,10 @@ const foldSpans = (acc: Acc, view: EngineView): void => {
     for (let i = acc.closedCount[machine] ?? 0; i < list.length; i++) {
       const span = list[i] as DeepReadonly<Span>;
       if (rowOf(machine, span.kind).noSample !== true) continue;
-      const cover = { startFrame: span.startFrame, endFrame: span.endFrame };
+      (acc.noSample[machine] ??= []).push(span);
       if (machine === LOCATION) {
-        if (span.carId === undefined) continue;
-        const visits = acc.visits.get(span.carId) ?? [];
-        acc.visits.set(span.carId, visits);
-        visits.push(cover);
-        trackOf(acc, span.carId).stale = true;
-      } else if (isNeutralisation(machine, span)) {
-        acc.neutralised.push(cover);
+        if (span.carId !== undefined) trackOf(acc, span.carId).stale = true;
+      } else {
         for (const track of acc.tracks.values()) track.stale = true;
       }
     }
@@ -203,7 +197,7 @@ const evaluate = (track: Track, excluded: (from: Point, to: Point) => boolean): 
     for (const est of track.estimates) {
       const baselineMs = from.frame >= est.frame ? est.baseline?.[segment] : undefined;
       if (baselineMs === undefined || baselineMs === 'fewLaps') continue;
-      est.counted.push({ endFrame: to.frame, at: to.at, lossMs: ms - baselineMs });
+      est.counted.push({ fromFrame: from.frame, toFrame: to.frame, at: to.at, lossMs: ms - baselineMs });
       est.sumMs += ms - baselineMs;
     }
     foldCarSample(track.samples, segment, ms);
@@ -211,16 +205,20 @@ const evaluate = (track: Track, excluded: (from: Point, to: Point) => boolean): 
   track.evaluated = points.length;
 };
 
-/** A pure fold over the events, the laps, the crossings, the closed spans and the config (C31.2). */
+/**
+ * A pure fold over the events, the laps, the crossings, the closed spans and the config (C31.2). A mini-sector is no
+ * sample where the one exclusion (`timeLossExcludedOf`) over the closed spans of `noSample` says so (C26); the open
+ * ones are applied by `output`.
+ */
 const fold = (acc: Acc, view: EngineView): Acc => {
   foldJumps(acc, view);
   foldLaps(acc, view);
   foldSpans(acc, view);
   foldCrossings(acc, view);
+  const excluded = timeLossExcludedOf({ history: { spans: acc.noSample } });
   for (const [id, track] of acc.tracks) {
     if (track.stale) resetTrack(track);
-    const visits = acc.visits.get(id) ?? [];
-    evaluate(track, (from, to) => acc.neutralised.some((n) => sharesFrame(from, to, n)) || visits.some((v) => sharesFrame(from, to, v)));
+    evaluate(track, (from, to) => excluded(id, from.frame, to.frame));
   }
   return acc;
 };
@@ -233,8 +231,7 @@ const init = (view: EngineView): Acc =>
       laps: emptyCurrentLaps(),
       crossingCount: 0,
       closedCount: {},
-      neutralised: [],
-      visits: new Map(),
+      noSample: {},
       tracks: new Map(),
       ...settings(view),
     },
@@ -277,26 +274,6 @@ const carsNow = (view: EngineView): Map<CarId, { state: Omit<DamageState, 'jumps
 };
 
 /**
- * Per car, the frame from which its open `noSample` spans (C20) cover every frame: the open neutralisation's start and
- * the car's open pit visit or garage spell's, the earlier; `Infinity` with none open. A mini-sector ending after it
- * shares a frame with one (C26).
- */
-const openCutOf = (view: EngineView): ((id: CarId) => FrameNumber) => {
-  let session = Infinity;
-  for (const machine of NEUTRALISATION_MACHINES) {
-    for (const span of openSpansOf(view, machine)) {
-      if (isNeutralisation(machine, span) && rowOf(machine, span.kind).noSample === true) session = Math.min(session, span.startFrame);
-    }
-  }
-  const byCar = openSpansByCar(view, LOCATION);
-  return (id) => {
-    let cut = session;
-    for (const span of byCar.get(id) ?? []) if (rowOf(LOCATION, span.kind).noSample === true) cut = Math.min(cut, span.startFrame);
-    return cut;
-  };
-};
-
-/**
  * While the loss is measured (`insufficientData`: enough pace laps before the jump, fewer than `pace-delta`'s
  * `MIN_LAPS` after its lap), the pace laps after it so far; `notApplicable` once measured or when it can never be.
  */
@@ -311,14 +288,15 @@ const measuringOf = (
 };
 
 /**
- * The estimate of a jump: the losses of its counted mini-sectors no open span covers (they end at or before `cut`),
- * summed and scaled to a lap of `MINI_SECTORS`, as of the newest one; `insufficientData` below `minSegments`.
+ * The estimate of a jump: the losses of its counted mini-sectors no open `noSample` span covers (`openExcluded`, C20,
+ * C26), summed and scaled to a lap of `MINI_SECTORS`, as of the newest one; `insufficientData` below `minSegments`. An
+ * open span covers every frame from the one it opened on, so the mini-sectors it covers are the newest counted ones.
  */
-const estimateOf = (est: JumpEstimate | undefined, cut: FrameNumber, minSegments: number): Known<Ms> => {
+const estimateOf = (est: JumpEstimate | undefined, openExcluded: (c: Counted) => boolean, minSegments: number): Known<Ms> => {
   if (est === undefined) return unknown('insufficientData');
   let n = est.counted.length;
   let sumMs = est.sumMs;
-  for (let last = est.counted[n - 1]; last !== undefined && last.endFrame > cut; last = est.counted[n - 1]) {
+  for (let last = est.counted[n - 1]; last !== undefined && openExcluded(last); last = est.counted[n - 1]) {
     sumMs -= last.lossMs;
     n--;
   }
@@ -353,18 +331,19 @@ export const damageCalculator: IncrementalCalculator<Acc, DamageOutput> = {
   update: (acc, delta, view) => (delta.rewound !== undefined ? init(view) : fold(acc, view)),
   output(acc, view) {
     const out: DamageOutput = {};
-    const cutOf = openCutOf(view);
+    // the open spans of the situation alone (C20): the accumulator applied the closed ones
+    const excluded = timeLossExcludedOf({ history: { spans: {} }, situation: view.situation });
     for (const [id, { state, lap, effect }] of carsNow(view)) {
       // integer keys iterate in ascending order: the car's laps by lap number
       const laps = Object.values(acc.laps[id] ?? {});
       const opts = { ...acc, isRace: effect.isRace === true };
       const estimates = acc.tracks.get(id)?.estimates ?? [];
-      const cut = cutOf(id);
+      const openExcluded = (c: Counted): boolean => excluded(id, c.fromFrame, c.toFrame);
       const jumps = (acc.grouping.jumps.get(id) ?? []).flatMap((raw, i) => {
         if (repairedSince(acc.grouping, id, raw)) return [];
         const finished = finishJump(raw, laps, lap, opts);
         const jump = effect.measured === true ? finished : { ...finished, lossMsPerLap: unknown('notApplicable') };
-        const estimateMsPerLap = jump.lossMsPerLap.known ? unknown('notApplicable') : estimateOf(estimates[i], cut, acc.minEstimateSegments);
+        const estimateMsPerLap = jump.lossMsPerLap.known ? unknown('notApplicable') : estimateOf(estimates[i], openExcluded, acc.minEstimateSegments);
         return [{ ...jump, measuring: measuringOf(jump, laps, opts), estimateMsPerLap }];
       });
       out[id] = { ...state, jumps };
