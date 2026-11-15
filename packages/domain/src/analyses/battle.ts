@@ -19,13 +19,8 @@ export type BattleSide = {
   /** Over the same last 50 mini-sectors of both cars, s/lap; positive = we are faster. */
   paceDeltaMs: Known<Ms>;
   /**
-   * The margin that applies on this side: `pass` ahead (our edge − `overtakeThresholdMs`), `hold` behind
-   * (`overtakeThresholdMs` − their edge); positive = good for us.
-   */
-  margin: Known<{ kind: 'pass' | 'hold'; ms: Ms }>;
-  /**
    * The pass chance (0–1) at the current gap from `race-interaction`'s pass curve (SP4.3c O13): ahead ours to pass, behind
-   * theirs to pass us. Replaces `margin`, which Task 15 deletes; unfilled until then.
+   * theirs to pass us.
    */
   passChance: Known<number>;
   ours: { compound: VisualCompound; age: number };
