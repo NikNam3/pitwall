@@ -453,3 +453,24 @@ describe('strategy-dp: edges', () => {
     expect(a.plans[0]!.expectedMs).toBeGreaterThan(30 * PACE_MS);
   });
 });
+
+// SP4.3c Task 15 (O15, C43): the DP burns the starting point's burn (`carParams.fuelBurnKgPerLap`, from
+// `shared/fuel-burn.ts`), not its own `fuel ÷ laps left` (`state.ts`'s fuel by lap, `thresholds.ts`' green race time).
+describe('strategy-dp: the fuel burn (SP4.3c Task 15, O15)', () => {
+  const MS_PER_KG = 100;
+  const fuelled = (fuelBurnKgPerLap: number) =>
+    dpInput({ totalLaps: 25, fromLap: 1, lap: { ...LAP, fuelMsPerKg: MS_PER_KG }, car: { degMsPerLap: 0, fuelKg: 30, fuelBurnKgPerLap }, sets: NO_SETS });
+
+  it('a car burning 1.8 kg/lap with 30 kg left plans 16 laps of fuel: 16 full burns, 1.2 kg on lap 17, empty after', () => {
+    const r = strategyDp(fuelled(1.8));
+    // Σ max(0, 30 − 1.8 i), i = 0 … 24: 265.2 kg-laps (30 kg over 25 laps would be 390)
+    const kgLaps = Array.from({ length: 25 }, (_, i) => Math.max(0, 30 - 1.8 * i)).reduce((s, kg) => s + kg, 0);
+    expect(kgLaps).toBeCloseTo(265.2, 9);
+    close(r.stayOut.expectedMs, 25 * PACE_MS + MS_PER_KG * kgLaps, 'stayOut: the pace plus the fuel term of the measured burn');
+    close(r.stayOut.expectedMs, raceTimeMs(fuelled(1.8), []), 'and the deterministic race time of the support');
+  });
+
+  it('the burn is read, not computed: no burn keeps the fuel to the flag', () => {
+    close(strategyDp(fuelled(0)).stayOut.expectedMs, 25 * (PACE_MS + MS_PER_KG * 30), 'no burn');
+  });
+});

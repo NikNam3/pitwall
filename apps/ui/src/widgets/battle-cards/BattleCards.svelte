@@ -1,5 +1,5 @@
 <script lang="ts">
-  // One row per neighbour of the linked car (V14): gap, pace, pass/hold margin, laps to DRS, tyres, rival ERS.
+  // One row per neighbour of the linked car (V14): gap, pace, pass chance, laps to DRS, tyres, rival ERS.
   import CompoundMark from '../../kit/compound/CompoundMark.svelte';
   import TextCell from '../../kit/values/TextCell.svelte';
   import type { WidgetProps } from '../../kit/types.ts';

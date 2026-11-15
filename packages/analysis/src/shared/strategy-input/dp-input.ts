@@ -97,6 +97,7 @@ export function dpInputOn(field: StartingPoint, car: CarId, hazard: Hazard, road
       tyreAge: field.tyreAge[car] ?? 0,
       wearPct: field.wearPct[car] ?? 0,
       fuelKg: field.fuelKg[car] ?? 0,
+      fuelBurnKgPerLap: field.fuelBurnKgPerLap[car] ?? 0,
       paceMs: field.paceMs[car] ?? 0,
       degMsPerLap: field.tyre.degMsPerLap[current] ?? 0,
       wearRatePct,

@@ -12,10 +12,11 @@ export function battleRole(moment: Known<RaceMoment> | undefined, car: CarId, si
   return params.carId === car && params.side === side ? presentation.moments[moment.value.moment].emphasis : undefined;
 }
 
-/** The margin's role: a positive pass is white, a negative hold is a warning; anything else is plain. */
-export function marginRole(margin: Known<{ kind: 'pass' | 'hold'; ms: number }> | undefined): Role | undefined {
-  if (margin === undefined || !margin.known) return undefined;
-  const { kind, ms } = margin.value;
-  if (kind === 'pass') return ms > 0 ? 'text' : undefined;
-  return ms < 0 ? 'warning' : undefined;
+/** A pass chance at a braking zone from which a pass is likely: about the curve's chance at 1 s a lap faster with DRS. */
+const LIKELY_PASS = 0.25;
+
+/** The pass chance's role: a likely pass ahead (ours) is white, behind (theirs on us) a warning; anything else is plain. */
+export function passChanceRole(side: Side, chance: Known<number> | undefined): Role | undefined {
+  if (chance === undefined || !chance.known || chance.value < LIKELY_PASS) return undefined;
+  return side === 'ahead' ? 'text' : 'warning';
 }

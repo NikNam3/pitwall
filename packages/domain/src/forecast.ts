@@ -35,6 +35,8 @@ export type StartingPoint = {
   tyreAge: Int16Array;
   wearPct: Float64Array;
   fuelKg: Float64Array;
+  /** kg per lap: the car's measured burn, else its fuel over the laps left (`shared/fuel-burn.ts`, SP4.3c O15). */
+  fuelBurnKgPerLap: Float64Array;
   paceMs: Float64Array;
   paceSdMs: Float64Array;
   sigmaMs: Float64Array;

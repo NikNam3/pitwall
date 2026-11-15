@@ -3,13 +3,13 @@ import type { CarOverview } from '@pitwall/contracts';
 import { carCodeById } from '../../kit/car/car-label.ts';
 import { gridRow, knownPart, unknownPart, type CellPart, type GridColumn } from '../../kit/grid/grid.ts';
 import { compoundText } from '../../kit/compound/compound-mark.ts';
-import { formatJoules, formatLaps, formatSecondsPerLap, formatSignedSeconds } from '../../kit/values/format.ts';
+import { formatJoules, formatLaps, formatSecondsPerLap, formatShare, formatSignedSeconds } from '../../kit/values/format.ts';
 import type { Role } from '../../theme/roles.ts';
 import type { WidgetSize } from '../../kit/types.ts';
-import { battleRole, marginRole, type Side } from './emphasis.ts';
+import { battleRole, passChanceRole, type Side } from './emphasis.ts';
 import * as text from './text.ts';
 
-export type ColumnId = 'drv' | 'gap' | 'paceDelta' | 'margin' | 'toDrs' | 'tyres' | 'ers';
+export type ColumnId = 'drv' | 'gap' | 'paceDelta' | 'passChance' | 'toDrs' | 'tyres' | 'ers';
 /** A field: a part (its text, or why it is unknown) with its emphasis and what it means on hover (`title`). */
 export type Cell = CellPart & { role?: Role; title?: string };
 export type TyrePair = { ours: { compound: VisualCompound; age: number }; theirs: { compound: VisualCompound; age: number } };
@@ -21,7 +21,7 @@ export type BattleRow = {
   tyres?: TyrePair;
 };
 
-const COLUMN_IDS: readonly ColumnId[] = ['drv', 'gap', 'paceDelta', 'margin', 'toDrs', 'tyres', 'ers'];
+const COLUMN_IDS: readonly ColumnId[] = ['drv', 'gap', 'paceDelta', 'passChance', 'toDrs', 'tyres', 'ers'];
 const COMPACT: readonly ColumnId[] = ['drv', 'gap', 'toDrs'];
 export const LABEL_WIDTH = 6;
 /** The fixed field of each column. */
@@ -30,7 +30,7 @@ export const WIDTH: Record<ColumnId, GridColumn> = {
   gap: { width: 6, align: 'right' },
   toDrs: { width: 8, align: 'right' },
   paceDelta: { width: 11, align: 'right' },
-  margin: { width: 16, align: 'right' },
+  passChance: { width: 4, align: 'right' },
   tyres: { width: 7, align: 'left' },
   ers: { width: 6, align: 'right' },
 };
@@ -48,10 +48,10 @@ const GAP_SIGN: Record<Side, 1 | -1> = { ahead: -1, behind: 1 };
 const toDrsCell = (lapsToDrs: Known<number>, drs: DrsStatus): Cell =>
   drs.enabled ? knownPart(lapsToDrs, (n) => (n === 0 ? text.inDrs : formatLaps(n))) : { text: text.drsOff, title: text.drsOffTitle[drs.reason] };
 
-/** MARGIN: PASS or HOLD with the pace margin per lap. */
-function marginCell(margin: BattleSide['margin']): Cell {
-  const cell: Cell = knownPart(margin, (m) => `${text.marginKind[m.kind]} ${formatSecondsPerLap(m.ms)}`);
-  const role = marginRole(margin);
+/** PASS: the pass chance at the gap as a whole percent; ahead ours, behind theirs on us. */
+function passChanceCell(side: Side, chance: Known<number>): Cell {
+  const cell: Cell = knownPart(chance, formatShare);
+  const role = passChanceRole(side, chance);
   return role === undefined ? cell : { ...cell, role };
 }
 
@@ -70,7 +70,7 @@ function sideRow(label: BattleRow['label'], side: Side, card: BattleCard, cars: 
     gap: knownPart(s.gapMs, (ms) => formatSignedSeconds(GAP_SIGN[side] * ms, 3)),
     toDrs: toDrsCell(s.lapsToDrs, card.drs),
     paceDelta: knownPart(s.paceDeltaMs, formatSecondsPerLap),
-    margin: marginCell(s.margin),
+    passChance: passChanceCell(side, s.passChance),
     tyres: { text: tyreText(s) },
     ers: knownPart(s.theirErsStoreJ, formatJoules),
   };

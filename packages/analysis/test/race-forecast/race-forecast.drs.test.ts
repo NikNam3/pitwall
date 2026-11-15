@@ -3,27 +3,25 @@
 //   p = cap · σ(level + slopePerMs · advantageMs + drsFactor · [DRS]), × wetFactor when wet,
 // at the braking zone after a DRS zone; it no longer reads `RaceInteraction.drsPassFactor`.
 //
-// The seam of row 1 (the test agent's choice): `race-forecast/index.ts` exports its pass chance as
-// `passChance(curve: PassCurve, wet: boolean, drs: boolean, advantageMs: number): number`, compared with the formula
-// within 1e-9; the simulator is pinned to it on a two-car start in plain mode, where a held car passes once its summed
-// hazard −ln(1 − p) reaches ln 2, i.e. at a lone zone with p ≥ 0.5: a DRS chance just above 0.5 passes on the first DRS
-// lap, just below it waits for the next.
+// The seam of row 1 (ported in SP4.3c Task 15, O13): the pass chance is `race-interaction`'s
+// `passChance(deltaMs, gapMs, { curve, wet, drs, drsRangeMs })` (`race-forecast` calls it; its own copy is deleted),
+// compared with the formula within 1e-9 at a gap inside the DRS range; the simulator is pinned to it on a two-car start
+// in plain mode, where a held car passes once its summed hazard −ln(1 − p) reaches ln 2, i.e. at a lone zone with
+// p ≥ 0.5: a DRS chance just above 0.5 passes on the first DRS lap, just below it waits for the next.
 import type { PassCurve, Policy, StartingPoint } from '@pitwall/domain';
 import { asOfNow, createRng, type EngineView } from '@pitwall/engine/readers';
 import { describe, expect, it } from 'vitest';
-import * as forecast from '../../src/race-forecast/index.ts';
 import { raceForecast } from '../../src/race-forecast/index.ts';
+import { passChance as interactionPassChance } from '../../src/race-interaction/index.ts';
 import { buildStartingPoint } from '../../src/shared/forecast-field/index.ts';
 import { generated, materialised, PARAMS, plainNoise, TRACK, upstreamOf, type Generated } from '../shared/forecast-field/support.ts';
 import { CURVE, drawn, interaction, noStops, NOISY, PACE_MS, PLAIN, startingPoint, traceAt, type CarSpec } from './start.ts';
 
 type PassChance = (curve: PassCurve, wet: boolean, drs: boolean, advantageMs: number) => number;
 
-/** The exported pass chance (row 1's seam); throws while the module has none. */
+/** The one pass chance (`race-interaction`'s) at a gap inside the DRS range, in row 1's argument order. */
 function passChanceOf(): PassChance {
-  const f = (forecast as Record<string, unknown>)['passChance'];
-  if (typeof f !== 'function') throw new Error('race-forecast exports no passChance(curve, wet, drs, advantageMs)');
-  return f as PassChance;
+  return (curve, wet, drs, advantageMs) => interactionPassChance(advantageMs, 0, { curve, wet, drs, drsRangeMs: 1_000 });
 }
 
 const sigmoid = (x: number): number => 1 / (1 + Math.exp(-x));

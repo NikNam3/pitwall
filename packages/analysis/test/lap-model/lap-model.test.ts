@@ -1,9 +1,9 @@
 // `lap-model` (SP4.3a spec 6.2, Task 17): one car, one lap, additive, on plain inputs only (C50). Each term is checked
 // alone against a zero baseline; the properties hold over random parameters and inputs.
-import type { LapInput, LapModelParams, NoiseCompound } from '@pitwall/domain';
+import { tyreTypeOf, type LapInput, type LapModelParams, type NoiseCompound } from '@pitwall/domain';
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
-import { lapTimeMs } from '../../src/lap-model/index.ts';
+import { lapTimeMs, typeTermMs } from '../../src/lap-model/index.ts';
 
 /** Every term zero or neutral: the lap time is the base pace alone. */
 const ZERO: LapModelParams = {
@@ -205,6 +205,41 @@ describe('lap-model: properties', () => {
       fc.property(paramsArb, carArb, fc.double({ min: 0, max: 110, noNaN: true }), (p, car, other) => {
         const [lo, hi] = car.fuelKg <= other ? [car.fuelKg, other] : [other, car.fuelKg];
         expect(lapTimeMs(p, { ...car, fuelKg: lo })).toBeLessThanOrEqual(lapTimeMs(p, { ...car, fuelKg: hi }));
+      }),
+    );
+  });
+});
+
+// SP4.3c Task 15 (O4, C43, C50): the compound and wetness term of the lap time is the lap model's, exported as
+// `typeTermMs`; `race-monte-carlo/rivals.ts` calls it for a rival's type choice instead of its own copy (`typeMs`).
+describe('lap-model: the compound and wetness term (typeTermMs, SP4.3c Task 15, O4)', () => {
+  it("is the compound's offset plus its tyre type's wetness slope times the wetness", () => {
+    for (const compound of COMPOUNDS) {
+      for (const w of [0, 400, 1_500]) {
+        expect(typeTermMs(PARAMS, compound, w), `${compound} at ${w}`).toBeCloseTo(PARAMS.compoundOffsetMs[compound] + PARAMS.wetnessMsPerMs[tyreTypeOf(compound)] * w, 9);
+      }
+    }
+    // inter at 1,500 ms: 2,000 − 0.5 × 1,500
+    expect(typeTermMs(PARAMS, 'inter', 1_500)).toBeCloseTo(1_250, 9);
+  });
+
+  it("equals the lap model's own term: a lap's time less its pace, every other term off, is typeTermMs", () => {
+    const only: LapModelParams = { ...ZERO, compoundOffsetMs: PARAMS.compoundOffsetMs, wetnessMsPerMs: PARAMS.wetnessMsPerMs };
+    for (const compound of COMPOUNDS) {
+      for (const wetnessMs of [0, 700, 2_000]) {
+        expect(lap({ compound, wetnessMs }, only) - BASE.paceMs, `${compound} at ${wetnessMs}`).toBeCloseTo(typeTermMs(only, compound, wetnessMs), 9);
+      }
+    }
+  });
+
+  it('property: a green lap changes with its compound and wetness exactly as typeTermMs does', () => {
+    fc.assert(
+      fc.property(paramsArb, carArb, fc.constantFrom(...COMPOUNDS), fc.double({ min: 0, max: 3_000, noNaN: true }), (p, car, compound, wetnessMs) => {
+        const green: LapInput = { ...car, neutralised: 'none' };
+        const rest = lapTimeMs(p, green) - typeTermMs(p, green.compound, green.wetnessMs);
+        // the wet flag (the cold-tyre term's) stays the car's: only the compound and the wetness move
+        const other = lapTimeMs(p, { ...green, compound, wetnessMs }) - typeTermMs(p, compound, wetnessMs);
+        expect(other).toBeCloseTo(rest, 6);
       }),
     );
   });

@@ -7,8 +7,9 @@
 // a held, faster car passes by the pass curve on its pace advantage. Interaction is only between neighbours in race
 // order, so a lapped car never holds a faster one (blue flags). Stops, retirements and neutralisations are events at
 // the points; the lap's time comes from `lap-model`.
-import type { ForecastResult, PassCurve, Policy, Scenario, StartingPoint } from '@pitwall/domain';
+import type { ForecastResult, Policy, Scenario, StartingPoint } from '@pitwall/domain';
 import { defineSimulator, type Rng } from '@pitwall/engine/readers';
+import { passChance, sessionCurve, type PassContext } from '../race-interaction/pass-chance.ts';
 import { DOUBLE_STACK_MS, HUMAN_STOP_SAVING_MS, MEDIAN_PASS_HAZARD, PASS_MARGIN_MS, PLAIN_PASS_MIN_ADVANTAGE_MS } from './constants.ts';
 import { PURPOSE, streamKey, uniform } from './draws.ts';
 import { createField, endLap, fitStop, lineIndex, NEUTRAL, SLOT, startLap, stopAt, STRIDE, wetOn, type Field } from './field.ts';
@@ -28,6 +29,7 @@ const SC = NEUTRAL.sc;
 const PASS = PURPOSE.pass;
 const MEDIAN_HAZARD = MEDIAN_PASS_HAZARD;
 const MARGIN_MS = PASS_MARGIN_MS;
+const passAt = passChance;
 const uniformDraw = uniform;
 const keyOf = streamKey;
 const lapStart = startLap;
@@ -50,20 +52,6 @@ const DRS_PASS = SLOT.drsPass;
 const HELD_EPS_MS = 1e-6;
 const PIT_LOSS = ['green', 'vsc', 'sc'] as const;
 
-/**
- * The pass chance at one braking zone, the model `race-interaction` fits (`race-interaction/fit.ts`; SP4.3b Task 10b):
- * cap · σ(level + slopePerMs · advantageMs + drsFactor · [DRS]), × wetFactor when wet; `drs`: a zone after a DRS zone.
- */
-export function passChance(curve: PassCurve, wet: boolean, drs: boolean, advantageMs: number): number {
-  const eta = curve.level + curve.slopePerMs * advantageMs + (drs ? curve.drsFactor : 0);
-  return ((wet ? curve.wetFactor : 1) * curve.cap) / (1 + Math.exp(-eta));
-}
-
-/** The session's pass curve: its band's, else the first band's; none passes without a band. */
-function curveOf(start: StartingPoint): PassCurve | undefined {
-  const { bands, band } = start.interaction;
-  return (band.known ? bands[band.value]?.curve : undefined) ?? bands[0]?.curve;
-}
 
 type Run = { f: Field; pts: LapPoints; order: Int16Array; m: number };
 
@@ -107,7 +95,9 @@ export function raceForecast(start: StartingPoint, policies: readonly Policy[], 
   // the one DRS rule, race-interaction's (forecast-field fills it, F7)
   const drsRangeMs = start.drs.rangeMs;
   const drsFromLap = start.drs.fromLap;
-  const curve = curveOf(start);
+  // the one pass curve, race-interaction's (O13); one context, updated per pass draw (no allocation in the loop)
+  const curve = sessionCurve(it);
+  const pass: PassContext | undefined = curve === undefined ? undefined : { curve, wet: false, drs: false, drsRangeMs: Math.max(0, drsRangeMs) };
   // a wet lap scales the pass chance (`track-wetness`'s one rule, O3); per lap where the scenario carries a wetness path
   // (SP4.3b spec §7.1)
   const wetPath = f.wetnessByLap !== undefined;
@@ -177,10 +167,13 @@ export function raceForecast(start: StartingPoint, policies: readonly Policy[], 
         car[b + HELD_BY] = within ? ahead : -1;
         t = Math.max(t, ta + minGapMs);
         if (kind === BRAKING) {
-          if (within && curve !== undefined && nc === GREEN) {
+          if (within && pass !== undefined && nc === GREEN) {
             const advantageMs = (car[a + GREEN_MS] ?? 0) - (car[b + GREEN_MS] ?? 0);
             if (advantageMs > 0 && car[a + NEUTRAL_AT] === GREEN && car[b + IN_LAP] === 0) {
-              const p = passChance(curve, wet, car[b + DRS_PASS] === 1, advantageMs);
+              // DRS is decided by the hand-over at the zone's DRS end (`DRS_PASS`), so the held car's gap counts as in range
+              pass.wet = wet;
+              pass.drs = car[b + DRS_PASS] === 1;
+              const p = passAt(advantageMs, 0, pass);
               let passes: boolean;
               if (plain && advantageMs <= PLAIN_PASS_MIN_ADVANTAGE_MS) {
                 // plain is the mode: below the minimum advantage a pass is less likely than not, so it stays behind

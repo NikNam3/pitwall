@@ -11,15 +11,16 @@ const overview = (id: number, name: string): CarOverview =>
   ({ id: carId(id), identity: { name, raceNumber: id }, timing: {}, tyres: {}, updatedAt: 10 }) as unknown as CarOverview;
 const cars = [overview(1, 'Kuhnlein'), overview(3, 'Charles Leclerc'), overview(7, 'Alexander Albon')];
 
-// LEC ahead: we are faster, PASS +0.25 (bold white); ALB behind in DRS range: HOLD −0.40 (warning).
+// LEC ahead: we are faster, PASS 31 % (bold white); ALB behind in DRS range: its chance against us 42 % (warning)
+// (SP4.3c Task 15: battle's pass chance replaces the fixed margin).
 const lec: BattleSide = {
   carId: carId(3), gapMs: k(3199), lapsToDrs: k(7.1), paceDeltaMs: k(430),
-  margin: k({ kind: 'pass', ms: 250 }),
+  passChance: k(0.31),
   ours: { compound: 'medium', age: 12 }, theirs: { compound: 'hard', age: 23 }, theirErsStoreJ: k(3_100_000),
 };
 const alb: BattleSide = {
   carId: carId(7), gapMs: k(841), lapsToDrs: k(0), paceDeltaMs: k(-420),
-  margin: k({ kind: 'hold', ms: -400 }),
+  passChance: k(0.42),
   ours: { compound: 'medium', age: 12 }, theirs: { compound: 'medium', age: 1 }, theirErsStoreJ: unknown('realism'),
 };
 const card: BattleCard = { carId: carId(1), ahead: k(lec), behind: k(alb), drs: { enabled: true } };
@@ -39,6 +40,20 @@ const gallery: GalleryEntry<typeof widget> = {
     // Realism: both rivals' ERS hidden, the cards still render.
     realismHidden: {
       card: { ...card, ahead: k({ ...lec, theirErsStoreJ: unknown('realism') }) },
+      cars,
+      moment: undefined,
+    },
+    // Unlikely passes both ways (12 % ahead, 0 % behind: the car behind is slower), and a chance not yet known: plain.
+    unlikelyPasses: {
+      card: { ...card, ahead: k({ ...lec, passChance: k(0.12) }), behind: k({ ...alb, paceDeltaMs: k(180), passChance: k(0) }) },
+      cars,
+      moment: undefined,
+    },
+    paceUnknown: {
+      card: {
+        ...card,
+        ahead: k({ ...lec, paceDeltaMs: unknown('insufficientData'), lapsToDrs: unknown('insufficientData'), passChance: unknown('insufficientData') }),
+      },
       cars,
       moment: undefined,
     },

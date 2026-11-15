@@ -25,3 +25,12 @@ export function burnPerLapKg(laps: readonly DeepReadonly<LapRecord>[], o: BurnOp
   const rate = perLapGainRate(samples, o.rate);
   return rate.known ? known(rate.value.perLap as Kg, rate.at) : rate;
 }
+
+/**
+ * The burn per lap a simulator plans with (SP4.3c O15): the car's measured burn (`burnPerLapKg`) where one is known, else
+ * its fuel over the laps left, which runs it to empty at the flag; no burn with no lap left.
+ */
+export function planBurnKgPerLap(measured: Known<Kg>, fuelKg: number, lapsLeft: number): number {
+  if (measured.known) return measured.value;
+  return lapsLeft > 0 ? fuelKg / lapsLeft : 0;
+}

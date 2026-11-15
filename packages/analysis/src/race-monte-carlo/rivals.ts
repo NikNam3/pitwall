@@ -2,7 +2,8 @@
 // (`rival-stops` through the starting point, F3), and its reaction to an SC: a rival with a stop still ahead and tyres
 // at least `aMin` laps old boxes with chance `q` (one draw per SC, at its first lap it qualifies), never under a VSC.
 // The one source of a rival's next compound and of whether a stop lies ahead (4.3b2 preconditions).
-import { NOISE_COMPOUNDS, tyreTypeOf, type LapModelParams, type NoiseCompound, type Policy, type Scenario, type StartingPoint } from '@pitwall/domain';
+import { NOISE_COMPOUNDS, tyreTypeOf, type NoiseCompound, type Policy, type Scenario, type StartingPoint } from '@pitwall/domain';
+import { typeTermMs } from '../lap-model/index.ts';
 import { streamKey, uniform, type Draws } from '../race-forecast/draws.ts';
 import { MC_PURPOSE } from './constants.ts';
 import type { RivalRules } from './types.ts';
@@ -30,8 +31,8 @@ const typeOf = tyreTypeOf;
 /** The compound a rival fits for each type when it switches (a switch back to slicks: the medium, the field's usual one). */
 const SWITCH_TO: readonly NoiseCompound[] = ['medium', 'inter', 'wet'];
 
-/** A compound's lap time at wetness `w` against the others: its offset plus its type's wetness term (`lap-model`). */
-const typeMs = (p: LapModelParams, compound: NoiseCompound, w: number): number => p.compoundOffsetMs[compound] + p.wetnessMsPerMs[typeOf(compound)] * w;
+/** A compound's lap time at wetness `w` against the others: the lap model's compound and wetness term (O4). */
+const typeMs = typeTermMs;
 
 /**
  * Car slot `k`'s stops in one scenario (spec §7.2, O8): its dry stop at the end of lap `dryLap` (-1: none), and its

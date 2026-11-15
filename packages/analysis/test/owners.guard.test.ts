@@ -83,6 +83,21 @@ const RAIN_FROM_SAMPLES = /\boffsetMin\s*>=?\s*0(?![\d.])|\brainPct\s*>=/;
 /** The weather path's dynamics: the wetness a rain lap adds, a dry lap takes and the ceiling (SP4.3c Task 14, O3b). */
 const WETNESS_DYNAMICS = ['WETNESS_RISE_MS_PER_LAP', 'WETNESS_FALL_MS_PER_LAP', 'WETNESS_MAX_MS'];
 
+/**
+ * The lap model's compound and wetness term computed outside it: a tyre type's wetness slope read by index
+ * (`wetnessMsPerMs[type]`), as `race-monte-carlo/rivals.ts`' `typeMs` did (SP4.3c Task 15, O4).
+ */
+const TYPE_TERM = /\bwetnessMsPerMs\s*\[/;
+
+/** The pass curve evaluated: its slope times an advantage (`slopePerMs * …`), as `race-forecast`'s copy did (SP4.3c Task 15, O13). */
+const PASS_CURVE = /\bslopePerMs\s*\*/;
+
+/**
+ * A burn per lap computed from a fuel load: a `burn…` assigned a fuel divided by something (`burn = fuelKg / n`,
+ * `burnKg[c] = … fuelKg[c] … / lapsLeft`), the three `fuel ÷ laps left` formulas (SP4.3c Task 15, O15).
+ */
+const BURN_FROM_FUEL = /\bburn\w*(?:\[[^\]\n]*\])?\s*=(?!=)[^;\n]*\bfuel\w*[^;\n]*\//;
+
 /** `code` without its string and template literals (a note that quotes "70" is no literal of the limit). */
 const withoutStrings = (code: string): string => code.replace(/'(?:[^'\\\n]|\\.)*'|"(?:[^"\\\n]|\\.)*"|`(?:[^`\\]|\\.)*`/g, "''");
 
@@ -147,6 +162,16 @@ const OWNERS: OwnerRow[] = [
   // SP4.3c Task 14 (O3b, spec §5.4a): the weather path (rain chance → wetness per lap) is `weather-paths`'; no other unit
   // holds the wetness dynamics (`race-monte-carlo`'s own timeline is moved, the MC calls `weatherPath`).
   { judgement: 'weather path', owner: 'weather-paths', source: (u) => codeNames(u, WETNESS_DYNAMICS), allowed: [] },
+  // SP4.3c Task 15 (O4): the lap time's compound and wetness term is `lap-model`'s (`typeTermMs`); no other unit reads a
+  // tyre type's wetness slope to price a compound (`rivals.ts`' `typeMs` is deleted). `track-wetness` reads the slopes
+  // as the slick scale and the dry reference's slope per type (O3: "the slick scale from the lap model's parameters").
+  { judgement: 'the compound and wetness term', owner: 'lap-model', source: (u) => codeMatches(u, TYPE_TERM), allowed: ['track-wetness'] },
+  // SP4.3c Task 15 (O13): "can a car pass" is `race-interaction`'s one pass curve (`passChance`, its fit); no other unit
+  // evaluates the curve (`race-forecast`'s copy is deleted; `battle`'s fixed margin gives way to the chance).
+  { judgement: 'the pass curve', owner: 'race-interaction', source: (u) => codeMatches(u, PASS_CURVE), allowed: [] },
+  // SP4.3c Task 15 (O15): the burn the simulators use is `shared/fuel-burn.ts`' through the starting point; no other
+  // unit computes a burn from a fuel load (`race-forecast/field.ts`, `strategy-dp/thresholds.ts`, `strategy-dp/state.ts`).
+  { judgement: 'the fuel burn', owner: 'shared/fuel-burn.ts', source: (u) => codeMatches(u, BURN_FROM_FUEL), allowed: [] },
 ];
 
 /** A path as the guard shows it: repo-relative with forward slashes. */
@@ -317,6 +342,31 @@ describe('owners guard (spec §5.8)', () => {
       expect(wp !== undefined && codeNames(wp, WETNESS_DYNAMICS), 'weather-paths holds the dynamics').toBe(true);
       expect(mc !== undefined && codeNames(mc, ['weatherPath']), 'race-monte-carlo calls weatherPath').toBe(true);
       expect(mc?.imports).toContain('packages/analysis/src/weather-paths/index.ts');
+    });
+
+    it('Task 15 patterns: a type term by index, the pass curve evaluated, a burn from a fuel load (in code only)', () => {
+      expect(TYPE_TERM.test(codeOf('const ms = p.compoundOffsetMs[c] + p.wetnessMsPerMs[typeOf(c)] * w;'))).toBe(true);
+      expect(TYPE_TERM.test(codeOf('wetnessMsPerMs: { slick: 1, inter: 0, wet: 0 },'))).toBe(false);
+      expect(TYPE_TERM.test(codeOf('// p.wetnessMsPerMs[type]\nconst s = params.wetnessMsPerMs.slick;'))).toBe(false);
+      expect(PASS_CURVE.test(codeOf('const eta = curve.level + curve.slopePerMs * advantageMs;'))).toBe(true);
+      expect(PASS_CURVE.test(codeOf('slopePerMs: config.passSlopePerMs,'))).toBe(false);
+      expect(PASS_CURVE.test(codeOf('// cap · σ(level + slopePerMs * u)\nconst p = passChance(u, gap, ctx);'))).toBe(false);
+      expect(BURN_FROM_FUEL.test(codeOf('const burn = input.carParams.fuelKg / n;'))).toBe(true);
+      expect(BURN_FROM_FUEL.test(codeOf('f.burnKg[c] = lapsLeft > 0 ? (f.fuelKg[c] ?? 0) / lapsLeft : 0;'))).toBe(true);
+      expect(BURN_FROM_FUEL.test(codeOf('const burn = burnPerLapKg(laps, options);'))).toBe(false);
+      expect(BURN_FROM_FUEL.test(codeOf('const lapsOfFuel = fuelKg / burn;'))).toBe(false);
+      expect(BURN_FROM_FUEL.test(codeOf('const burn = start.fuelBurnKgPerLap[c] ?? 0;'))).toBe(false);
+      // the readers call the owners: rivals the lap model's term, race-forecast and battle the one pass chance
+      const mc = unit('race-monte-carlo');
+      expect(mc !== undefined && codeNames(mc, ['typeTermMs']), 'race-monte-carlo calls typeTermMs').toBe(true);
+      expect(mc?.imports).toContain('packages/analysis/src/lap-model/index.ts');
+      for (const name of ['race-forecast', 'battle']) {
+        const u = unit(name);
+        expect(u !== undefined && codeNames(u, ['passChance']), `${name} calls passChance`).toBe(true);
+        expect(u?.imports.some((i) => i.startsWith('packages/analysis/src/race-interaction/')), `${name} imports race-interaction`).toBe(true);
+      }
+      const forecastField = unit('shared/forecast-field');
+      expect(forecastField !== undefined && codeNames(forecastField, ['planBurnKgPerLap']), 'forecast-field calls planBurnKgPerLap').toBe(true);
     });
 
     it('fix round 2: degradation and tyre-model both call the shared fresh-set pick; tyre-model and tyre-life the shared laps-to-limit rule', () => {

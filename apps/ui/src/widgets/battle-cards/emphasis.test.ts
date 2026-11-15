@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { carId, known, unknown } from '@pitwall/domain';
 import type { Known, Moment, RaceMoment } from '@pitwall/domain';
-import { battleRole, marginRole } from './emphasis.ts';
+import { battleRole, passChanceRole } from './emphasis.ts';
 
 const k = <T>(v: T): Known<T> => known(v, 0);
 const OURS = carId(1);
@@ -46,21 +46,27 @@ describe('battleRole', () => {
   });
 });
 
-describe('marginRole', () => {
-  it('is text (bold white) for a positive PASS', () => {
-    expect(marginRole(k({ kind: 'pass', ms: 250 }))).toBe('text');
+// SP4.3c Task 15 (O13): the pass chance's role replaces the margin's. A likely pass (a chance of 25 % or more at a
+// braking zone, the test agent's choice: about the curve's chance at 1 s a lap faster with DRS) is our chance ahead,
+// bold white (`text`), and the car behind's chance against us, a warning; anything less is plain.
+describe('passChanceRole', () => {
+  it('ahead: text (bold white) from 25 %', () => {
+    expect(passChanceRole('ahead', k(0.25))).toBe('text');
+    expect(passChanceRole('ahead', k(0.31))).toBe('text');
+    expect(passChanceRole('ahead', k(1))).toBe('text');
   });
 
-  it('is warning for a negative HOLD', () => {
-    expect(marginRole(k({ kind: 'hold', ms: -400 }))).toBe('warning');
+  it('behind: warning from 25 %', () => {
+    expect(passChanceRole('behind', k(0.25))).toBe('warning');
+    expect(passChanceRole('behind', k(0.42))).toBe('warning');
   });
 
-  it('is undefined for a negative PASS, a positive HOLD, a zero margin, an unknown or missing margin', () => {
-    expect(marginRole(k({ kind: 'pass', ms: -100 }))).toBeUndefined();
-    expect(marginRole(k({ kind: 'hold', ms: 100 }))).toBeUndefined();
-    expect(marginRole(k({ kind: 'pass', ms: 0 }))).toBeUndefined();
-    expect(marginRole(k({ kind: 'hold', ms: 0 }))).toBeUndefined();
-    expect(marginRole(unknown('insufficientData'))).toBeUndefined();
-    expect(marginRole(undefined)).toBeUndefined();
+  it('is undefined below 25 %, at 0, for an unknown or missing chance', () => {
+    for (const side of ['ahead', 'behind'] as const) {
+      expect(passChanceRole(side, k(0.249))).toBeUndefined();
+      expect(passChanceRole(side, k(0))).toBeUndefined();
+      expect(passChanceRole(side, unknown('insufficientData'))).toBeUndefined();
+      expect(passChanceRole(side, undefined)).toBeUndefined();
+    }
   });
 });

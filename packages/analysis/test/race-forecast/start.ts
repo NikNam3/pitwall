@@ -21,6 +21,7 @@
 // - `trace`: one entry per lap from `start.lap` on, each car as it completes that lap: its position, its gap to the
 //   leader at that line and its lap time.
 import { known, unknown, NOISE_COMPOUNDS, type CarId, type DrsZone, type ForecastResult, type ForecastTrace, type LapModelParams, type NoiseCompound, type PassCurve, type Policy, type RaceInteraction, type Scenario, type StartingPoint } from '@pitwall/domain';
+import { startLapOf } from '../../src/race-forecast/index.ts';
 
 export const PACE_MS = 90_000;
 
@@ -45,6 +46,11 @@ export type CarSpec = {
   tyreAge?: number;
   wearPct?: number;
   fuelKg?: number;
+  /**
+   * kg per lap (`StartingPoint.fuelBurnKgPerLap`, SP4.3c Task 15, O15); by default the car's fuel over its laps left from
+   * where it starts (`lapsLeftOf`), the burn the simulator used to compute itself, so a field without one runs as before.
+   */
+  fuelBurnKgPerLap?: number;
   human?: boolean;
   retired?: boolean;
 };
@@ -112,6 +118,21 @@ export type StartSpec = {
 
 const frac = (x: number): number => ((x % 1) + 1) % 1;
 
+/** Car slot `c`'s laps left from where it starts: the flag's lap less its start lap (`startLapOf`) plus one, less its lap fraction. */
+export const lapsLeftOf = (start: StartingPoint, c: number): number => start.lapsTotal - startLapOf(start, c) + 1 - (start.lapFraction[c] ?? 0);
+
+/**
+ * `start` with every car's burn as its fuel over its laps left (`lapsLeftOf`) where `burns` gives none: the burn a field
+ * without a measured one ran by before SP4.3c Task 15 (the simulator computed it). Call it after changing lap fractions.
+ */
+export function withLapsLeftBurn(start: StartingPoint, burns: readonly (number | undefined)[] = []): StartingPoint {
+  const fuelBurnKgPerLap = Float64Array.from({ length: start.cars }, (_, c) => {
+    const lapsLeft = lapsLeftOf(start, c);
+    return burns[c] ?? (lapsLeft > 0 ? (start.fuelKg[c] ?? 0) / lapsLeft : 0);
+  });
+  return { ...start, fuelBurnKgPerLap };
+}
+
 /** The field of `spec.cars` in the order given (`cars[0]` leads), each `gapMs` behind the leader (default 2 s a place). */
 export function startingPoint(spec: StartSpec): StartingPoint {
   const cars = spec.cars.map((c, i) => ({ gapMs: 2_000 * i, paceMs: PACE_MS, ...c }));
@@ -135,7 +156,7 @@ export function startingPoint(spec: StartSpec): StartingPoint {
     sets[slot as CarId] = (['soft', 'medium', 'hard'] as const).flatMap((compound) => Array.from({ length: 5 }, () => ({ compound, wearPct: 0 })));
   }
   const lapsTotal = spec.lapsTotal ?? 30;
-  return {
+  const start: StartingPoint = {
     lap: spec.lap ?? 1,
     lapsTotal,
     cars: n,
@@ -148,6 +169,8 @@ export function startingPoint(spec: StartSpec): StartingPoint {
     tyreAge: f((l) => new Int16Array(l), (c) => c.tyreAge ?? 0),
     wearPct: f((l) => new Float64Array(l), (c) => c.wearPct ?? 0),
     fuelKg: f((l) => new Float64Array(l), (c) => c.fuelKg ?? 0),
+    // set by `withLapsLeftBurn` below, once the lap fractions are known
+    fuelBurnKgPerLap: f((l) => new Float64Array(l), () => 0),
     paceMs: f((l) => new Float64Array(l), (c) => c.paceMs),
     paceSdMs: f((l) => new Float64Array(l), (c) => c.paceSdMs ?? 0),
     sigmaMs: f((l) => new Float64Array(l), (c) => c.sigmaMs ?? 0),
@@ -179,6 +202,7 @@ export function startingPoint(spec: StartSpec): StartingPoint {
     interaction: spec.interaction ?? interaction(),
     lapModel: spec.lapModel ?? LAP_MODEL,
   };
+  return withLapsLeftBurn(start, cars.map((c) => c.fuelBurnKgPerLap));
 }
 
 export const PLAIN: Scenario = { id: 0, plain: true, neutralisations: [] };
