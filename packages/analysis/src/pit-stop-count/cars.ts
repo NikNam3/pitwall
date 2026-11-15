@@ -7,7 +7,7 @@ import { PIT_STOP_COUNT_BEHAVIOUR } from './behaviour.ts';
 const ROWS = PIT_STOP_COUNT_BEHAVIOUR[carStatusSpans.machine] ?? {};
 
 /**
- * The cars with a listed car-status span (`PIT_STOP_COUNT_BEHAVIOUR`), open or closed, by id ascending. Reads
+ * The cars with an in-session car-status span (`PIT_STOP_COUNT_BEHAVIOUR`), open or closed, by id ascending. Reads
  * `spans:car-status` (C41). A kind without a row is a bug in the table (C3): it throws.
  */
 export function carsOfSession(view: EngineView): CarId[] {
@@ -16,7 +16,7 @@ export function carsOfSession(view: EngineView): CarId[] {
   for (const span of spans) {
     if (span.carId === undefined || ids.has(span.carId)) continue;
     if (!Object.hasOwn(ROWS, span.kind)) throw new Error(`behaviour table: no row for ${carStatusSpans.machine} ${span.kind}`);
-    if (ROWS[span.kind]?.listed === true) ids.add(span.carId);
+    if (ROWS[span.kind]?.inSession === true) ids.add(span.carId);
   }
   return [...ids].sort((a, b) => a - b);
 }

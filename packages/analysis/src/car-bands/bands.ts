@@ -1,7 +1,7 @@
 // The bands of `car-bands` and the lap they judge.
 import { known, unknown, type ActualCompound, type BandState, type CarId, type CarState, type Corners, type Known, type LapRecord, type Range, type SessionTime, type VisualCompound } from '@pitwall/domain';
 import type { DeepReadonly, EngineView } from '@pitwall/engine/readers';
-import { classifyLap, LAP_CLASSES_CONFIG, type LapClassOptions } from '../lap-classes/index.ts';
+import { classifyLap, LAP_CLASSES_CONFIG, lapPhaseRowOf, RACE_LAP_PHASE_ROWS, type LapClassOptions } from '../lap-classes/index.ts';
 import { behaviourFor } from '../shared/behaviour.ts';
 import type { CAR_BANDS_CONFIG } from './config.ts';
 
@@ -90,21 +90,14 @@ export const measured = (range: DeepReadonly<Range>, measure: Measure): number =
 export const stateOf = (value: number, { lo, hi }: Band): BandState => (value < lo ? 'below' : value > hi ? 'above' : 'in');
 
 /**
- * The `weekend-phase` rows of the judged lap (C44), one table part of `car-bands` and `alarms` alike, so both judge the
- * same lap (C43): only the race has the lap-1 rule. `pending` has no span, so no lap-1 rule.
+ * The `classifyLap` options of the judged lap, the same for `car-bands` and `alarms` (C43): the session's `weekend-phase`
+ * row of `RACE_LAP_PHASE_ROWS` (a read of `spans:weekend-phase`; without an open span the phase is pending and reads as
+ * the race, `lapPhaseRowOf`, C14) and the `lap-classes` config.
  */
-export const JUDGED_LAP_PHASE_ROWS: Record<'practice' | 'qualifying' | 'race' | 'none', { isRace?: true }> = {
-  practice: {},
-  qualifying: {},
-  race: { isRace: true },
-  none: {},
+export const judgedLapClasses = (view: EngineView): LapClassOptions => {
+  const row = behaviourFor({ 'weekend-phase': RACE_LAP_PHASE_ROWS }, view)[0] ?? lapPhaseRowOf(RACE_LAP_PHASE_ROWS, 'pending');
+  return { isRace: row.isRace, ...LAP_CLASSES_CONFIG.read(view) };
 };
-
-/** The `classifyLap` options of the judged lap: the session's `weekend-phase` row (a read of `spans:weekend-phase`) and the `lap-classes` config. */
-export const judgedLapClasses = (view: EngineView): LapClassOptions => ({
-  isRace: behaviourFor({ 'weekend-phase': JUDGED_LAP_PHASE_ROWS }, view).some((row) => row.isRace === true),
-  ...LAP_CLASSES_CONFIG.read(view),
-});
 
 /**
  * Each car's judged lap (Q1 A): its newest completed lap that is a rate lap (`classifyLap`: no in or out lap, at most a

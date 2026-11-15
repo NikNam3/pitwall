@@ -503,7 +503,7 @@ describe('car-bands calculator', () => {
     });
 
     it('weekend phase: only race asks for the lap-1 rule; practice, qualifying and none do not', () => {
-      expect(CAR_BANDS_BEHAVIOUR['weekend-phase']).toEqual({ practice: {}, qualifying: {}, race: { isRace: true }, none: {} });
+      expect(CAR_BANDS_BEHAVIOUR['weekend-phase']).toEqual({ practice: { isRace: false }, qualifying: { isRace: false }, race: { isRace: true }, none: { isRace: false } });
     });
 
     // carcass, pressure and engine above their bands now; the last lap a rate lap whose carcass was above the band all lap

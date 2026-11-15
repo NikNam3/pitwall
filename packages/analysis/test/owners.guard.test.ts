@@ -28,8 +28,22 @@ type UnitDecl = { unit: string; folder: string | undefined; reads: readonly stri
 /** One owner of a judgement: `source` says whether a unit reads the judgement's raw source; only `owner` and `allowed` may. */
 type OwnerRow = { judgement: string; owner: string; source: (unit: UnitDecl) => boolean; allowed: readonly string[] };
 
+/** `text` without its comments (line and block), so a doc comment that names a field is no read of it. */
+const codeOf = (text: string): string => text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:'"`])\/\/.*$/gm, '$1');
+
+/** Whether the code (comments left out) of a unit's source files names one of `names` as an identifier. */
+function codeNames(unit: UnitDecl, names: readonly string[]): boolean {
+  if (unit.folder === undefined) return false;
+  const pattern = new RegExp(`\\b(?:${names.join('|')})\\b`);
+  return sourceFiles(join(ROOT, unit.folder)).some((file) => pattern.test(codeOf(readFileSync(file, 'utf8'))));
+}
+
 /** The owners (spec §5.2–§5.3); each owner task adds its row. */
-const OWNERS: OwnerRow[] = [];
+const OWNERS: OwnerRow[] = [
+  // SP4.3c Task 5 (O7): which laps count is `lap-classes`' (`isNeutralisedLap`, `touchesNeutralisation`); no other unit
+  // reads a lap record's SC or VSC share itself. Expressed by name: `lap-classes` has no private module to import.
+  { judgement: 'lap counts', owner: 'lap-classes', source: (u) => codeNames(u, ['scShare', 'vscShare']), allowed: [] },
+];
 
 /** A path as the guard shows it: repo-relative with forward slashes. */
 const shown = (path: string): string => relative(ROOT, path).split('\\').join('/');
@@ -135,6 +149,16 @@ describe('owners guard (spec §5.8)', () => {
       expect(imports).toContain('packages/analysis/src/shared/stint-laps.ts');
       expect(imports).toContain('@pitwall/domain');
       expect(imports.some((i) => i.startsWith('./') || i.startsWith('../'))).toBe(false);
+    });
+
+    it('codeNames finds a name in code, never in a comment', () => {
+      expect(codeOf('/** `scShare` */\nconst a = 1; // vscShare\n')).not.toMatch(/scShare/);
+      expect(codeOf("const s = lap.scShare; // a note\nconst u = 'http://x';")).toMatch(/lap\.scShare/);
+      expect(codeOf("const u = 'http://x';")).toBe("const u = 'http://x';");
+      const lapClasses = unit('lap-classes');
+      const gaps = unit('gaps');
+      expect(lapClasses !== undefined && codeNames(lapClasses, ['scShare'])).toBe(true);
+      expect(gaps !== undefined && codeNames(gaps, ['scShare', 'vscShare'])).toBe(false);
     });
 
     it('a row names every unit but the owner and the allowed ones that reads its source, by reads or by import', () => {

@@ -3,6 +3,7 @@
 // rows of the spans a lap or the view's frame belongs to.
 import type { MachineId, WeekendPhase } from '@pitwall/domain';
 import type { AsOfView, DeepReadonly } from '@pitwall/engine/readers';
+import { lapPhaseRowOf, RACE_LAP_PHASE_ROWS } from '../lap-classes/index.ts';
 import type { BehaviourTable } from '../shared/behaviour.ts';
 
 /** What a span says about a car's noise model. */
@@ -23,13 +24,11 @@ export type DriverNoiseEffect = {
   noTimeLoss?: boolean;
 };
 
-const RACE: DriverNoiseEffect = { isRace: true };
-const NOT_RACE: DriverNoiseEffect = { isRace: false };
 const COUNTS: DriverNoiseEffect = { noTimeLoss: false };
 const NO_TIME_LOSS: DriverNoiseEffect = { noTimeLoss: true };
 
 export const DRIVER_NOISE_BEHAVIOUR: BehaviourTable<DriverNoiseEffect> = {
-  'weekend-phase': { practice: NOT_RACE, qualifying: NOT_RACE, race: RACE, none: NOT_RACE },
+  'weekend-phase': RACE_LAP_PHASE_ROWS,
   'car-driver': { ai: { model: 'ai' }, human: { model: 'human' } },
   'car-status': {
     competing: { inSession: true, retirement: false },
@@ -65,5 +64,5 @@ export function isRaceAt(view: Pick<AsOfView, 'situation'>): boolean {
   const open = view.situation.byMachine['weekend-phase'] ?? [];
   if (open.length > 0) return open.every((s) => rowOf('weekend-phase', s.kind).isRace === true);
   const phase: DeepReadonly<WeekendPhase> = view.situation.weekendPhase;
-  return phase.kind === 'pending' || rowOf('weekend-phase', phase.kind).isRace === true;
+  return lapPhaseRowOf(RACE_LAP_PHASE_ROWS, phase.kind).isRace;
 }

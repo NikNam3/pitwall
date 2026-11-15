@@ -28,6 +28,7 @@ import {
 } from '@pitwall/domain';
 import { membershipOf, type DeepReadonly, type MembershipSource, type Projection } from '@pitwall/engine/readers';
 import { DRIVER_NOISE_CONFIG } from '../driver-noise/config.ts';
+import { touchesNeutralisation } from '../lap-classes/index.ts';
 import { freeAirLaps } from '../shared/free-air.ts';
 import { median } from '../shared/stats.ts';
 import { RACE_INTERACTION_BEHAVIOUR } from './behaviour.ts';
@@ -61,7 +62,7 @@ export function excludedLap(lap: DeepReadonly<LapRecord>, ctx: LapFilterCtx): bo
 
 /** The lap filter's checks on the lap record itself (the cheap ones, so membership runs only for the laps they keep). */
 function excludedByLap(lap: DeepReadonly<LapRecord>, config: RaceInteractionConfig): boolean {
-  if (lap.lapNumber <= 1 || lap.inLap || lap.outLap || lap.scShare > 0 || lap.vscShare > 0) return true;
+  if (lap.lapNumber <= 1 || lap.inLap || lap.outLap || touchesNeutralisation(lap)) return true;
   const damage = lap.damageAtEnd;
   if (!damage.known) return false;
   for (const part of AERO_PARTS) if (damage.value[part] >= config.aeroDamageMaxPct) return true;

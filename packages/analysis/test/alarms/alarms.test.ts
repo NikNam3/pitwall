@@ -926,12 +926,12 @@ describe('alarms behaviour table (C44)', () => {
 
   it('weekend phase: only race asks for the lap-1 rule and counts corner-cutting warnings; practice, qualifying and none ask for nothing', () => {
     const table: BehaviourTable<AlarmsEffect> = ALARMS_BEHAVIOUR;
-    expect(table['weekend-phase']).toEqual({ practice: {}, qualifying: {}, race: { isRace: true, warningCount: 'cornerCutting' }, none: {} });
+    expect(table['weekend-phase']).toEqual({ practice: { isRace: false }, qualifying: { isRace: false }, race: { isRace: true, warningCount: 'cornerCutting' }, none: { isRace: false } });
   });
 
   it("weekend phase: the lap-1 rule is car-bands' row, so both judge the same lap (C43); car-bands counts no warnings", () => {
     const table: BehaviourTable<AlarmsEffect> = ALARMS_BEHAVIOUR;
-    expect(CAR_BANDS_BEHAVIOUR['weekend-phase']).toEqual({ practice: {}, qualifying: {}, race: { isRace: true }, none: {} });
+    expect(CAR_BANDS_BEHAVIOUR['weekend-phase']).toEqual({ practice: { isRace: false }, qualifying: { isRace: false }, race: { isRace: true }, none: { isRace: false } });
     for (const [kind, row] of Object.entries(CAR_BANDS_BEHAVIOUR['weekend-phase']!)) {
       expect(table['weekend-phase']![kind], kind).toMatchObject(row);
       expect(table['weekend-phase']![kind]!.isRace, kind).toBe(row.isRace);
