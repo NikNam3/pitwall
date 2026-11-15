@@ -23,21 +23,14 @@ export const latestTime = (c: CarCrossings): SessionTime | undefined => timeAt(c
  */
 type Start = { at: SessionTime; from: number };
 
-/** The output's origin; one built by hand without it starts at `raceStartAt`, as lights out. */
-function originOf(out: GapsOutput): NonNullable<GapsOutput['origin']> {
-  if (out.origin !== undefined) return out.origin;
-  const start = out.raceStartAt;
-  return start.known ? known({ kind: 'lightsOut', at: start.value }, start.at) : start;
-}
-
 /** The start of an origin: its time, and its progress (`lap × 50` of a join). */
-const startOf = (origin: Extract<NonNullable<GapsOutput['origin']>, { known: true }>['value']): Start => ({
+const startOf = (origin: Extract<GapsOutput['origin'], { known: true }>['value']): Start => ({
   at: origin.at,
   from: origin.kind === 'join' ? origin.lap * MINI_SECTORS : 0,
 });
 
 /** The origin as the gapper's lines name it: without its time. */
-const namedOrigin = (origin: NonNullable<GapsOutput['origin']>): GapperLines['origin'] => {
+const namedOrigin = (origin: GapsOutput['origin']): GapperLines['origin'] => {
   if (!origin.known) return origin;
   const value = origin.value.kind === 'join' ? { kind: 'join' as const, lap: origin.value.lap } : { kind: 'lightsOut' as const };
   return known(value, origin.at);
@@ -53,7 +46,7 @@ const raceLaps = (out: GapsOutput, carId: CarId, start: Start) =>
  * completed laps at the line. A finished car needs no rule of its own: the game sends no crossing after the flag, so its
  * newest crossing is its finish. `insufficientData` before its first crossing past the start.
  */
-function meanLap(out: GapsOutput, carId: CarId | undefined, origin: NonNullable<GapsOutput['origin']>): Known<Ms> {
+function meanLap(out: GapsOutput, carId: CarId | undefined, origin: GapsOutput['origin']): Known<Ms> {
   if (!origin.known) return origin;
   const start = startOf(origin.value);
   const crossings = carId === undefined ? undefined : out.recent[carId];
@@ -63,7 +56,7 @@ function meanLap(out: GapsOutput, carId: CarId | undefined, origin: NonNullable<
 }
 
 /** The virtual car's lap time; a fixed lap is given, so it is known from the start. */
-function referenceLap(out: GapsOutput, reference: GapperReference, origin: NonNullable<GapsOutput['origin']>): Known<Ms> {
+function referenceLap(out: GapsOutput, reference: GapperReference, origin: GapsOutput['origin']): Known<Ms> {
   switch (reference.kind) {
     case 'leaderAverage':
       return meanLap(out, out.intervals[0]?.carId, origin);
@@ -121,7 +114,7 @@ function pointsOf(out: GapsOutput, carId: CarId, start: Start, lapMs: Ms): Gappe
  * ends early at its own end. `phases` are the calculator's, the same for every reference.
  */
 export function gapperLines(out: GapsOutput, reference: GapperReference): GapperLines {
-  const origin = originOf(out);
+  const origin = out.origin;
   const referenceLapMs = referenceLap(out, reference, origin);
   const { ours, others } = out.gapperWindow;
   const inWindow = (carId: CarId) => ours.includes(carId) || others.includes(carId);
@@ -142,5 +135,5 @@ export function gapperLines(out: GapsOutput, reference: GapperReference): Gapper
     );
   const cars = [...running, ...stopped];
   const named = reference.kind === 'carAverage' ? known(reference.carId, 0) : unknown('notApplicable');
-  return { reference: { kind: reference.kind, carId: named }, origin: namedOrigin(origin), referenceLapMs, cars, phases: out.phases };
+  return { reference: { kind: reference.kind, carId: named }, origin: namedOrigin(origin), referenceLapMs, cars, phases: out.phases.map(({ kind, fromLap, toLap }) => ({ kind, fromLap, toLap })) };
 }

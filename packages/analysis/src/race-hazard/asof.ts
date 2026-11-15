@@ -47,9 +47,11 @@ function leaderLaps(
   const laps = view.history.laps;
   const progress = gaps?.leaderProgress;
   const done = progress?.known === true ? progress.value.lap - 1 : leaderLapAt(laps, Infinity as FrameNumber) - 1;
-  const phases = gaps?.phases ?? [];
-  const openPhase = gaps === undefined ? undefined : phases.find((p) => p.kind !== 'red' && !p.toLap.known);
-  const lastPhase = gaps === undefined || last === null ? undefined : phases.find((p) => p.kind !== 'red' && p.toLap.known && p.toLap.at === last.end);
+  // a span's phase is the one that names it (C26), never one matched by time
+  const phaseOf = (span: DeepReadonly<OpenSpan> | null | undefined) =>
+    span == null ? undefined : gaps?.phases.find((p) => p.span.machine === span.machine && p.span.id === span.id);
+  const openPhase = phaseOf(open);
+  const lastPhase = phaseOf(last);
   const doneAtStart =
     open === undefined ? 0
     : openPhase !== undefined ? Math.floor(openPhase.fromLap)

@@ -1,12 +1,13 @@
 // The `gaps` calculator (spec 6.1): a fold over the mini-sector crossings; the order and our cars come from the car state.
-import { carStatusSpans, foldCurrentCrossing, known, weekendPhaseSpans, MINI_SECTORS, sessionPhaseRaceSpans, unknown, type CarId, type CrossingIndex, type Interval, type Known, type MiniSectorCrossing, type Ms, type Neighbourhood, type SessionTime } from '@pitwall/domain';
-import { openSpansOf, type EngineView, type IncrementalCalculator } from '@pitwall/engine/readers';
+import { carStatusSpans, foldCurrentCrossing, known, weekendPhaseSpans, MINI_SECTORS, sessionPhaseRaceSpans, unknown, type CarId, type CrossingIndex, type FrameNumber, type Interval, type Known, type MachineId, type MiniSectorCrossing, type Ms, type Neighbourhood, type SessionTime } from '@pitwall/domain';
+import { membershipOf, openSpansOf, type EngineView, type IncrementalCalculator, type MembershipSource } from '@pitwall/engine/readers';
 import { behaviourByCar, behaviourFor, openSpansByCar } from '../shared/behaviour.ts';
 import { CAR_STATUS_READS } from '../shared/car-status.ts';
-import { isClosed, NEUTRALISATION_READS, neutralisationKind, neutralisedSpans, type NeutralisationKind } from '../shared/neutralised.ts';
+import { isClosed, NEUTRALISATION_READS, neutralisationKind, neutralisedSpans, type Neutralisation } from '../shared/neutralised.ts';
 import { ourCars } from '@pitwall/domain';
-import { fineOf, gapBehind, lapsBehind, latestTime, progressAt, progressOf, recentOf, type CarCrossings } from './gaps.ts';
+import { fineOf, gapBehind, lapsBehind, latestTime, progressOf, recentOf, type CarCrossings } from './gaps.ts';
 import { GAPS, GAPS_BEHAVIOUR, GAPS_CONFIG, type GapsOutput } from './index.ts';
+import type { GapsPhase } from './output.ts';
 import { emptyWindow, judgeCrossing, othersInWindow, windowThresholds, type GapperWindow } from './window.ts';
 
 /** What the crossings and events so far add up to. */
@@ -30,11 +31,16 @@ type Table = {
   firstRaceSpan: FirstSpan | undefined;
   /** The furthest progress any car has crossed; -1 before any crossing. */
   furthest: number;
+  /** The crossings that led the road (each further than every one before it), in the projection's order: the leader's progress by frame. */
+  leaders: RoadLeader[];
   /** By car id: the progress of its first crossing (the first after the join). */
   firstProgress: Array<number | undefined>;
   /** The leader's first line crossing after the join (`JoinLine`), once one is known. */
   joinLine: JoinLine | undefined;
 };
+
+/** A crossing that led the road: the frame it describes (C26) and its progress. */
+type RoadLeader = { frame: FrameNumber; progress: number };
 
 /** A span of the race session phase as the join reads it: its kind and whether the engine joined in it. */
 type FirstSpan = { kind: string; joinedAt: boolean };
@@ -109,6 +115,7 @@ function foldJoinLine(acc: Table, m: MiniSectorCrossing, progress: number): void
   }
   if (progress <= acc.furthest) return;
   acc.furthest = progress;
+  acc.leaders.push({ frame: m.frame, progress });
   // segment 0 is the line at the start of its lap: it completes the lap before (none for lap 1, the start)
   if (acc.joinLine === undefined && m.segment === 0 && m.lap >= 2) acc.joinLine = { lap: m.lap - 1, progress, at: m.at };
 }
@@ -181,7 +188,7 @@ const firstRaceSpanNow = (acc: Table, view: EngineView): FirstSpan | undefined =
  * (its first `racing` span not after start lights, or its first span joined past them), the leader's first line
  * crossing after the join; `notReceived` until one is known.
  */
-function originOf(acc: Table, view: EngineView, start: RaceStart | undefined, race: RaceParts): NonNullable<GapsOutput['origin']> {
+function originOf(acc: Table, view: EngineView, start: RaceStart | undefined, race: RaceParts): GapsOutput['origin'] {
   if (race !== 'race') return notRace(race);
   if (start?.lightsOutSeen === true) return known({ kind: 'lightsOut', at: start.at }, start.at);
   const first = firstRaceSpanNow(acc, view);
@@ -215,36 +222,56 @@ const positionsGained = (timing: { gridPosition: number; position: number }, rac
   return known(timing.gridPosition - timing.position, view.live.sessionTime);
 };
 
-/** A neutralised phase: its end `undefined` while it is open. */
-type Phase = { kind: NeutralisationKind; start: SessionTime; end: SessionTime | undefined };
+/** The span bounds membership reads (C26): an open span has no `endFrame`. */
+type Bounds = { machine: MachineId; startFrame: FrameNumber; endFrame?: FrameNumber };
 
-/** The race's neutralisations (`shared/neutralised.ts`: closed in the projection, then the open one, C20), as phases. */
-const neutralisedPhases = (view: EngineView): Phase[] =>
-  neutralisedSpans(view.history, view.situation).map((span) => ({
-    kind: neutralisationKind(span),
-    start: span.start,
-    end: isClosed(span) ? span.end : undefined,
-  }));
+/**
+ * Whether the projection module puts a fact on `frame` inside the span `bounds` (C26: `membershipOf`, never judged here),
+ * asked of a source holding that one span alone, so it reads nothing else of the projection.
+ */
+const inside = (bounds: Bounds, frame: FrameNumber): boolean => {
+  const source = { history: { spans: { [bounds.machine]: [bounds] } } } as unknown as MembershipSource;
+  return membershipOf(source, { frame })[bounds.machine] !== undefined;
+};
 
-/** The leader's progress in laps at `t`: the furthest crossing of any car by then, / 50 (the race start before any). */
-const leaderLapAt = (acc: Table, t: SessionTime): number => {
-  let furthest = 0;
-  for (const track of acc.tracks) {
-    const progress = track === undefined ? undefined : progressAt(track, t);
-    if (progress !== undefined && progress > furthest) furthest = progress;
+/** The first index of `leaders` from `from` on for which `test` holds, `test` false then true along them; `leaders.length` if none. */
+const firstWhere = (leaders: readonly RoadLeader[], from: number, test: (l: RoadLeader) => boolean): number => {
+  let lo = from;
+  let hi = leaders.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    if (test(leaders[mid] as RoadLeader)) hi = mid;
+    else lo = mid + 1;
   }
-  return furthest / MINI_SECTORS;
+  return lo;
 };
 
-/** The phases on the gapper's x: the leader's progress at their start and end. */
-const phasesOf = (acc: Table, race: RaceParts, view: EngineView): GapsOutput['phases'] => {
-  if (race !== 'race') return [];
-  return neutralisedPhases(view).map(({ kind, start, end }) => ({
-    kind,
-    fromLap: leaderLapAt(acc, start),
-    toLap: end === undefined ? NOT_APPLICABLE : known(leaderLapAt(acc, end), end),
-  }));
-};
+/**
+ * A neutralisation on the leader's progress, by its crossings' membership (C26): `fromLap` at the leader's first crossing
+ * inside the span, `toLap` at its last one inside it (`notApplicable` while open). The road-leading crossings are in
+ * frame order, so those inside the span are one run of them: the first is the first at or after its opening frame (the
+ * span taken as still open), the run ends at the first one outside it. A span with none inside lies where the leader
+ * was as it opened.
+ */
+function phaseOf(acc: Table, span: Neutralisation): GapsPhase {
+  const leaders = acc.leaders;
+  const bounds: Bounds = { machine: span.machine, startFrame: span.startFrame, ...(isClosed(span) ? { endFrame: span.endFrame } : {}) };
+  const fromOpening = { machine: span.machine, startFrame: span.startFrame };
+  const first = firstWhere(leaders, 0, (l) => inside(fromOpening, l.frame));
+  const before = first === 0 ? 0 : (leaders[first - 1] as RoadLeader).progress;
+  const entered = first < leaders.length && inside(bounds, (leaders[first] as RoadLeader).frame);
+  const fromLap = (entered ? (leaders[first] as RoadLeader).progress : before) / MINI_SECTORS;
+  let toLap: Known<number> = NOT_APPLICABLE;
+  if (isClosed(span)) {
+    const last = entered ? firstWhere(leaders, first, (l) => !inside(bounds, l.frame)) - 1 : -1;
+    toLap = known((last >= 0 ? (leaders[last] as RoadLeader).progress : before) / MINI_SECTORS, span.end);
+  }
+  return { kind: neutralisationKind(span), fromLap, toLap, span: { machine: span.machine, id: span.id } };
+}
+
+/** The phases on the gapper's x: the race's neutralisations (`shared/neutralised.ts`: closed, then the open one, C20). */
+const phasesOf = (acc: Table, race: RaceParts, view: EngineView): GapsOutput['phases'] =>
+  race !== 'race' ? [] : neutralisedSpans(view.history, view.situation).map((span) => phaseOf(acc, span));
 
 /** The running cars in position order (ties by id), their intervals, the cars around each of ours, and the cars out of the race. */
 function build(acc: Table, view: EngineView): GapsOutput {
@@ -319,6 +346,7 @@ const init = (view: EngineView): Table => {
     lastRaceSpanKind: undefined,
     firstRaceSpan: undefined,
     furthest: -1,
+    leaders: [],
     firstProgress: [],
     joinLine: undefined,
   };

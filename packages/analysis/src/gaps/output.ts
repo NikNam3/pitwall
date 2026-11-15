@@ -1,6 +1,9 @@
 // The output of `gaps` (spec 6.1), re-exported by `index.ts`; its own module so `shared/gapper-lines.ts` reads it
 // without an import cycle through the index that re-exports the gapper.
-import type { Known, CarId, GapperLines, Interval, Neighbourhood, SessionTime } from '@pitwall/domain';
+import type { Known, CarId, GapperLines, Interval, MachineId, Neighbourhood, SessionTime, SpanId } from '@pitwall/domain';
+
+/** A phase on the gapper's x and the span it is: its machine and span id (C26), so a reader picks it by span, never by time. */
+export type GapsPhase = GapperLines['phases'][number] & { span: { machine: MachineId; id: SpanId } };
 
 /**
  * The output. The bindings compute `gaps.toCar` and `gaps.gapper` from it with their params; `battle` reads
@@ -31,8 +34,12 @@ export type GapsOutput = {
    * `intervals`. `gaps.toCar` gives them `notApplicable`, the gapper keeps their completed race laps.
    */
   outOfRace: CarId[];
-  /** The race's neutralised phases in the leader's progress at their start and end (`GapperLines.phases`); `[]` outside a race. */
-  phases: GapperLines['phases'];
+  /**
+   * The race's neutralised phases in the leader's progress (`GapperLines.phases`), each naming its span (`span`, C26):
+   * `fromLap` at the leader's first crossing inside the span, `toLap` at its last one inside it, by the projection
+   * module's membership; `[]` outside a race.
+   */
+  phases: GapsPhase[];
   /**
    * The leader's progress now: the lap the leader of the order (`intervals[0]`) is on and the part of it crossed
    * (mini-sectors / 50), from its newest crossing. `notReceived` before its first crossing (C3).
@@ -41,8 +48,7 @@ export type GapsOutput = {
   /**
    * Where the gapper starts (`GapperLines.origin`), with the time it counts each car's race time from: lights out
    * (`at` = `raceStartAt`) when the engine saw it, else the leader's first line crossing after the join (`lap` the
-   * leader's completed laps there). `notApplicable` outside a race, `notReceived` before it is known. An output
-   * without it (one built by hand) starts at `raceStartAt`, as lights out.
+   * leader's completed laps there). `notApplicable` outside a race, `notReceived` before it is known (C3).
    */
-  origin?: Known<{ kind: 'lightsOut'; at: SessionTime } | { kind: 'join'; lap: number; at: SessionTime }>;
+  origin: Known<{ kind: 'lightsOut'; at: SessionTime } | { kind: 'join'; lap: number; at: SessionTime }>;
 };
