@@ -88,7 +88,6 @@ export function rejoinAt(condition: PitCondition, unknownLoss?: UnknownReason, u
     lossSource: LOSSES[condition].source,
     rejoinPosition: unknownOrder === undefined && ghost !== undefined ? known(ghost[1], at) : unknown(unknownOrder ?? 'insufficientData'),
     order: unknownOrder === undefined ? known(ORDERS[condition].map(row), at) : unknown(unknownOrder),
-    mapPoint: unknown('notApplicable'),
   };
 }
 
