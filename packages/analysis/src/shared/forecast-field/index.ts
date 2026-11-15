@@ -53,6 +53,7 @@ import { ourCars } from '@pitwall/domain';
 import { startLapOf } from '../../race-forecast/index.ts';
 import { configOf } from '../config-of.ts';
 import { burnPerLapKg, planBurnKgPerLap } from '../fuel-burn.ts';
+import { isHumanDriver } from '../human-driver.ts';
 import { FORECAST_FIELD_CONFIG } from './config.ts';
 import { lapModelParams } from './lap-model-params.ts';
 import { distanceAsOf, distanceOf, leaderTimeAt, leaderTimes, newestCrossings, orderOf } from './placement.ts';
@@ -246,7 +247,7 @@ export function buildStartingPoint(view: AsOfView, outputs: ReadonlyMap<Calculat
 
     const carNoise = noise.cars[id] as DeepReadonly<CarNoise> | undefined;
     const driver = carNoise?.driver ?? 'unknown';
-    sp.human[k] = driver === 'human' || (driver === 'unknown' && config.unknownDriverIsHuman) ? 1 : 0;
+    sp.human[k] = isHumanDriver(driver === 'unknown' ? undefined : driver, config.unknownDriverIsHuman) ? 1 : 0;
     // the tyre terms are `tyre-model`'s, per compound (SP4.3c Task 12): the rate at the worst corner
     const model = tyreModel[id];
     const termsOf = (c: NoiseCompound) => model?.compounds[c];

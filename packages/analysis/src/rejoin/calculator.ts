@@ -24,7 +24,9 @@ import { PIT_LOSS } from '../pit-loss/index.ts';
 import { RACE_INTERACTION_CONFIG } from '../race-interaction/config.ts';
 import { rejoinOnRoad, stopCostOfLoss, type RoadAtLine } from '../race-forecast/index.ts';
 import { behaviourByCar, behaviourFor } from '../shared/behaviour.ts';
+import { FORECAST_FIELD_CONFIG } from '../shared/forecast-field/config.ts';
 import { latestTime, type CarCrossings } from '../shared/gapper-lines.ts';
+import { isHumanDriver } from '../shared/human-driver.ts';
 import { ourCars } from '@pitwall/domain';
 import { REJOIN_BEHAVIOUR } from './behaviour.ts';
 import { REJOIN_CONFIG } from './config.ts';
@@ -66,7 +68,7 @@ type CarContext = {
   ours: CarCrossings | undefined;
   position: number;
   carId: CarId;
-  /** A human drives our car (its car-driver span): its stop is shorter (the stop model's). */
+  /** A human drives our car (`isHumanDriver`): its stop is shorter (the stop model's). */
   human: boolean;
   /** `race-interaction`'s minimum following gap: the pit-exit yield's window. */
   minGapMs: Ms;
@@ -134,12 +136,15 @@ export const rejoinCalculator: QuickCalculator<RejoinOutput> = {
     const outOfRace = new Set(gaps.outOfRace);
     // the pit-exit yield's window: race-interaction's minimum following gap, the starting point's too
     const { minGapMs } = RACE_INTERACTION_CONFIG.read(view);
+    // a car without a car-driver span: forecast-field's key, the starting point's too (C43, C47)
+    const { unknownDriverIsHuman } = FORECAST_FIELD_CONFIG.read(view);
     for (const carId of mine) {
       const rows = rowsOf(carId);
       if (rows.some((row) => 'notApplicable' in row || ('car' in row && row.car !== 'running'))) continue;
       const position = positionOf(carId);
-      // a car without a car-driver span is the AI's, as `driver-noise` reads it
-      const human = driverOf(carId).some((row) => 'human' in row);
+      // who drives our car: its car-driver span, else forecast-field's rule for a car without one (R55)
+      const kind = driverOf(carId).find((row) => 'driver' in row && row.driver !== undefined);
+      const human = isHumanDriver(kind !== undefined && 'driver' in kind ? kind.driver : undefined, unknownDriverIsHuman);
       const ctx: CarContext = { losses, gaps: gapsToCar(gaps, carId), outOfRace, ours: gaps.recent[carId], position, carId, human, minGapMs, positionOf, around: orderAround };
       cars[carId] = { carId, position, conditions: Object.fromEntries(CONDITIONS.map((c) => [c, rejoinAt(c, ctx)])) as Rejoin['conditions'] };
     }
