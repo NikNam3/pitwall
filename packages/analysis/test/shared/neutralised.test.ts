@@ -298,3 +298,60 @@ describe('guard: neutralisation kind has one owner (shared/neutralised.ts)', () 
     expect(offending).toEqual([]);
   });
 });
+
+// Guard (SP4.3c Task 4b, C26, C28): membership is the projection module's (`situationAt`, `membershipOf`). No unit of
+// analysis judges whether a span covers a frame range itself: a source line (comments left out) fails when it compares
+// both a `startFrame` and an `endFrame` (`<`, `<=`, `>`, `>=`), the two-sided "this range shares a frame with this span"
+// test. `shared/neutralised.ts` asks the projection module (`timeLossExcludedOf`) and passes. `damage`, whose samples
+// the exclusion decides, reads no span frame at all: neither `startFrame` nor `endFrame` appears in its code.
+describe('guard: no unit judges span coverage from frame numbers itself (Task 4b, C26)', () => {
+  const SRC = fileURLToPath(new URL('../../src/', import.meta.url));
+  const files = (dir: string): string[] =>
+    readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? files(join(dir, e.name)) : e.name.endsWith('.ts') ? [join(dir, e.name)] : []));
+  /** `text` without its comments, line breaks kept so line numbers stay. */
+  const codeOf = (text: string): string =>
+    text.replace(/\/\*[\s\S]*?\*\//g, (c) => c.replace(/[^\n]/g, '')).replace(/(^|[^:'"`])\/\/.*$/gm, '$1');
+  /** A comparison with a span bound on either side; `=>` and `->` are no comparison. */
+  const compares = (bound: string): RegExp => new RegExp(`(?<![=-])[<>]=?\\s*[\\w.?!]*\\b${bound}\\b|\\b${bound}\\s*[<>]=?(?!>)`);
+  const START = compares('startFrame');
+  const END = compares('endFrame');
+  const covers = (line: string): boolean => START.test(line) && END.test(line);
+  const offendersIn = (file: string): string[] => {
+    const name = relative(SRC, file).split('\\').join('/');
+    return codeOf(readFileSync(file, 'utf8'))
+      .split('\n')
+      .flatMap((line, i) => (covers(line) ? [`${name}:${i + 1}: ${line.trim()}`] : []));
+  };
+  /**
+   * Units outside Task 4b's scope found with the same own coverage test (reported for their own task): each must still
+   * offend, so the list only shrinks; once fixed, its entry goes.
+   */
+  const PENDING = ['battle/battle.ts', 'forecast-score/experiments.ts', 'sc-call/prepare.ts'];
+
+  it('the pattern finds a two-sided bound comparison, never an arrow, a field copy or a one-sided test', () => {
+    expect(covers('if (skips.some((s) => from.frame < s.endFrame && to.frame > s.startFrame)) return;')).toBe(true);
+    expect(covers('span.startFrame <= to && (!isClosed(span) || span.endFrame > from);')).toBe(true);
+    expect(covers('push({ startFrame: span.startFrame, endFrame: span.endFrame });')).toBe(false);
+    expect(covers('.map((s) => ({ from: s.startFrame, to: s.endFrame }))')).toBe(false);
+    expect(covers('.filter((s) => !isClosed(s) || s.endFrame > frame)')).toBe(false);
+    expect(codeOf('/** a.startFrame < b && c.endFrame > d */\nconst x = 1;')).toBe('\nconst x = 1;');
+  });
+
+  it('no unit of analysis compares a frame range with both bounds of a span', () => {
+    const offending = files(SRC).flatMap(offendersIn).filter((o) => !PENDING.some((p) => o.startsWith(`${p}:`)));
+    expect(offending).toEqual([]);
+  });
+
+  it('the pending units still offend (remove an entry once its unit asks the projection module)', () => {
+    for (const p of PENDING) expect(offendersIn(join(SRC, p)), p).not.toEqual([]);
+  });
+
+  it('damage reads no span frame: its exclusion is the shared rule over the projection module', () => {
+    const named = files(join(SRC, 'damage')).flatMap((file) =>
+      codeOf(readFileSync(file, 'utf8'))
+        .split('\n')
+        .flatMap((line, i) => (/\b(startFrame|endFrame)\b/.test(line) ? [`damage/${relative(join(SRC, 'damage'), file)}:${i + 1}: ${line.trim()}`] : [])),
+    );
+    expect(named).toEqual([]);
+  });
+});
