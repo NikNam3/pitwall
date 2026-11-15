@@ -2,9 +2,7 @@
 import { defineConfig } from '@pitwall/engine/readers';
 
 export const PIT_SWEEP_CONFIG = defineConfig('pit-sweep', {
-  /** Traffic: a car within this gap of ours at a line crossing (ms). Source: spec §9.2, §11.1 (the DRS line that decides an undercut, Aguad fn. 15). */
-  trafficGapMs: 1000,
-  /** Traffic: counted over this many laps after the stop. Source: spec §9.2, §11.1 (where traffic losses are settled, research 13 §10.2, Tulabandhula & Rudin). */
+  /** Traffic (a car within `strategy`'s `trafficGapMs` of ours at a line crossing): counted over this many laps after the stop. Source: spec §9.2, §11.1 (where traffic losses are settled, research 13 §10.2, Tulabandhula & Rudin). */
   trafficLaps: 3,
   /** A compound's rows start this many stop laps before its window opens (`pit-window`'s `windowLaps.from`), never before now. Source: SP4.3b2 Task 18q, Q10 B (the approved mockup `pit-sweep-table.html`: rows from L14 around a window of L19–L21). */
   rowsBefore: 3,

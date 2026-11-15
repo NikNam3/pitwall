@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { mcSettingsFrom, policyOf, strategyInputFrom, toDpInput, toMcHazard } from '../../../src/shared/strategy-input/index.ts';
 import { strategyDp, type DpInput } from '../../../src/strategy-dp/index.ts';
 import { STRATEGY_CONFIG } from '../../../src/strategy/config.ts';
+import { RACE_INTERACTION_CONFIG } from '../../../src/race-interaction/config.ts';
 import { RACE, viewAt } from '../../strategy/support.ts';
 import FORMER from './former-values.json' with { type: 'json' };
 import { plainValue, SNAPSHOT_LAP } from './former.ts';
@@ -36,14 +37,20 @@ describe('shared strategy input', () => {
   // row 5
   it('mcSettingsFrom maps rivalScBoxChance, rivalScMinTyreAge, rivalReactionLaps and parses points', () => {
     const set = mcSettingsFrom({ [STRATEGY_CONFIG.key]: { rivalScBoxChance: 0.5, rivalScMinTyreAge: 7, rivalReactionLaps: 2, points: '10, 6,3 ,1', zTie: 3, tieBand: 0.1 } });
-    expect(set).toEqual({ rivalRules: { q: 0.5, aMin: 7, reactionLaps: 2, coverRule: false }, points: [10, 6, 3, 1], zTie: 3, tieBand: 0.1 });
+    expect(set).toEqual({ rivalRules: { q: 0.5, aMin: 7, reactionLaps: 2, coverRule: false, coverGapMs: 3_000 }, points: [10, 6, 3, 1], zTie: 3, tieBand: 0.1 });
     // without a section: the config's defaults
     const d = STRATEGY_CONFIG.defaults;
     expect(mcSettingsFrom({})).toEqual({
-      rivalRules: { q: d.rivalScBoxChance, aMin: d.rivalScMinTyreAge, reactionLaps: d.rivalReactionLaps, coverRule: false },
+      rivalRules: { q: d.rivalScBoxChance, aMin: d.rivalScMinTyreAge, reactionLaps: d.rivalReactionLaps, coverRule: false, coverGapMs: RACE_INTERACTION_CONFIG.defaults.closeGapMs },
       points: [25, 18, 15, 12, 10, 8, 6, 4, 2, 1],
       zTie: d.zTie,
       tieBand: d.tieBand,
     });
+  });
+
+  it("one close gap (SP4.3c Task 3, C43, C47): the cover rule's gap is race-interaction's closeGapMs, filled by mcSettingsFrom; a strategy ruleGapMs is not read", () => {
+    expect(RACE_INTERACTION_CONFIG.defaults.closeGapMs).toBe(3_000);
+    expect(mcSettingsFrom({ [RACE_INTERACTION_CONFIG.key]: { closeGapMs: 1_750 } }).rivalRules.coverGapMs).toBe(1_750);
+    expect(mcSettingsFrom({ [STRATEGY_CONFIG.key]: { ruleGapMs: 1_750 } }).rivalRules.coverGapMs).toBe(3_000);
   });
 });

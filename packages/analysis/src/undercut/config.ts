@@ -2,8 +2,6 @@
 import { defineConfig } from '@pitwall/engine/readers';
 
 export const UNDERCUT_CONFIG = defineConfig('undercut', {
-  /** The rivals: the cars directly ahead and behind within this gap, then the next one each way within it (ms). Source: spec §9.1, §11.1 (`forecast-score`'s `closeGapMs`, research 12 §8). */
-  undercutRangeMs: 3000,
   /** The cases per rival: the second stop 1 … this many laps after the first. Source: spec §9.1, §11.1 (N 1–3). */
   maxLapsLater: 3,
   /**

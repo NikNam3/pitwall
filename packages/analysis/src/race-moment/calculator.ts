@@ -15,9 +15,10 @@ import {
 } from '@pitwall/domain';
 import { openSpansOf, type QuickCalculator } from '@pitwall/engine/readers';
 import { ALARMS } from '../alarms/index.ts';
-import { BATTLE, BATTLE_CONFIG, type BattleOutput } from '../battle/index.ts';
+import { BATTLE, type BattleOutput } from '../battle/index.ts';
 import { INCIDENTS, type IncidentsOutput } from '../incidents/index.ts';
 import { PIT_WINDOW, type PitWindowOutput } from '../pit-window/index.ts';
+import { RACE_INTERACTION_CONFIG } from '../race-interaction/config.ts';
 import { RAIN_OUTLOOK, type RainOutlook } from '../rain-outlook/index.ts';
 import { behaviourFor } from '../shared/behaviour.ts';
 import { ourCars } from '@pitwall/domain';
@@ -93,7 +94,7 @@ export const raceMomentCalculator: QuickCalculator<RaceMomentOutput> = {
       holding.push(['weather', { since: NOT_APPLICABLE, cause: { rule: 'forecastRain', params: { rainPct, offsetMin } } }]);
     }
 
-    const { drsRangeMs } = BATTLE_CONFIG.read(view);
+    const { drsRangeMs } = RACE_INTERACTION_CONFIG.read(view);
     const sides = [...sidesOf((view.outputs.get(BATTLE) as BattleOutput | undefined) ?? {})];
     // laps to DRS first: battle gives 0 for a gap already in range and counts a closing one down; the gap alone is
     // the fallback for a side whose laps to DRS are unknown

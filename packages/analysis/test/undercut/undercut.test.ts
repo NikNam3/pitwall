@@ -12,6 +12,7 @@ import { binShares } from '../../src/shared/distribution.ts';
 import { mcSettingsFrom, policyOf, toDpInput, toMcHazard } from '../../src/shared/strategy-input/index.ts';
 import { candidatesForRun } from '../../src/strategy/index.ts';
 import { bestWith, dpResult, solveDp } from '../../src/strategy-dp/index.ts';
+import { RACE_INTERACTION_CONFIG } from '../../src/race-interaction/index.ts';
 import { UNDERCUT_CONFIG, UNDERCUT_JOB, type UndercutInput, type UndercutOutput } from '../../src/undercut/index.ts';
 import { run } from '../../src/undercut/job.ts';
 import {
@@ -57,7 +58,8 @@ beforeEach(() => {
 });
 
 const SEED = 1_521_242_745;
-const RANGE = UNDERCUT_CONFIG.defaults.undercutRangeMs;
+// the one close gap: race-interaction's `closeGapMs` (SP4.3c Task 3)
+const RANGE = RACE_INTERACTION_CONFIG.defaults.closeGapMs;
 
 /** The job's input on the view at the leader's lap `lap`, as the worker receives it. */
 const inputOf = (lap: number = LAP, spec: UndercutViewSpec = {}): UndercutInput => structuredClone(UNDERCUT_JOB.prepare(undercutView(lap, spec)));
@@ -99,7 +101,7 @@ describe('undercut: the job', () => {
   // row 1
   it('rivals: the cars directly ahead and behind within 3.0 s, then the next each way within range, in place order', () => {
     for (const rangeMs of [RANGE, 4_500]) {
-      const input = inputOf(LAP, { undercut: { undercutRangeMs: rangeMs } });
+      const input = inputOf(LAP, { raceInteraction: { closeGapMs: rangeMs } });
       const start = startOf(input);
       const out = run(input, createRng(SEED));
       let withNext = 0;
@@ -245,7 +247,7 @@ describe('undercut: the job', () => {
 
   // row 5
   it('a case past the last lap, a rival with no stop still ahead, or no set for us is absent', () => {
-    const wide = { undercut: { undercutRangeMs: 60_000 } };
+    const wide = { raceInteraction: { closeGapMs: 60_000 } };
 
     // the last laps: every rival given a stop ahead; a case whose later stop leaves no lap to measure is absent
     const late = inputOf(18, wide);
@@ -280,9 +282,18 @@ describe('undercut: the job', () => {
     }
   }, 120_000);
 
+  it("one close gap (SP4.3c Task 3, C43, C47): the rivals' range is race-interaction's closeGapMs; undercut has no range of its own", () => {
+    expect(Object.keys(UNDERCUT_CONFIG.defaults)).not.toContain('undercutRangeMs');
+    const rivalsWith = (spec: UndercutViewSpec) => OURS.flatMap((car) => inputOf(LAP, spec).cars[car]?.rivals ?? []);
+    expect(rivalsWith({}).length).toBeGreaterThan(0);
+    expect(rivalsWith({ raceInteraction: { closeGapMs: 1 } })).toEqual([]);
+    // an undercut undercutRangeMs is not read
+    expect(rivalsWith({ raceInteraction: { closeGapMs: 1 }, undercut: { undercutRangeMs: 60_000 } })).toEqual([]);
+  });
+
   // row 6
   it('no rival in range: rivals empty, never notApplicable', () => {
-    const input = inputOf(LAP, { undercut: { undercutRangeMs: 1 } });
+    const input = inputOf(LAP, { raceInteraction: { closeGapMs: 1 } });
     const start = startOf(input);
     const out = run(input, createRng(SEED));
     for (const car of OURS) {

@@ -494,7 +494,8 @@
    "q": 0.88,
    "aMin": 4,
    "reactionLaps": 0,
-   "coverRule": false
+   "coverRule": false,
+   "coverGapMs": 3000
   },
   "points": [
    25,

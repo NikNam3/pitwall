@@ -3,13 +3,6 @@
 // are the model's fixed terms, each with its source.
 
 /**
- * The cover rule's gap (spec §7.2 ablation, only with `coverRule`): a rival ahead of our stopping car by at most this
- * at the line ending our in-lap covers with a stop on the next lap. Source: `strategy`'s `ruleGapMs` 3,000 ms (spec
- * §11.1), `forecast-score`'s `closeGapMs` (research 12 §8).
- */
-export const COVER_GAP_MS = 3_000;
-
-/**
  * The share of a car's scenario-policies the search keeps back for scoring the top few again on common scenarios
  * (spec §7.3 step 5). Source: pitwall estimate (a quarter: the search's batches of `n0` keep the rest).
  */

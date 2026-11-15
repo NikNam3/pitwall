@@ -23,9 +23,13 @@ import { generateRace, GENERATOR_DEFAULTS, type GeneratorParams } from '../../..
 import { zandvoortTrack } from '../../../../test-support/track.ts';
 import { FORECAST_SCORE_CONFIG } from '../../src/forecast-score/config.ts';
 import { prepareScore, type ScoreInput } from '../../src/forecast-score/job.ts';
+import { RACE_INTERACTION_CONFIG } from '../../src/race-interaction/config.ts';
 
-/** The defaults of `forecast-score` (3 s, 1–5 laps, ±3 places, 6 s repair, 2 settle laps). */
-export const CONFIG = FORECAST_SCORE_CONFIG.defaults;
+/**
+ * The natural experiments' config: the defaults of `forecast-score` (1–5 laps, ±3 places, 6 s repair, 2 settle laps)
+ * and the one close gap, `race-interaction`'s `closeGapMs` (3 s; SP4.3c Task 3).
+ */
+export const CONFIG = { ...FORECAST_SCORE_CONFIG.defaults, closeGapMs: RACE_INTERACTION_CONFIG.defaults.closeGapMs };
 
 /** The track file of every generator view here: braking zones, DRS zones and pit-loss defaults. */
 export const TRACK: EngineView['track'] = known(zandvoortTrack(), 0);

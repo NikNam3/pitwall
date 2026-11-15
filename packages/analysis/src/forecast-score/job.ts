@@ -32,12 +32,13 @@ import {
 } from '@pitwall/engine/readers';
 import { raceForecast } from '../race-forecast/index.ts';
 import { fieldPositions } from '../race-monte-carlo/field.ts';
-import type { FieldInput, RivalRules } from '../race-monte-carlo/types.ts';
+import type { FieldInput } from '../race-monte-carlo/types.ts';
+import { RACE_INTERACTION_CONFIG } from '../race-interaction/config.ts';
 import { RIVAL_STOPS } from '../rival-stops/index.ts';
 import { buildStartingPoint, FORECAST_UNITS } from '../shared/forecast-field/index.ts';
 import { leaderLapAt, neutralisationKind, neutralisedSpans, isClosed } from '../shared/neutralised.ts';
 import { ourCars } from '@pitwall/domain';
-import { STRATEGY_CONFIG } from '../strategy/config.ts';
+import { mcSettingsFrom } from '../shared/strategy-input/settings.ts';
 import { FORECAST_SCORE_CONFIG } from './config.ts';
 import { crpsSummary, rankedProbabilityScore } from './crps.ts';
 import { actualStops, naturalExperiments, type Case, type ForecastScoreConfig } from './experiments.ts';
@@ -185,7 +186,7 @@ export function run(input: ScoreInput, rng: Rng): ForecastScoreReport {
     }
     return scored({ carId: car, driver: driverAt(c.predictFrame, car), lap: c.lap, predicted, actual: c.measure(history) });
   };
-  const experiments = naturalExperiments(history, config, situation);
+  const experiments = naturalExperiments(history, { ...config, closeGapMs: RACE_INTERACTION_CONFIG.read(input).closeGapMs }, situation);
   const scoreAll = (cases: readonly Case[]) => cases.flatMap((c) => experiment(c) ?? []);
 
   // the plain forecasts: one forecast per leader lap, rivals on rival-stops' windows, our cars on their actual stops
@@ -233,8 +234,7 @@ export function run(input: ScoreInput, rng: Rng): ForecastScoreReport {
   // the CRPS (SP4.3b spec §8.4): one `fieldPositions` run per predict lap (every `crpsEveryLaps` from `crpsFirstLap`)
   // over the plain plans, at the laps predict lap + each horizon, with a zero hazard (a scored case holds no SC or VSC
   // lap, F1), the rivals' rule from `strategy`'s config; each case scores its car's pmf at its target lap
-  const strategy = STRATEGY_CONFIG.read(input);
-  const rivalRules: RivalRules = { q: strategy.rivalScBoxChance, aMin: strategy.rivalScMinTyreAge, reactionLaps: strategy.rivalReactionLaps, coverRule: false };
+  const { rivalRules } = mcSettingsFrom(input.config);
   const crpsByLap = new Map<number, ForecastCase[]>();
   for (const c of forecastCases(history, horizons, config.crpsFirstLap)) {
     if ((c.lap - config.crpsFirstLap) % config.crpsEveryLaps !== 0) continue;

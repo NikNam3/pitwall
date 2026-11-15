@@ -6,7 +6,8 @@ import { createRng } from '@pitwall/engine/readers';
 import { describe, expect, it } from 'vitest';
 import { naturalExperiments } from '../../src/forecast-score/experiments.ts';
 import { forecastCases } from '../../src/forecast-score/forecasts.ts';
-import { FORECAST_SCORE, FORECAST_SCORE_JOB } from '../../src/forecast-score/index.ts';
+import { FORECAST_SCORE, FORECAST_SCORE_CONFIG, FORECAST_SCORE_JOB } from '../../src/forecast-score/index.ts';
+import { RACE_INTERACTION_CONFIG } from '../../src/race-interaction/config.ts';
 import * as jobModule from '../../src/forecast-score/job.ts';
 import { prepareScore, run } from '../../src/forecast-score/job.ts';
 import { CONFIG, generated, inputAt, SMALL, viewOf } from './support.ts';
@@ -111,6 +112,20 @@ describe('forecast-score job', () => {
       if (c.lap >= 10) expect(c.driver, `lap ${c.lap}`).toBe('ai');
     }
     expect(taken.experiments.rejoin.cases.find((c) => c.carId === 7)?.driver).toBe('human');
+  });
+
+  it("one close gap (SP4.3c Task 3, C43, C47): the undercut experiments read race-interaction's closeGapMs; forecast-score has none of its own", () => {
+    expect(Object.keys(FORECAST_SCORE_CONFIG.defaults)).not.toContain('closeGapMs');
+    const input = inputOnce();
+    // no forecast tables and no CRPS: only the experiments run
+    const cheap = { horizons: '', crpsFirstLap: 1_000 };
+    const undercutsWith = (config: Record<string, Record<string, number | string>>) =>
+      run({ ...input, config: { ...input.config, ...config, 'forecast-score': { ...cheap, ...config['forecast-score'] } } }, createRng(0)).experiments.undercut.cases.length;
+    expect(naturalExperiments(input.history, { ...CONFIG, closeGapMs: 60_000 }).undercut.length, 'the race has undercut pairs').toBeGreaterThan(0);
+    expect(undercutsWith({ [RACE_INTERACTION_CONFIG.key]: { closeGapMs: 0 } })).toBe(0);
+    expect(undercutsWith({ [RACE_INTERACTION_CONFIG.key]: { closeGapMs: 60_000 } })).toBeGreaterThan(0);
+    // a forecast-score closeGapMs is not read
+    expect(undercutsWith({ [RACE_INTERACTION_CONFIG.key]: { closeGapMs: 60_000 }, 'forecast-score': { closeGapMs: 0 } })).toBeGreaterThan(0);
   });
 
   it('no state between runs: a second run on the same input gives the same report (C31)', () => {

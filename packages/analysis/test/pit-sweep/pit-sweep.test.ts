@@ -15,7 +15,7 @@ import { PIT_SWEEP_CONFIG, PIT_SWEEP_JOB } from '../../src/pit-sweep/index.ts';
 import { run } from '../../src/pit-sweep/job.ts';
 import { placePmf } from '../../src/shared/distribution.ts';
 import { mcSettingsFrom, policyOf } from '../../src/shared/strategy-input/index.ts';
-import { prepareStrategy, runStrategy } from '../../src/strategy/index.ts';
+import { prepareStrategy, runStrategy, STRATEGY_CONFIG } from '../../src/strategy/index.ts';
 import { viewAt } from '../strategy/support.ts';
 import { json, mean, middles, OURS, pitWindowOf, PLAYER, RACE, seOf, SETS, SWEEP_CAP, sweepViewAt, TEAMMATE, windowOf, type Recorded, type SweepSpec } from './support.ts';
 
@@ -113,6 +113,14 @@ function expectedCandidates(car: CarId, compound: NoiseCompound, last: number, f
 const SWEPT: readonly NoiseCompound[] = ['hard', 'medium', 'soft'];
 
 describe('pit-sweep: the job', () => {
+  it("one traffic gap (SP4.3c Task 3, C43, C47): every call's traffic gap is strategy's trafficGapMs; pit-sweep has none of its own", () => {
+    expect(Object.keys(PIT_SWEEP_CONFIG.defaults)).not.toContain('trafficGapMs');
+    // strategy's section (`config`) at 1,234 ms; a pit-sweep trafficGapMs is not read
+    swept({ window: { compounds: ['hard'] }, config: { trafficGapMs: 1_234 }, sweepConfig: { trafficGapMs: 9_999 } });
+    expect(rec.calls.length).toBeGreaterThan(0);
+    for (const { input } of rec.calls) expect(input.traffic).toEqual({ gapMs: 1_234, laps: PIT_SWEEP_CONFIG.defaults.trafficLaps });
+  });
+
   // row 1
   it('one table per compound with a new set; auto is pit-window\'s windowCompound; a superSoft or unknown set has no table', () => {
     const out = swept({ window: { compounds: ['soft', 'medium', 'hard', 'superSoft', 'unknown'] } });
@@ -166,7 +174,7 @@ describe('pit-sweep: the job', () => {
           const scenarios = Math.floor(SWEEP_CAP / expected.length);
           expect(input.scenarios).toBe(scenarios);
           expect(t.scenarios).toBe(scenarios);
-          expect(input.traffic).toEqual({ gapMs: PIT_SWEEP_CONFIG.defaults.trafficGapMs, laps: PIT_SWEEP_CONFIG.defaults.trafficLaps });
+          expect(input.traffic).toEqual({ gapMs: STRATEGY_CONFIG.defaults.trafficGapMs, laps: PIT_SWEEP_CONFIG.defaults.trafficLaps });
 
           // each row's numbers from its candidate's outcomes
           t.rows.forEach((row, i) => {

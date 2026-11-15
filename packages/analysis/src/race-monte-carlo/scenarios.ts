@@ -5,7 +5,7 @@ import type { ForecastResult, NoiseCompound, Policy, Scenario, StartingPoint } f
 import type { Rng } from '@pitwall/engine/readers';
 import { drawsInto, normal, PURPOSE, streamKey, uniform, type Draws } from '../race-forecast/draws.ts';
 import { raceForecast } from '../race-forecast/index.ts';
-import { COVER_GAP_MS, MC_PURPOSE } from './constants.ts';
+import { MC_PURPOSE } from './constants.ts';
 import { hasStopAhead, rivalPlan, rivalStops } from './rivals.ts';
 import type { McInput, RivalRules } from './types.ts';
 import { drawWeather, wetnessPath, type WeatherLap } from './weather.ts';
@@ -332,7 +332,7 @@ function rivalPits(run: Run, policies: Policy[], scenario: Scenario, owns: reado
 }
 
 /**
- * The cover rule (spec §7.2 ablation): a rival ahead of our stopping car by at most `COVER_GAP_MS` at the line ending our
+ * The cover rule (spec §7.2 ablation): a rival ahead of our stopping car by at most `rules.coverGapMs` at the line ending our
  * in-lap, with a stop still ahead later than the next lap, stops on the next lap instead. One traced forecast to our
  * last stop finds the gaps.
  */
@@ -351,7 +351,7 @@ function cover(run: Run, policies: Policy[], drawn: ScenarioEntry): void {
       for (let k = 0; k < start.cars; k++) {
         if (run.ours.has(k) || !hasStopAhead(start, k)) continue;
         const pos = entry.position[k] ?? 0;
-        if (pos === 0 || pos >= ourPos || (entry.gapMs[c] ?? 0) - (entry.gapMs[k] ?? 0) > COVER_GAP_MS) continue;
+        if (pos === 0 || pos >= ourPos || (entry.gapMs[c] ?? 0) - (entry.gapMs[k] ?? 0) > run.rules.coverGapMs) continue;
         const planned = rivalLaps[k] ?? -1;
         const now = policies[k]?.stops[0]?.lap ?? planned;
         if (now !== -1 && now <= s.lap + 1) continue;

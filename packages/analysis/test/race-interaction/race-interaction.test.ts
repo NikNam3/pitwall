@@ -82,6 +82,10 @@ describe('race-interaction', () => {
     expect(raceInteractionCalculator.cadence).toBe('lapCompleted');
   });
 
+  it('owns the one DRS rule and the one close gap (SP4.3c Task 3, C43, C47): drsRangeMs 1000, drsFromLap 3, closeGapMs 3000', () => {
+    expect([CONFIG.drsRangeMs, CONFIG.drsFromLap, CONFIG.closeGapMs]).toEqual([1_000, 3, 3_000]);
+  });
+
   it('guarded view and behaviour-table completeness pick it up (C41, C44)', async () => {
     // the generic tests (guarded-view-completeness, behaviour-completeness) run over every registered unit
     expect(CALCULATORS.map((c) => c.id)).toContain(RACE_INTERACTION);

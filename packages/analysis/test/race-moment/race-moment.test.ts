@@ -25,7 +25,8 @@ import {
   RACE_MOMENT,
   RACE_MOMENT_CONFIG,
 } from "../../src/race-moment/index.ts";
-import { BATTLE, BATTLE_CONFIG } from "../../src/battle/index.ts";
+import { BATTLE } from "../../src/battle/index.ts";
+import { RACE_INTERACTION_CONFIG } from "../../src/race-interaction/index.ts";
 import { INCIDENTS, type IncidentsOutput } from "../../src/incidents/index.ts";
 import { ALARMS } from "../../src/alarms/index.ts";
 import { RAIN_OUTLOOK, type RainOutlook } from "../../src/rain-outlook/index.ts";
@@ -37,7 +38,8 @@ const NOW = 600_000 as SessionTime;
 const car0 = carId(0);
 const car1 = carId(1);
 const na = unknown("notApplicable");
-const DRS = BATTLE_CONFIG.defaults.drsRangeMs;
+// the one DRS range: race-interaction's (SP4.3c Task 3)
+const DRS = RACE_INTERACTION_CONFIG.defaults.drsRangeMs;
 const CFG = RACE_MOMENT_CONFIG.defaults;
 
 const incident = (over: Partial<IncidentEntry> = {}): IncidentEntry => ({
@@ -143,8 +145,10 @@ function run({
   alarms,
   outlook,
   pitWindow,
+  config,
 }: {
   kind?: "race" | "practice" | "qualifying" | "none";
+  config?: EngineView["config"];
   /** The other open spans of the situation, beside the weekend phase and `active`. */
   session?: OpenSpan[];
   phases?: ReturnType<typeof neutralisation>[];
@@ -168,6 +172,7 @@ function run({
     situation,
     outputs,
     sessionTime: NOW,
+    ...(config ? { config } : {}),
   });
   // every test computes through the unit's guarded view (C41)
   return raceMomentCalculator.compute(guardedView(view, raceMomentCalculator.reads, { unit: RACE_MOMENT }));
@@ -365,6 +370,22 @@ describe("race-moment calculator", () => {
         run({ battle: { [car0]: card(known(early(DRS + 1), NOW)) } }),
       );
       expect(far.moment).toBe("carCare");
+    });
+
+    it("one DRS range (SP4.3c Task 3, C43, C47): the gap rule reads race-interaction's drsRangeMs; an override of it moves the battle, one of battle's section does not", () => {
+      const at = (gapMs: number, config: EngineView["config"] = {}) =>
+        value(
+          run({
+            config,
+            battle: {
+              [car0]: card(known(side({ gapMs: known(gapMs, NOW), lapsToDrs: na }), NOW)),
+            },
+          }),
+        ).moment;
+      expect(at(1_400)).toBe("carCare");
+      expect(at(1_400, { [RACE_INTERACTION_CONFIG.key]: { drsRangeMs: 1_500 } })).toBe("battle");
+      expect(at(900, { [RACE_INTERACTION_CONFIG.key]: { drsRangeMs: 800 } })).toBe("carCare");
+      expect(at(1_400, { battle: { drsRangeMs: 1_500 } })).toBe("carCare");
     });
 
     it("a battle card beyond both thresholds, or with unknown values, sets no battle", () => {

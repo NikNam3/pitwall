@@ -22,8 +22,8 @@ export const POINTS = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1];
 /** Spec §11.1's search and ranking, the cap from `strategy`'s config. */
 export const CONFIG: McConfig = { n0: 40, zDrop: 2.8, zTie: 2, tieBand: 0.05, rescoreTop: 5, maxScenarioPolicies: 5_000, points: POINTS };
 
-/** `strategy`'s config (research 19 §5): q 0.88, aMin 4, reactionLaps 0; no cover rule. */
-export const RIVAL_RULES: RivalRules = { q: 0.88, aMin: 4, reactionLaps: 0, coverRule: false };
+/** `strategy`'s config (research 19 §5): q 0.88, aMin 4, reactionLaps 0; no cover rule; its gap `race-interaction`'s `closeGapMs` (3 s, SP4.3c Task 3). */
+export const RIVAL_RULES: RivalRules = { q: 0.88, aMin: 4, reactionLaps: 0, coverRule: false, coverGapMs: 3_000 };
 
 export type Hazard = McInput['hazard'];
 

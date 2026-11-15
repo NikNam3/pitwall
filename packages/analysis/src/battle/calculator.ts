@@ -8,13 +8,15 @@ import type { GapsOutput } from '../gaps/index.ts';
 import { behaviourFor } from '../shared/behaviour.ts';
 import { NEUTRALISATION_READS } from '../shared/neutralised.ts';
 import { emptyBattleAcc, foldBattle, openNeutralised, paceDelta, type BattleAcc } from './battle.ts';
+import { RACE_INTERACTION_CONFIG } from '../race-interaction/config.ts';
 import { BATTLE, BATTLE_BEHAVIOUR, BATTLE_CONFIG, type BattleOutput } from './index.ts';
 
 export type { BattleAcc } from './battle.ts';
 
 const NOT_APPLICABLE = unknown('notApplicable');
 type Car = DeepReadonly<CarState>;
-type Config = ReturnType<typeof BATTLE_CONFIG.read>;
+/** `battle`'s config and the one DRS range, `race-interaction`'s `drsRangeMs` (C43, C47). */
+type Config = ReturnType<typeof BATTLE_CONFIG.read> & { drsRangeMs: number };
 
 /**
  * The laps to DRS range on one side: (gap − `drsRangeMs`) / the closing car's edge per lap (`edge`, positive while the
@@ -100,7 +102,7 @@ function output(acc: BattleAcc, view: EngineView): BattleOutput {
   // a pending weekend phase (no span yet) reads as a race grid (C14): the cards are computed, DRS is not enabled yet
   const computed = phase === undefined || phase.cards === 'computed';
   const drs = drsOf(view, phase?.cards !== 'notApplicable');
-  const ctx = { acc, view, gaps, drs, neutralised: computed && gaps !== undefined ? openNeutralised(view) : [], config: BATTLE_CONFIG.read(view) };
+  const ctx = { acc, view, gaps, drs, neutralised: computed && gaps !== undefined ? openNeutralised(view) : [], config: { ...BATTLE_CONFIG.read(view), drsRangeMs: RACE_INTERACTION_CONFIG.read(view).drsRangeMs } };
   const out: BattleOutput = {};
   for (const id of ourCars(view.live)) out[id] = cardOf(ctx, computed, id);
   return out;
