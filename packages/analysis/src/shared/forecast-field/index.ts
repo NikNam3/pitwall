@@ -50,7 +50,9 @@ import { TYRE_LIFE, tyreLifeAsOf } from '../../tyre-life/index.ts';
 import { tyreModelAsOf, tyreModelCalculator } from '../../tyre-model/calculator.ts';
 import { TYRE_MODEL } from '../../tyre-model/id.ts';
 import { ourCars } from '@pitwall/domain';
+import { startLapOf } from '../../race-forecast/index.ts';
 import { configOf } from '../config-of.ts';
+import { burnPerLapKg, planBurnKgPerLap } from '../fuel-burn.ts';
 import { FORECAST_FIELD_CONFIG } from './config.ts';
 import { lapModelParams } from './lap-model-params.ts';
 import { distanceAsOf, distanceOf, leaderTimeAt, leaderTimes, newestCrossings, orderOf } from './placement.ts';
@@ -341,6 +343,15 @@ export function buildStartingPoint(view: AsOfView, outputs: ReadonlyMap<Calculat
       // gap now as the crossings extrapolate it less the gap at the car's newest crossing
       sp.gapMs[k] = own + (t === undefined || tc === undefined ? 0 : at - t - (c.at - tc));
     } else sp.gapMs[k] = t === undefined ? 0 : Math.max(0, at - t);
+  }
+
+  // the burn the simulators use (O15): the car's measured burn, else its fuel over its whole laps left from where it
+  // starts (a whole count: the as-of and the live builds differ only in lap fraction and gap)
+  const burnOptions = { lapClasses: configOf(LAP_CLASSES_CONFIG, view), rate: configOf(PER_LAP_RATE_CONFIG, view) };
+  const lapsByCar: LapRecord[][] = Array.from({ length: cars }, () => []);
+  for (const l of laps) if (l.carId >= 0 && l.carId < cars) lapsByCar[l.carId]?.push(l);
+  for (let k = 0; k < cars; k++) {
+    sp.fuelBurnKgPerLap[k] = planBurnKgPerLap(burnPerLapKg(lapsByCar[k] ?? [], burnOptions), sp.fuelKg[k] ?? 0, lapsTotal - startLapOf(sp, k) + 1);
   }
 
   sp.sets = setsOf(view, tyreModel, cars);

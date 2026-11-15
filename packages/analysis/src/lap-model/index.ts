@@ -1,6 +1,6 @@
 // `lap-model` (SP4.3a spec 6.2): a simulator (C50): one car, one lap, additive, on plain inputs only; its parameters
 // are built by `forecast-field`. No reads, no cadence, no topic.
-import { tyreTypeOf, type LapInput, type LapModelParams } from '@pitwall/domain';
+import { tyreTypeOf, type LapInput, type LapModelParams, type NoiseCompound } from '@pitwall/domain';
 import { defineSimulator } from '@pitwall/engine/readers';
 
 export const SIMULATOR = defineSimulator('lap-model');
@@ -18,6 +18,14 @@ function tyreMs(p: LapModelParams, car: LapInput): number {
 function coldMs(p: LapModelParams, car: LapInput): number {
   const cold = car.lapOnSet === 1 ? p.coldTyreMs[0] : car.lapOnSet === 2 ? p.coldTyreMs[1] : 0;
   return car.wet ? cold * p.coldTyreWetFactor : cold;
+}
+
+/**
+ * The compound and wetness term of a lap time (SP4.3c O4): the compound's offset plus its tyre type's wetness slope times
+ * the wetness. `lapTimeMs` adds the same two parts, in its own summation order (so its floating sums stay as they are).
+ */
+export function typeTermMs(p: LapModelParams, compound: NoiseCompound, wetnessMs: number): number {
+  return p.compoundOffsetMs[compound] + p.wetnessMsPerMs[typeOf(compound)] * wetnessMs;
 }
 
 /** One car's lap time (ms, floating) under `p`. */

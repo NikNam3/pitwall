@@ -137,7 +137,8 @@ const RAIN_PROBE_MS = [1_000, 2_000] as const;
 function greenRaceMs(input: DpInput, w: number, stops: DpPlan['stops']): number {
   const p = input.carParams;
   const n = input.totalLaps - input.fromLap + 1;
-  const burn = p.fuelKg / n;
+  // the car's burn per lap (the starting point's, O15)
+  const burn = p.fuelBurnKgPerLap;
   const lap: LapInput = { paceMs: p.paceMs, degMsPerLap: p.degMsPerLap, wearPct: p.wearPct, fuelKg: p.fuelKg, compound: p.compound, lapOnSet: 1, neutralised: 'none', wetnessMs: w, wet: isWet(w, 0, 0), scatterMs: 0, mistakeMs: 0 };
   let onSet = p.tyreAge;
   let total = 0;

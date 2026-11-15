@@ -164,9 +164,9 @@ function lapTable(input: DpInput, n: number, fuel: Float64Array, tyre: NoiseComp
   return table;
 }
 
-/** Per lap offset the fuel at the lap's start: the green burn that runs it to empty at the flag. */
+/** Per lap offset the fuel at the lap's start: the car's green burn per lap (the starting point's, O15), never below 0. */
 function fuelByLap(input: DpInput, n: number): Float64Array {
-  const burn = input.carParams.fuelKg / n;
+  const burn = input.carParams.fuelBurnKgPerLap;
   const fuel = new Float64Array(n);
   let kg = input.carParams.fuelKg;
   for (let i = 0; i < n; i++) {

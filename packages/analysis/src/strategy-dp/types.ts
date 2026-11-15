@@ -10,6 +10,8 @@ export type DpCarParams = {
   tyreAge: number;
   wearPct: number;
   fuelKg: number;
+  /** kg per lap: the starting point's burn (`StartingPoint.fuelBurnKgPerLap`, `shared/fuel-burn.ts`, SP4.3c O15). */
+  fuelBurnKgPerLap: number;
   paceMs: number;
   degMsPerLap: number;
   /** Wear per lap by compound in %; `null` where the car's wear is hidden (age only, spec §6). */

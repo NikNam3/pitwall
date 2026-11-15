@@ -93,7 +93,6 @@ export type Field = {
   compound: Uint8Array;
   wearPct: Float64Array;
   fuelKg: Float64Array;
-  burnKg: Float64Array;
   lapOnSet: Int16Array;
   /** Our cars' sets fitted so far, per car and compound index. */
   setsUsed: Map<number, Int16Array>;
@@ -103,7 +102,7 @@ export type Field = {
 const input: LapInput = { paceMs: 0, degMsPerLap: 0, wearPct: 0, fuelKg: 0, compound: 'medium', lapOnSet: 1, neutralised: 'none', wetnessMs: 0, wet: false, scatterMs: 0, mistakeMs: 0 };
 
 /** A field's typed arrays, by size: per car, per car and lap, per lap. */
-type Arrays = Pick<Field, 'neutralByLap' | 'vscLapMs' | 'stopCompound' | 'car' | 'order' | 'carKeys' | 'lap' | 'lineT' | 'running' | 'paceMs' | 'degMs' | 'scatterMs' | 'innovationMs' | 'compound' | 'wearPct' | 'fuelKg' | 'burnKg' | 'lapOnSet'>;
+type Arrays = Pick<Field, 'neutralByLap' | 'vscLapMs' | 'stopCompound' | 'car' | 'order' | 'carKeys' | 'lap' | 'lineT' | 'running' | 'paceMs' | 'degMs' | 'scatterMs' | 'innovationMs' | 'compound' | 'wearPct' | 'fuelKg' | 'lapOnSet'>;
 
 function allocate(n: number, laps: number): Arrays {
   return {
@@ -123,7 +122,6 @@ function allocate(n: number, laps: number): Arrays {
     compound: new Uint8Array(n),
     wearPct: new Float64Array(n),
     fuelKg: new Float64Array(n),
-    burnKg: new Float64Array(n),
     lapOnSet: new Int16Array(n),
   };
 }
@@ -145,7 +143,6 @@ function arraysFor(n: number, laps: number): Arrays {
   a.lap.fill(0);
   a.lineT.fill(Number.NaN);
   a.scatterMs.fill(0);
-  a.burnKg.fill(0);
   return a;
 }
 
@@ -294,11 +291,6 @@ export function startLap(f: Field, c: number, lap: number, fromFraction: number,
       car[b + LAP_MS] = f.vscLapMs[lap] ?? 0;
     } else car[b + LAP_MS] = lapTime(s.lapModel, input);
   }
-  if (first) {
-    // fuel runs to empty at the flag
-    const lapsLeft = s.lapsTotal - lap + 1 - fromFraction;
-    f.burnKg[c] = lapsLeft > 0 ? (f.fuelKg[c] ?? 0) / lapsLeft : 0;
-  }
 }
 
 /** Car `c` crossed the line ending lap `lap`: wear and fuel of the lap, a stop's new set; returns the stop's set if it stopped. */
@@ -307,14 +299,16 @@ export function endLap(f: Field, c: number, lap: number): NoiseCompound | undefi
   const kind = f.car[c * W + NEUTRAL_AT] ?? NEUTRAL.none;
   // the compound fitted now: after a stop the new compound's rate (SP4.3c Task 12)
   const rate = s.tyre.wearRatePct[tyreIndex(c, f.compound[c] ?? 0)] ?? 0;
+  // the starting point's burn (`forecast-field`'s, from `shared/fuel-burn.ts`, O15)
+  const burn = s.fuelBurnKgPerLap[c] ?? 0;
   if (kind === NEUTRAL.none) {
     // a green lap's factors are 1 (and × 1 is exact)
     f.wearPct[c] = (f.wearPct[c] ?? 0) + rate;
-    f.fuelKg[c] = Math.max(0, (f.fuelKg[c] ?? 0) - (f.burnKg[c] ?? 0));
+    f.fuelKg[c] = Math.max(0, (f.fuelKg[c] ?? 0) - burn);
   } else {
     const factors = kind === NEUTRAL.sc ? s.lapModel.neutralised.sc : s.lapModel.neutralised.vsc;
     f.wearPct[c] = (f.wearPct[c] ?? 0) + rate * factors.wearFactor;
-    f.fuelKg[c] = Math.max(0, (f.fuelKg[c] ?? 0) - (f.burnKg[c] ?? 0) * factors.fuelFactor);
+    f.fuelKg[c] = Math.max(0, (f.fuelKg[c] ?? 0) - burn * factors.fuelFactor);
   }
   f.lapOnSet[c] = (f.lapOnSet[c] ?? 0) + 1;
   const k = f.car[c * W + IN_LAP] === 1 ? stopAt(f, c, lap) : -1;
