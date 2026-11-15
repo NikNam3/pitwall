@@ -10,10 +10,11 @@ describe('BattleSide', () => {
   it('has no CLOSING and no old overtaking margin', () => {
     expectTypeOf<BattleSide>().not.toHaveProperty('closingMsPerLap');
     expectTypeOf<BattleSide>().not.toHaveProperty('overtakeMarginMs');
+    expectTypeOf<BattleSide>().not.toHaveProperty('margin');
   });
 
-  it('has margin required: pass or hold with its ms', () => {
-    expectTypeOf<Pick<BattleSide, 'margin'>>().toEqualTypeOf<{ margin: Known<{ kind: 'pass' | 'hold'; ms: Ms }> }>();
+  it('has passChance required (SP4.3c O13)', () => {
+    expectTypeOf<Pick<BattleSide, 'passChance'>>().toEqualTypeOf<{ passChance: Known<number> }>();
   });
 });
 

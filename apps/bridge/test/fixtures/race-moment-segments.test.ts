@@ -18,6 +18,7 @@ import {
   tyreModelCalculator,
   trackWetnessCalculator,
   pitWindowCalculator,
+  raceInteractionCalculator,
   tyreWearCalculator,
   type RaceMomentOutput,
 } from '@pitwall/analysis';
@@ -32,6 +33,7 @@ const CALCULATORS = [
   damageCalculator,
   battleCalculator,
   gapsCalculator,
+  raceInteractionCalculator,
   alarmsCalculator,
   tyreWearCalculator,
   tyreLifeCalculator,
