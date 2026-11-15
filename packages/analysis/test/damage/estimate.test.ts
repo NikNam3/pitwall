@@ -247,6 +247,36 @@ describe('damage: measuring and the early estimate (spec 3.5)', () => {
       expect(estimate(jumpAt(vsc, 5, 40))).toEqual(knownMs(100 * 50));
     });
 
+    // SP4.3c Task 4b (C26): the exclusion asks the projection module (`membershipOf`); these pin its numbers.
+    it("an open pit visit of the car skips every mini-sector from the one it opened in (C20)", () => {
+      // (5, 20) on are 3 s slow in the pit lane, still there: only (5, 10) .. (5, 19) count
+      const inPits: Scenario = {
+        slow: (lap, segment) => (!sinceJump(lap, segment) ? 0 : lap === 5 && segment < 20 ? 100 : 3_000),
+        pits: (at) => [{ from: at(5, 20) + 50 }],
+      };
+      expect(estimate(jumpAt(inPits, 5, 40))).toEqual(knownMs(100 * 50));
+    });
+
+    it('a span opening and closing on crossing frames skips exactly the mini-sectors it covers (C26)', () => {
+      // the pit visit covers the frames of (5, 12) and (5, 13) only: (5, 11) ends on its first frame, (5, 14) starts on
+      // the frame it closed on; both count. 5 s slow (5, 11) .. (5, 14): 10 counted by (5, 22), two of them 5 s slow
+      const edge: Scenario = {
+        slow: (lap, segment) => (!sinceJump(lap, segment) ? 0 : lap === 5 && segment >= 11 && segment <= 14 ? 5_000 : 100),
+        pits: (at) => [{ from: at(5, 12), to: at(5, 14) }],
+      };
+      expect(estimate(jumpAt(edge, 5, 21))).toEqual(unknown('insufficientData'));
+      expect(estimate(jumpAt(edge, 5, 22))).toEqual(knownMs(((8 * 100 + 2 * 5_000) * 50) / 10));
+    });
+
+    it('an SC opening and closing on crossing frames skips exactly the mini-sectors it covers (C26)', () => {
+      const edge: Scenario = {
+        slow: (lap, segment) => (!sinceJump(lap, segment) ? 0 : lap === 5 && segment >= 11 && segment <= 14 ? 5_000 : 100),
+        neutralised: (at) => [{ from: at(5, 12), to: at(5, 14) }],
+      };
+      expect(estimate(jumpAt(edge, 5, 21))).toEqual(unknown('insufficientData'));
+      expect(estimate(jumpAt(edge, 5, 22))).toEqual(knownMs(((8 * 100 + 2 * 5_000) * 50) / 10));
+    });
+
     it("another car's pit visit does not skip car 0's mini-sectors", () => {
       // (5, 10) .. (5, 19): 8 at +100 ms and two at +5 000 ms = 10 800 ms
       expect(estimate(jumpAt({ slow, otherPits: pits }, 5, 20))).toEqual(knownMs((10_800 * 50) / 10));
@@ -324,6 +354,26 @@ describe('damage: measuring and the early estimate (spec 3.5)', () => {
       ],
     };
     const boundaries = crossingsOf(mixed.slow!).map((c) => [c.lap, c.segment] as const);
+
+    // SP4.3c Task 4b (C26): the exclusion moves to the projection module; the samples, and so every estimate, stay.
+    it('pins the estimates through the pit visit and the SCs, closed and open', () => {
+      // (5, 30) .. (5, 33) in the pit lane leave the estimate at (5, 34) as at (5, 30); the SC over (6, 20) .. (6, 25)
+      // and the open one from (8, 40) skip theirs; at (9, 10) the loss is measured
+      const PINNED = [
+        [5, 20, known(9100, 398_035)],
+        [5, 29, known(9029, 415_855)],
+        [5, 30, known(8973, 417_815)],
+        [5, 34, known(8973, 417_815)],
+        [5, 45, known(8915, 447_505)],
+        [6, 0, known(8963, 457_435)],
+        [6, 22, known(8932, 497_005)],
+        [6, 30, known(8933, 516_785)],
+        [7, 0, known(8950, 556_405)],
+        [8, 45, known(8927, 734_525)],
+        [9, 10, unknown('notApplicable')],
+      ] as const;
+      for (const [lap, segment, expected] of PINNED) expect(estimate(jumpAt(mixed, lap, segment)), `at (${lap}, ${segment})`).toEqual(expected);
+    });
 
     it('at every crossing, through the jump, the pit visit, the SCs, the measured loss and an open SC', () => {
       let state = damage.init(viewAt(mixed, 1, 0));
