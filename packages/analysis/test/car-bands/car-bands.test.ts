@@ -30,7 +30,7 @@ const TREF = { C1: 105, C2: 95, C3: 90, C4: 85, C5: 80, inter: 65, wet: 55 } as 
 /** The pressure band of `setup` psi on a compound of reference `tref` °C (§5.6 B). */
 const gasBand = (setup: number, tref: number) => ({ lo: (setup * (tref - 20 + 273.15)) / (tref + 273.15), hi: (setup * (tref + 15 + 273.15)) / (tref + 273.15) });
 /** A known band equal to `b` up to float rounding. */
-const closeBand = (b: { lo: number; hi: number }, digits = 9) => ({ known: true, value: { lo: expect.closeTo(b.lo, digits), hi: expect.closeTo(b.hi, digits) } });
+const closeBand = (b: { lo: number; hi: number }, digits = 9) => ({ known: true, value: { lo: expect.closeTo(b.lo, digits), hi: expect.closeTo(b.hi, digits) }, at: 0 });
 /** A C3 car's pressure band on its 25 psi setup: 23.62-26.03 psi. */
 const P25 = closeBand(gasBand(25, TREF.C3));
 /** The C3 carcass band: 90 - 20 ... 90 + 15 °C. */
