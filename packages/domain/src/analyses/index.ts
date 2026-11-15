@@ -26,6 +26,7 @@ export type * from './strategy.ts';
 export type * from './talk-window.ts';
 export type * from './track-positions.ts';
 export type * from './track-wetness.ts';
+export type * from './tyre-model.ts';
 export type * from './tyre-wear.ts';
 export * from './undercut.ts';
 export type * from './weather.ts';

@@ -14,7 +14,7 @@ import { runFrames, runScenario } from '../support/run.ts';
 // The lap-start and lap-end samples are pinned in lap-start-samples.test.ts and lap-end-samples.test.ts; here they only have to be there.
 const lapEnd = { wearAtStartPct: expect.anything(), ersStoreAtStartJ: expect.anything(), wearAtEndPct: expect.anything(),
   ersStoreAtEndJ: expect.anything(), ersDeployedJ: expect.anything(), ersHarvestedJ: expect.anything(), damageAtEnd: expect.anything(),
-  channelRange: expect.anything() };
+  channelRange: expect.anything(), tyreSets: expect.anything(), carcassMeanC: expect.anything() };
 const car0 = (d: FrameDraft) => d.lapData.lapData[0]!;
 // frames 0–2 = lap 1 (sector 1 at frame 1, sector 2 + fuel 48.5 at frame 2); frame 3 = lap 2 begins; frame 4 = lap 2
 const lapOne = () => new ScenarioBuilder({ cars: 1 }).frames(5, (d) => {

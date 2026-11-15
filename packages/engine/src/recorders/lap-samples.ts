@@ -6,7 +6,7 @@ import type { LiveCar } from './cars.ts';
 import type { LapCursor } from './lap-cursor.ts';
 
 export type LapStartSamples = Pick<LapRecord, 'wearAtStartPct' | 'ersStoreAtStartJ'>;
-export type LapEndSamples = Pick<LapRecord, 'wearAtEndPct' | 'ersStoreAtEndJ' | 'ersDeployedJ' | 'ersHarvestedJ' | 'damageAtEnd' | 'channelRange'>;
+export type LapEndSamples = Pick<LapRecord, 'wearAtEndPct' | 'ersStoreAtEndJ' | 'ersDeployedJ' | 'ersHarvestedJ' | 'damageAtEnd' | 'channelRange' | 'tyreSets' | 'carcassMeanC'>;
 
 type Reading = (car: LiveCar) => Known<number>;
 
@@ -118,6 +118,9 @@ export const lapEndSamples = (cursor: LapCursor, car: LiveCar, at: SessionTime):
   ersHarvestedJ: total(cursor.ersHarvestedJ, car.energy.ers, at),
   damageAtEnd: damageOf(car, at),
   channelRange: channelRange(cursor, car, at),
+  // SP4.3c Task 9: the recorder fills these (test + implement phases)
+  tyreSets: unknown('notReceived'),
+  carcassMeanC: mapCorners(() => unknown('notReceived')),
 });
 
 /**
@@ -134,5 +137,7 @@ export const unknownLapEnd = (): LapStartSamples & LapEndSamples => {
     ersHarvestedJ: none,
     damageAtEnd: none,
     channelRange: { tyres: mapCorners(() => ({ surfaceC: none, carcassC: none, pressurePsi: none })), brakesC: mapCorners(() => none), engineC: none },
+    tyreSets: none,
+    carcassMeanC: mapCorners(() => none),
   };
 };

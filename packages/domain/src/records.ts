@@ -1,12 +1,13 @@
 // History entries (spec 6.3): append-only facts about the session.
 import type { DamageParts } from './analyses/damage.ts';
 import type { ActualCompound, VisualCompound } from './compounds.ts';
+import type { TyreSet } from './car.ts';
 import type { Corners } from './corners.ts';
 import type { FactRef, FrameNumber } from './facts.ts';
 import type { Policy } from './forecast.ts';
 import type { CarId, SessionTime } from './ids.ts';
 import type { Known } from './known.ts';
-import type { Joules, Kg, Ms, Percent, Ratio } from './units.ts';
+import type { Celsius, Joules, Kg, Ms, Percent, Ratio } from './units.ts';
 
 /** The lowest and highest value a channel had over a span, e.g. one lap. */
 export type Range = { min: number; max: number };
@@ -55,6 +56,13 @@ export type LapRecord = {
   damageAtEnd: Known<DamageParts>;
   /** Min and max of every band channel over the lap. */
   channelRange: ChannelRange;
+  /**
+   * Every tyre set of the car as the game gives it at the lap end, in the game's order, with no selection (C23: which set
+   * counts for what is `tyre-model`'s judgement); `unknown('realism')` for a rival whose sets are hidden (C8).
+   */
+  tyreSets: Known<TyreSet[]>;
+  /** The lap's mean inner (carcass) temperature per corner, over the frames of the lap. */
+  carcassMeanC: Corners<Known<Celsius>>;
   /** The frame the record describes (C26): the frame that completed the lap. */
   frame: FrameNumber;
 };
