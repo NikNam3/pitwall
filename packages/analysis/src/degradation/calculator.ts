@@ -20,6 +20,8 @@ import { PER_LAP_RATE_CONFIG } from '../per-lap-rate/index.ts';
 import { CAR_STATUS_READS } from '../shared/car-status.ts';
 import { configOf } from '../shared/config-of.ts';
 import { lapsByCar } from '../shared/stint-laps.ts';
+import { gameLossMsPerPct, gamePriorRatePct } from '../shared/tyre-prior.ts';
+import { TYRE_MODEL_CONFIG } from '../tyre-model/config.ts';
 import { DEGRADATION_BEHAVIOUR, phaseRow, type DegradationEffect } from './behaviour.ts';
 import { DEGRADATION, DEGRADATION_CONFIG, type DegradationOutput, type StartPrior, type StintDegradation } from './index.ts';
 import type { FilterPrior } from './kalman.ts';
@@ -37,14 +39,42 @@ type Start = { prior: FilterPrior; startPrior: StartPrior; source: (sessionShare
 
 const lapsWord = (n: number): string => `${n} ${n === 1 ? 'lap' : 'laps'}`;
 
+/** The source of a start from the game's tyre prior. */
+const GAME_PRIOR_SOURCE: EstimateSource = { kind: 'default', note: "the game's tyre sets: loss per % × k · 70 / usableLife (research 22)", sessionShare: 0, parts: 'game prior' };
+
+/**
+ * `ν` of a stint from the game's tyre prior (SP4.3c Task 12, research 22 §1.6, §2): on the stint's newest lap whose
+ * recorded sets give it, the game's loss per % of wear (the fitted set against a fresh one of its compound,
+ * `gameLossMsPerPct`) times the game's rate (`gamePriorRatePct`, the AI's k and the limit of `tyre-model`'s config);
+ * none without such a lap (the config default then).
+ */
+function gameNuOf(view: Pick<AsOfView, 'config'>, laps: readonly Lap[]): number | undefined {
+  const c = configOf(TYRE_MODEL_CONFIG, view);
+  for (let i = laps.length - 1; i >= 0; i--) {
+    const sets = (laps[i] as Lap).tyreSets;
+    if (!sets.known) continue;
+    const fitted = sets.value.find((s) => s.fitted);
+    if (fitted === undefined || !(fitted.usableLifeLaps > 0)) continue;
+    let fresh: number | undefined;
+    for (const s of sets.value) {
+      if (s.visualCompound === fitted.visualCompound && s.available && !s.fitted && s.wearPct === 0 && (fresh === undefined || s.lapDeltaMs < fresh)) fresh = s.lapDeltaMs;
+    }
+    const loss = fresh === undefined ? undefined : gameLossMsPerPct(fitted.lapDeltaMs, fresh, fitted.wearPct, c.minWearForLossPct);
+    if (loss !== undefined && loss > 0) return loss * gamePriorRatePct(fitted.usableLifeLaps, c.aiWearFactor, c.limitPct);
+  }
+  return undefined;
+}
+
 /**
  * The start of a stint on `visual` (spec 4.1, 4.4; ruling R41): per key (`ν`, its sd, the `α` offset) the snapshot's
  * entry when it is known, else that key's declared fallback, the default start's field (C43: the calibration panel's
  * one rule). The source is the calibration's when at least one key came from the snapshot, else the default start's;
  * it is `session` once the session's share of `ν`'s precision is above half.
  */
-function startOf(view: Pick<AsOfView, 'config' | 'priors' | 'track'>, visual: VisualCompound): Start {
-  const fallback = defaultStart({ config: view.config, track: view.track }, visual);
+function startOf(view: Pick<AsOfView, 'config' | 'priors' | 'track'>, visual: VisualCompound, gameNu?: number): Start {
+  const config = defaultStart({ config: view.config, track: view.track }, visual);
+  // the game's tyre prior where the stint's sets give it, the config default otherwise (SP4.3c Task 12)
+  const fallback: StartPrior = gameNu === undefined ? config : { ...config, nuMsPerLap: gameNu, source: GAME_PRIOR_SOURCE };
   const snapshot = snapshotOf(view.priors, visual);
   const nu = snapshot?.entry('nuMsPerLap');
   const sd = snapshot?.entry('nuSdMs');
@@ -201,7 +231,7 @@ export function degradationAsOf(view: AsOfView): DegradationOutput {
     const effect: DegradationEffect = Object.assign({}, session, ...rows.car(carId));
     if (effect.inSession !== true) continue;
     out[carId] = stintsOf(lapsBy.get(carId) ?? [], recordsBy.get(carId) ?? []).map((s, i): StintDegradation => {
-      const start = startOf(view, s.visual);
+      const start = startOf(view, s.visual, gameNuOf(view, s.laps));
       const fit = fitLaps(s.laps, fuelOf, start.prior, config, classes, rate);
       const pnn = fit.state.cov[1][1];
       const priorVar = start.prior.nuSdMs * start.prior.nuSdMs;
@@ -218,7 +248,6 @@ export function degradationAsOf(view: AsOfView): DegradationOutput {
         nuSdMs: known(Math.sqrt(Math.max(0, pnn)), now),
         basis: fit.basis,
         fuelCorrected: fit.fuelCorrected,
-        wearRatePctPerLap: fit.wearRatePctPerLap,
         source: start.source(sessionShare, fit.paceLaps.length),
         // the same run's posterior: `fitStint`'s, which needs two laps
         cov: fit.paceLaps.length < 2 ? unknown('insufficientData') : known(fit.state.cov, now),

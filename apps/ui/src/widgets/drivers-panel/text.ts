@@ -28,9 +28,9 @@ export const entryLabels: Readonly<Record<string, string>> = {
   'driverNoise.mistakeRate': 'mistake/lap',
   'driverNoise.mistakeMedianMs': 'mistake s',
   'driverNoise.mistakeSigmaLog': 'mistake σlog',
-  'driverNoise.wearRatePct.soft': 'wear S %/lap',
-  'driverNoise.wearRatePct.medium': 'wear M %/lap',
-  'driverNoise.wearRatePct.hard': 'wear H %/lap',
+  'tyreModel.wearFactor.soft': 'wear k S',
+  'tyreModel.wearFactor.medium': 'wear k M',
+  'tyreModel.wearFactor.hard': 'wear k H',
 };
 export const overrideHover = (value: string): string => `your override ${value}`;
 export const overrideFieldHover = (label: string): string => `override of ${label}, empty clears it`;

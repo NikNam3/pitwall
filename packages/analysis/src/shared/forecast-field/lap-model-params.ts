@@ -3,6 +3,7 @@
 import type { LapModelParams, NoiseCompound } from '@pitwall/domain';
 import type { AsOfView, CalculatorId, DeepReadonly } from '@pitwall/engine/readers';
 import { DEGRADATION, DEGRADATION_CONFIG, type DegradationOutput } from '../../degradation/index.ts';
+import { SLICK_CONFIG } from '../../tyre-model/types/slick.ts';
 import { configOf } from '../config-of.ts';
 import { FORECAST_FIELD_CONFIG } from './config.ts';
 
@@ -96,13 +97,15 @@ function solve(a: number[][], b: number[]): number[] {
  */
 export function lapModelParams(view: AsOfView, outputs: ReadonlyMap<CalculatorId, unknown>): LapModelParams {
   const c = configOf(FORECAST_FIELD_CONFIG, view);
+  const slick = configOf(SLICK_CONFIG, view);
   const degradation = (outputs.get(DEGRADATION) as DeepReadonly<DegradationOutput> | undefined) ?? {};
   const offsets = fittedOffsets(degradation, priorOffsets(view), c.compoundOffsetPriorSdMs);
   return {
     compoundOffsetMs: { soft: offsets.soft, medium: 0, hard: offsets.hard, inter: c.interOffsetMs, wet: c.wetOffsetMs },
     fuelMsPerKg: configOf(DEGRADATION_CONFIG, view).gammaMsPerKg,
-    convexFromPct: c.convexFromPct,
-    convexMsPerPct2: c.convexMsPerPct2,
+    // the convex tyre term is the slick module's (`tyre-model`, SP4.3c Task 12; flagged)
+    convexFromPct: slick.convexFromPct,
+    convexMsPerPct2: slick.convexMsPerPct2,
     convexFlagged: true,
     coldTyreMs: [c.coldTyreLap1Ms, c.coldTyreLap2Ms],
     coldTyreWetFactor: c.coldTyreWetFactor,

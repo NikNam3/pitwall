@@ -48,6 +48,7 @@ export * from './track-positions/index.ts';
 export { trackPositionsCalculator } from './track-positions/calculator.ts';
 export * from './tyre-life/index.ts';
 export { tyreLifeCalculator } from './tyre-life/calculator.ts';
+export * from './tyre-model/index.ts';
 export * from './tyre-wear/index.ts';
 export * from './weather/index.ts';
 export { weatherCalculator } from './weather/calculator.ts';

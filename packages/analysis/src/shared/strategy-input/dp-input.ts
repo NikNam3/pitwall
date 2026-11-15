@@ -82,9 +82,8 @@ export function dpInputOn(field: StartingPoint, car: CarId, hazard: Hazard, road
   const n = field.lapsTotal - fromLap + 1;
   const shifted = (a: Float64Array): Float64Array => Float64Array.from({ length: n }, (_, i) => a[fromLap + i - field.lap] ?? 0);
   const current = tyreIndex(car, field.compound[car] ?? 0);
-  const rate = field.tyre.wearRatePct[current] ?? 0;
-  // SP4.3c Task 12: per-compound terms from tyre-model
-  const wearRatePct = Object.fromEntries(NOISE_COMPOUNDS.map((c) => [c, rate])) as Record<NoiseCompound, number>;
+  // each compound its own wear rate (`tyre-model`'s, SP4.3c Task 12)
+  const wearRatePct = Object.fromEntries(NOISE_COMPOUNDS.map((c, i) => [c, field.tyre.wearRatePct[tyreIndex(car, i)] ?? 0])) as Record<NoiseCompound, number>;
   // new sets only (spec §6, K5)
   const sets = Object.fromEntries(NOISE_COMPOUNDS.map((c) => [c, 0])) as Record<NoiseCompound, number>;
   for (const s of field.sets[car] ?? []) if (s.wearPct <= 0) sets[s.compound] += 1;

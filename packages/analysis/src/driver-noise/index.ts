@@ -1,5 +1,5 @@
 // `driver-noise` (SP4.3a spec 5.2): per car its lap scatter, lap-to-lap correlation, mistakes, big events,
-// retirements and tyre wear rates, AI or human by the car's car-driver span. A calculator: no topic.
+// and retirements, AI or human by the car's car-driver span. A calculator: no topic.
 import type { DriverNoise } from '@pitwall/domain';
 
 export { DRIVER_NOISE_BEHAVIOUR, type DriverNoiseEffect } from './behaviour.ts';

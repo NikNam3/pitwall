@@ -2,7 +2,7 @@
 // corrected time against `degradation`'s stint line `α + ν · tyreAge`, minus `track-wetness`'s common mode of the lap
 // and its tyre type (C43: both own their part). Each lap counts for the model (AI or human) of the car-driver span it
 // belongs to (C26, through the projection module's `membershipOf`); each model keeps only its own laps.
-import { type CarId, type FrameNumber, type Ms, type NoiseCompound, type OpenSpan, type Span, type StintRecord, type TrackWetness } from '@pitwall/domain';
+import { type CarId, type FrameNumber, type Ms, type OpenSpan, type Span, type StintRecord, type TrackWetness } from '@pitwall/domain';
 import type { AsOfView, DeepReadonly, MembershipSource, Projection } from '@pitwall/engine/readers';
 import { tyreTypeOf } from '@pitwall/domain';
 import type { DegradationOutput, StintDegradation } from '../degradation/index.ts';
@@ -60,40 +60,12 @@ export type ModelEstimates = {
   at: Ms | undefined;
 };
 
-/** One car's models, its driver at the view's frame, and its own measured wear rates per compound. */
+/** One car's models and its driver at the view's frame (its wear rates are `tyre-model`'s, SP4.3c Task 12). */
 export type CarModels = {
   driver: Model | 'unknown';
   inSession: boolean;
   models: Record<Model, ModelEstimates>;
-  ownWear: Partial<Record<NoiseCompound, { ratePct: number; laps: number; at: Ms }>>;
 };
-
-const NOISE_COMPOUNDS: ReadonlySet<string> = new Set<NoiseCompound>(['soft', 'medium', 'hard', 'inter', 'wet']);
-
-/** The worst corner's known wear rate of a stint, else `undefined`. */
-function worstRate(stint: DeepReadonly<StintDegradation>): { ratePct: number; at: Ms } | undefined {
-  let worst: { ratePct: number; at: Ms } | undefined;
-  for (const k of Object.values(stint.wearRatePctPerLap)) if (k.known && (worst === undefined || k.value > worst.ratePct)) worst = { ratePct: k.value, at: k.at };
-  return worst;
-}
-
-/** Per compound the car's own measured wear rate: its stints' worst-corner rates, weighted by their laps. */
-export function ownWearOf(stints: readonly DeepReadonly<StintDegradation>[]): CarModels['ownWear'] {
-  const sums: Partial<Record<NoiseCompound, { sum: number; laps: number; at: Ms }>> = {};
-  for (const stint of stints) {
-    if (!NOISE_COMPOUNDS.has(stint.visual)) continue;
-    const rate = worstRate(stint);
-    if (rate === undefined) continue;
-    const laps = Math.max(1, stint.laps.length);
-    const slot = (sums[stint.visual as NoiseCompound] ??= { sum: 0, laps: 0, at: 0 });
-    slot.sum += rate.ratePct * laps;
-    slot.laps += laps;
-    slot.at = Math.max(slot.at, rate.at);
-  }
-  const out: CarModels['ownWear'] = {};
-  for (const [c, s] of Object.entries(sums)) out[c as NoiseCompound] = { ratePct: s.sum / s.laps, laps: s.laps, at: s.at };
-  return out;
-}
 
 /**
  * The lag-1 correlation of the residuals over consecutive laps, corrected for its small-sample bias (ruling R32):
@@ -315,7 +287,6 @@ export function carModelsOf(view: AsOfView, config: ResidualConfig): Map<CarId, 
         ai: estimatesOf('ai', samples.ai, new Map(), retirements.ai, config),
         human: estimatesOf('human', samples.human, losses, retirements.human, config),
       },
-      ownWear: ownWearOf(own),
     });
   }
   return out;

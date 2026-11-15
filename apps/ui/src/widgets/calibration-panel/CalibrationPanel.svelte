@@ -15,7 +15,7 @@
   import TextCell from '../../kit/values/TextCell.svelte';
   import { role } from '../../theme/index.ts';
   import {
-    COMPOUNDS, LIMIT_SPECS, PIT_SPECS, compactDegSpec, compoundLabel, compoundSpecs, lapColumns, overrideAction, overrideText,
+    COMPOUNDS, PIT_SPECS, compactDegSpec, compoundLabel, compoundSpecs, lapColumns, overrideAction, overrideText,
     runningSetId, samplesCell, samplesKey, sessionState, setsOf, shownSet, sourceKey, sourceRow, trackOf, trackOptions, valueCell,
     type ValueSpec,
   } from './rows.ts';
@@ -356,11 +356,6 @@
           {SP}<span class="faint">{fitCell(text.overrideRow, 3)}</span>{#each compoundSpecs(c) as { spec } (spec.key)}{SP}{@render field(spec)}{/each}
         </div>
       {/each}
-      <div class="line">
-        {SP}<span class="faint">{text.limitsTitle}</span>{#each LIMIT_SPECS as { name, spec } (spec.key)}{SP2}{text.limits[name]}{SP}{@render value(
-            spec,
-          )}{SP}{@render field(spec)}{/each}
-      </div>
       <div class="line">{SP}</div>
       <div class="line">{SP}<span class="faint">{text.pitTitle}</span>{SP}<span class="faint">{text.pitNote}</span></div>
       <div class="line faint">{SP}{pitHeader}</div>
