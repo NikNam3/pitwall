@@ -13,7 +13,7 @@
 // `fromLap`. Pure, no randomness (C2).
 import { NOISE_COMPOUNDS, type LapInput, type NoiseCompound } from '@pitwall/domain';
 import { lapTimeMs } from '../lap-model/index.ts';
-import { HUMAN_STOP_SAVING_MS } from '../race-forecast/constants.ts';
+import { stopCostOf } from '../race-forecast/stop.ts';
 import type { DpInput, DpPlan } from './types.ts';
 
 /** At most this many stops from `fromLap` (spec §6, §11.1 `strategy`'s maximum stops). */
@@ -176,10 +176,10 @@ function fuelByLap(input: DpInput, n: number): Float64Array {
   return fuel;
 }
 
-/** A stop at the end of lap offset i under condition `cond` (0 green, SC, VSC): the loss less the human saving, plus traffic. */
+/** A stop at the end of lap offset i under condition `cond` (0 green, SC, VSC): the stop model's cost (`race-forecast`), plus traffic. */
 export function stopCostMs(input: DpInput, cond: number, i: number): number {
-  const loss = cond === COND_SC ? input.pitLossMs.sc : cond === COND_VSC ? input.pitLossMs.vsc : input.pitLossMs.green;
-  return loss - (input.carParams.human ? HUMAN_STOP_SAVING_MS : 0) + (input.trafficMsByLap[i] ?? 0);
+  const condition = cond === COND_SC ? 'sc' : cond === COND_VSC ? 'vsc' : 'green';
+  return stopCostOf(input.pitLossMs, input.carParams.human, condition) + (input.trafficMsByLap[i] ?? 0);
 }
 
 /** A neutralisation starting at a state: its expected value boxing onto the best child and staying out. */

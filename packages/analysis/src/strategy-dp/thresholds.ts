@@ -3,7 +3,7 @@
 // binds calculators and analyses); the constants are the model's fixed terms, each with its source.
 import { NOISE_COMPOUNDS, type LapInput, type NoiseCompound, type Trigger } from '@pitwall/domain';
 import { lapTimeMs } from '../lap-model/index.ts';
-import { HUMAN_STOP_SAVING_MS } from '../race-forecast/constants.ts';
+import { stopCostOf } from '../race-forecast/stop.ts';
 import { isWet } from '../track-wetness/wet.ts';
 import { DRY_COMPOUNDS, nodeAt, type GraphSolution } from './state.ts';
 import type { DpInput, DpPlan } from './types.ts';
@@ -150,7 +150,7 @@ function greenRaceMs(input: DpInput, w: number, stops: DpPlan['stops']): number 
     lap.fuelKg = Math.max(0, lap.fuelKg - burn);
     const stop = stops.find((s) => s.lap === input.fromLap + i);
     if (stop !== undefined) {
-      total += input.pitLossMs.green - (p.human ? HUMAN_STOP_SAVING_MS : 0) + (input.trafficMsByLap[i] ?? 0);
+      total += stopCostOf(input.pitLossMs, p.human, 'green') + (input.trafficMsByLap[i] ?? 0);
       Object.assign(lap, { compound: stop.compound, wearPct: 0 });
       onSet = 0;
     }

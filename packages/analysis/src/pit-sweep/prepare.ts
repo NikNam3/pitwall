@@ -1,10 +1,9 @@
 // `pit-sweep`'s job input (SP4.3b spec §9.2): the shared strategy input (`shared/strategy-input/`, C43) and, per our car,
-// `pit-window`'s compounds with a new set and their windows, its `windowCompound`, `flag` and `stint.latest`, `rejoin`'s green rejoin
-// position and the car's row of the behaviour table; the config. Structured-cloneable (C51).
+// `pit-window`'s compounds with a new set and their windows, its `windowCompound`, `flag` and `stint.latest`
+// and the car's row of the behaviour table; the config. Structured-cloneable (C51).
 import { known, unknown, type CarId, type Known, type NoiseCompound, type VisualCompound } from '@pitwall/domain';
 import type { EngineView } from '@pitwall/engine/readers';
 import { PIT_WINDOW, type PitWindowOutput } from '../pit-window/index.ts';
-import { REJOIN, type RejoinOutput } from '../rejoin/index.ts';
 import { behaviourFor } from '../shared/behaviour.ts';
 import { strategyInputFrom, type StrategyInput } from '../shared/strategy-input/index.ts';
 import { PIT_SWEEP_BEHAVIOUR, type PitSweepEffect } from './behaviour.ts';
@@ -26,8 +25,6 @@ export type SweepCar = {
   latest: Known<number>;
   /** Per compound of `compounds`, its first set's `windowLaps` (stop laps from its `earliest` to `stint.latest`): its rows' range (Task 18q B). */
   windows: Partial<Record<NoiseCompound, Known<{ from: number; to: number }>>>;
-  /** `rejoin`'s green rejoin position (a stop now, C43). */
-  greenRejoin: Known<number>;
 };
 
 /** The job's input: `strategy`'s input, per our car what it sweeps, and `pit-sweep`'s config. */
@@ -45,15 +42,14 @@ function phaseRow(view: EngineView): PitSweepEffect {
   return kind === 'pending' ? 'sweep' : (PIT_SWEEP_BEHAVIOUR['weekend-phase']?.[kind] ?? 'notApplicable');
 }
 
-/** Car `car`'s sweep from `pit-window`'s and `rejoin`'s outputs. */
-function sweepCarOf(view: EngineView, car: CarId, windows: PitWindowOutput, rejoins: RejoinOutput | undefined): SweepCar {
+/** Car `car`'s sweep from `pit-window`'s output. */
+function sweepCarOf(view: EngineView, car: CarId, windows: PitWindowOutput): SweepCar {
   const applies = phaseRow(view) === 'sweep' && behaviourFor(PIT_SWEEP_BEHAVIOUR, view, car).every((row) => row === 'sweep');
   const lap = view.live.cars.find((c) => c.id === car)?.timing.lap ?? 1;
-  const greenRejoin = rejoins?.cars[car]?.conditions.green.rejoinPosition ?? unknown('insufficientData');
   const w = windows[car];
   if (w === undefined || !w.known) {
     const why = w === undefined ? 'insufficientData' : w.reason;
-    return { lap, applies, compounds: [], auto: unknown(why), flag: unknown(why), latest: unknown(why), windows: {}, greenRejoin };
+    return { lap, applies, compounds: [], auto: unknown(why), flag: unknown(why), latest: unknown(why), windows: {} };
   }
   const value = w.value;
   const compounds: NoiseCompound[] = [];
@@ -67,15 +63,14 @@ function sweepCarOf(view: EngineView, car: CarId, windows: PitWindowOutput, rejo
   const wc = value.windowCompound;
   const mapped = wc.known ? noiseCompoundOf(wc.value) : undefined;
   const auto: Known<NoiseCompound> = !wc.known ? wc : mapped === undefined ? unknown('insufficientData') : known(mapped, wc.at);
-  return { lap, applies, compounds, auto, flag: known(value.flag, w.at), latest: value.stint.latest, windows: byCompound, greenRejoin };
+  return { lap, applies, compounds, auto, flag: known(value.flag, w.at), latest: value.stint.latest, windows: byCompound };
 }
 
-/** The job's input from the view (C39, C41: `strategy`'s reads, `pit-window`, `rejoin` and the config). */
+/** The job's input from the view (C39, C41: `strategy`'s reads, `pit-window` and the config). */
 export function preparePitSweep(view: EngineView): PitSweepInput {
   const strategy = strategyInputFrom(view);
   const windows = (view.outputs.get(PIT_WINDOW) as PitWindowOutput | undefined) ?? {};
-  const rejoins = view.outputs.get(REJOIN) as RejoinOutput | undefined;
   const cars: Record<CarId, SweepCar> = {};
-  for (const car of strategy.ourCars) cars[car] = sweepCarOf(view, car, windows, rejoins);
+  for (const car of strategy.ourCars) cars[car] = sweepCarOf(view, car, windows);
   return { strategy, cars, config: PIT_SWEEP_CONFIG.read(view) };
 }

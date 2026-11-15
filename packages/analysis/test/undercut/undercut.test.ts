@@ -218,28 +218,25 @@ describe('undercut: the job', () => {
   }, 120_000);
 
   // row 4
-  it("the box-now case's rejoin position is rejoin's green one (C43)", () => {
+  // SP4.3c Task 17 (O8, B8): one table, one rejoin model; `rejoin`'s green position mixed into the box-now cases is gone
+  it("every case's rejoin position is the simulated rejoin's median, the box-now cases too; rejoin's green position is in none (B8)", () => {
     const view = undercutView();
     const input = structuredClone(UNDERCUT_JOB.prepare(view));
     const out = run(input, createRng(SEED));
     for (const car of OURS) {
       const v = valueOf(out, car);
       const { input: call, result } = callOf(car);
-      const green = { known: true, value: GREEN_REJOIN[car], at: view.live.sessionTime };
       expect(v.rivals.some((r) => r.side === 'ahead' && r.cases.length > 0), `car ${car}: a rival ahead with cases`).toBe(true);
       for (const rival of v.rivals) {
         for (const x of rival.cases) {
-          if (rival.side === 'ahead') {
-            // we box now: rejoin's green position, not the simulated one
-            expect(x.rejoinPosition).toEqual(green);
-          } else {
-            // we box N laps later: the median of the simulated rejoin
-            const { i } = caseIn(call, rival, v.lap, x.n);
-            const [lo, hi] = medianRange(result.outcomes[i]!.rejoin);
-            const got = valueIn(x.rejoinPosition);
-            expect(got).toBeGreaterThanOrEqual(lo);
-            expect(got).toBeLessThanOrEqual(hi);
-          }
+          // we box now (a rival ahead) or N laps later (a rival behind): the median of the simulated rejoin
+          const { i } = caseIn(call, rival, v.lap, x.n);
+          const [lo, hi] = medianRange(result.outcomes[i]!.rejoin);
+          const got = valueIn(x.rejoinPosition);
+          expect(got, `car ${car} vs ${rival.carId} N${x.n}`).toBeGreaterThanOrEqual(lo);
+          expect(got, `car ${car} vs ${rival.carId} N${x.n}`).toBeLessThanOrEqual(hi);
+          // GREEN_REJOIN's places no simulated rejoin gives by chance
+          expect(got, `car ${car}: not rejoin's green position`).not.toBe(GREEN_REJOIN[car]);
         }
       }
     }

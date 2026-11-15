@@ -66,7 +66,7 @@ function tablesOf(input: PitSweepInput, start: StartingPoint, at: SessionTime, c
     // the one traffic gap (C43): strategy's, as the DP's and sc-call's
     const traffic = { gapMs: strategyConfigOf(strategy.config).trafficGapMs, laps: config.trafficLaps };
     const { outcomes } = scoreCalls({ start: callStart, car, candidates, committed, hazard, rivalRules, scenarios, traffic }, rng);
-    const rows = rowsOf(stopLaps, outcomes, { now, position, cars: callStart.cars, latest: c.latest, greenRejoin: c.greenRejoin, zTie, tieBand, at });
+    const rows = rowsOf(stopLaps, outcomes, { position, cars: callStart.cars, latest: c.latest, zTie, tieBand, at });
     if (rows.length === 0) continue;
     const table: PitSweepTable = { compound, rows, scenarios };
     byCompound[compound] = known(table, at);

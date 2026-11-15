@@ -1,5 +1,5 @@
 // `sc-call`'s job input (SP4.3b spec §9.3; SP4.3b2 Task 9): the shared strategy input (`shared/strategy-input/`, C43)
-// and, per our car, `rejoin`'s rejoin position, loss and loss source per condition (as the 4.2 calculator took them),
+// and, per our car, `rejoin`'s loss and loss source per condition (as the 4.2 calculator took them),
 // whether the car already boxed under the neutralisation out now, and its behaviour row (C44). Structured-cloneable
 // (C51).
 import { unknown, type CarId, type EstimateSource, type Known, type Ms, type Rejoin } from '@pitwall/domain';
@@ -14,8 +14,8 @@ import { effectOf, SC_CALL_BEHAVIOUR, type ScCallEffect } from './behaviour.ts';
 /** A neutralising condition: the call's rows. */
 export type ScCondition = 'sc' | 'vsc';
 
-/** `rejoin`'s answer for one condition (C43). */
-export type ScRejoin = { rejoinPosition: Known<number>; lossMs: Known<Ms>; lossSource: EstimateSource };
+/** `rejoin`'s loss for one condition, with its source (C43); the row's rejoin position is the box run's (one model, B8). */
+export type ScRejoin = { lossMs: Known<Ms>; lossSource: EstimateSource };
 
 /** One of our cars as the job reads it. */
 export type ScCallCar = {
@@ -40,8 +40,8 @@ const NO_SOURCE: EstimateSource = { kind: 'default', note: 'no rejoin answer', s
 /** `rejoin`'s answer for `condition`, its reason passed through where unknown; without one, `insufficientData`. */
 function rejoinAt(rejoin: Rejoin | undefined, condition: ScCondition): ScRejoin {
   const at = rejoin?.conditions[condition];
-  if (at === undefined) return { rejoinPosition: unknown('insufficientData'), lossMs: unknown('insufficientData'), lossSource: NO_SOURCE };
-  return { rejoinPosition: at.rejoinPosition, lossMs: at.lossMs, lossSource: at.lossSource };
+  if (at === undefined) return { lossMs: unknown('insufficientData'), lossSource: NO_SOURCE };
+  return { lossMs: at.lossMs, lossSource: at.lossSource };
 }
 
 /** The job's input from the view (C41: through what `SC_CALL_JOB` reads). */

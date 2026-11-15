@@ -100,4 +100,15 @@ describe('forecast-field makes up no value (F4, C3)', () => {
     const unknownDriver = (n: DriverNoise): DriverNoise => ({ ...n, cars: { ...n.cars, [CAR]: { ...n.cars[CAR]!, driver: 'unknown' } } });
     expectDeclaredOrUnknown('unknown driver', builder(undefined, unknownDriver));
   });
+
+  // SP4.3c Task 17 fix round (R55; C43, C47): the unknown driver's stand-in is `unknownDriverIsHuman`, the one key
+  // `rejoin` reads too (`isHumanDriver`): at the default the car is the AI's, overridden the human's
+  it('a car whose driver is unknown: the AI at the default, the human with unknownDriverIsHuman overridden', () => {
+    const unknownDriver = (n: DriverNoise): DriverNoise => ({ ...n, cars: { ...n.cars, [CAR]: { ...n.cars[CAR]!, driver: 'unknown' } } });
+    const build = builder(undefined, unknownDriver);
+    const atDefault = build({});
+    const overridden = build({ [FORECAST_FIELD_CONFIG.key]: { unknownDriverIsHuman: true } });
+    expect(atDefault.known && atDefault.value.human[CAR]).toBe(0);
+    expect(overridden.known && overridden.value.human[CAR]).toBe(1);
+  });
 });

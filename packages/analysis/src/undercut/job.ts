@@ -81,7 +81,7 @@ function carValue(input: UndercutInput, start: StartingPoint, at: number, car: C
       position: r.position,
       gapMs,
       aheadFromGainMs: r.side === 'ahead' ? gapMs : -gapMs,
-      cases: calls.flatMap((c, i) => (c.rival.carId === r.carId ? [caseValue(c, outcomes[i], own.greenRejoin, at)] : [])),
+      cases: calls.flatMap((c, i) => (c.rival.carId === r.carId ? [caseValue(c, outcomes[i], at)] : [])),
     };
   });
   return { carId: car, lap, position: own.position, rangeMs: input.config.closeGapMs, rivals };

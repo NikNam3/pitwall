@@ -17,6 +17,7 @@ import { startLapOf } from '../race-forecast/index.ts';
 import { scoreCalls, type CallInput, type McInput } from '../race-monte-carlo/index.ts';
 import { configOf } from '../shared/config-of.ts';
 import { binShares } from '../shared/distribution.ts';
+import { lowerMedian } from '../shared/stats.ts';
 import { committedField, mcSettingsFrom, notPlannedWhy, plannedCars, plannedField, policyOf, strategyConfigOf, toDpInput, toMcHazard } from '../shared/strategy-input/index.ts';
 import { bestWith, dpResult, solveDp, type DpSolution, type DpUnder } from '../strategy-dp/index.ts';
 import { SC_CALL_CONFIG } from './config.ts';
@@ -95,12 +96,15 @@ function rowOn(
     if (b < s) ahead++;
   }
   const r = car.rejoin[condition];
+  // the box run's simulated rejoin, its median over the scenarios that stopped: the one stop-and-rejoin model's, as the
+  // row's ePosDelta and pGain come from those runs (SP4.3c Task 17, B8)
+  const rejoinMedian = lowerMedian(Array.from(boxOut.rejoin).filter((p) => p > 0));
   return {
     condition,
     ePosDelta: known(sum / n, at),
     pGain: known(ahead / n, at),
     gainBins: known(binShares(diff, SC_CALL_GAIN_BINS), at),
-    rejoinPosition: r.rejoinPosition,
+    rejoinPosition: rejoinMedian === undefined ? unknown('insufficientData') : known(rejoinMedian, at),
     lossMs: r.lossMs,
     lossSource: r.lossSource,
     range: rangeOf(thresholds, condition, at),

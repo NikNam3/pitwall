@@ -118,8 +118,12 @@ describe('rejoin calculator', () => {
           const p0 = position(0);
           const pSmall = position(small);
           const pLarge = position(large);
-          expect(p0).toBe(3);
-          expect(pSmall).toBeGreaterThanOrEqual(3);
+          // with no loss we rejoin P3, unless a car is within the pit-exit yield window (minGapMs 500, B8): then we rejoin
+          // 500 ms behind the first of them, behind every car that crosses before that
+          const first = Math.min(...behind.map((g) => g * 100));
+          const rejoinAt = first < 500 ? first + 500 : 0;
+          expect(p0).toBe(3 + behind.filter((g) => g * 100 < rejoinAt).length);
+          expect(pSmall).toBeGreaterThanOrEqual(p0);
           expect(pLarge).toBeGreaterThanOrEqual(pSmall);
         },
       ),

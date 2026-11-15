@@ -1,10 +1,9 @@
 // `undercut`'s job input (SP4.3b spec §9.1; C41, C43, C51): the shared strategy input, and per our car the situation's
-// row (`behaviour.ts`), the rivals in range on the starting point with their place and signed gap, and `rejoin`'s green
-// rejoin position (a box-now case's, C43); the call's config. Structured-cloneable.
-import { unknown, type CarId, type Known, type StartingPoint } from '@pitwall/domain';
+// row (`behaviour.ts`) and the rivals in range on the starting point with their place and signed gap; the call's
+// config. Structured-cloneable.
+import type { CarId, StartingPoint } from '@pitwall/domain';
 import type { EngineView } from '@pitwall/engine/readers';
 import { RACE_INTERACTION_CONFIG } from '../race-interaction/config.ts';
-import { REJOIN, type RejoinOutput } from '../rejoin/index.ts';
 import { behaviourFor } from '../shared/behaviour.ts';
 import { configOf } from '../shared/config-of.ts';
 import { strategyInputFrom, type StrategyInput } from '../shared/strategy-input/index.ts';
@@ -14,8 +13,8 @@ import { UNDERCUT_CONFIG, type UndercutConfig } from './config.ts';
 /** A rival in range: its place (1-based, running cars), its side and its signed gap to our car (positive = we ahead). */
 export type UndercutRivalInput = { carId: CarId; side: 'ahead' | 'behind'; position: number; signedGapMs: number };
 
-/** One of our cars: whether its situation lets the call run, its place, the rivals in range, `rejoin`'s green position. */
-export type UndercutCarInput = { applicable: boolean; position: number; rivals: UndercutRivalInput[]; greenRejoin: Known<number> };
+/** One of our cars: whether its situation lets the call run, its place, the rivals in range. */
+export type UndercutCarInput = { applicable: boolean; position: number; rivals: UndercutRivalInput[] };
 
 /** The call's config: `undercut`'s and the rivals' range, the one close gap, `race-interaction`'s `closeGapMs` (C43). */
 export type UndercutJobConfig = UndercutConfig & { closeGapMs: number };
@@ -56,13 +55,11 @@ export function rivalsOf(start: StartingPoint, car: CarId, rangeMs: number): { p
 export function prepareUndercut(view: EngineView): UndercutInput {
   const strategy = strategyInputFrom(view);
   const config = jobConfigOf(view);
-  const rejoin = view.outputs.get(REJOIN) as RejoinOutput | undefined;
   const cars: Record<CarId, UndercutCarInput> = {};
   for (const car of strategy.ourCars) {
     const applicable = behaviourFor(UNDERCUT_BEHAVIOUR, view, car).every((row) => row === 'compute');
     const { position, rivals } = strategy.start.known ? rivalsOf(strategy.start.value, car, config.closeGapMs) : { position: 0, rivals: [] };
-    const greenRejoin = rejoin?.cars[car]?.conditions.green.rejoinPosition ?? unknown('insufficientData');
-    cars[car] = { applicable, position, rivals, greenRejoin };
+    cars[car] = { applicable, position, rivals };
   }
   return { strategy, cars, config };
 }

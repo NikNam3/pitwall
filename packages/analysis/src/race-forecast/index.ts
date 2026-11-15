@@ -10,11 +10,27 @@
 import type { ForecastResult, Policy, Scenario, StartingPoint } from '@pitwall/domain';
 import { defineSimulator, type Rng } from '@pitwall/engine/readers';
 import { passChance, sessionCurve, type PassContext } from '../race-interaction/pass-chance.ts';
-import { DOUBLE_STACK_MS, HUMAN_STOP_SAVING_MS, MEDIAN_PASS_HAZARD, PASS_MARGIN_MS, PLAIN_PASS_MIN_ADVANTAGE_MS } from './constants.ts';
+import { DOUBLE_STACK_MS, MEDIAN_PASS_HAZARD, PASS_MARGIN_MS, PLAIN_PASS_MIN_ADVANTAGE_MS } from './constants.ts';
 import { PURPOSE, streamKey, uniform } from './draws.ts';
 import { createField, endLap, fitStop, lineIndex, NEUTRAL, SLOT, startLap, stopAt, STRIDE, wetOn, type Field } from './field.ts';
 import { lapPointsOf, POINT, type LapPoints } from './points.ts';
 import { result } from './result.ts';
+import { inLapCostMs, startLapOf, stopCostMs, yieldedRejoinMs } from './stop.ts';
+
+export {
+  inLapCostMs,
+  rejoinOnRoad,
+  startLapOf,
+  stopCostMs,
+  stopCostOf,
+  stopCostOfLoss,
+  stopperRejoin,
+  yieldedRejoinMs,
+  type RoadAtLine,
+  type StopCondition,
+  type StopLosses,
+  type StopperRejoin,
+} from './stop.ts';
 
 export const SIMULATOR = defineSimulator('race-forecast');
 
@@ -225,16 +241,6 @@ export function raceForecast(start: StartingPoint, policies: readonly Policy[], 
   return result(f, toFlag, opts?.trace === true);
 }
 
-/**
- * The lap car `c` is on at the start: the leader's lap `start.lap`, or the one before for a car past the leader's lap
- * fraction (behind it, not yet at the line). The forecast's one rule; `forecast-score`'s policies read it too.
- */
-export function startLapOf(start: StartingPoint, c: number): number {
-  const leader = start.order.find((k) => start.retired[k] !== 1);
-  const leaderFraction = leader === undefined ? 0 : (start.lapFraction[leader] ?? 0);
-  return (start.lapFraction[c] ?? 0) > leaderFraction ? start.lap - 1 : start.lap;
-}
-
 /** Every car on its lap at its lap fraction (`startLapOf`), its last point's time back-extrapolated. */
 function place(r: Run): void {
   const { f, pts, order } = r;
@@ -261,12 +267,11 @@ function place(r: Run): void {
 
 type Condition = (typeof PIT_LOSS)[number];
 
-/** The in-lap's part of a stop's loss under `condition`: `inLapShare` of it (F2). */
-const inLapLossMs = (s: StartingPoint, condition: Condition): number => s.track.pitLossMs.inLapShare * s.track.pitLossMs[condition];
+/** The in-lap's part of a stop's loss under `condition` (the stop model's, F2). */
+const inLapLossMs = (s: StartingPoint, condition: Condition): number => inLapCostMs(s.track.pitLossMs, condition);
 
-/** The rest of car `c`'s loss, paid after the line: a human's shorter stationary time comes off it. */
-const outLapLossMs = (s: StartingPoint, c: number, condition: Condition): number =>
-  s.track.pitLossMs[condition] - inLapLossMs(s, condition) - (s.human[c] === 1 ? HUMAN_STOP_SAVING_MS : 0);
+/** The rest of car `c`'s stop cost (the stop model's `stopCostMs`), paid after the line. */
+const outLapLossMs = (s: StartingPoint, c: number, condition: Condition): number => stopCostMs(s, c, condition) - inLapLossMs(s, condition);
 
 /** Every car crossed the line ending `lap` at point `g`: its line time, its stop (loss, double stack), its next lap. */
 function crossLine(r: Run, g: number, lap: number): void {
@@ -325,16 +330,9 @@ function yieldAtPitExit(r: Run, g: number, stoppers: readonly number[]): void {
   const car = f.car;
   const minGapMs = f.start.interaction.minGapMs;
   const rejoins = stoppers.map((c) => car[c * W + T_LAST] ?? 0);
-  for (let s = 0; s < stoppers.length; s++) {
-    const c = stoppers[s] ?? 0;
-    const t = rejoins[s] ?? 0;
-    let first = Infinity;
-    for (let k = 0; k < r.m; k++) {
-      const o = order[k] ?? 0;
-      if (stoppers.includes(o)) continue;
-      const to = tAt(r, o, g);
-      if (to >= t && to < t + minGapMs && to < first) first = to;
-    }
-    if (first !== Infinity) car[c * W + T_LAST] = first + minGapMs;
-  }
+  const stayedOut = (k: number): number | undefined => {
+    const o = order[k] ?? 0;
+    return stoppers.includes(o) ? undefined : tAt(r, o, g);
+  };
+  for (let s = 0; s < stoppers.length; s++) car[(stoppers[s] ?? 0) * W + T_LAST] = yieldedRejoinMs(rejoins[s] ?? 0, r.m, stayedOut, minGapMs);
 }

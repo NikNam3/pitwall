@@ -3,7 +3,6 @@
 // Topic `pitSweep.car`, whose select picks the panel's compound.
 import type { Job } from '@pitwall/engine/readers';
 import { PIT_WINDOW } from '../pit-window/index.ts';
-import { REJOIN } from '../rejoin/index.ts';
 import { STRATEGY_JOB, STRATEGY_TRIGGER } from '../strategy/index.ts';
 import { mergePitSweep, splitPitSweep, type PitSweepOutput } from './job.ts';
 import { preparePitSweep, type PitSweepInput } from './prepare.ts';
@@ -16,11 +15,11 @@ export type { PitSweepInput } from './prepare.ts';
 /** The analysis id (its job's id). */
 export const PIT_SWEEP = 'pit-sweep';
 
-/** The job (C51): `strategy`'s trigger and input reads, plus `pit-window` and `rejoin`; on demand of `pitSweep.car` (C49). */
+/** The job (C51): `strategy`'s trigger and input reads, plus `pit-window`; on demand of `pitSweep.car` (C49). */
 export const PIT_SWEEP_JOB: Job<PitSweepInput, PitSweepOutput> = {
   kind: 'job',
   id: PIT_SWEEP,
-  reads: [...STRATEGY_JOB.reads, { calculator: PIT_WINDOW }, { calculator: REJOIN }],
+  reads: [...STRATEGY_JOB.reads, { calculator: PIT_WINDOW }],
   trigger: { onChange: [...STRATEGY_TRIGGER.onChange] },
   prepare: (view) => preparePitSweep(view),
   module: new URL('./job.ts', import.meta.url),
