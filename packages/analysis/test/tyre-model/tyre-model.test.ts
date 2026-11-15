@@ -11,9 +11,10 @@
 // Every case runs through the guarded view (C41). The type modules' inputs are pinned here (the plan names them
 // `TypeRateInput`, `TypeLossInput`, `TypeOffsetInput`): a rate input is the rate the unit chose with its source, the
 // track's wetness (ms) over the measured window and now, the carcass (°C) the rate assumes and now, and the config.
-import { carId, known, NOISE_COMPOUNDS, unknown, type CarState, type LapRecord, type NoiseCompound, type StintRecord, type TyreTerm } from '@pitwall/domain';
+import { carId, known, NOISE_COMPOUNDS, unknown, type CarState, type LapRecord, type LapUse, type Ms, type NoiseCompound, type StintRecord, type TyreTerm } from '@pitwall/domain';
 import type { EngineView } from '@pitwall/engine/readers';
 import { describe, expect, it } from 'vitest';
+import { DEGRADATION, type DegradationOutput, type StintDegradation } from '../../src/degradation/index.ts';
 import { INTER_CONFIG, SLICK_CONFIG, TYRE_MODEL, TYRE_MODEL_CONFIG, tyreModelCalculator, WET_CONFIG } from '../../src/tyre-model/index.ts';
 import { inter } from '../../src/tyre-model/types/inter.ts';
 import { slick } from '../../src/tyre-model/types/slick.ts';
@@ -487,9 +488,143 @@ describe('row 6: the loss per % of wear (research 22 §1.6)', () => {
     }
   });
 
-  it('ν is the loss per % × the wear rate (research 22 §2)', () => {
+  it('without a fit or a game loss, ν is the default loss per % × the wear rate, source default (research 22 §2)', () => {
     const m = fittedOf(modelView([{ id: 0, sets: liveSets([tyreSet('medium', { fitted: true })]) }]));
     expect(valueOf(m.nuMsPerLap)).toBeCloseTo(57 * AI_PRIOR_28, 6);
+    expect(m.nuMsPerLap.source).toBe('default');
+  });
+});
+
+describe('fix round F1: ν and the loss per % from the stint`s own fit (spec §5.2, ruling R38 corrected)', () => {
+  /**
+   * A degradation stint of car `car` on `visual` over laps `firstLap`–`lastLap`, ν `nu` ms per lap; every lap a pace
+   * lap the filter used, unless `use` says otherwise.
+   */
+  const degStint = (o: { car?: number; visual?: NoiseCompound; stint?: number; firstLap: number; lastLap: number; nu: number; use?: LapUse }): StintDegradation => {
+    const visual = o.visual ?? 'medium';
+    const at = o.lastLap * LAP_MS;
+    const laps = Array.from({ length: o.lastLap - o.firstLap + 1 }, (_, i) => {
+      const lapNumber = o.firstLap + i;
+      return { lapNumber, tyreAge: i, lapTimeMs: 90_000 as Ms, correctedMs: known(89_000 as Ms, lapNumber * LAP_MS), use: o.use ?? ('used' as LapUse) };
+    });
+    return {
+      stint: o.stint ?? 1,
+      firstLap: o.firstLap,
+      lastLap: o.lastLap,
+      actual: ACTUAL[visual],
+      visual,
+      basePaceMs: known(89_000 as Ms, at),
+      nuMsPerLap: known(o.nu, at),
+      nuSdMs: known(10, at),
+      basis: 'wear',
+      fuelCorrected: true,
+      source: { kind: 'session', sessionShare: 0.9, parts: `${laps.length} laps + default` },
+      cov: known([[100, 0], [0, 100]], at),
+      startPrior: { nuMsPerLap: 50, nuSdMs: 30, alphaOffsetMs: unknown('notApplicable'), source: { kind: 'default', note: 'config', sessionShare: 0, parts: 'default' } },
+      laps,
+    };
+  };
+
+  /** `degradation`'s output with car 0's `stints`. */
+  const degradation = (stints: StintDegradation[]): EngineView['outputs'] => new Map([[DEGRADATION, { [carId(0)]: stints } satisfies DegradationOutput]]);
+
+  /**
+   * Car 0 on a medium C3 at 10 % after laps of 2 %/lap (`gains`, five by default: a measured rate of 2 on every corner),
+   * its sets the fitted medium and a fresh medium 1,500 ms faster (the game's loss: 1,500 / 10 = 150 ms/%) and a fresh
+   * hard of 40 laps; `degradation`'s output as given.
+   */
+  const fitView = (outputs?: EngineView['outputs'], o: { gains?: number[]; freshMedium?: boolean } = {}): EngineView => {
+    const laps = gainLaps(o.gains ?? [2, 2, 2, 2, 2]);
+    const wear = endWear(laps).fl;
+    const sets = liveSets([
+      tyreSet('medium', { fitted: true, wearPct: wear, lapDeltaMs: 0 }),
+      ...(o.freshMedium === false ? [] : [tyreSet('medium', { lapDeltaMs: -150 * wear })]),
+      tyreSet('hard', { usableLifeLaps: 40, lapDeltaMs: 400 }),
+    ]);
+    return modelView([{ id: 0, age: laps.length, wearPct: wear, sets }], { laps, ...(outputs !== undefined && { outputs }) });
+  };
+
+  it('a stint with a degradation fit: ν is that fit`s ν, source measured; loss per % = ν ÷ the measured worst-corner rate, source measured', () => {
+    const m = fittedOf(fitView(degradation([degStint({ firstLap: 1, lastLap: 5, nu: 90 })])));
+    expect(m.wearRatePct.rr.source).toBe('measured');
+    expect(valueOf(m.nuMsPerLap)).toBeCloseTo(90, 9);
+    expect(m.nuMsPerLap.source).toBe('measured');
+    expect(valueOf(m.lossMsPerPct)).toBeCloseTo(90 / 2, 9);
+    expect(m.lossMsPerPct.source).toBe('measured');
+  });
+
+  it('the worst corner`s measured rate divides the fit`s ν: rr 4 %/lap, the others 2 → loss ν ÷ 4', () => {
+    const laps = gainLaps(Array.from({ length: 5 }, () => ({ fl: 2, fr: 2, rl: 2, rr: 4 })));
+    const view = modelView([{ id: 0, age: 5, wearPct: endWear(laps) }], { laps, outputs: degradation([degStint({ firstLap: 1, lastLap: 5, nu: 120 })]) });
+    const m = fittedOf(view);
+    expect(valueOf(m.nuMsPerLap)).toBeCloseTo(120, 9);
+    expect(valueOf(m.lossMsPerPct)).toBeCloseTo(120 / 4, 9);
+    expect(m.lossMsPerPct.source).toBe('measured');
+  });
+
+  it('the car`s current stint`s fit, not an earlier stint`s', () => {
+    const laps = [
+      ...gainLaps([3, 3, 3]),
+      ...gainLaps([3], { from: 4, startPct: 9, over: { inLap: true } }),
+      ...gainLaps([1], { from: 5, age: 0, over: { outLap: true } }),
+      ...gainLaps([2, 2, 2], { from: 6, age: 1, startPct: 1 }),
+    ];
+    const outputs = degradation([degStint({ firstLap: 1, lastLap: 4, nu: 200 }), degStint({ stint: 2, firstLap: 5, lastLap: 8, nu: 80 })]);
+    const view = runView(laps, { age: 4, wearPct: 7 }, { stints: [stint({ firstLap: 1, lastLap: 4 })], outputs });
+    const m = fittedOf(view);
+    expect(valueOf(m.nuMsPerLap)).toBeCloseTo(80, 9);
+    expect(valueOf(m.lossMsPerPct)).toBeCloseTo(80 / 2, 9);
+  });
+
+  it('without a fit (no degradation output): ν is the game`s loss per % × the rate, source game; the loss the game`s', () => {
+    const m = fittedOf(fitView());
+    expect(valueOf(m.lossMsPerPct)).toBeCloseTo(150, 9);
+    expect(m.lossMsPerPct.source).toBe('game');
+    expect(valueOf(m.nuMsPerLap)).toBeCloseTo(150 * 2, 9);
+    expect(m.nuMsPerLap.source).toBe('game');
+  });
+
+  it('a current stint without a pace lap the filter used is no fit: the game`s values', () => {
+    const m = fittedOf(fitView(degradation([degStint({ firstLap: 1, lastLap: 5, nu: 90, use: { excluded: 'neutralised' } })])));
+    expect(m.nuMsPerLap.source).toBe('game');
+    expect(valueOf(m.nuMsPerLap)).toBeCloseTo(150 * 2, 9);
+    expect(m.lossMsPerPct.source).toBe('game');
+  });
+
+  it('a fit whose stint has no measured rate yet: ν the fit`s (measured), the loss per % the game`s (not ν ÷ a prior rate)', () => {
+    // two gain laps: the rate is the game prior 0.86 × 70 / 28
+    const m = fittedOf(fitView(degradation([degStint({ firstLap: 1, lastLap: 2, nu: 90 })]), { gains: [2, 2] }));
+    expect(m.wearRatePct.fl.source).toBe('game');
+    expect(valueOf(m.nuMsPerLap)).toBeCloseTo(90, 9);
+    expect(m.nuMsPerLap.source).toBe('measured');
+    expect(valueOf(m.lossMsPerPct)).toBeCloseTo(150, 9);
+    expect(m.lossMsPerPct.source).toBe('game');
+  });
+
+  it('without a fit and without the game`s loss (no fresh set of the compound): the default loss 57, ν = 57 × the rate, source default', () => {
+    const m = fittedOf(fitView(undefined, { freshMedium: false }));
+    expect(valueOf(m.lossMsPerPct)).toBeCloseTo(57, 9);
+    expect(m.lossMsPerPct.source).toBe('default');
+    expect(valueOf(m.nuMsPerLap)).toBeCloseTo(57 * 2, 9);
+    expect(m.nuMsPerLap.source).toBe('default');
+  });
+
+  it('a compound other than the current stint`s takes no ν from the fit: the hard`s default loss 35 × its prior rate, source default', () => {
+    const hard = fittedOf(fitView(degradation([degStint({ firstLap: 1, lastLap: 5, nu: 90 })])), 0, 'hard');
+    expect(valueOf(hard.lossMsPerPct)).toBeCloseTo(35, 9);
+    expect(hard.lossMsPerPct.source).toBe('default');
+    expect(valueOf(hard.nuMsPerLap)).toBeCloseTo(35 * ((AI_K * 70) / 40), 6);
+    expect(hard.nuMsPerLap.source).toBe('default');
+  });
+
+  it('keeps cars apart: car 1 without a stint in degradation`s output gets the game`s values', () => {
+    const laps = [...gainLaps([2, 2, 2, 2, 2]), ...gainLaps([2, 2, 2, 2, 2], { car: 1 })];
+    const sets = liveSets([tyreSet('medium', { fitted: true, wearPct: 10 }), tyreSet('medium', { lapDeltaMs: -1_500 })]);
+    const view = modelView([{ id: 0, age: 5, wearPct: 10, sets }, { id: 1, age: 5, wearPct: 10, sets }], { laps, outputs: degradation([degStint({ firstLap: 1, lastLap: 5, nu: 90 })]) });
+    const out = calc.compute(view);
+    expect(carOf(out, 0).compounds.medium.nuMsPerLap.source).toBe('measured');
+    expect(carOf(out, 1).compounds.medium.nuMsPerLap.source).toBe('game');
+    expect(valueOf(carOf(out, 1).compounds.medium.nuMsPerLap)).toBeCloseTo(150 * 2, 9);
   });
 });
 

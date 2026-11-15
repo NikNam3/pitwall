@@ -257,7 +257,8 @@ describe('forecast-field (Task 16)', () => {
   });
 
   it("sets left only for our cars, tyre-model's usedSets", () => {
-    // every car's sets in the fixed inputs (as a run without realism holds them); our car is car 4
+    // every car's sets in its lap records (as a run without realism records them, O1a; the fixed inputs hold none,
+    // fix round F2); our car is car 4
     const frame = g.race.framesOfLap(6)[0]!;
     const now = g.viewAt(frame);
     const at = now.live.sessionTime;
@@ -272,9 +273,10 @@ describe('forecast-field (Task 16)', () => {
       usableLifeLaps: 18,
       lapDeltaMs: 0,
     });
-    const sets = known({ sets: [set('medium', 9, true), set('hard', 0, false), set('medium', 24, false)], fittedIdx: 0 }, at);
+    const sets = [set('medium', 9, true), set('hard', 0, false), set('medium', 24, false)];
     const base = asOfNow(now);
-    const view = liveViewAt(frame, { fixed: { ...base.fixed, playerCar: known(carId(4), at), setsNow: now.live.cars.map(() => sets) } });
+    const laps = (base.history.laps as readonly LapRecord[]).map((l) => ({ ...l, tyreSets: known(sets, l.completedAt) }));
+    const view = liveViewAt(frame, { fixed: { ...base.fixed, playerCar: known(carId(4), at) }, history: { ...base.history, laps } as AsOfView['history'] });
     const outputs = upstreamOf(view, plainNoise(PARAMS.cars, HUMANS, at));
     const sp = valueOf(buildStartingPoint(view, outputs), 'lap 6');
 

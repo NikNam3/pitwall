@@ -14,7 +14,7 @@ import { viewOf } from '../support/scheduler.ts';
 
 /** An as-of view of an empty race, with `outputs` before the units. */
 const viewWith = (outputs: AsOfView['outputs'] = new Map()): AsOfView => ({
-  fixed: { totalLaps: unknown('notReceived'), playerCar: unknown('notReceived'), teammateCar: unknown('notReceived'), aiDifficulty: unknown('notReceived'), safetyCar: unknown('notReceived'), setsNow: null, weatherNow: null },
+  fixed: { totalLaps: unknown('notReceived'), playerCar: unknown('notReceived'), teammateCar: unknown('notReceived'), aiDifficulty: unknown('notReceived'), safetyCar: unknown('notReceived'), weatherNow: null },
   history: history(),
   situation: { weekendPhase: { kind: 'race', format: 'grandPrix' }, byMachine: {} },
   frame: 'now',
@@ -37,6 +37,12 @@ describe('asOfNow', () => {
     expect(now.at).toBe(view.live.sessionTime);
     expect([now.config, now.priors, now.drivers, now.track, now.weekend]).toEqual([view.config, view.priors, view.drivers, view.track, view.weekend]);
     expect(now.outputs.get('a')).toBe(1);
+  });
+
+  it('the fixed inputs hold no tyre sets: a unit reads the sets the projection records (SP4.3c Task 12 fix round F2, spec §5.2 O1a)', () => {
+    const view = viewOf(run(script(gridStart(10))).results.at(-1)!);
+    expect(Object.keys(asOfNow(view).fixed)).not.toContain('setsNow');
+    expect(Object.keys(viewWith().fixed)).not.toContain('setsNow');
   });
 });
 
