@@ -158,8 +158,9 @@ const isDue = (cadence: Cadence, lastRunAt: SessionTime, slot: Slot, pending: Pe
   if (cadence === 'frame') return true;
   const { before, after, rewound } = pending.delta;
   if (typeof cadence === 'object') {
-    if ('hz' in cadence) return now < lastRunAt || now - lastRunAt >= 1000 / cadence.hz;
-    return rewound !== undefined || cadence.onChange.some((trigger) => hasChange(trigger, slot, pending, input));
+    const rateDue = (hz: number | undefined): boolean => hz !== undefined && (now < lastRunAt || now - lastRunAt >= 1000 / hz);
+    if (!('onChange' in cadence)) return rateDue(cadence.hz);
+    return rewound !== undefined || cadence.onChange.some((trigger) => hasChange(trigger, slot, pending, input)) || rateDue(cadence.hz);
   }
   // A rewind discards history, so event calculators run again to catch up with it.
   switch (cadence) {
@@ -241,6 +242,8 @@ export class Scheduler implements Snapshotable<SchedulerBookkeeping> {
   readonly #failed = new Set<CalculatorId>();
   readonly #hook: OnCalculatorRun;
   readonly #freezeOutputs: boolean;
+  /** Every object an earlier run's output already froze deeply: a later output that shares it freezes only its new objects (SP4.3c Task 12s). */
+  readonly #frozen = new WeakSet<object>();
   #needed: ReadonlySet<CalculatorId> = new Set();
 
   constructor(registry: CalculatorRegistry, opts: SchedulerOptions = {}) {
@@ -361,7 +364,7 @@ export class Scheduler implements Snapshotable<SchedulerBookkeeping> {
       let evaluation: Evaluation;
       try {
         evaluation = evaluate(calc, slot, view, this.#hook);
-        if (this.#freezeOutputs) deepFreeze(evaluation.output);
+        if (this.#freezeOutputs) deepFreeze(evaluation.output, this.#frozen);
       } catch (error) {
         this.#outputs.delete(calc.id);
         this.#failed.add(calc.id);

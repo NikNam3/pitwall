@@ -48,7 +48,7 @@ export class CalculatorRegistry {
     }
     for (const calc of calcs) {
       const cadence = calc.cadence;
-      if (typeof cadence === 'object' && 'hz' in cadence && !(Number.isFinite(cadence.hz) && cadence.hz > 0)) {
+      if (typeof cadence === 'object' && 'hz' in cadence && !(cadence.hz !== undefined && Number.isFinite(cadence.hz) && cadence.hz > 0)) {
         throw new RegistryError('invalidCadence', [calc.id], `calculator "${calc.id}" has cadence hz ${cadence.hz}, expected a positive number`);
       }
       if (typeof cadence === 'object' && 'onChange' in cadence && cadence.onChange.length === 0) {

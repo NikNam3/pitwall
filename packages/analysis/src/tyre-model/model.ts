@@ -3,7 +3,10 @@
 // usableLife, else the default), the loss per % of wear, ν, the fresh-set offset and a fresh set's laps to the limit;
 // per car the fresh sets, the type deltas, the fitted set's laps to the limit and life span, our cars' used sets. The
 // unit chooses the source and the sets; each tyre type's module adds its own terms. The scheduled run gives the live
-// state's tyres (`calculator.ts`), the as-of form the projection's (`asof.ts`).
+// state's tyres (`calculator.ts`), the as-of form the projection's. One computation, two calculators (ruling R53):
+// `tyreModelFitOf` gives per car every term with the inputs of what the wear and carcass now move (`tyre-model-fit`);
+// `tyreModelOf` builds each car's output on it, sharing its objects (`tyre-model`), or on a fit of its own where none
+// holds for the car.
 import {
   known,
   NOISE_COMPOUNDS,
@@ -46,7 +49,6 @@ import { wet } from './types/wet.ts';
 
 const CORNERS = ['fl', 'fr', 'rl', 'rr'] as const;
 type Corner = (typeof CORNERS)[number];
-const TYPES: readonly TyreType[] = ['slick', 'inter', 'wet'];
 
 /** The module of each tyre type. */
 const MODULES: Record<TyreType, TypeModule> = { slick, inter, wet };
@@ -75,25 +77,40 @@ export const wearFactorKey = (compound: NoiseCompound): string => `tyreModel.wea
 
 const isNoise = (c: string): c is NoiseCompound => (NOISE_COMPOUNDS as readonly string[]).includes(c);
 
+type GameSet = DeepReadonly<TyreSet>;
+
+/**
+ * A car's sets that count, read once per run: the list, the game's fitted index, when; the fitted set (the one at
+ * `fittedIdx`, else the first with `fitted`) and per compound the fastest fresh set (the shared pick, `bestFreshSet`).
+ */
+type Usable = {
+  sets: readonly GameSet[];
+  fittedIdx: number;
+  at: Ms;
+  fitted: GameSet | undefined;
+  bestFresh: Record<NoiseCompound, GameSet | undefined>;
+};
+
 /** A car's sets when they count: known and not empty (the game sends every set of a car it shows: an empty list is none received). */
-function usable(sets: CarSets): { sets: readonly DeepReadonly<TyreSet>[]; fittedIdx: number; at: Ms } | undefined {
-  return sets.known && sets.value.sets.length > 0 ? { sets: sets.value.sets, fittedIdx: sets.value.fittedIdx, at: sets.at } : undefined;
+function usable(sets: CarSets): Usable | undefined {
+  if (!sets.known || sets.value.sets.length === 0) return undefined;
+  const { sets: list, fittedIdx } = sets.value;
+  const best = (c: NoiseCompound): GameSet | undefined => bestFreshSet(list, c, fittedIdx);
+  return {
+    sets: list,
+    fittedIdx,
+    at: sets.at,
+    fitted: list[fittedIdx] ?? list.find((x) => x.fitted),
+    bestFresh: { soft: best('soft'), medium: best('medium'), hard: best('hard'), inter: best('inter'), wet: best('wet') },
+  };
 }
 
 /** Why a car's sets do not count: their reason, an empty list `notReceived`. */
 const noSets = (sets: CarSets): Known<never> => (sets.known ? unknown('notReceived') : unknown(sets.reason));
 
-type Usable = NonNullable<ReturnType<typeof usable>>;
-
-/** The fitted set of `s`: the one at `fittedIdx`, else the first with `fitted`. */
-const fittedOf = (s: Usable): DeepReadonly<TyreSet> | undefined => s.sets[s.fittedIdx] ?? s.sets.find((x) => x.fitted);
-
-/** The fastest fresh set of `compound` in `s` (the shared pick, `bestFreshSet`, with the game's fitted index), if any. */
-const bestFresh = (s: Usable, compound: VisualCompound): DeepReadonly<TyreSet> | undefined => bestFreshSet(s.sets, compound, s.fittedIdx);
-
 /** The set whose usable life stands for `compound`: the fitted one on it, else an available one, else any with a life. */
 function lifeSetOf(s: Usable, compound: NoiseCompound): DeepReadonly<TyreSet> | undefined {
-  const fitted = fittedOf(s);
+  const fitted = s.fitted;
   if (fitted !== undefined && fitted.visualCompound === compound && fitted.usableLifeLaps > 0) return fitted;
   return s.sets.find((x) => x.visualCompound === compound && x.available && x.usableLifeLaps > 0) ?? s.sets.find((x) => x.visualCompound === compound && x.usableLifeLaps > 0);
 }
@@ -207,7 +224,13 @@ type CarCtx = {
 };
 
 /** The shared inputs of one view. */
-type ViewCtx = { view: AsOfView; c: Config; maxNeutralisedMs: number; wetness: DeepReadonly<TrackWetness> | undefined };
+type ViewCtx = {
+  view: AsOfView;
+  c: Config;
+  bandsConfig: (typeof CAR_BANDS_CONFIG)['defaults'];
+  maxNeutralisedMs: number;
+  wetness: DeepReadonly<TrackWetness> | undefined;
+};
 
 /** A corner's chosen rate of `compound` (before the type's terms) and the laps it was measured on, if measured. */
 function baseRate(v: ViewCtx, car: CarCtx, compound: NoiseCompound, corner: Corner): { base: TyreTerm<number>; measured: Measured | undefined } {
@@ -238,9 +261,9 @@ function actualOf(car: CarCtx, compound: NoiseCompound): ActualCompound {
 function gameLossOf(v: ViewCtx, car: CarCtx, compound: NoiseCompound): number | undefined {
   const s = car.priorSets;
   if (s === undefined) return undefined;
-  const fitted = fittedOf(s);
+  const fitted = s.fitted;
   if (fitted === undefined || fitted.visualCompound !== compound) return undefined;
-  const fresh = bestFresh(s, compound);
+  const fresh = s.bestFresh[compound];
   // a worn set no slower than a fresh one is no reading of the game's loss (the default then, C3)
   return fresh === undefined ? undefined : gameSetLossMsPerPct(fitted, fresh, v.c.minWearForLossPct);
 }
@@ -259,8 +282,8 @@ function trackOffset(view: AsOfView, compound: NoiseCompound): Ms | undefined {
 function gameOffset(car: CarCtx, compound: NoiseCompound): Ms | undefined {
   const s = car.priorSets;
   if (s === undefined) return undefined;
-  const own = bestFresh(s, compound);
-  const medium = bestFresh(s, 'medium');
+  const own = s.bestFresh[compound];
+  const medium = s.bestFresh.medium;
   return own === undefined || medium === undefined ? undefined : own.lapDeltaMs - medium.lapDeltaMs;
 }
 
@@ -298,46 +321,88 @@ function fromFit(fit: Known<number> & { known: true }, worst: TyreTerm<number>, 
  * compound), if that fit is the session's own: its covariance known (`degradation` gives it from two pace laps on;
  * below, ν is still mostly the filter's prior).
  */
-function stintFitOf(stints: readonly DeepReadonly<StintDegradation>[] | undefined, set: FittedSet | undefined, own: readonly LapRecord[]): (Known<number> & { known: true }) | undefined {
-  const newest = own.at(-1);
-  if (stints === undefined || set === undefined || newest === undefined) return undefined;
-  const stint = stints.findLast((s) => s.firstLap <= newest.lapNumber && s.lastLap >= newest.lapNumber);
+function stintFitOf(stints: readonly DeepReadonly<StintDegradation>[] | undefined, set: FittedSet | undefined, newestLap: number | undefined): (Known<number> & { known: true }) | undefined {
+  if (stints === undefined || set === undefined || newestLap === undefined) return undefined;
+  const stint = stints.findLast((s) => s.firstLap <= newestLap && s.lastLap >= newestLap);
   if (stint === undefined || stint.visual !== set.visualCompound || !stint.nuMsPerLap.known) return undefined;
   return stint.cov.known ? (stint.nuMsPerLap as Known<number> & { known: true }) : undefined;
 }
 
-/** One compound's terms for one car. */
-function compoundOf(v: ViewCtx, car: CarCtx, compound: NoiseCompound): TyreModelCompound {
+/**
+ * A corner's rate inputs that do not depend on the carcass now: the chosen rate, the carcass the heat term compares
+ * against (a car whose temperatures the game simulates, a human, on its fitted compound: research 20 §1), the wetness
+ * over the measured window and now.
+ */
+type RateInputs = { base: TyreTerm<number>; basisC?: number; wetnessMs?: { window: number; now: number } };
+
+/** A corner's rate inputs of `compound` for `car` (`onIt`: the fitted compound). */
+function rateInputsOf(v: ViewCtx, car: CarCtx, compound: NoiseCompound, corner: Corner, onIt: boolean, actual: ActualCompound): RateInputs {
+  const { base, measured } = baseRate(v, car, compound, corner);
+  let basisC: number | undefined;
+  if (car.human && onIt) {
+    const basis = measured === undefined ? refTempC(actual, v.bandsConfig, 0) : known(carcassMean(measured.laps, corner) ?? Number.NaN, 0);
+    if (basis.known && Number.isFinite(basis.value)) basisC = basis.value;
+  }
+  const wetnessMs = measured === undefined ? undefined : wetnessOver(v.wetness, measured.laps);
+  return { base, ...(basisC !== undefined && { basisC }), ...(wetnessMs !== undefined && { wetnessMs }) };
+}
+
+/** A corner's rate from its inputs and the carcass now: the type's terms, the heat term where both carcasses are known. */
+function rateNow(module: TypeModule, config: AsOfView['config'], r: DeepReadonly<RateInputs>, carcassNow: DeepReadonly<Known<number>>): TyreTerm<number> {
+  const carcassC = r.basisC !== undefined && carcassNow.known ? { basis: r.basisC, now: carcassNow.value } : undefined;
+  return module.wearRatePct({ base: r.base as TyreTerm<number>, config, ...(r.wetnessMs !== undefined && { wetnessMs: r.wetnessMs }), ...(carcassC !== undefined && { carcassC }) });
+}
+
+/** A compound's terms from its corners' rates, the type's loss per %, its fresh offset and the stint's own ν, if it has one. */
+function compoundFrom(
+  rates: DeepReadonly<Corners<TyreTerm<number>>>,
+  gameLoss: DeepReadonly<TyreTerm<number>>,
+  freshOffsetMs: DeepReadonly<TyreTerm<Ms>>,
+  fit: (Known<number> & { known: true }) | undefined,
+  limitPct: number,
+): TyreModelCompound {
+  const wearRatePct = rates as Corners<TyreTerm<number>>;
+  const loss = gameLoss as TyreTerm<number>;
+  const worst = worstOf(wearRatePct);
+  const { nuMsPerLap, lossMsPerPct } = fit === undefined ? fromLoss(worst, loss) : fromFit(fit, worst, loss);
+  // a fresh set's laps: from 0 % at the worst corner's rate
+  const lapsToLimit = lapsToLimitOf(known(0, 0), worst.value, limitPct);
+  return { wearRatePct, nuMsPerLap, lossMsPerPct, freshOffsetMs: freshOffsetMs as TyreTerm<Ms>, lapsToLimit };
+}
+
+/** The fitted compound's inputs the fit holds, so `tyre-model` builds its terms with the carcass and the stint fit now. */
+type FittedInputs = {
+  compound: NoiseCompound;
+  rates: Corners<RateInputs>;
+  gameLoss: TyreTerm<number>;
+  /** The newest lap on the fitted set, the one whose stint `degradation`'s fit is read for (`stintFitOf`). */
+  newestLap: number | undefined;
+  /** The terms rest on the stint's own fit (as of the fit's run). */
+  stintFit: boolean;
+};
+
+/** One compound's terms for one car, with its inputs when it is the fitted compound. */
+function compoundOf(v: ViewCtx, car: CarCtx, compound: NoiseCompound): { terms: TyreModelCompound; inputs: Omit<FittedInputs, 'newestLap' | 'stintFit'> | undefined } {
   const type = tyreTypeOf(compound);
   const module = MODULES[type];
   const config = v.view.config;
   const onIt = car.tyres.set?.visualCompound === compound;
-  const bandsConfig = configOf(CAR_BANDS_CONFIG, v.view);
   const actual = actualOf(car, compound);
-  const rate = (corner: Corner): TyreTerm<number> => {
-    const { base, measured } = baseRate(v, car, compound, corner);
-    const now = car.tyres.carcassC[corner];
-    // the heat term: a car whose temperatures the game simulates (a human, research 20 §1), on the fitted compound
-    let carcassC: { basis: number; now: number } | undefined;
-    if (car.human && onIt && now.known) {
-      const basis = measured === undefined ? refTempC(actual, bandsConfig, 0) : known(carcassMean(measured.laps, corner) ?? Number.NaN, 0);
-      if (basis.known && Number.isFinite(basis.value)) carcassC = { basis: basis.value, now: now.value };
-    }
-    const wetnessMs = measured === undefined ? undefined : wetnessOver(v.wetness, measured.laps);
-    return module.wearRatePct({ base, config, ...(wetnessMs !== undefined && { wetnessMs }), ...(carcassC !== undefined && { carcassC }) });
-  };
-  const wearRatePct: Corners<TyreTerm<number>> = { fl: rate('fl'), fr: rate('fr'), rl: rate('rl'), rr: rate('rr') };
+  const inputs = (corner: Corner): RateInputs => rateInputsOf(v, car, compound, corner, onIt, actual);
   const game = gameLossOf(v, car, compound);
   const gameLoss = module.lossMsPerPct({ actual, config, ...(game !== undefined && { gameMsPerPct: game }) });
   const gameMs = gameOffset(car, compound);
   const trackMs = trackOffset(v.view, compound);
   const freshOffsetMs = module.freshOffsetMs({ config, ...(gameMs !== undefined && { gameMs }), ...(trackMs !== undefined && { trackMs }) });
-  const worst = worstOf(wearRatePct);
-  const fit = onIt ? car.fitNuMsPerLap : undefined;
-  const { nuMsPerLap, lossMsPerPct } = fit === undefined ? fromLoss(worst, gameLoss) : fromFit(fit, worst, gameLoss);
-  // a fresh set's laps: from 0 % at the worst corner's rate
-  const lapsToLimit = lapsToLimitOf(known(0, 0), worst.value, v.c.limitPct);
-  return { wearRatePct, nuMsPerLap, lossMsPerPct, freshOffsetMs, lapsToLimit };
+  if (!onIt) {
+    // off the fitted compound nothing is measured and no heat applies: one rate for every corner
+    const shared = rateNow(module, config, inputs('fl'), unknown('notApplicable'));
+    return { terms: compoundFrom({ fl: shared, fr: shared, rl: shared, rr: shared }, gameLoss, freshOffsetMs, undefined, v.c.limitPct), inputs: undefined };
+  }
+  const rates: Corners<RateInputs> = { fl: inputs('fl'), fr: inputs('fr'), rl: inputs('rl'), rr: inputs('rr') };
+  const now = car.tyres.carcassC;
+  const wearRatePct = { fl: rateNow(module, config, rates.fl, now.fl), fr: rateNow(module, config, rates.fr, now.fr), rl: rateNow(module, config, rates.rl, now.rl), rr: rateNow(module, config, rates.rr, now.rr) };
+  return { terms: compoundFrom(wearRatePct, gameLoss, freshOffsetMs, car.fitNuMsPerLap, v.c.limitPct), inputs: { compound, rates, gameLoss } };
 }
 
 /** The fitted set's laps to the limit: the fewest of its corners' (`lapsToLimitOf`; C3: unknown with its reason). */
@@ -352,48 +417,47 @@ function fittedLapsToLimit(tyres: TyresNow, rates: Corners<TyreTerm<number>> | u
 }
 
 /** The available fresh sets per compound (C3: the sets' reason while they do not count). */
-function freshSetsOf(sets: CarSets): Record<NoiseCompound, Known<number>> {
-  const s = usable(sets);
+function freshSetsOf(s: Usable | undefined, sets: CarSets): Record<NoiseCompound, Known<number>> {
   if (s === undefined) {
     const why = noSets(sets);
-    return Object.fromEntries(NOISE_COMPOUNDS.map((c) => [c, why])) as Record<NoiseCompound, Known<number>>;
+    return { soft: why, medium: why, hard: why, inter: why, wet: why };
   }
-  const counts = Object.fromEntries(NOISE_COMPOUNDS.map((c) => [c, 0])) as Record<NoiseCompound, number>;
+  const counts: Record<NoiseCompound, number> = { soft: 0, medium: 0, hard: 0, inter: 0, wet: 0 };
   s.sets.forEach((x, i) => {
     if (isNoise(x.visualCompound) && isFreshSet(x, i, s.fittedIdx)) counts[x.visualCompound] += 1;
   });
-  return Object.fromEntries(NOISE_COMPOUNDS.map((c) => [c, known(counts[c], s.at)])) as Record<NoiseCompound, Known<number>>;
+  const n = (c: NoiseCompound): Known<number> => known(counts[c], s.at);
+  return { soft: n('soft'), medium: n('medium'), hard: n('hard'), inter: n('inter'), wet: n('wet') };
 }
 
 /** Per tyre type the best fresh set's delta against the fitted set, as the game gives it. */
-function typeDeltasOf(sets: CarSets): Record<TyreType, Known<Ms>> {
-  const s = usable(sets);
-  const out = {} as Record<TyreType, Known<Ms>>;
-  for (const type of TYPES) {
-    if (s === undefined) {
-      out[type] = noSets(sets);
-      continue;
-    }
-    let best: number | undefined;
-    s.sets.forEach((x, i) => {
-      if (isFreshSet(x, i, s.fittedIdx) && tyreTypeOf(x.visualCompound) === type && (best === undefined || x.lapDeltaMs < best)) best = x.lapDeltaMs;
-    });
-    out[type] = best === undefined ? unknown('notReceived') : known(best, s.at);
+function typeDeltasOf(s: Usable | undefined, sets: CarSets): Record<TyreType, Known<Ms>> {
+  if (s === undefined) {
+    const why = noSets(sets);
+    return { slick: why, inter: why, wet: why };
   }
-  return out;
+  const best: Partial<Record<TyreType, number>> = {};
+  s.sets.forEach((x, i) => {
+    const type = tyreTypeOf(x.visualCompound);
+    if (type === undefined || !isFreshSet(x, i, s.fittedIdx)) return;
+    const held = best[type];
+    if (held === undefined || x.lapDeltaMs < held) best[type] = x.lapDeltaMs;
+  });
+  const delta = (type: TyreType): Known<Ms> => {
+    const ms = best[type];
+    return ms === undefined ? unknown('notReceived') : known(ms, s.at);
+  };
+  return { slick: delta('slick'), inter: delta('inter'), wet: delta('wet') };
 }
 
 /** The fitted set's life span as the game states it. */
-function lifeSpanOf(sets: CarSets): Known<number> {
-  const s = usable(sets);
+function lifeSpanOf(s: Usable | undefined, sets: CarSets): Known<number> {
   if (s === undefined) return noSets(sets);
-  const fitted = fittedOf(s);
-  return fitted === undefined ? unknown('notReceived') : known(fitted.lifeSpanLaps, s.at);
+  return s.fitted === undefined ? unknown('notReceived') : known(s.fitted.lifeSpanLaps, s.at);
 }
 
 /** Our car's available sets but the fitted one, of a compound the model tells apart, each with its wear. */
-function usedSetsOf(sets: CarSets): TyreModelCar['usedSets'] {
-  const s = usable(sets);
+function usedSetsOf(s: Usable | undefined, sets: CarSets): TyreModelCar['usedSets'] {
   if (s === undefined) return noSets(sets);
   const out: { compound: NoiseCompound; wearPct: number }[] = [];
   s.sets.forEach((x, i) => {
@@ -402,55 +466,151 @@ function usedSetsOf(sets: CarSets): TyreModelCar['usedSets'] {
   return known(out, s.at);
 }
 
+/** What a car's fit was computed for: its fitted set and its driver; a fit of another set or driver is not this car's now. */
+type FitBasis = { set: FittedSet | undefined; human: boolean };
+
 /**
- * `tyre-model`'s output on `view` for `cars` (each with its rows, `TYRE_MODEL_BEHAVIOUR`: a car not in the session has
- * none), each car's tyres now from `tyresOf` (given the car's laps).
+ * One car's fit (ruling R53): its `tyre-model` terms as of the fit's run, of which `tyre-model` takes as they are those
+ * that do not depend on the wear or carcass now (every compound's terms but the fitted one's where they move, the fresh
+ * sets, the type deltas, the fitted set's life span, the used sets); the fitted compound's inputs it builds them from
+ * now; what they were computed for.
  */
-export function tyreModelOf(view: AsOfView, cars: readonly CarId[], tyresOf: (car: CarId, laps: readonly LapRecord[]) => TyresNow): TyreModelOutput {
+export type TyreModelFitCar = TyreModelCar & { basis: FitBasis; fitted: FittedInputs | undefined };
+
+/** `tyre-model-fit`'s output: per car in the session its fit. */
+export type TyreModelFitOutput = Record<CarId, TyreModelFitCar>;
+
+/** A car's tyres now from `tyresOf`, given its laps (read only where needed). */
+type TyresOf = (car: CarId, laps: () => readonly LapRecord[]) => TyresNow;
+
+/** One run's shared inputs, each read once and only where needed: the config sections, the upstream outputs, the laps by car, our cars and sets. */
+function runOf(view: AsOfView, tyresOf: TyresOf) {
   const c = configOf(TYRE_MODEL_CONFIG, view);
   const v: ViewCtx = {
     view,
     c,
+    bandsConfig: configOf(CAR_BANDS_CONFIG, view),
     maxNeutralisedMs: configOf(LAP_CLASSES_CONFIG, view).maxNeutralisedMs,
     wetness: view.outputs.get(TRACK_WETNESS) as DeepReadonly<TrackWetness> | undefined,
   };
-  const effects = effectsByCar(view);
   const degradation = view.outputs.get(DEGRADATION) as DeepReadonly<DegradationOutput> | undefined;
-  const lapsOf = lapsByCar(view.history);
-  const fixed = view.fixed;
-  const player = fixed.playerCar;
-  const teammate = fixed.teammateCar;
+  let lapsBy: ReadonlyMap<CarId, readonly LapRecord[]> | undefined;
+  const lapsOf = (id: CarId): readonly LapRecord[] => (lapsBy ??= lapsByCar(view.history)).get(id) ?? [];
+  const player = view.fixed.playerCar;
+  const teammate = view.fixed.teammateCar;
   const ours = player.known ? ourCars({ playerCar: player.value, teammateCar: teammate.known ? teammate.value : undefined }) : [];
   const tyresBy = new Map<CarId, TyresNow>();
   const tyresOfCar = (id: CarId): TyresNow => {
     let t = tyresBy.get(id);
     if (t === undefined) {
-      t = tyresOf(id, lapsOf.get(id) ?? []);
+      t = tyresOf(id, () => lapsOf(id));
       tyresBy.set(id, t);
     }
     return t;
   };
-  const ourSets = player.known ? usable(tyresOfCar(player.value).sets) : undefined;
+  // the player's sets are read once, for its own terms and as the stand-in of a rival's
+  let ourSets: { s: Usable | undefined } | undefined;
+  const ourSetsOf = (): Usable | undefined => (ourSets ??= { s: player.known ? usable(tyresOfCar(player.value).sets) : undefined }).s;
+
+  /** A car's fit (`effect`: its rows), from its laps, its tyres and sets now and the upstream outputs. */
+  const fitOf = (id: CarId, effect: TyreModelEffect): TyreModelFitCar => {
+    const tyres = tyresOfCar(id);
+    const own = onFittedSet(currentStintLaps(view.history, id, lapsOf(id)), tyres.set);
+    const newestLap = own.at(-1)?.lapNumber;
+    const fitNuMsPerLap = stintFitOf(degradation?.stints[id], tyres.set, newestLap);
+    const sets = player.known && id === player.value ? ourSetsOf() : usable(tyres.sets);
+    const human = effect.human === true;
+    const car: CarCtx = { id, human, tyres, priorSets: sets ?? ourSetsOf(), own, fitNuMsPerLap };
+    let fitted: FittedInputs | undefined;
+    const compound = (compound: NoiseCompound): TyreModelCompound => {
+      const { terms, inputs } = compoundOf(v, car, compound);
+      if (inputs !== undefined) fitted = { ...inputs, newestLap, stintFit: fitNuMsPerLap !== undefined };
+      return terms;
+    };
+    const compounds: Record<NoiseCompound, TyreModelCompound> = { soft: compound('soft'), medium: compound('medium'), hard: compound('hard'), inter: compound('inter'), wet: compound('wet') };
+    const fittedRates = tyres.set !== undefined && isNoise(tyres.set.visualCompound) ? compounds[tyres.set.visualCompound].wearRatePct : undefined;
+    return {
+      compounds,
+      typeDeltaMs: typeDeltasOf(sets, tyres.sets),
+      freshSets: freshSetsOf(sets, tyres.sets),
+      limitPct: c.limitPct,
+      fittedLapsToLimit: fittedLapsToLimit(tyres, fittedRates, c.limitPct),
+      fittedLifeSpanLaps: lifeSpanOf(sets, tyres.sets),
+      usedSets: ours.includes(id) ? usedSetsOf(sets, tyres.sets) : unknown('notApplicable'),
+      basis: { set: tyres.set, human },
+      fitted,
+    };
+  };
+
+  /**
+   * A car's output from its fit and its tyres now: the fit's objects as they are; new ones only for what the wear, the
+   * carcass and the stint fit now move: the fitted compound of a human (the heat term) or of a car whose stint fit
+   * counts (its ν, as of now), and the fitted set's laps to the limit.
+   */
+  const carOf = (id: CarId, fit: DeepReadonly<TyreModelFitCar>): TyreModelCar => {
+    const tyres = tyresOfCar(id);
+    const f = fit.fitted;
+    let compounds = fit.compounds as Record<NoiseCompound, TyreModelCompound>;
+    if (f !== undefined) {
+      const nu = stintFitOf(degradation?.stints[id], tyres.set, f.newestLap);
+      if (fit.basis.human || nu !== undefined || f.stintFit) {
+        const held = compounds[f.compound];
+        const module = MODULES[tyreTypeOf(f.compound)];
+        const config = view.config;
+        const now = tyres.carcassC;
+        const rates = fit.basis.human
+          ? { fl: rateNow(module, config, f.rates.fl, now.fl), fr: rateNow(module, config, f.rates.fr, now.fr), rl: rateNow(module, config, f.rates.rl, now.rl), rr: rateNow(module, config, f.rates.rr, now.rr) }
+          : held.wearRatePct;
+        compounds = { ...compounds, [f.compound]: compoundFrom(rates, f.gameLoss, held.freshOffsetMs, nu, c.limitPct) };
+      }
+    }
+    const fittedRates = tyres.set !== undefined && isNoise(tyres.set.visualCompound) ? compounds[tyres.set.visualCompound].wearRatePct : undefined;
+    return {
+      compounds,
+      typeDeltaMs: fit.typeDeltaMs as TyreModelCar['typeDeltaMs'],
+      freshSets: fit.freshSets as TyreModelCar['freshSets'],
+      limitPct: c.limitPct,
+      fittedLapsToLimit: fittedLapsToLimit(tyres, fittedRates, c.limitPct),
+      fittedLifeSpanLaps: fit.fittedLifeSpanLaps as Known<number>,
+      usedSets: fit.usedSets as TyreModelCar['usedSets'],
+    };
+  };
+
+  /** Whether `fit` was computed for the car as it is now: the same fitted set (compound and age) and the same driver. */
+  const holds = (id: CarId, effect: TyreModelEffect, fit: DeepReadonly<TyreModelFitCar>): boolean => {
+    const a = fit.basis.set;
+    const b = tyresOfCar(id).set;
+    const sameSet = a === undefined || b === undefined ? a === b : a.actualCompound === b.actualCompound && a.visualCompound === b.visualCompound && a.age === b.age;
+    return sameSet && fit.basis.human === (effect.human === true);
+  };
+
+  return { effects: effectsByCar(view), fitOf, carOf, holds };
+}
+
+/** `tyre-model-fit`'s output on `view` for `cars` (each with its rows, `TYRE_MODEL_BEHAVIOUR`: a car not in the session has none). */
+export function tyreModelFitOf(view: AsOfView, cars: readonly CarId[], tyresOf: TyresOf): TyreModelFitOutput {
+  const run = runOf(view, tyresOf);
+  const out: TyreModelFitOutput = {};
+  for (const id of cars) {
+    const effect = run.effects.get(id);
+    if (effect?.inSession === true) out[id] = run.fitOf(id, effect);
+  }
+  return out;
+}
+
+/**
+ * `tyre-model`'s output on `view` for `cars` (each with its rows, `TYRE_MODEL_BEHAVIOUR`: a car not in the session has
+ * none), each car's tyres now from `tyresOf`: built on `fit`, the fit's output, where it holds for the car (`holds`),
+ * else on the car's fit computed here (`tyreModelFitOf`'s per-car function; without `fit`, every car's).
+ */
+export function tyreModelOf(view: AsOfView, cars: readonly CarId[], tyresOf: TyresOf, fit?: DeepReadonly<TyreModelFitOutput>): TyreModelOutput {
+  const run = runOf(view, tyresOf);
   const out: TyreModelOutput = {};
   for (const id of cars) {
-    const effect = effects.get(id);
+    const effect = run.effects.get(id);
     if (effect?.inSession !== true) continue;
-    const tyres = tyresOfCar(id);
-    const laps = lapsOf.get(id) ?? [];
-    const own = onFittedSet(currentStintLaps(view.history, id, laps), tyres.set);
-    const fitNuMsPerLap = stintFitOf(degradation?.stints[id],tyres.set, own);
-    const car: CarCtx = { id, human: effect.human === true, tyres, priorSets: usable(tyres.sets) ?? ourSets, own, fitNuMsPerLap };
-    const compounds = Object.fromEntries(NOISE_COMPOUNDS.map((compound) => [compound, compoundOf(v, car, compound)])) as Record<NoiseCompound, TyreModelCompound>;
-    const fitted = tyres.set !== undefined && isNoise(tyres.set.visualCompound) ? compounds[tyres.set.visualCompound].wearRatePct : undefined;
-    out[id] = {
-      compounds,
-      typeDeltaMs: typeDeltasOf(tyres.sets),
-      freshSets: freshSetsOf(tyres.sets),
-      limitPct: c.limitPct,
-      fittedLapsToLimit: fittedLapsToLimit(tyres, fitted, c.limitPct),
-      fittedLifeSpanLaps: lifeSpanOf(tyres.sets),
-      usedSets: ours.includes(id) ? usedSetsOf(tyres.sets) : unknown('notApplicable'),
-    };
+    const held = fit?.[id];
+    out[id] = run.carOf(id, held !== undefined && run.holds(id, effect, held) ? held : run.fitOf(id, effect));
   }
   return out;
 }

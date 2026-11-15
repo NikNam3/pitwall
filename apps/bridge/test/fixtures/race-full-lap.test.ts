@@ -17,6 +17,7 @@ import {
   sessionRemainingCalculator,
   tyreLifeCalculator,
   tyreModelCalculator,
+  tyreModelFitCalculator,
   trackWetnessCalculator,
   tyreWearCalculator,
   type AlarmsOutput,
@@ -159,6 +160,8 @@ beforeAll(async () => {
     tyreWearCalculator,
     tyreLifeCalculator,
     tyreModelCalculator,
+    // SP4.3c Task 12s (ruling R53): tyre-model reads tyre-model-fit
+    tyreModelFitCalculator,
     trackWetnessCalculator,
     degradationCalculator,
     fuelCalculator,

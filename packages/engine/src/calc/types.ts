@@ -15,7 +15,8 @@ export type CalculatorId = string;
  * `positionAtEnd` 1 was appended, or a rewind (SP4.3a spec 5). `onChange`: only when one of the listed changes happened
  * since the last run, or a rewind (SP4.3b spec §5.2).
  */
-export type Cadence = 'frame' | { hz: number } | 'lapCompleted' | 'pitStop' | 'sessionChange' | 'ourCrossing' | 'leaderLap' | { onChange: readonly ChangeTrigger[] };
+/** An `onChange` cadence with `hz` also runs once `1000 / hz` ms passed since its last run (SP4.3c Task 12s). */
+export type Cadence = 'frame' | { hz: number } | 'lapCompleted' | 'pitStop' | 'sessionChange' | 'ourCrossing' | 'leaderLap' | { onChange: readonly ChangeTrigger[]; hz?: number };
 
 /**
  * A change an `onChange` cadence runs on: a change tag (C40); `leaderLap`, a lap record with `positionAtEnd` 1 appended;

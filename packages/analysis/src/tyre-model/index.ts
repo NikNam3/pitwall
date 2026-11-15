@@ -2,8 +2,9 @@
 // each with its source; one module per tyre type (`types/`). A calculator: no topic (C42).
 export * from './behaviour.ts';
 export * from './config.ts';
-export { tyreModelAsOf, tyreModelCalculator } from './calculator.ts';
-export { TYRE_MODEL } from './id.ts';
+export { tyreModelAsOf, tyreModelCalculator, tyreModelFitCalculator } from './calculator.ts';
+export { TYRE_MODEL, TYRE_MODEL_FIT } from './id.ts';
+export type { TyreModelFitCar, TyreModelFitOutput } from './model.ts';
 export { wearFactorKey } from './model.ts';
 export { TYRE_MODEL_PROFILES } from './profiles.ts';
 export { INTER_CONFIG } from './types/inter.ts';

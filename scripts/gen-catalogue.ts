@@ -45,7 +45,7 @@ type BindingShape = { topic: string } & Partial<Record<'from' | 'fromHistory' | 
   fromLive?: unknown;
 };
 type FeatureModule = {
-  calculators: Array<{ id: string; reads: ReadonlyArray<string | { calculator: string }>; cadence: string | { hz: number } | { onChange: readonly string[] } }>;
+  calculators: Array<{ id: string; reads: ReadonlyArray<string | { calculator: string }>; cadence: string | { hz: number } | { onChange: readonly string[]; hz?: number } }>;
   topics: BindingShape[];
   jobs?: Array<{ id: string }>;
   config?: Array<{ key: string }>;
@@ -53,8 +53,8 @@ type FeatureModule = {
 type TopicModule = { owner: string; scope: string; mode: string; maxHz: number };
 
 /** An engine `Cadence` as text: `{ hz: 10 }` becomes `10 Hz`, `{ onChange: [a, b] }` becomes `on a, b`. */
-const cadenceText = (cadence: string | { hz: number } | { onChange: readonly string[] }): string =>
-  typeof cadence === 'string' ? cadence : 'hz' in cadence ? `${cadence.hz} Hz` : `on ${cadence.onChange.join(', ')}`;
+const cadenceText = (cadence: string | { hz: number } | { onChange: readonly string[]; hz?: number }): string =>
+  typeof cadence === 'string' ? cadence : !('onChange' in cadence) ? `${cadence.hz} Hz` : `on ${cadence.onChange.join(', ')}${cadence.hz === undefined ? '' : ` and ${cadence.hz} Hz`}`;
 
 /** An engine `Dependency` as text: `{ calculator: id }` becomes `calculator:<id>`. */
 const readText = (read: string | { calculator: string }): string => (typeof read === 'string' ? read : `calculator:${read.calculator}`);
