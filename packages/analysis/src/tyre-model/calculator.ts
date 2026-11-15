@@ -1,12 +1,14 @@
-// `tyre-model` (SP4.3c spec §5.2, O1): a quick calculator (no topic, C42). Its scheduled run is the as-of form on
-// `asOfNow(view)` with the live state's tyres in place of the projection's (the set fitted now, its wear and carcass
-// now, the car's sets); the as-of form reads each car's newest lap record (its end wear, carcass mean and the sets the
-// game gave then, Task 9), or the run's sets now where the view holds them (`fixed`).
+// `tyre-model` (SP4.3c spec §5.2, O1) and `tyre-model-fit` (Task 12s, ruling R53): two quick calculators (no topic,
+// C42). Their scheduled runs are the as-of form on `asOfNow(view)` with the live state's tyres in place of the
+// projection's (the set fitted now, its wear and carcass now, the car's sets); the as-of form reads each car's newest
+// lap record (its end wear, carcass mean and the sets the game gave then, Task 9), or the run's sets now where the view
+// holds them (`fixed`). The fit computes every term that does not depend on the wear now, on a lap and once a second;
+// `tyre-model` runs per frame on it and builds only what the wear and carcass now move.
 import { unknown, type CarId, type CarState, type LapRecord, type TyreModelOutput, type TyreSet } from '@pitwall/domain';
 import { asOfNow, type AsOfView, type DeepReadonly, type EngineView, type QuickCalculator } from '@pitwall/engine/readers';
 import { CAR_STATUS_READS } from '../shared/car-status.ts';
-import { TYRE_MODEL } from './id.ts';
-import { carsOf, tyreModelOf, type CarSets, type TyresNow } from './model.ts';
+import { TYRE_MODEL, TYRE_MODEL_FIT } from './id.ts';
+import { carsOf, tyreModelFitOf, tyreModelOf, type CarSets, type TyreModelFitOutput, type TyresNow } from './model.ts';
 
 const NO_LAP = unknown('notReceived');
 const NONE = { fl: NO_LAP, fr: NO_LAP, rl: NO_LAP, rr: NO_LAP };
@@ -37,9 +39,9 @@ function tyresAsOf(view: AsOfView, car: CarId, laps: readonly LapRecord[]): Tyre
   return { set, wearPct: newest.wearAtEndPct, carcassC: newest.carcassMeanC, sets };
 }
 
-/** `tyre-model`'s output as of the view's frame. */
+/** `tyre-model`'s output as of the view's frame (its fit computed on the same view). */
 export function tyreModelAsOf(view: AsOfView): TyreModelOutput {
-  return tyreModelOf(view, carsOf(view), (car, laps) => tyresAsOf(view, car, laps));
+  return tyreModelOf(view, carsOf(view), (car, laps) => tyresAsOf(view, car, laps()));
 }
 
 /** A car's tyres as the live state holds them now. */
@@ -53,33 +55,60 @@ function tyresNow(tyres: DeepReadonly<CarState['tyres']>): TyresNow {
   };
 }
 
+/** The scheduled run's view: the as-of view now, and each car's tyres from the live state (else as of the projection). */
+function scheduled(view: EngineView): { asOf: AsOfView; tyresOf: (car: CarId, laps: () => readonly LapRecord[]) => TyresNow } {
+  const asOf = asOfNow(view);
+  const live = new Map(view.live.cars.map((c) => [c.id, c.tyres]));
+  return {
+    asOf,
+    tyresOf: (car, laps) => {
+      const tyres = live.get(car);
+      return tyres === undefined ? tyresAsOf(asOf, car, laps()) : tyresNow(tyres);
+    },
+  };
+}
+
+/** What both read: `session` and `identity` are what `asOfNow` reads for the as-of view's `fixed` (our cars). */
+const READS: QuickCalculator<unknown>['reads'] = [
+  'tyres',
+  'laps',
+  'stints',
+  'decisions',
+  'drivers',
+  'session',
+  'identity',
+  'spans:car-driver',
+  'spans:car-activity-race',
+  CAR_STATUS_READS,
+  'spans:weekend-phase',
+  { calculator: 'degradation' },
+  { calculator: 'track-wetness' },
+];
+
+/**
+ * Per car in the session (its rows, `TYRE_MODEL_BEHAVIOUR`): the terms that do not depend on the wear now, on a lap and
+ * once a second (a new set reaches it within a second; the sets' `at` it carries is as of its run).
+ */
+export const tyreModelFitCalculator: QuickCalculator<TyreModelFitOutput> = {
+  id: TYRE_MODEL_FIT,
+  kind: 'quick',
+  reads: READS,
+  cadence: { onChange: ['laps'], hz: 1 },
+  compute: (view: EngineView): TyreModelFitOutput => {
+    const { asOf, tyresOf } = scheduled(view);
+    return tyreModelFitOf(asOf, carsOf(asOf), tyresOf);
+  },
+};
+
 /** Per car in the session (its rows, `TYRE_MODEL_BEHAVIOUR`): per compound and corner its tyre terms with their sources. */
 export const tyreModelCalculator: QuickCalculator<TyreModelOutput> = {
   id: TYRE_MODEL,
   kind: 'quick',
-  // `session` and `identity`: what `asOfNow` reads for the as-of view's `fixed` (our cars)
-  reads: [
-    'tyres',
-    'laps',
-    'stints',
-    'decisions',
-    'drivers',
-    'session',
-    'identity',
-    'spans:car-driver',
-    'spans:car-activity-race',
-    CAR_STATUS_READS,
-    'spans:weekend-phase',
-    { calculator: 'degradation' },
-    { calculator: 'track-wetness' },
-  ],
+  reads: [...READS, { calculator: TYRE_MODEL_FIT }],
   cadence: { onChange: ['laps', 'tyres'] },
   compute: (view: EngineView): TyreModelOutput => {
-    const asOf = asOfNow(view);
-    const live = new Map(view.live.cars.map((c) => [c.id, c.tyres]));
-    return tyreModelOf(asOf, carsOf(asOf), (car, laps) => {
-      const tyres = live.get(car);
-      return tyres === undefined ? tyresAsOf(asOf, car, laps) : tyresNow(tyres);
-    });
+    const { asOf, tyresOf } = scheduled(view);
+    const fit = view.outputs.get(TYRE_MODEL_FIT) as DeepReadonly<TyreModelFitOutput> | undefined;
+    return tyreModelOf(asOf, carsOf(asOf), tyresOf, fit);
   },
 };

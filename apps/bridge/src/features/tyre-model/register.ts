@@ -1,4 +1,4 @@
-import { INTER_CONFIG, SLICK_CONFIG, TYRE_MODEL_CONFIG, TYRE_MODEL_PROFILES, tyreModelCalculator, WET_CONFIG } from '@pitwall/analysis';
+import { INTER_CONFIG, SLICK_CONFIG, TYRE_MODEL_CONFIG, TYRE_MODEL_PROFILES, tyreModelCalculator, tyreModelFitCalculator, WET_CONFIG } from '@pitwall/analysis';
 import { defineFeature } from '../feature.ts';
 
 /**
@@ -9,7 +9,7 @@ import { defineFeature } from '../feature.ts';
  */
 export default defineFeature({
   name: 'tyre-model',
-  calculators: [tyreModelCalculator],
+  calculators: [tyreModelFitCalculator, tyreModelCalculator],
   topics: [],
   config: [TYRE_MODEL_CONFIG, SLICK_CONFIG, INTER_CONFIG, WET_CONFIG],
   profiles: [TYRE_MODEL_PROFILES],
