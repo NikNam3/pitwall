@@ -2,6 +2,7 @@
 // decided the situation; the calculator only looks up the rows of the spans open for a car and merges them. Its laps by
 // activity come from the lap records (in and out laps), and a rate has no lap-1 rule, so it reads no weekend phase.
 import type { BehaviourTable } from '../shared/behaviour.ts';
+import { IN_SESSION_ROWS } from '../shared/car-status.ts';
 
 /** What the situations open for a car say about its entry. */
 export type TyreLifeEffect = {
@@ -9,8 +10,6 @@ export type TyreLifeEffect = {
   inSession?: boolean;
 };
 
-const IN: TyreLifeEffect = { inSession: true };
-
 export const TYRE_LIFE_BEHAVIOUR: BehaviourTable<TyreLifeEffect> = {
-  'car-status': { competing: IN, retired: IN, disqualified: IN, absent: { inSession: false } },
+  'car-status': IN_SESSION_ROWS,
 };

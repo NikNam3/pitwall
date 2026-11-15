@@ -2,7 +2,7 @@
 // sub-machines means for the alarms. The machine decides what a car holds or owes and what the session does; the
 // calculator only looks up the rows of the spans open now, the car's and the session's, and merges them (as `lap-times`
 // does).
-import { JUDGED_LAP_PHASE_ROWS } from '../car-bands/bands.ts';
+import { RACE_LAP_PHASE_ROWS } from '../lap-classes/index.ts';
 import type { BehaviourTable } from '../shared/behaviour.ts';
 
 /** What the situations open for a car ask of its alarms; every field absent means "nothing". */
@@ -20,20 +20,21 @@ export type AlarmsEffect = {
    * "safety car in this lap"; the VSC's ending the same).
    */
   bandsHidden?: true;
-  /** The session is a race: lap 1 is not judged (`judgedLaps`, the row `car-bands` uses). */
-  isRace?: true;
+  /** The session is a race: lap 1 is not judged (`judgedLaps`, `lap-classes`' rows, as `car-bands` judges it). */
+  isRace?: boolean;
 };
 
 const NOTHING: AlarmsEffect = {};
 
 /**
- * The `weekend-phase` rows: the judged lap's (`car-bands`' rows, so both judge the same lap, C43), and in a race the
- * last-warning alarm on the corner-cutting warnings; the warned span's row asks for nothing, so no other phase raises it.
+ * The `weekend-phase` rows: the judged lap's (`lap-classes`' rows, as `car-bands`' are, so both judge the same lap,
+ * C43), and in a race the last-warning alarm on the corner-cutting warnings; the warned span's row asks for nothing, so
+ * no other phase raises it.
  */
 const WEEKEND_PHASE_ROWS = {
-  ...JUDGED_LAP_PHASE_ROWS,
-  race: { ...JUDGED_LAP_PHASE_ROWS.race, warningCount: 'cornerCutting' },
-} as const satisfies Record<keyof typeof JUDGED_LAP_PHASE_ROWS, AlarmsEffect>;
+  ...RACE_LAP_PHASE_ROWS,
+  race: { ...RACE_LAP_PHASE_ROWS.race, warningCount: 'cornerCutting' },
+} as const satisfies Record<keyof typeof RACE_LAP_PHASE_ROWS, AlarmsEffect>;
 
 /** One row per kind of `weekend-phase`, `warnings`, `penalties` and `session-phase-race`. */
 export const ALARMS_BEHAVIOUR = {

@@ -4,11 +4,20 @@
 // crossing) holds a session-phase span whose row is `red` (C44). Stints by `stintLaps` (`shared/stint-laps.ts`).
 import { known, unknown, type CarId, type Known, type LapRecord, type Ratio, type StintRecord } from '@pitwall/domain';
 import { membershipOf, type EngineView, type QuickCalculator } from '@pitwall/engine/readers';
-import { classifyLap, isNeutralisedLap, LAP_CLASSES_CONFIG, type LapClassOptions } from '../lap-classes/index.ts';
+import {
+  classifyLap,
+  isNeutralisedLap,
+  LAP_CLASSES_CONFIG,
+  lapNeutralisationKind,
+  lapPhaseRowOf,
+  RACE_LAP_PHASE_ROWS,
+  type LapClassOptions,
+} from '../lap-classes/index.ts';
 import { bestsOf, sessionBestsOf, type CarBests } from '../lap-times/lap-times.ts';
 import { behaviourFor } from '../shared/behaviour.ts';
+import { NEUTRALISATION_MACHINES } from '../shared/neutralised.ts';
 import { carLaps, stintLaps } from '../shared/stint-laps.ts';
-import { LAP_OVERVIEW_BEHAVIOUR, SESSION_PHASE_MACHINES, type LapOverviewEffect } from './behaviour.ts';
+import { LAP_OVERVIEW_BEHAVIOUR, type LapOverviewEffect } from './behaviour.ts';
 import { LAP_OVERVIEW, type LapOverviewLap, type LapOverviewOutput, type LapStatus } from './index.ts';
 
 /** The weekend-phase rows alone: the session-phase rows apply per lap, by its membership, not by the open spans. */
@@ -54,10 +63,10 @@ export const lapOverviewCalculator: QuickCalculator<LapOverviewOutput> = {
   reads: ['laps', 'stints', 'spans:weekend-phase', 'spans:session-phase-race', 'spans:session-phase-qualifying', 'spans:session-phase-practice'],
   cadence: 'frame',
   compute: (view: EngineView) => {
-    const session: LapOverviewEffect = Object.assign({}, ...behaviourFor(WEEKEND_PHASE_TABLE, view));
+    // a pending weekend phase has no span yet and reads as the race (C14, `lapPhaseRowOf`)
+    const session: LapOverviewEffect = behaviourFor(WEEKEND_PHASE_TABLE, view)[0] ?? lapPhaseRowOf(RACE_LAP_PHASE_ROWS, 'pending');
     const { maxNeutralisedMs } = LAP_CLASSES_CONFIG.read(view);
-    // a pending weekend phase has no span yet and reads as the race (C14)
-    const classes: LapClassOptions = { isRace: session.isRace ?? true, maxNeutralisedMs };
+    const classes: LapClassOptions = { isRace: session.isRace === true, maxNeutralisedMs };
 
     const cars = [...new Set(view.history.laps.map((l) => l.carId))];
     const lapsByCar = new Map<CarId, LapRecord[]>(cars.map((id) => [id, carLaps(view.history, id)]));
@@ -70,12 +79,12 @@ export const lapOverviewCalculator: QuickCalculator<LapOverviewOutput> = {
 
     const statusOf = (lap: LapRecord): LapStatus => {
       const member = membershipOf({ history: view.history, situation: view.situation }, lap);
-      for (const machine of SESSION_PHASE_MACHINES) {
+      for (const machine of NEUTRALISATION_MACHINES) {
         const span = member[machine];
         if (span !== undefined && LAP_OVERVIEW_BEHAVIOUR[machine]?.[span.kind]?.red === true) return 'red';
       }
       if (!isNeutralisedLap(lap, { maxNeutralisedMs })) return 'green';
-      return lap.scShare > 0 ? 'sc' : 'vsc';
+      return lapNeutralisationKind(lap) ?? 'green';
     };
 
     const out: LapOverviewOutput = {};

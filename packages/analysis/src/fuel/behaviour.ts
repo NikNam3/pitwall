@@ -2,6 +2,7 @@
 // decided the situation; the calculator only looks up the rows of the spans open for a car and merges them. Its laps by
 // activity come from the lap records (in and out laps), and a rate has no lap-1 rule.
 import type { BehaviourTable } from '../shared/behaviour.ts';
+import { IN_SESSION_ROWS } from '../shared/car-status.ts';
 
 /** What the situations open for a car say about its fuel state. */
 export type FuelEffect = {
@@ -14,10 +15,9 @@ export type FuelEffect = {
   judged?: boolean;
 };
 
-const IN: FuelEffect = { inSession: true };
 const JUDGED: FuelEffect = { judged: true };
 
 export const FUEL_BEHAVIOUR: BehaviourTable<FuelEffect> = {
   'weekend-phase': { practice: JUDGED, qualifying: JUDGED, race: JUDGED, none: { judged: false } },
-  'car-status': { competing: IN, retired: IN, disqualified: IN, absent: { inSession: false } },
+  'car-status': IN_SESSION_ROWS,
 };

@@ -207,7 +207,7 @@ export const crossoverCalculator: QuickCalculator<CrossoverOutput> = {
       return out;
     }
     const { minCars, line110 } = CROSSOVER_CONFIG.read(view);
-    const green = greenLaps(view, { isRace: true, ...LAP_CLASSES_CONFIG.read(view) });
+    const green = greenLaps(view, { isRace: session.isRace === true, ...LAP_CLASSES_CONFIG.read(view) });
     const byLap = byLapOf(green, minCars);
     for (const car of cars) out[car] = crossoverOf(view, car, green, byLap, line110);
     return out;
