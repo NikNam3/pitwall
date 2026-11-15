@@ -25,6 +25,9 @@ export type LapCursor = LapMark & {
   /** Per band channel (the order of `CHANNELS` in `lap-samples.ts`): lowest and highest value of the lap's frames; min above max = none seen. */
   channelMin: number[];
   channelMax: number[];
+  /** Per corner (the order of `CORNER_NAMES`): the sum and count of the lap's known carcass temperatures, for its mean. */
+  carcassSumC: number[];
+  carcassCount: number[];
   /** The last in-lap ERS totals (the game resets them at the line); `undefined` = none seen. */
   ersDeployedJ: number | undefined;
   ersHarvestedJ: number | undefined;

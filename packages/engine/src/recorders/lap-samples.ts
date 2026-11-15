@@ -1,4 +1,4 @@
-import type { ChannelRange, DamageParts, Known, LapRecord, SessionTime } from '@pitwall/domain';
+import type { ChannelRange, DamageParts, Known, LapRecord, SessionTime, TyreSet } from '@pitwall/domain';
 import { known, unknown } from '../util/hot-domain.ts';
 import { CORNER_NAMES, mapCorners, type CornerName } from '../step/corners.ts';
 import type { DeepReadonly } from '../util/deep-readonly.ts';
@@ -26,10 +26,12 @@ const TYRE_CHANNELS_PER_CORNER = 3;
 const BRAKE_CHANNEL_0 = TYRE_CHANNELS_PER_CORNER * CORNER_NAMES.length;
 const ENGINE_CHANNEL = BRAKE_CHANNEL_0 + CORNER_NAMES.length;
 
-/** A cursor's channel accumulators: nothing seen yet (min above max). */
-export const emptyChannels = (): Pick<LapCursor, 'channelMin' | 'channelMax'> => ({
+/** A cursor's channel accumulators: nothing seen yet (min above max, no carcass sample). */
+export const emptyChannels = (): Pick<LapCursor, 'channelMin' | 'channelMax' | 'carcassSumC' | 'carcassCount'> => ({
   channelMin: CHANNELS.map(() => Infinity),
   channelMax: CHANNELS.map(() => -Infinity),
+  carcassSumC: CORNER_NAMES.map(() => 0),
+  carcassCount: CORNER_NAMES.map(() => 0),
 });
 
 /** Folds one channel's reading into the cursor's range of channel `i`. */
@@ -48,6 +50,10 @@ export const observeLapFrame = (cursor: LapCursor, car: LiveCar): void => {
     const first = TYRE_CHANNELS_PER_CORNER * c;
     observeChannel(cursor, first, tyre.surfaceTempC);
     observeChannel(cursor, first + 1, tyre.carcassTempC);
+    if (tyre.carcassTempC.known) {
+      cursor.carcassSumC[c] = (cursor.carcassSumC[c] ?? 0) + tyre.carcassTempC.value;
+      cursor.carcassCount[c] = (cursor.carcassCount[c] ?? 0) + 1;
+    }
     observeChannel(cursor, first + 2, tyre.pressurePsi);
     observeChannel(cursor, BRAKE_CHANNEL_0 + c, car.condition.brakes[corner].tempC);
   }
@@ -92,6 +98,24 @@ const channelRange = (cursor: LapCursor, car: LiveCar, at: SessionTime): Channel
   return { tyres, brakesC, engineC: range(ENGINE_CHANNEL) };
 };
 
+/**
+ * A corner's mean carcass temperature over the frames of the lap seen (also of a lap joined after its start). The live
+ * reading's reason when the game sends none (`notApplicable`, surface only) or realism hides it (`realism`);
+ * `insufficientData` when no frame of the lap had it.
+ */
+const carcassMean = (cursor: LapCursor, car: LiveCar, at: SessionTime): LapRecord['carcassMeanC'] =>
+  mapCorners((corner) => {
+    const reading = car.tyres.corners[corner].carcassTempC;
+    if (!reading.known && (reading.reason === 'notApplicable' || reading.reason === 'realism')) return unknown(reading.reason);
+    const c = CORNER_NAMES.indexOf(corner);
+    const count = cursor.carcassCount[c] ?? 0;
+    return count > 0 ? known((cursor.carcassSumC[c] ?? 0) / count, at) : unknown('insufficientData');
+  });
+
+/** The car's tyre sets as the live state has them at the lap end, in the game's order; its own reason when unknown (C8). */
+const tyreSetsOf = (car: LiveCar, at: SessionTime): Known<TyreSet[]> =>
+  car.tyres.sets.known ? known(car.tyres.sets.value.sets.slice(), at) : unknown(car.tyres.sets.reason);
+
 const ersStoreOf = (car: LiveCar, at: SessionTime): Known<number> =>
   car.energy.ers.known ? known(car.energy.ers.value.storeJ, at) : unknown(car.energy.ers.reason);
 
@@ -107,8 +131,8 @@ export const lapStartSamples = (car: LiveCar, at: SessionTime, fromStart: boolea
 };
 
 /**
- * What the car had at the end of the lap that `cursor` collected. Wear, ERS store and damage are read from the car state
- * of the completing frame; the totals and ranges come from the frames of the lap. The completing frame itself is
+ * What the car had at the end of the lap that `cursor` collected. Wear, ERS store and damage and the tyre sets are read from the
+ * car state of the completing frame; the totals, ranges and carcass mean come from the frames of the lap. The completing frame itself is
  * not part of the lap's ranges and totals: its values belong to the next lap (the game has already reset the per-lap ERS counters in it).
  */
 export const lapEndSamples = (cursor: LapCursor, car: LiveCar, at: SessionTime): LapEndSamples => ({
@@ -118,9 +142,8 @@ export const lapEndSamples = (cursor: LapCursor, car: LiveCar, at: SessionTime):
   ersHarvestedJ: total(cursor.ersHarvestedJ, car.energy.ers, at),
   damageAtEnd: damageOf(car, at),
   channelRange: channelRange(cursor, car, at),
-  // SP4.3c Task 9: the recorder fills these (test + implement phases)
-  tyreSets: unknown('notReceived'),
-  carcassMeanC: mapCorners(() => unknown('notReceived')),
+  tyreSets: tyreSetsOf(car, at),
+  carcassMeanC: carcassMean(cursor, car, at),
 });
 
 /**
