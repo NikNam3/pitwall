@@ -69,9 +69,16 @@ const bandChannels = (bands: CarBands, lap: Lap | undefined, lapBands: Bands | u
   const range = lap?.channelRange;
   const on = (r: DeepReadonly<Known<Range>> | undefined, band: Band | undefined) =>
     lap && r && band ? { lap: { lapNumber: lap.lapNumber, range: r, band } } : {};
-  /** The pressure band is the car's setup, not the compound's: `car-bands`' band, which is unknown without the setup. */
-  const lapBand = (kind: (typeof TYRE_CHANNELS)[number][1], reading: BandReading): Band | undefined =>
-    kind === 'pressure' ? (reading.band.known ? reading.band.value : undefined) : lapBands?.[kind];
+  /**
+   * The judged lap's band of a tyre channel, as `car-bands` judges it: the carcass band is unknown for a compound without
+   * a reference temperature, the pressure band (the car's setup on that compound) without the setup.
+   */
+  const lapBand = (kind: (typeof TYRE_CHANNELS)[number][1], corner: (typeof CORNERS)[number]): Band | undefined => {
+    if (lapBands === undefined) return undefined;
+    if (kind === 'surface') return lapBands.surface;
+    if (kind === 'carcass') return lapBands.carcass.known ? lapBands.carcass.value : undefined;
+    return lapBands.pressure.known ? lapBands.pressure.value[corner] : undefined;
+  };
   return [
     ...CORNERS.flatMap((c) =>
       TYRE_CHANNELS.map(([t, kind]): BandChannel => ({
@@ -79,7 +86,7 @@ const bandChannels = (bands: CarBands, lap: Lap | undefined, lapBands: Bands | u
         category: 'tyres',
         measure: 'midRange',
         reading: bands.tyres[c][t],
-        ...on(range?.tyres[c][t], lapBand(kind, bands.tyres[c][t])),
+        ...on(range?.tyres[c][t], lapBand(kind, c)),
       })),
     ),
     ...CORNERS.map((c): BandChannel => ({
@@ -199,7 +206,7 @@ const alarmsOf = (view: EngineView, id: CarId, judged: Lap | undefined, config: 
   const damage = pick<DamageState>(DAMAGE);
   // the rows of the car's spans and the session's, merged
   const effect: AlarmsEffect = Object.assign({}, ...behaviourFor<AlarmsEffect>(ALARMS_BEHAVIOUR, view, id));
-  const lapBands = judged && bandsFor(judged.visualCompound, CAR_BANDS_CONFIG.read(view));
+  const lapBands = judged && bandsFor(car, judged, CAR_BANDS_CONFIG.read(view), view.live.sessionTime);
   return [
     ...(bands && !bandsHidden(view, effect) ? bandAlarms(bands, judged, lapBands, make) : []),
     ...(wear ? wearAlarms(wear, config, make) : []),
@@ -221,6 +228,7 @@ export const alarmsCalculator: QuickCalculator<AlarmsOutput> = {
     { calculator: DAMAGE },
     'timing',
     'identity',
+    'ownCar',
     'spans:warnings',
     'spans:penalties',
     'spans:session-phase-race',
