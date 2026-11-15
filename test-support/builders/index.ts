@@ -147,6 +147,8 @@ export function lap(over: Partial<LapRecord> = {}): LapRecord {
       brakesC: perCorner(() => known(range(300, 800), at)),
       engineC: known(range(110, 110), at),
     },
+    tyreSets: unknown('notReceived'),
+    carcassMeanC: perCorner(() => unknown('notReceived')),
     frame: 0,
     ...starts,
     ...over,
