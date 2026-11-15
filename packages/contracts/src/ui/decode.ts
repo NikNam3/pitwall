@@ -91,6 +91,7 @@ export const decodeUiAction = (raw: unknown): UiAction | undefined => {
   switch (raw.kind) {
     case 'workbook.open':
     case 'workbook.saveAs':
+    case 'workbook.reset':
       return isString(raw.name) ? { kind: raw.kind, name: raw.name } : undefined;
     case 'workbook.updateWindow': {
       const window = decodeWorkbookWindow(raw.window);

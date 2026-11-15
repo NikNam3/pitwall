@@ -1,6 +1,6 @@
 // `serve` seeds the shipped workbooks into its UI dir before it opens the UI state, so every start path (live,
-// replay, and dev and the desktop app through them) has them, and an edited workbook is never overwritten.
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+// replay, and dev and the desktop app through them) has them; a user file of a default not yet seeded is kept as a dated .bak (SP4.3c §5.9).
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
@@ -48,12 +48,15 @@ describe('serve seeds the default workbooks', { timeout: 20_000 }, () => {
     expect(await workbookNamesServed(uiDir)).toEqual(['car', 'garage', 'quali', 'race', 'strategy']);
   });
 
-  it('an edited workbook in the UI dir is kept as it is', async () => {
+  it('an edited workbook of a default not yet seeded is replaced by the default and kept as a dated .bak', async () => {
     const uiDir = join(mkdtempSync(join(tmpdir(), 'serve-seed-')), 'ui');
     mkdirSync(join(uiDir, 'workbooks'), { recursive: true });
     const mine = '{"name":"car","windows":[],"edited":"by hand"}\n';
     writeFileSync(join(uiDir, 'workbooks', 'car.json'), mine);
     expect(await workbookNamesServed(uiDir)).toEqual(['car', 'garage', 'quali', 'race', 'strategy']);
-    expect(readFileSync(join(uiDir, 'workbooks', 'car.json'), 'utf8')).toBe(mine);
+    expect(readFileSync(join(uiDir, 'workbooks', 'car.json'), 'utf8')).not.toBe(mine);
+    const backups = readdirSync(join(uiDir, 'workbooks')).filter((f) => /^car\.json\.bak-\d{4}-\d{2}-\d{2}$/.test(f));
+    expect(backups).toHaveLength(1);
+    expect(readFileSync(join(uiDir, 'workbooks', backups[0]!), 'utf8')).toBe(mine);
   });
 });
