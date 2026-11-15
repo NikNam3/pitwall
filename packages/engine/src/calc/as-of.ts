@@ -11,17 +11,14 @@ import type { Situation } from '../situations/situation.ts';
 import type { ProfileCtx, StoredDriverSession } from './profiles.ts';
 import type { CalculatorId, Dependency, EngineView } from './types.ts';
 
-/** A car's tyre sets as the live state holds them. */
-export type LiveSets = DeepReadonly<LiveState>['cars'][number]['tyres']['sets'];
-
-/**
- * The session's values an as-of form may read that the projection does not hold (ruling R17): `totalLaps` and our car
- * are fixed for the session; the cars' tyre sets and the weather forecast exist only now (the live state), so a cut or
- * stored view has none (rulings R17, R19).
- */
 /** The session's weather now and its forecast, as the live state holds them. */
 export type LiveWeather = Pick<DeepReadonly<LiveState>['session'], 'weather' | 'forecast' | 'forecastAccuracy'>;
 
+/**
+ * The session's values an as-of form may read that the projection does not hold (ruling R17): `totalLaps` and our car
+ * are fixed for the session; the weather forecast exists only now (the live state), so a cut or stored view has none
+ * (rulings R17, R19). The cars' tyre sets are the projection's (the lap records', SP4.3c spec §5.2 O1a).
+ */
 export type AsOfFixed = {
   totalLaps: Known<number>;
   playerCar: Known<CarId>;
@@ -31,7 +28,6 @@ export type AsOfFixed = {
   aiDifficulty: Known<number>;
   /** The lobby's safety-car setting (fixed for the session; SP4.3b spec §5.2's lobby factor); absent reads as not received. */
   safetyCar: Known<GameSettings['safetyCar']>;
-  setsNow: readonly LiveSets[] | null;
   weatherNow: LiveWeather | null;
 };
 
@@ -70,7 +66,6 @@ export function asOfNow(view: EngineView): AsOfView {
       get teammateCar() { const t = view.live.teammateCar; return t === undefined ? unknown('notApplicable') : known(t, view.live.sessionTime); },
       get aiDifficulty() { return known(view.live.session.settings.aiDifficulty, view.live.sessionTime); },
       get safetyCar() { return known(view.live.session.settings.safetyCar, view.live.sessionTime); },
-      get setsNow() { return view.live.cars.map((c) => c.tyres.sets); },
       get weatherNow() {
         const { weather, forecast, forecastAccuracy } = view.live.session;
         return { weather, forecast, forecastAccuracy };
@@ -144,6 +139,6 @@ export function asOfStored(session: StoredDriverSession, ctx: ProfileCtx): AsOfV
     track: session.track,
     weekend: undefined,
     outputs: new Map(),
-    fixed: { totalLaps: session.totalLaps, playerCar: known(session.session.feedCar, 0), teammateCar: unknown('notReceived'), aiDifficulty: session.aiDifficulty, safetyCar: unknown('notReceived'), setsNow: null, weatherNow: null },
+    fixed: { totalLaps: session.totalLaps, playerCar: known(session.session.feedCar, 0), teammateCar: unknown('notReceived'), aiDifficulty: session.aiDifficulty, safetyCar: unknown('notReceived'), weatherNow: null },
   };
 }

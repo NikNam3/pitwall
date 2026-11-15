@@ -30,6 +30,7 @@ import {
 } from '@pitwall/domain';
 import type { AsOfView, DeepReadonly } from '@pitwall/engine/readers';
 import { CAR_BANDS_CONFIG } from '../car-bands/config.ts';
+import { DEGRADATION, type DegradationOutput, type StintDegradation } from '../degradation/index.ts';
 import { refTempC } from '../car-bands/bands.ts';
 import { isRateLap, LAP_CLASSES_CONFIG } from '../lap-classes/index.ts';
 import { configOf } from '../shared/config-of.ts';
@@ -210,6 +211,8 @@ type CarCtx = {
   priorSets: Usable | undefined;
   /** The rate laps of the fitted set. */
   own: readonly LapRecord[];
+  /** ν of `degradation`'s fit of the stint on the fitted set, if it has one (`stintFitOf`). */
+  fitNuMsPerLap: (Known<number> & { known: true }) | undefined;
 };
 
 /** The shared inputs of one view. */
@@ -282,6 +285,37 @@ function worstOf(rates: Corners<TyreTerm<number>>): TyreTerm<number> {
   return worst as TyreTerm<number>;
 }
 
+type NuAndLoss = { nuMsPerLap: TyreTerm<number>; lossMsPerPct: TyreTerm<number> };
+
+/** Without a fit: the type's loss per % (the game's, else the default) and ν = that loss × the worst corner's rate, with the loss's source. */
+function fromLoss(worst: TyreTerm<number>, loss: TyreTerm<number>): NuAndLoss {
+  const value = !worst.value.known ? worst.value : !loss.value.known ? loss.value : known(loss.value.value * worst.value.value, Math.max(worst.value.at, loss.value.at));
+  return { nuMsPerLap: { value, source: loss.source }, lossMsPerPct: loss };
+}
+
+/**
+ * With the stint's own fit (spec §5.2): ν is the fit's, measured; the loss per % is ν ÷ the worst corner's rate when
+ * that rate is measured too, else the type's loss (the game's, else the default).
+ */
+function fromFit(fit: Known<number> & { known: true }, worst: TyreTerm<number>, loss: TyreTerm<number>): NuAndLoss {
+  const nuMsPerLap: TyreTerm<number> = { value: fit, source: 'measured' };
+  if (worst.source !== 'measured' || !worst.value.known || !(worst.value.value > 0)) return { nuMsPerLap, lossMsPerPct: loss };
+  return { nuMsPerLap, lossMsPerPct: { value: known(fit.value / worst.value.value, Math.max(fit.at, worst.value.at)), source: 'measured' } };
+}
+
+/**
+ * The ν of `degradation`'s fit of the car's stint on its fitted set (the stint holding the set's newest lap, on its
+ * compound, with a pace lap the filter used), if it has one.
+ */
+function stintFitOf(stints: readonly DeepReadonly<StintDegradation>[] | undefined, set: FittedSet | undefined, own: readonly LapRecord[]): (Known<number> & { known: true }) | undefined {
+  const newest = own.at(-1);
+  if (stints === undefined || set === undefined || newest === undefined) return undefined;
+  const stint = stints.findLast((s) => s.firstLap <= newest.lapNumber && s.lastLap >= newest.lapNumber);
+  if (stint === undefined || stint.visual !== set.visualCompound || !stint.nuMsPerLap.known) return undefined;
+  const fitted = stint.laps.some((l) => typeof l.use === 'string');
+  return fitted ? (stint.nuMsPerLap as Known<number> & { known: true }) : undefined;
+}
+
 /** One compound's terms for one car. */
 function compoundOf(v: ViewCtx, car: CarCtx, compound: NoiseCompound): TyreModelCompound {
   const type = tyreTypeOf(compound);
@@ -304,13 +338,13 @@ function compoundOf(v: ViewCtx, car: CarCtx, compound: NoiseCompound): TyreModel
   };
   const wearRatePct: Corners<TyreTerm<number>> = { fl: rate('fl'), fr: rate('fr'), rl: rate('rl'), rr: rate('rr') };
   const game = gameLossOf(v, car, compound);
-  const lossMsPerPct = module.lossMsPerPct({ actual, config, ...(game !== undefined && { gameMsPerPct: game }) });
+  const gameLoss = module.lossMsPerPct({ actual, config, ...(game !== undefined && { gameMsPerPct: game }) });
   const gameMs = gameOffset(car, compound);
   const trackMs = trackOffset(v.view, compound);
   const freshOffsetMs = module.freshOffsetMs({ config, ...(gameMs !== undefined && { gameMs }), ...(trackMs !== undefined && { trackMs }) });
   const worst = worstOf(wearRatePct);
-  const nuMsPerLap: TyreTerm<number> =
-    worst.value.known && lossMsPerPct.value.known ? { value: known(lossMsPerPct.value.value * worst.value.value, worst.value.at), source: worst.source } : { value: worst.value.known ? lossMsPerPct.value : worst.value, source: worst.source };
+  const fit = onIt ? car.fitNuMsPerLap : undefined;
+  const { nuMsPerLap, lossMsPerPct } = fit === undefined ? fromLoss(worst, gameLoss) : fromFit(fit, worst, gameLoss);
   const lapsToLimit: Known<number> = !worst.value.known ? worst.value : worst.value.value > 0 ? known(v.c.limitPct / worst.value.value, worst.value.at) : unknown('insufficientData');
   return { wearRatePct, nuMsPerLap, lossMsPerPct, freshOffsetMs, lapsToLimit };
 }
@@ -398,6 +432,7 @@ export function tyreModelOf(view: AsOfView, cars: readonly CarId[], tyresOf: (ca
     wetness: view.outputs.get(TRACK_WETNESS) as DeepReadonly<TrackWetness> | undefined,
   };
   const effects = effectsByCar(view);
+  const degradation = view.outputs.get(DEGRADATION) as DeepReadonly<DegradationOutput> | undefined;
   const lapsOf = lapsByCar(view.history);
   const fixed = view.fixed;
   const player = fixed.playerCar;
@@ -420,7 +455,8 @@ export function tyreModelOf(view: AsOfView, cars: readonly CarId[], tyresOf: (ca
     const tyres = tyresOfCar(id);
     const laps = lapsOf.get(id) ?? [];
     const own = onFittedSet(currentStintLaps(view.history, id, laps), tyres.set);
-    const car: CarCtx = { id, human: effect.human === true, tyres, priorSets: usable(tyres.sets) ?? ourSets, own };
+    const fitNuMsPerLap = stintFitOf(degradation?.[id], tyres.set, own);
+    const car: CarCtx = { id, human: effect.human === true, tyres, priorSets: usable(tyres.sets) ?? ourSets, own, fitNuMsPerLap };
     const compounds = Object.fromEntries(NOISE_COMPOUNDS.map((compound) => [compound, compoundOf(v, car, compound)])) as Record<NoiseCompound, TyreModelCompound>;
     const fitted = tyres.set !== undefined && isNoise(tyres.set.visualCompound) ? compounds[tyres.set.visualCompound].wearRatePct : undefined;
     out[id] = {

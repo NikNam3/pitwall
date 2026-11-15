@@ -49,7 +49,7 @@ import { scored, scoreTable, summary } from './tables.ts';
 
 /**
  * The job's input: the projection (its `appendedAt` included) and the open spans now, the run's fixed inputs, and the
- * session's values an as-of view needs (`fixed`, with `setsNow` and `weatherNow` null: a past frame has none, R17).
+ * session's values an as-of view needs (`fixed`, with `weatherNow` null: a past frame has none, R17).
  */
 export type ScoreInput = {
   history: Projection;
@@ -100,7 +100,7 @@ export function prepareScore(view: EngineView): ScoreInput {
     drivers: view.drivers,
     track: view.track,
     weekend: view.weekend,
-    fixed: { totalLaps: fixed.totalLaps, playerCar: fixed.playerCar, teammateCar: fixed.teammateCar, aiDifficulty: fixed.aiDifficulty, safetyCar: fixed.safetyCar, setsNow: null, weatherNow: null },
+    fixed: { totalLaps: fixed.totalLaps, playerCar: fixed.playerCar, teammateCar: fixed.teammateCar, aiDifficulty: fixed.aiDifficulty, safetyCar: fixed.safetyCar, weatherNow: null },
   };
 }
 
