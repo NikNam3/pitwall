@@ -22,6 +22,9 @@ import {
   type StintRecord,
   type TyreModelCar,
   type TyreModelOutput,
+  type TyreType,
+  tyreTypeOf,
+  type Ms,
   type VisualCompound,
 } from '@pitwall/domain';
 import type { AsOfView, DeepReadonly } from '@pitwall/engine/readers';
@@ -39,10 +42,17 @@ const DRY = ['soft', 'medium', 'hard'] as const satisfies readonly NoiseCompound
 const COMPOUNDS: readonly VisualCompound[] = ['soft', 'medium', 'hard', 'inter', 'wet'];
 const isCompound = (c: VisualCompound): c is NoiseCompound => COMPOUNDS.includes(c);
 
-// SP4.3c Task 18 (supervisor first): the switch fields unfilled until the task's implement phase
-const NO_SWITCH = { switchLap: unknown('insufficientData'), switchTo: unknown('insufficientData') } as const satisfies Pick<RivalStop, 'switchLap' | 'switchTo'>;
+type Switch = Pick<RivalStop, 'switchLap' | 'switchTo'>;
 
-const NOT_APPLICABLE: Omit<RivalStop, 'basis'> = { owesStop: unknown('notApplicable'), window: unknown('notApplicable'), nextCompound: unknown('notApplicable'), ...NO_SWITCH };
+const NOT_APPLICABLE: Omit<RivalStop, 'basis'> = {
+  owesStop: unknown('notApplicable'),
+  window: unknown('notApplicable'),
+  nextCompound: unknown('notApplicable'),
+  switchLap: unknown('notApplicable'),
+  switchTo: unknown('notApplicable'),
+};
+
+const TYRE_TYPES: readonly TyreType[] = ['slick', 'inter', 'wet'];
 
 /** The car-scoped machines the unit reads, each read once (C41) and grouped by car. */
 const CAR_MACHINES = [carStatusSpans.machine, compoundRuleSpans.machine, carDriverSpans.machine] as const;
@@ -162,6 +172,30 @@ function oddsOf(peerChoices: readonly NoiseCompound[], used: ReadonlySet<NoiseCo
   return odds;
 }
 
+/**
+ * The car's tyre-type switch (SP4.3c O5, research 22 §1.7): `tyre-model`'s `typeDeltaMs` of a type other than the car's
+ * own below 0 means the AI switches at the end of the lap it is on (`set.lastLap + 1`), onto the type whose delta is
+ * lowest. No negative delta of another type, or none known, is no switch (the simulator's lap model decides then).
+ */
+function switchOf(model: DeepReadonly<TyreModelCar> | undefined, set: CurrentSet | undefined, at: Ms): Switch {
+  if (set === undefined || model === undefined) return { switchLap: unknown('insufficientData'), switchTo: unknown('insufficientData') };
+  const own = tyreTypeOf(set.compound);
+  let best: { type: TyreType; deltaMs: number } | undefined;
+  let anyKnown = false;
+  for (const type of TYRE_TYPES) {
+    if (type === own) continue;
+    const delta = model.typeDeltaMs[type];
+    if (!delta.known) continue;
+    anyKnown = true;
+    if (delta.value < 0 && (best === undefined || delta.value < best.deltaMs)) best = { type, deltaMs: delta.value };
+  }
+  if (best === undefined) {
+    const reason = anyKnown ? 'notApplicable' : 'insufficientData';
+    return { switchLap: unknown(reason), switchTo: unknown(reason) };
+  }
+  return { switchLap: known(set.lastLap + 1, at), switchTo: known(best.type, at) };
+}
+
 /** Per car in the session, its next stop as of `view`'s frame. */
 export function rivalStopsAsOf(view: AsOfView): RivalStops {
   const out: Record<CarId, RivalStop> = {};
@@ -208,19 +242,20 @@ export function rivalStopsAsOf(view: AsOfView): RivalStops {
     const set = currentSet(h);
     const owes = effect.rule === undefined ? undefined : owesSecondDryCompound(effect.rule, { stints: h?.stints ?? [] }, id, set?.compound);
     const owesStop: Known<boolean> = owes === undefined ? unknown('notReceived') : known(owes, at);
+    const model = tyreModel[id];
+    const typeSwitch = switchOf(model, set, at);
     if (set === undefined) {
-      out[id] = { owesStop, window: unknown('insufficientData'), nextCompound: unknown('insufficientData'), basis: 'tyreLife', ...NO_SWITCH };
+      out[id] = { owesStop, window: unknown('insufficientData'), nextCompound: unknown('insufficientData'), basis: 'tyreLife', ...typeSwitch };
       continue;
     }
     const peers = (peerStops.get(set.compound) ?? []).filter((p) => p.car !== id);
     const choices = peers.flatMap((p) => (p.next === undefined ? [] : [p.next]));
-    const model = tyreModel[id];
     const nextCompound = known(oddsOf(choices, usedCompounds(h, set), set.compound, (c) => mayFit(model, c)), at);
 
     const toFlag = (basis: RivalStop['basis']): RivalStop =>
       total.known
-        ? { owesStop, window: known({ lowLap: totalLaps, midLap: totalLaps, highLap: totalLaps, toFlag: true }, at), nextCompound, basis, ...NO_SWITCH }
-        : { owesStop, window: unknown('insufficientData'), nextCompound, basis, ...NO_SWITCH };
+        ? { owesStop, window: known({ lowLap: totalLaps, midLap: totalLaps, highLap: totalLaps, toFlag: true }, at), nextCompound, basis, ...typeSwitch }
+        : { owesStop, window: unknown('insufficientData'), nextCompound, basis, ...typeSwitch };
     if (outOfSets(model)) {
       out[id] = toFlag('noStop');
       continue;
@@ -246,7 +281,7 @@ export function rivalStopsAsOf(view: AsOfView): RivalStops {
       }
     }
     if (ages === undefined) {
-      out[id] = { owesStop, window: unknown('insufficientData'), nextCompound, basis, ...NO_SWITCH };
+      out[id] = { owesStop, window: unknown('insufficientData'), nextCompound, basis, ...typeSwitch };
       continue;
     }
     const unclamped = (age: number): number => Math.round(set.lastLap + age - set.age);
@@ -263,7 +298,7 @@ export function rivalStopsAsOf(view: AsOfView): RivalStops {
             toFlag: false,
           }
         : { lowLap: lapOf(ages.low), midLap: lapOf(ages.mid), highLap: lapOf(ages.high), toFlag: false };
-    out[id] = { owesStop, window: known(window, at), nextCompound, basis, ...NO_SWITCH };
+    out[id] = { owesStop, window: known(window, at), nextCompound, basis, ...typeSwitch };
   }
   return out;
 }

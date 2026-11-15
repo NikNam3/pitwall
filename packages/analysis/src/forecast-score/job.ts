@@ -1,7 +1,7 @@
 // `forecast-score`'s job (C51; SP4.3a spec 7.1): `prepare` takes what the scoring needs from the view, structured-
 // cloneable (the projection with its append frames, so `projectionAsOf` can cut it in the worker); `run` rebuilds the
 // starting point at every case's frame (`forecast-field`: the projection cut, the forecast units run as of it, the
-// build, as `startingPointAt` does, keeping `rival-stops`' output for the forecast tables' policies), runs the plain
+// build, as `startingPointAt` does; the forecast tables' policies are the rivals' plain policies on it), runs the plain
 // forecast (`raceForecast`) and scores it against what happened. No state between runs (C31).
 import { carDriverSpans } from '@pitwall/domain';
 import type {
@@ -12,7 +12,6 @@ import type {
   Known,
   MachineId,
   Policy,
-  RivalStops,
   Scenario,
   ScoreCase,
   SessionTime,
@@ -34,7 +33,6 @@ import { raceForecast } from '../race-forecast/index.ts';
 import { fieldPositions } from '../race-monte-carlo/field.ts';
 import type { FieldInput } from '../race-monte-carlo/types.ts';
 import { RACE_INTERACTION_CONFIG } from '../race-interaction/config.ts';
-import { RIVAL_STOPS } from '../rival-stops/index.ts';
 import { buildStartingPoint, FORECAST_UNITS } from '../shared/forecast-field/index.ts';
 import { leaderLapAt } from '../gaps/index.ts';
 import { neutralisationKind, neutralisedSpans, isClosed } from '../shared/neutralised.ts';
@@ -110,8 +108,8 @@ function horizonsOf(config: ForecastScoreConfig): Horizon[] {
   return HORIZONS.filter((h) => given.has(h));
 }
 
-/** A starting point as of a frame, with the `rival-stops` output it was built with. */
-type Built = { start: Known<StartingPoint>; stops: DeepReadonly<RivalStops> };
+/** A starting point as of a frame (it carries `rival-stops`' plans of the rivals, SP4.3c O9). */
+type Built = { start: Known<StartingPoint> };
 
 /**
  * The scoreboard over `input` (runs in a worker). The plain forecast draws nothing, so `rng` is unused in 4.3a and the
@@ -135,7 +133,7 @@ export function run(input: ScoreInput, rng: Rng): ForecastScoreReport {
       const cut = projectionAsOf({ history, situation }, frame);
       const asOf: AsOfView = { ...base, history: cut.history, situation: cut.situation, frame, at: time };
       const outputs = runAsOf(FORECAST_UNITS, asOf);
-      b = { start: buildStartingPoint(asOf, outputs), stops: (outputs.get(RIVAL_STOPS) as DeepReadonly<RivalStops> | undefined) ?? {} };
+      b = { start: buildStartingPoint(asOf, outputs) };
       builds.set(frame, b);
     }
     return b;
@@ -204,10 +202,10 @@ export function run(input: ScoreInput, rng: Rng): ForecastScoreReport {
   const ours = fixed.playerCar.known ? ourCars({ playerCar: fixed.playerCar.value, teammateCar: fixed.teammateCar.known ? fixed.teammateCar.value : undefined }) : [];
   for (const [lap, cases] of byLap) {
     const first = cases[0] as ForecastCase;
-    const { start, stops } = buildAt(first.predictFrame, first.predictAt);
+    const { start } = buildAt(first.predictFrame, first.predictAt);
     if (!start.known) continue;
     const sp = start.value;
-    const policies: Policy[] = forecastPolicies(stops, sp.cars);
+    const policies: Policy[] = forecastPolicies(sp);
     if (ours.length > 0) {
       const actual = actualStops(history, race, first.predictFrame, sp.cars);
       for (const car of ours) if (car < sp.cars) policies[car] = actual[car] as Policy;
@@ -246,10 +244,10 @@ export function run(input: ScoreInput, rng: Rng): ForecastScoreReport {
   const crpsScores: { c: ForecastCase; driver: ScoreCase['driver']; score: number }[] = [];
   for (const [lap, cases] of crpsByLap) {
     const first = cases[0] as ForecastCase;
-    const { start, stops } = buildAt(first.predictFrame, first.predictAt);
+    const { start } = buildAt(first.predictFrame, first.predictAt);
     if (!start.known) continue;
     const sp = start.value;
-    const policies: Policy[] = forecastPolicies(stops, sp.cars);
+    const policies: Policy[] = forecastPolicies(sp);
     if (ours.length > 0) {
       const actual = actualStops(history, race, first.predictFrame, sp.cars);
       for (const car of ours) if (car < sp.cars) policies[car] = actual[car] as Policy;

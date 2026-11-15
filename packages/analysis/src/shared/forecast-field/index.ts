@@ -206,7 +206,7 @@ export function buildStartingPoint(view: AsOfView, outputs: ReadonlyMap<Calculat
     stopMid: new Int16Array(cars),
     stopHigh: new Int16Array(cars),
     owesStop: new Uint8Array(cars),
-    // filled from rival-stops by Task 18's implement phase
+    // filled from rival-stops with the window (below)
     nextOdds: Array.from({ length: cars }, () => null),
     typeSwitch: Array.from({ length: cars }, () => null),
     sets: {},
@@ -324,6 +324,9 @@ export function buildStartingPoint(view: AsOfView, outputs: ReadonlyMap<Calculat
     }
     const owes = stop === undefined ? false : stop.owesStop.known ? stop.owesStop.value : config.assumeOwesStop;
     sp.owesStop[k] = owes ? 1 : 0;
+    // its next compound's odds and its tyre-type switch from the game's delta (SP4.3c O9, O5); null while unknown
+    sp.nextOdds[k] = stop?.nextCompound.known === true ? { ...stop.nextCompound.value } : null;
+    sp.typeSwitch[k] = stop?.switchLap.known === true && stop.switchTo.known ? { lap: stop.switchLap.value, to: stop.switchTo.value } : null;
 
     lapMs[k] = lap.lapTimeMs;
   }
