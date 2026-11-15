@@ -18,10 +18,6 @@ export type CarNoise = {
   bigEventRatePerLap: Known<number>;
   /** A retirement (plan review P5: apart from big slow laps). */
   retireRatePerLap: Known<number>;
-  /** The worst corner's rate. */
-  wearRatePctPerLap: Record<NoiseCompound, Known<number>>;
-  /** Where each compound's wear rate comes from (spec 5.2: own laps, profile, our car's rate, default). */
-  wearRateSource: Record<NoiseCompound, EstimateSource>;
   source: EstimateSource;
   laps: number;
 };
