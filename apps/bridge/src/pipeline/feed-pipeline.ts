@@ -183,9 +183,10 @@ type QueuedDecision =
 
 /**
  * A restart's restore under way: the packets that arrive meanwhile wait in `buffer`, the decisions and calibration
- * edits in `decisions`, each in arrival order.
+ * edits in `decisions`, each in arrival order. `trackId` is the stored session's track: a pick is judged against it on
+ * arrival (C73).
  */
-type Restore = { buffer: RawPacket[]; decisions: QueuedDecision[]; done: Promise<void> };
+type Restore = { trackId: number; buffer: RawPacket[]; decisions: QueuedDecision[]; done: Promise<void> };
 
 /**
  * Runs one feed: every datagram updates the feed's health, the tracker splits the stream into sessions and frames,
@@ -268,12 +269,19 @@ export class FeedPipeline {
    * session's track; before any session, the set's own track). An unknown set (of the newest session's track, or before
    * any session of any track) is rejected, with or without a running session (C73); `defaults` before any session
    * changes nothing. A pipeline without a calibration store takes no picks. During a restart's restore (C59) a pick is
-   * answered ok and queued: it is committed once the run is live (`#applyQueued`).
+   * judged at once against the stored session's track, as outside a restore: an unknown set is rejected, any other pick
+   * is answered ok and queued, and committed once the run is live (`#applyQueued`).
    */
   commitDecision(setId: string | null): DecisionResult {
     const calibration = this.#o.calibration;
     if (calibration === undefined) return { ok: false, reason: 'notSupported', message: 'this feed takes no calibration picks' };
-    if (this.#restore !== undefined) return this.#queue({ kind: 'pick', setId });
+    const restore = this.#restore;
+    if (restore !== undefined) {
+      if (setId !== null && calibration.snapshotOf(restore.trackId, setId) === undefined) {
+        return { ok: false, reason: 'invalid', message: `no calibration set ${setId} on track ${restore.trackId}` };
+      }
+      return this.#queue({ kind: 'pick', setId });
+    }
     const run = this.#decisions;
     const session = this.#session;
     if (run === undefined) {
@@ -456,7 +464,8 @@ export class FeedPipeline {
 
   /**
    * Live: the stored session `packet` starts, when it is the Session packet of a session other than the running one
-   * whose key (session uid, weekend id, player car) is stored with a recording that is still there (C59); else none.
+   * whose key (session uid, weekend id, player car) is stored not complete with a recording that is still there (C59);
+   * else none. A complete stored session is never continued (C24): its key starts a run as any new session does.
    */
   #storedRecordingOf(packet: RawPacket): { row: StoredSessionRow; path: string } | undefined {
     if (!this.#continuesRecordings) return undefined;
@@ -473,7 +482,7 @@ export class FeedPipeline {
         playerCar: carId(header.playerCarIndex),
       };
       const row = new WeekendRepository(db, { log: this.#log }).sessionOf(key);
-      if (row?.pwrecPath != null && existsSync(row.pwrecPath)) found = { row, path: row.pwrecPath };
+      if (row !== undefined && !row.complete && row.pwrecPath !== null && existsSync(row.pwrecPath)) found = { row, path: row.pwrecPath };
     });
     return found;
   }
@@ -485,7 +494,7 @@ export class FeedPipeline {
    * session of their own, in a file of its own.
    */
   #startRestore(stored: { row: StoredSessionRow; path: string }, first: RawPacket): void {
-    const restore: Restore = { buffer: [first], decisions: [], done: Promise.resolve() };
+    const restore: Restore = { trackId: stored.row.trackId, buffer: [first], decisions: [], done: Promise.resolve() };
     this.#restore = restore;
     restore.done = this.#replayStored(stored, first.receivedAtMs)
       .catch((error: unknown) => {
@@ -498,7 +507,7 @@ export class FeedPipeline {
       });
   }
 
-  /** A decision or calibration edit that arrives during a restart's restore waits for the run to be live; none is rejected for it. */
+  /** A decision or calibration edit that arrives during a restart's restore waits for the run to be live; none is rejected for the wait. */
   #queue(decision: QueuedDecision): DecisionResult {
     this.#restore?.decisions.push(decision);
     return { ok: true };
@@ -508,7 +517,7 @@ export class FeedPipeline {
    * The decisions and calibration edits queued during a restart's restore, in arrival order, once the run is live (C76,
    * like a feed that joins the team later): each goes to the runner with the first live frame and, placed at the
    * session's record index (the first after the resume record), to the decisions sidecar. One the live run does not take
-   * (an unknown set, no running session) is logged.
+   * (a set deleted meanwhile, no running session) is logged.
    */
   #applyQueued(queued: readonly QueuedDecision[]): void {
     for (const entry of queued) {
