@@ -76,7 +76,14 @@ function phaseOf(span: OpenSpan | Span): GapsOutput['phases'] {
   if ('endFrame' in span && !span.confirmed) return [];
   const kind = span.kind === 'suspended' ? 'red' : span.kind === 'neutralised' ? ((span.detail as { car: 'SC' | 'VSC' }).car) : undefined;
   if (kind === undefined) return [];
-  return [{ kind, fromLap: progressAt(span.startFrame), toLap: 'endFrame' in span ? known(progressAt(span.endFrame), span.end) : unknown('notApplicable') }];
+  return [
+    {
+      kind,
+      fromLap: progressAt(span.startFrame),
+      toLap: 'endFrame' in span ? known(progressAt(span.endFrame), span.end) : unknown('notApplicable'),
+      span: { machine: span.machine, id: span.id },
+    },
+  ];
 }
 
 /**
@@ -232,6 +239,45 @@ describe('race-hazard', () => {
     const endedBefore = hazardOf(view({ done: 6, closed: [SC_LAST_LAP], open: openPhase('racing', 550) }));
     expect(entry(endedBefore, 7)).toEqual({ lap: 7, sc: 0, vsc: 0 });
     expectTable(endedBefore, 8, 44, 1, 'ended in lap 6');
+  });
+
+  // SP4.3c Task 6 fix round (F1, C26): the phases' bounds and the leader's lap now come from `gaps`, one source, and the
+  // phase of a neutralisation is the one that names its span (machine and span id), never one matched by time. Each
+  // case lists a decoy phase first: another span's, at the same session time; the right one gives values the lap
+  // records (`leaderLapAt`) would not, so only `gaps`' phase of that span passes.
+  describe("the neutralisation's phase is gaps' phase of its span (by span id)", () => {
+    /** `view(over)` with `gaps`' output: the leader on lap `done + 1`, the phases `phases`. */
+    const withPhases = (over: ViewOver & { done: number }, phases: GapsOutput['phases']): EngineView => ({
+      ...view(over),
+      outputs: new Map([[GAPS, gapsOutput({ intervals: orderOf([carId(0), carId(1)]), leaderProgress: known({ lap: over.done + 1, fraction: 0.01 }, 0), phases })]]),
+    });
+
+    it('the open one: its laps run count from the phase of its span, not the first open phase listed', () => {
+      // an SC open since frame 550 (span id 2), the leader on lap 8 (7 done); gaps places its start at 4.5 (4 laps done
+      // then): run 3. A decoy open phase of span 8 at 6.5 (run 1) comes first; the lap records give 5 (run 2).
+      const sc = { ...openNeutralisation({ kind: 'SC', start: 495_000, startFrame: 550, id: 2 }), detail: scDetail('deployed') };
+      const phases: GapsOutput['phases'] = [
+        { kind: 'SC', fromLap: 6.5, toLap: unknown('notApplicable'), span: { machine: RACE_PHASES, id: 8 } },
+        { kind: 'SC', fromLap: 4.5, toLap: unknown('notApplicable'), span: { machine: RACE_PHASES, id: 2 } },
+      ];
+      const active = valueOf(hazardOf(withPhases({ done: 7, open: sc }, phases))).active;
+      expect(active?.condition).toBe('sc');
+      expectPmf(active?.remainingLaps, conditioned(HAZARD.durationLaps.sc, 3), 'run 3, from the phase of span 2');
+    });
+
+    it('the last closed one: its end is the phase of its span, not a phase that ended at the same session time', () => {
+      // an SC (span id 4) closed on frame 550 at 495 000, the leader on lap 7 (6 done). gaps ends its phase at 4.5 (in
+      // lap 5): laps 5 and 6 blocked, lap 7 on the table's. A decoy phase of span 9 ends at the same session time at 6.5
+      // (lap 7, blocking 7 and 8); the lap records give lap 6 (blocking 7).
+      const closed = neutralisation({ kind: 'SC', start: 225_000, end: 495_000, startFrame: 250, endFrame: 550, id: 4 });
+      const phases: GapsOutput['phases'] = [
+        { kind: 'SC', fromLap: 2.5, toLap: known(6.5, 495_000), span: { machine: RACE_PHASES, id: 9 } },
+        { kind: 'SC', fromLap: 2.5, toLap: known(4.5, 495_000), span: { machine: RACE_PHASES, id: 4 } },
+      ];
+      const out = hazardOf(withPhases({ done: 6, closed: [closed], open: openPhase('racing', 550) }, phases));
+      expect(valueOf(out).active).toBeNull();
+      expectTable(out, 7, 44, 1, 'ended in lap 5 by the phase of span 4');
+    });
   });
 
   // SP4.3c Task 4 (B7, C18): a span closed with `confirmed: false` never was a neutralisation, so it blocks no start;

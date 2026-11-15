@@ -1,24 +1,32 @@
 // `gaps`' output for the tests of the units that read it (SP4.3c Task 6, O10): a hand-built one (`gapsOutput`) where a
 // view has no crossings, and the calculator's own over a view (`gapsOf`) where it has.
-import { unknown, type CarId } from '@pitwall/domain';
+import { known, unknown, type CarId } from '@pitwall/domain';
 import type { EngineView } from '@pitwall/engine/readers';
 import { gapsCalculator } from '../../src/gaps/calculator.ts';
 import { GAPS, type GapsOutput } from '../../src/gaps/index.ts';
 
-/** An empty output (no car, nothing received), with `over` set. */
-export const gapsOutput = (over: Partial<GapsOutput> = {}): GapsOutput => ({
-  intervals: [],
-  lineTimes: {},
-  recent: {},
-  fine: {},
-  gapperWindow: { ours: [], others: [] },
-  neighbourhood: [],
-  raceStartAt: unknown('notReceived'),
-  outOfRace: [],
-  phases: [],
-  leaderProgress: unknown('notReceived'),
-  ...over,
-});
+/**
+ * An empty output (no car, nothing received), with `over` set. Its origin (required, C3: an absent field is no lights
+ * out) is `over.origin`, else lights out at `raceStartAt` when that is known, else `notReceived` as `raceStartAt`.
+ */
+export const gapsOutput = (over: Partial<GapsOutput> = {}): GapsOutput => {
+  const raceStartAt = over.raceStartAt ?? unknown('notReceived');
+  const origin: GapsOutput['origin'] = raceStartAt.known ? known({ kind: 'lightsOut', at: raceStartAt.value }, raceStartAt.at) : raceStartAt;
+  return {
+    intervals: [],
+    lineTimes: {},
+    recent: {},
+    fine: {},
+    gapperWindow: { ours: [], others: [] },
+    neighbourhood: [],
+    raceStartAt,
+    outOfRace: [],
+    phases: [],
+    leaderProgress: unknown('notReceived'),
+    ...over,
+    origin: over.origin ?? origin,
+  };
+};
 
 /** The order `ids` as intervals: the leader first; the gaps are not what these tests read. */
 export const orderOf = (ids: readonly CarId[]): GapsOutput['intervals'] =>

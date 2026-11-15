@@ -180,22 +180,30 @@ describe('gap properties', () => {
     );
   });
 
-  it("a phase lies at the leader's progress at its start and its end: the furthest crossing of any car by then, / 50", () => {
+  // SP4.3c Task 6 fix round (F1, C26): by frame, never by time. Each crossing on its own frame (its index + 1); the
+  // span opens at the session time of the crossing before its first frame and closes at the session time of the
+  // crossing on its closing frame, so a reading by time would take both, a reading by frame neither.
+  it("a phase lies at the leader's progress at its first crossing inside the span and its last one inside it, by frame, / 50", () => {
     const phaseArb = fc.record({ race: raceArb, a: fc.double({ min: 0, max: 1, noNaN: true }), b: fc.double({ min: 0, max: 1, noNaN: true }) });
     fc.assert(
       fc.property(phaseArb, ({ race, a, b }) => {
         const all = crossingsOf(race);
-        const history = all.slice(0, 1 + Math.floor(race.cut * (all.length - 1)));
-        const first = history[0]!.at;
-        const last = history.at(-1)!.at;
-        const [start, end] = [a, b].map((f) => Math.round(first + f * (last - first))).sort((x, y) => x - y) as [number, number];
-        const leaderAt = (t: number) => Math.max(...history.filter((m) => m.at <= t).map(progressOf)) / MINI_SECTORS;
-        const lines = gapperLines(run(viewOf(history, { phases: [neutralisation({ start, end })] })), { kind: 'fixed', lapMs: 90_000 });
+        const history = all.slice(0, 1 + Math.floor(race.cut * (all.length - 1))).map((m, i) => ({ ...m, frame: i + 1 }));
+        // frames 2 .. length + 1: the span opens after the first crossing's frame and may close after the last
+        const [startFrame, endFrame] = [a, b].map((f) => 2 + Math.round(f * (history.length - 1))).sort((x, y) => x - y) as [number, number];
+        const furthestBefore = Math.max(-1, ...history.filter((m) => m.frame < startFrame).map(progressOf));
+        const inside = history.filter((m) => m.frame >= startFrame && m.frame < endFrame);
+        const front = inside.find((m) => progressOf(m) > furthestBefore);
+        fc.pre(front !== undefined);
+        const start = history[startFrame - 2]!.at;
+        const end = (history[endFrame - 1] ?? history.at(-1)!).at;
+        const span = neutralisation({ start, end, startFrame, endFrame });
+        const lines = gapperLines(run(viewOf(history, { phases: [span] })), { kind: 'fixed', lapMs: 90_000 });
         expect(lines.phases).toHaveLength(1);
         const [phase] = lines.phases;
-        expect(phase!.fromLap).toBeCloseTo(leaderAt(start), 9);
+        expect(phase!.fromLap).toBeCloseTo(progressOf(front!) / MINI_SECTORS, 9);
         if (!phase!.toLap.known) throw new Error(`a closed phase has no toLap: ${phase!.toLap.reason}`);
-        expect(phase!.toLap.value).toBeCloseTo(leaderAt(end), 9);
+        expect(phase!.toLap.value).toBeCloseTo(Math.max(...inside.map(progressOf)) / MINI_SECTORS, 9);
         expect(phase!.fromLap).toBeLessThanOrEqual(phase!.toLap.value);
       }),
     );

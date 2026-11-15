@@ -12,6 +12,8 @@ import { gapperLines } from '../../src/shared/gapper-lines.ts';
 import { ghostLinesOf } from '../../src/rejoin/ghost-lines.ts';
 import { REJOIN_CONFIG } from '../../src/rejoin/index.ts';
 import { byTime, deltaOf, gaps, guarded, plain, progressAtX, progressOf, run, viewOf } from './race.ts';
+import { gapsOutput } from './output.ts';
+import type { GapsOutput } from '../../src/gaps/index.ts';
 
 const LEADER: GapperReference = { kind: 'leaderAverage' };
 const FIXED: GapperReference = { kind: 'fixed', lapMs: 90_000 };
@@ -65,6 +67,27 @@ describe('gaps: the gapper origin (row 1: a lights-out race is unchanged)', () =
   it('outside a race the origin is notApplicable; before lights out it is notReceived', () => {
     expect(gapperLines(run(viewOf(FULL, { kind: 'practice', lightsOutAt: null })), LEADER).origin).toEqual(unknown('notApplicable'));
     expect(gapperLines(run(viewOf([], { lightsOutAt: null })), LEADER).origin).toEqual(unknown('notReceived'));
+  });
+});
+
+// SP4.3c Task 6 fix round (F2, C3): the origin is required; an absent field is never read as lights out.
+describe('gaps: the origin is required', () => {
+  it('an output without an origin does not type check', () => {
+    const { origin: _origin, ...rest } = gapsOutput({ raceStartAt: known(0, 0) });
+    // @ts-expect-error `origin` is required: an output without it says nothing about where the gapper starts (C3)
+    const without: GapsOutput = rest;
+    expect(without).not.toHaveProperty('origin');
+  });
+
+  it('an unknown origin draws no line even with a known race start: the origin decides, not raceStartAt', () => {
+    const lines = gapperLines(gapsOutput({ raceStartAt: known(0, 0), origin: unknown('notReceived') }), FIXED);
+    expect(lines.origin).toEqual(unknown('notReceived'));
+    expect(lines.cars.every((c) => c.points.length === 0)).toBe(true);
+  });
+
+  it("the tests' hand-built output starts at lights out at a known race start, else is notReceived", () => {
+    expect(gapsOutput({ raceStartAt: known(4_200, 4_200) }).origin).toEqual(known({ kind: 'lightsOut', at: 4_200 }, 4_200));
+    expect(gapsOutput().origin).toEqual(unknown('notReceived'));
   });
 });
 
