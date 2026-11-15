@@ -3,7 +3,7 @@ import { known, unknown, type SessionTime, type BandReading, type BandState, typ
 import type { DeepReadonly, EngineView, QuickCalculator } from '@pitwall/engine/readers';
 import { behaviourFor } from '../shared/behaviour.ts';
 import { CAR_STATUS_READS } from '../shared/car-status.ts';
-import { bandsFor, judgedLapClasses, judgedLaps, measured, pressureBands, stateOf, type Band, type Measure } from './bands.ts';
+import { bandsFor, judgedLapClasses, judgedLaps, measured, stateOf, type Band, type Measure } from './bands.ts';
 import { CAR_BANDS_BEHAVIOUR, type CarBandsEffect } from './behaviour.ts';
 import { CAR_BANDS, CAR_BANDS_CONFIG, type CarBandsOutput } from './index.ts';
 
@@ -46,6 +46,17 @@ const lapOnlyReading =
     state: unknown('notApplicable'),
   });
 
+/**
+ * A tyre channel of a car no human drives (SP4.3c §5.6 D): the value only, no band and no judgement, live or of the lap.
+ */
+const notJudged: Reader = (value) => ({
+  value,
+  state: unknown('notApplicable'),
+  band: unknown('notApplicable'),
+  outForFullLap: false,
+  lapState: unknown('notApplicable'),
+});
+
 /** One corner's pressure band, or the whole band's reason. */
 const cornerOf = (bands: Known<Corners<Band>>, corner: keyof Corners<Band>): Known<Band> =>
   bands.known ? known(bands.value[corner], bands.at) : bands;
@@ -57,21 +68,20 @@ const bandsOfCar = (
   effect: CarBandsEffect,
   at: SessionTime,
 ): CarBands => {
-  const b = bandsFor(car.tyres.visualCompound, c);
+  const b = bandsFor(car, car.tyres, c, at);
   // the judged lap is the evidence for a whole lap out of band, against the bands of the compound it was driven on
   const r = judged?.channelRange;
-  const l = judged === undefined ? b : bandsFor(judged.visualCompound, c);
-  // the pressure band is the car's setup, whatever the compound
-  const pressure = pressureBands(car, c, at);
+  const l = judged === undefined ? b : bandsFor(car, judged, c, at);
   // in the box the bands are off: every channel is judged per lap only
   const live = effect.bandsOff === true ? lapOnlyReading : reading;
-  // tyre channels are judged by their lap's mid-range, the brakes and the engine by their peak
-  const tyreReading = live('midRange');
+  // tyre channels are judged by their lap's mid-range, the brakes and the engine by their peak; only on a human's car
+  const tyreReading = effect.tyresJudged === true ? live('midRange') : notJudged;
+  const surfaceReading = effect.tyresJudged === true ? lapOnlyReading('midRange') : notJudged;
   const fixed = (band: Band) => known(band, at);
   const tyre = (corner: 'fl' | 'fr' | 'rl' | 'rr') => ({
-    surfaceC: lapOnlyReading('midRange')(car.tyres.corners[corner].surfaceTempC, fixed(b.surface), r?.tyres[corner].surfaceC, fixed(l.surface)),
-    carcassC: tyreReading(car.tyres.corners[corner].carcassTempC, fixed(b.carcass), r?.tyres[corner].carcassC, fixed(l.carcass)),
-    pressurePsi: tyreReading(car.tyres.corners[corner].pressurePsi, cornerOf(pressure, corner), r?.tyres[corner].pressurePsi, cornerOf(pressure, corner)),
+    surfaceC: surfaceReading(car.tyres.corners[corner].surfaceTempC, fixed(b.surface), r?.tyres[corner].surfaceC, fixed(l.surface)),
+    carcassC: tyreReading(car.tyres.corners[corner].carcassTempC, b.carcass, r?.tyres[corner].carcassC, l.carcass),
+    pressurePsi: tyreReading(car.tyres.corners[corner].pressurePsi, cornerOf(b.pressure, corner), r?.tyres[corner].pressurePsi, cornerOf(l.pressure, corner)),
   });
   const brake = (corner: 'fl' | 'fr' | 'rl' | 'rr') => lapOnlyReading('peak')(car.condition.brakes[corner].tempC, fixed(b.brakes), r?.brakesC[corner], fixed(l.brakes));
   return {
@@ -88,7 +98,7 @@ const bandsOfCar = (
 export const carBandsCalculator: QuickCalculator<CarBandsOutput> = {
   id: CAR_BANDS,
   kind: 'quick',
-  reads: ['tyres', 'condition', 'ownCar', 'laps', CAR_STATUS_READS, 'spans:car-activity-race', 'spans:weekend-phase'],
+  reads: ['tyres', 'condition', 'ownCar', 'laps', CAR_STATUS_READS, 'spans:car-driver', 'spans:car-activity-race', 'spans:weekend-phase'],
   cadence: { hz: 4 },
   compute(view: EngineView): CarBandsOutput {
     const config = CAR_BANDS_CONFIG.read(view);

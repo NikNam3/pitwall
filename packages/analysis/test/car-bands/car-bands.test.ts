@@ -11,17 +11,32 @@ import { withOwnCar, withSetup } from '../own-car.ts';
 /** The calculator through its guarded view (C41): every case fails on a read it does not declare. */
 const calc = guardedQuick(carBandsCalculator);
 
-// Every case runs on TEST_BANDS, a fixed config (the defaults before 2026-10-30), so no case depends on the defaults;
-// only 'the default bands' pins those. Soft is a dry compound. The engine band's lo is pinned to 0 (engineHi only).
-// The pressure band follows the player's setup (Q3 A, Q5 A): setup - 1.5 psi to setup + 1.0 psi; a car `withSetup(c, 25)`
-// has the band 23.5-26 psi on every corner. Every other car's pressure band is unknown.
+// Every case runs on TEST_BANDS, a fixed config of the surface, brake and engine bands (the defaults before 2026-10-30),
+// so no case depends on those defaults; only 'the default bands' pins them. The carcass and pressure bands are the
+// defaults (SP4.3c §5.6): per actual compound, its reference temperature Tref (C1 105, C2 95, C3 90, C4 85, C5 80, inter
+// 65, wet 55 °C) -20 ... +15 °C; the builder's car and laps run C3 (carcass 70-105 °C). The pressure band is the setup on
+// the same carcass band by the gas law: setup x (Tref - 20 + 273.15) / (Tref + 273.15) ... setup x (Tref + 15 + 273.15) /
+// (Tref + 273.15); a C3 car `withSetup(c, 25)` has the band 23.62-26.03 psi (`P25`) on every corner. A car without a
+// setup has an unknown pressure band. Tyre bands are judged on human-driven cars only (§5.6 D): `bandsOf` opens a `human`
+// car-driver span for its car unless `driver` says otherwise. The engine band's lo is pinned to 0 (engineHi only).
 // The tyre surface and the brakes have no live state (rulings 2026-10-30: the surface swings 30-60 °C within a lap, the
 // brakes fall below the band on many straights); only outForFullLap judges them.
 const TEST_BANDS = {
   surfaceDryLo: 85, surfaceDryHi: 105, surfaceInterLo: 60, surfaceInterHi: 90, surfaceWetLo: 50, surfaceWetHi: 80,
-  carcassDryLo: 85, carcassDryHi: 110, carcassInterLo: 55, carcassInterHi: 75, carcassWetLo: 45, carcassWetHi: 65,
-  pressureBelowSetupPsi: 1.5, pressureAboveSetupPsi: 1.0, brakeLo: 300, brakeHi: 1000, engineHi: 125,
+  brakeLo: 300, brakeHi: 1000, engineHi: 125,
 };
+/** The game's reference carcass temperature per actual compound (research 20 §1). */
+const TREF = { C1: 105, C2: 95, C3: 90, C4: 85, C5: 80, inter: 65, wet: 55 } as const;
+/** The pressure band of `setup` psi on a compound of reference `tref` °C (§5.6 B). */
+const gasBand = (setup: number, tref: number) => ({ lo: (setup * (tref - 20 + 273.15)) / (tref + 273.15), hi: (setup * (tref + 15 + 273.15)) / (tref + 273.15) });
+/** A known band equal to `b` up to float rounding. */
+const closeBand = (b: { lo: number; hi: number }, digits = 9) => ({ known: true, value: { lo: expect.closeTo(b.lo, digits), hi: expect.closeTo(b.hi, digits) }, at: 0 });
+/** A C3 car's pressure band on its 25 psi setup: 23.62-26.03 psi. */
+const P25 = closeBand(gasBand(25, TREF.C3));
+/** The C3 carcass band: 90 - 20 ... 90 + 15 °C. */
+const C3_CARCASS = known({ lo: 70, hi: 105 }, 0);
+/** A `human` car-driver span of each car (§5.6 D): the cars whose tyre bands are judged. */
+const humans = (...ids: number[]) => ids.map((id) => openSpan('car-driver', 'human', { car: id }));
 const NO_LIVE_STATE = unknown('notApplicable');
 /** `lapState` without a judged lap, its range or its band: unknown, whatever the reason. */
 const NO_LAP_STATE = expect.objectContaining({ known: false });
@@ -34,9 +49,11 @@ const withSurface = (c: number) =>
 const bandsOf = (
   car: CarState,
   laps: LapRecord[] = [],
-  opts: { config?: EngineView['config']; session?: object; status?: string; spans?: OpenSpan[]; phase?: WeekendPhase } = {},
+  opts: { config?: EngineView['config']; session?: object; status?: string; spans?: OpenSpan[]; phase?: WeekendPhase; driver?: 'human' | 'ai' | 'none' } = {},
 ): CarBands => {
   const config = opts.config ?? { [CAR_BANDS_CONFIG.key]: TEST_BANDS };
+  const driver = opts.driver ?? 'human';
+  const driverSpans = driver === 'none' ? [] : [openSpan('car-driver', driver, { car: car.id })];
   const view = situatedView({
     cars: [car],
     ...(opts.phase && { phase: opts.phase }),
@@ -44,7 +61,7 @@ const bandsOf = (
     config,
     ...(opts.session && { session: opts.session }),
     ...(opts.status && { status: { [car.id]: opts.status } }),
-    ...(opts.spans && { spans: opts.spans }),
+    spans: [...driverSpans, ...(opts.spans ?? [])],
   });
   const out = calc.compute(view);
   return out[car.id]!;
@@ -56,23 +73,24 @@ const surfaceRange = (min: number, max: number): ChannelRange['tyres'] =>
   perCorner(() => ({ surfaceC: known({ min, max }, 0), carcassC: known({ min: 90, max: 100 }, 0), pressurePsi: known({ min: 23, max: 27 }, 0) }));
 
 describe('car-bands calculator', () => {
-  it('is a quick calculator at 4 Hz that reads tyres, condition, laps, the own car, car-status and the race activity, not the session', () => {
+  it('is a quick calculator at 4 Hz that reads tyres, condition, laps, the own car, car-status, car-driver and the race activity, not the session', () => {
     expect(carBandsCalculator.id).toBe(CAR_BANDS);
     expect(carBandsCalculator.kind).toBe('quick');
     expect(carBandsCalculator.cadence).toEqual({ hz: 4 });
-    expect(carBandsCalculator.reads).toEqual(expect.arrayContaining(['tyres', 'condition', 'laps', 'ownCar', 'spans:car-status', 'spans:car-activity-race', 'spans:weekend-phase']));
+    expect(carBandsCalculator.reads).toEqual(expect.arrayContaining(['tyres', 'condition', 'laps', 'ownCar', 'spans:car-status', 'spans:car-activity-race', 'spans:weekend-phase', 'spans:car-driver']));
     expect(carBandsCalculator.reads).not.toContain('session');
   });
 
-  it('the default bands: dry, inter and wet tyre bands; the pressure band on the setup; one band each for brakes and engine', () => {
+  it('the default bands: slick, inter and wet surface; the carcass per actual compound; the pressure band on the setup; one band each for brakes and engine', () => {
     const on = (visual: 'inter' | 'wet' | 'medium', actual: 'inter' | 'wet' | 'C2') =>
       bandsOf(withSetup(carState({ tyres: { visualCompound: visual, actualCompound: actual } }), 25), [], { config: {} });
     const tyreBands = (b: CarBands) => [b.tyres.fl.surfaceC.band, b.tyres.fl.carcassC.band];
-    expect(tyreBands(on('medium', 'C2'))).toEqual([known({ lo: 55, hi: 100 }, 0), known({ lo: 70, hi: 105 }, 0)]);
-    expect(tyreBands(on('inter', 'inter'))).toEqual([known({ lo: 30, hi: 85 }, 0), known({ lo: 55, hi: 95 }, 0)]);
-    expect(tyreBands(on('wet', 'wet'))).toEqual([known({ lo: 50, hi: 80 }, 0), known({ lo: 45, hi: 65 }, 0)]);
+    // slick and inter surface unchanged; the wet surface lowered to 30-55 °C (§5.6 C)
+    expect(tyreBands(on('medium', 'C2'))).toEqual([known({ lo: 55, hi: 100 }, 0), known({ lo: 75, hi: 110 }, 0)]);
+    expect(tyreBands(on('inter', 'inter'))).toEqual([known({ lo: 30, hi: 85 }, 0), known({ lo: 45, hi: 80 }, 0)]);
+    expect(tyreBands(on('wet', 'wet'))).toEqual([known({ lo: 30, hi: 55 }, 0), known({ lo: 35, hi: 70 }, 0)]);
     const dry = on('medium', 'C2');
-    expect(dry.tyres.fl.pressurePsi.band).toMatchObject({ known: true, value: { lo: 23.5, hi: 26 } });
+    expect(dry.tyres.fl.pressurePsi.band).toEqual(closeBand(gasBand(25, TREF.C2)));
     expect([dry.brakesC.fl.band, dry.engineC.band]).toEqual([known({ lo: 300, hi: 1000 }, 0), known({ lo: 0, hi: 135 }, 0)]);
   });
 
@@ -121,10 +139,10 @@ describe('car-bands calculator', () => {
 
   it('the band comes from the config: an override moves it, field by field over the defaults', () => {
     const d = CAR_BANDS_CONFIG.defaults;
-    const bands = bandsOf(carState(), [], { config: { [CAR_BANDS_CONFIG.key]: { surfaceDryHi: 120, carcassDryHi: 90 } } });
+    const bands = bandsOf(carState(), [], { config: { [CAR_BANDS_CONFIG.key]: { surfaceDryHi: 120, carcassAboveRefC: 0 } } });
     expect(bands.tyres.fl.surfaceC.band).toEqual(known({ lo: d.surfaceDryLo, hi: 120 }, 0));
-    // the builder's carcass is 95 °C: above the moved band
-    expect(bands.tyres.fl.carcassC).toMatchObject({ band: known({ lo: d.carcassDryLo, hi: 90 }, 0), state: { known: true, value: 'above' } });
+    // the builder's C3 carcass is 95 °C: above the moved band 70-90
+    expect(bands.tyres.fl.carcassC).toMatchObject({ band: known({ lo: 70, hi: 90 }, 0), state: { known: true, value: 'above' } });
   });
 
   it('carcass, pressure, brakes and engine each use their own band', () => {
@@ -136,26 +154,26 @@ describe('car-bands calculator', () => {
       25,
     );
     const b = bandsOf(car);
-    expect(b.tyres.fl.carcassC).toMatchObject({ band: known({ lo: 85, hi: 110 }, 0), state: { known: true, value: 'above' } });
-    expect(b.tyres.fl.pressurePsi).toMatchObject({ band: { known: true, value: { lo: 23.5, hi: 26 } }, state: { known: true, value: 'below' } });
+    expect(b.tyres.fl.carcassC).toMatchObject({ band: C3_CARCASS, state: { known: true, value: 'above' } });
+    expect(b.tyres.fl.pressurePsi).toMatchObject({ band: P25, state: { known: true, value: 'below' } });
     expect(b.tyres.fr.pressurePsi.state).toMatchObject({ known: true, value: 'in' });
     expect(b.brakesC.rr).toMatchObject({ band: known({ lo: 300, hi: 1000 }, 0), value: known(1100, 0) });
     expect(b.engineC).toMatchObject({ band: known({ lo: 0, hi: 125 }, 0), value: known(130, 0), state: { known: true, value: 'above' } });
   });
 
-  it('inter tyres use the inter band; wet tyres use the wet band; slicks use the dry band', () => {
+  it("inter tyres use the inter bands; wet tyres use the wet bands; slicks use the dry surface band and their compound's carcass band", () => {
     const on = (visual: 'inter' | 'wet' | 'medium', actual: 'inter' | 'wet' | 'C2') =>
       bandsOf(carState({ tyres: { visualCompound: visual, actualCompound: actual } }));
-    // the builder's 95 °C carcass is in the dry band (85-110) but above the inter band (55-75) and the wet band (45-65)
+    // the builder's 95 °C carcass is in the C2 band (75-110) but above the inter band (45-80) and the wet band (35-70)
     const inter = on('inter', 'inter');
     expect(inter.tyres.fl.surfaceC.band).toEqual(known({ lo: 60, hi: 90 }, 0));
-    expect(inter.tyres.fl.carcassC).toMatchObject({ band: known({ lo: 55, hi: 75 }, 0), state: { known: true, value: 'above' } });
+    expect(inter.tyres.fl.carcassC).toMatchObject({ band: known({ lo: 45, hi: 80 }, 0), state: { known: true, value: 'above' } });
     const wet = on('wet', 'wet');
     expect(wet.tyres.fl.surfaceC.band).toEqual(known({ lo: 50, hi: 80 }, 0));
-    expect(wet.tyres.fl.carcassC).toMatchObject({ band: known({ lo: 45, hi: 65 }, 0), state: { known: true, value: 'above' } });
+    expect(wet.tyres.fl.carcassC).toMatchObject({ band: known({ lo: 35, hi: 70 }, 0), state: { known: true, value: 'above' } });
     const dry = on('medium', 'C2');
     expect(dry.tyres.fl.surfaceC.band).toEqual(known({ lo: 85, hi: 105 }, 0));
-    expect(dry.tyres.fl.carcassC).toMatchObject({ band: known({ lo: 85, hi: 110 }, 0), state: { known: true, value: 'in' } });
+    expect(dry.tyres.fl.carcassC).toMatchObject({ band: known({ lo: 75, hi: 110 }, 0), state: { known: true, value: 'in' } });
   });
 
   it('outForFullLap when the last lap\'s channelRange min is above the band; false when the min was inside', () => {
@@ -255,7 +273,7 @@ describe('car-bands calculator', () => {
   });
 
   it('is stateless: the same view gives the same output twice', () => {
-    const view = situatedView({ cars: [withSurface(110)], history: { laps: [lap({ lapNumber: 2 })] }, config: { [CAR_BANDS_CONFIG.key]: TEST_BANDS } });
+    const view = situatedView({ cars: [withSurface(110)], history: { laps: [lap({ lapNumber: 2 })] }, config: { [CAR_BANDS_CONFIG.key]: TEST_BANDS }, spans: humans(0) });
     expect(calc.compute(view)).toEqual(calc.compute(view));
   });
 
@@ -322,7 +340,7 @@ describe('car-bands calculator', () => {
       expect(bandsOf(withSurface(130), [tyreLap('surfaceC', 80, 100)]).tyres.fl.surfaceC.lapState).toEqual(lapStateOf('in'));
     });
 
-    it('the carcass and the pressure by their mid-range: carcass 110-114 °C (112) above 85-110; pressure 26-28 psi (27) above the setup band 23.5-26', () => {
+    it('the carcass and the pressure by their mid-range: carcass 110-114 °C (112) above the C3 band 70-105; pressure 26-28 psi (27) above the setup band 23.62-26.03', () => {
       expect(bandsOf(carState(), [tyreLap('carcassC', 110, 114)]).tyres.rl.carcassC.lapState).toEqual(lapStateOf('above'));
       expect(bandsOf(carState(), [tyreLap('carcassC', 80, 100)]).tyres.rl.carcassC.lapState).toEqual(lapStateOf('in'));
       const player = withSetup(carState(), 25);
@@ -402,21 +420,21 @@ describe('car-bands calculator', () => {
     });
   });
 
-  describe('the slick carcass band 70-105 °C (Q2)', () => {
+  describe('the C3 carcass band keeps 70-105 °C (Q2, §5.6 A)', () => {
     const carcass = (c: number) =>
       bandsOf(carState({ tyres: { corners: perCorner(() => ({ carcassTempC: known(c, 0) })) } }), [], { config: {} }).tyres.fl.carcassC;
 
     it('carcass 72 °C is in band', () => {
-      expect(carcass(72)).toMatchObject({ band: known({ lo: 70, hi: 105 }, 0), state: { known: true, value: 'in' } });
+      expect(carcass(72)).toMatchObject({ band: C3_CARCASS, state: { known: true, value: 'in' } });
     });
 
     it('carcass 106 °C is above', () => {
-      expect(carcass(106)).toMatchObject({ band: known({ lo: 70, hi: 105 }, 0), state: { known: true, value: 'above' } });
+      expect(carcass(106)).toMatchObject({ band: C3_CARCASS, state: { known: true, value: 'above' } });
     });
   });
 
-  describe("the player's pressure band on the setup (Q3 A, Q5 A): setup - 1.5 psi to setup + 1.0 psi", () => {
-    // the friend's setup: 24.2 psi front, 20.9 psi rear
+  describe("the player's pressure band on the setup (Q3 A, Q5 A, §5.6 B): the setup on the carcass band by the gas law", () => {
+    // the friend's setup: 24.2 psi front, 20.9 psi rear; on C3 the rear band is 19.75-21.76 psi, the front 22.87-25.20
     const SETUP = { fl: 24.2, fr: 24.2, rl: 20.9, rr: 20.9 };
     const pressures = (p: { fl: number; fr: number; rl: number; rr: number }) =>
       carState({ tyres: { corners: { fl: { pressurePsi: known(p.fl, 0) }, fr: { pressurePsi: known(p.fr, 0) }, rl: { pressurePsi: known(p.rl, 0) }, rr: { pressurePsi: known(p.rr, 0) } } } });
@@ -425,12 +443,14 @@ describe('car-bands calculator', () => {
     const notReceived = { state: unknown('notReceived'), band: unknown('notReceived'), outForFullLap: false, lapState: NO_LAP_STATE };
 
     it("the player's pressure band follows the setup", () => {
-      const player = withSetup(pressures({ fl: 24.2, fr: 23, rl: 19.3, rr: 21.9 }), SETUP);
+      const player = withSetup(pressures({ fl: 24.2, fr: 23, rl: 19.3, rr: 21.5 }), SETUP);
       const b = bandsOf(player, [], { config: {} }).tyres;
-      expect(b.rl.pressurePsi).toMatchObject({ value: known(19.3, 0), band: { known: true, value: { lo: 19.4, hi: 21.9 } }, state: { known: true, value: 'below' } });
-      expect(b.rr.pressurePsi).toMatchObject({ band: { known: true, value: { lo: 19.4, hi: 21.9 } }, state: { known: true, value: 'in' } });
-      expect(b.fl.pressurePsi).toMatchObject({ band: { known: true, value: { lo: 22.7, hi: 25.2 } }, state: { known: true, value: 'in' } });
-      expect(b.fr.pressurePsi).toMatchObject({ band: { known: true, value: { lo: 22.7, hi: 25.2 } }, state: { known: true, value: 'in' } });
+      const rear = closeBand(gasBand(20.9, TREF.C3));
+      const frontBand = closeBand(gasBand(24.2, TREF.C3));
+      expect(b.rl.pressurePsi).toMatchObject({ value: known(19.3, 0), band: rear, state: { known: true, value: 'below' } });
+      expect(b.rr.pressurePsi).toMatchObject({ band: rear, state: { known: true, value: 'in' } });
+      expect(b.fl.pressurePsi).toMatchObject({ band: frontBand, state: { known: true, value: 'in' } });
+      expect(b.fr.pressurePsi).toMatchObject({ band: frontBand, state: { known: true, value: 'in' } });
       // the judged lap is judged against the same band: a rear at 17-19 psi all lap is out, a front at 23-25 psi is not
       const lowLap = lap({ lapNumber: 3, channelRange: rangeOf({ tyres: pressureRange(17, 19) }) });
       const front = lap({ lapNumber: 3, channelRange: rangeOf({ tyres: pressureRange(23, 25) }) });
@@ -438,13 +458,13 @@ describe('car-bands calculator', () => {
       expect(bandsOf(player, [front], { config: {} }).tyres.fl.pressurePsi.outForFullLap).toBe(false);
     });
 
-    it('the offsets come from the config', () => {
+    it("the pressure band moves with the carcass band's offsets from the config; no psi offset of its own", () => {
       const player = withSetup(pressures({ fl: 24.2, fr: 24.2, rl: 19.3, rr: 20.9 }), SETUP);
-      const b = bandsOf(player, [], { config: { [CAR_BANDS_CONFIG.key]: { pressureBelowSetupPsi: 2, pressureAboveSetupPsi: 0.5 } } }).tyres.rl.pressurePsi;
-      expect(b).toMatchObject({ band: { known: true, value: { lo: 18.9, hi: 21.4 } }, state: { known: true, value: 'in' } });
-      expect(CAR_BANDS_CONFIG.defaults).toMatchObject({ pressureBelowSetupPsi: 1.5, pressureAboveSetupPsi: 1.0 });
-      expect(CAR_BANDS_CONFIG.defaults).not.toHaveProperty('pressureLo');
-      expect(CAR_BANDS_CONFIG.defaults).not.toHaveProperty('pressureHi');
+      // carcass 90 - 40 ... 90 + 5 °C: the rear band 20.9 x 323.15 / 363.15 ... 20.9 x 368.15 / 363.15 = 18.60-21.19 psi
+      const b = bandsOf(player, [], { config: { [CAR_BANDS_CONFIG.key]: { carcassBelowRefC: 40, carcassAboveRefC: 5 } } }).tyres.rl.pressurePsi;
+      expect(b).toMatchObject({ band: closeBand({ lo: (20.9 * 323.15) / 363.15, hi: (20.9 * 368.15) / 363.15 }), state: { known: true, value: 'in' } });
+      expect(CAR_BANDS_CONFIG.defaults).toMatchObject({ carcassBelowRefC: 20, carcassAboveRefC: 15 });
+      for (const gone of ['pressureBelowSetupPsi', 'pressureAboveSetupPsi', 'pressureLo', 'pressureHi']) expect(CAR_BANDS_CONFIG.defaults).not.toHaveProperty(gone);
     });
 
     it("another car's pressure band is unknown", () => {
@@ -454,11 +474,13 @@ describe('car-bands calculator', () => {
         cars: [withSetup(carState(), 25), rival],
         history: { laps: [lap({ carId: carId(1), lapNumber: 3, channelRange: rangeOf({ tyres: pressureRange(10, 12) }) })] },
         config: { [CAR_BANDS_CONFIG.key]: TEST_BANDS },
+        // the rival is another human online: its tyre bands are judged, but it has no setup
+        spans: humans(0, 1),
       });
       const b = calc.compute(view)[carId(1)]!;
       for (const corner of corners) expect(b.tyres[corner].pressurePsi).toEqual({ value: known(32, 0), ...notReceived });
       // the rival's other bands stay
-      expect(b.tyres.fl.carcassC.band).toEqual(known({ lo: 85, hi: 110 }, 0));
+      expect(b.tyres.fl.carcassC.band).toEqual(C3_CARCASS);
     });
 
     it("the player's band before the setup arrives is unknown", () => {
@@ -466,14 +488,18 @@ describe('car-bands calculator', () => {
       for (const player of [withOwnCar(carState()), carState()]) {
         const b = bandsOf(player, [low]);
         for (const corner of corners) expect(b.tyres[corner].pressurePsi).toEqual({ value: known(25, 0), ...notReceived });
-        expect(b.tyres.fl.carcassC.band).toEqual(known({ lo: 85, hi: 110 }, 0));
+        expect(b.tyres.fl.carcassC.band).toEqual(C3_CARCASS);
       }
     });
   });
 
-  describe('behaviour table (C44): a row per car-status and race-activity kind', () => {
-    it('exports CAR_BANDS_BEHAVIOUR over car-status, the race activity and the weekend phase', () => {
-      expect(Object.keys(CAR_BANDS_BEHAVIOUR).sort()).toEqual(['car-activity-race', 'car-status', 'weekend-phase']);
+  describe('behaviour table (C44): a row per car-status, car-driver and race-activity kind', () => {
+    it('exports CAR_BANDS_BEHAVIOUR over car-status, car-driver, the race activity and the weekend phase', () => {
+      expect(Object.keys(CAR_BANDS_BEHAVIOUR).sort()).toEqual(['car-activity-race', 'car-driver', 'car-status', 'weekend-phase']);
+    });
+
+    it('car-driver: a row for exactly its kinds, ai and human', () => {
+      expect(Object.keys(CAR_BANDS_BEHAVIOUR['car-driver']!).sort()).toEqual(['ai', 'human']);
     });
 
     it('weekend phase: only race asks for the lap-1 rule; practice, qualifying and none do not', () => {
@@ -513,8 +539,8 @@ describe('car-bands calculator', () => {
       for (const corner of corners) {
         for (const channel of ['surfaceC', 'carcassC', 'pressurePsi'] as const) expect(b.tyres[corner][channel].state).toEqual(NO_LIVE_STATE);
         expect(b.brakesC[corner].state).toEqual(NO_LIVE_STATE);
-        expect(b.tyres[corner].carcassC).toMatchObject({ value: known(120, 0), band: known({ lo: 85, hi: 110 }, 0), outForFullLap: true });
-        expect(b.tyres[corner].pressurePsi).toMatchObject({ value: known(32, 0), band: { known: true, value: { lo: 23.5, hi: 26 } } });
+        expect(b.tyres[corner].carcassC).toMatchObject({ value: known(120, 0), band: C3_CARCASS, outForFullLap: true });
+        expect(b.tyres[corner].pressurePsi).toMatchObject({ value: known(32, 0), band: P25 });
       }
       expect(b.engineC).toEqual({ value: known(130, 0), state: NO_LIVE_STATE, band: known({ lo: 0, hi: 125 }, 0), outForFullLap: false, lapState: lapStateOf('in') });
     });
@@ -525,7 +551,7 @@ describe('car-bands calculator', () => {
         cars: [hot, other],
         history: { laps: [hotLap] },
         config: { [CAR_BANDS_CONFIG.key]: TEST_BANDS },
-        spans: [openSpan('car-activity-race', 'boxStop', { car: 0 }), openSpan('car-activity-race', 'racingLap', { car: 1 })],
+        spans: [openSpan('car-activity-race', 'boxStop', { car: 0 }), openSpan('car-activity-race', 'racingLap', { car: 1 }), ...humans(0, 1)],
       });
       const out = calc.compute(view);
       expect(out[carId(0)]!.engineC.state).toEqual(NO_LIVE_STATE);
@@ -534,7 +560,7 @@ describe('car-bands calculator', () => {
 
     // car-status decides (C43); Task 24 removed the transitional `car.active` these cases contradicted
     const statusOut = (kind: string) =>
-      calc.compute(situatedView({ cars: [hot], config: { [CAR_BANDS_CONFIG.key]: TEST_BANDS }, status: { 0: kind } }))[carId(0)];
+      calc.compute(situatedView({ cars: [hot], config: { [CAR_BANDS_CONFIG.key]: TEST_BANDS }, status: { 0: kind }, spans: humans(0) }))[carId(0)];
 
     it('car-status competing: the car has its bands', () => {
       expect(statusOut('competing')?.engineC.state).toEqual(above);
@@ -550,6 +576,159 @@ describe('car-bands calculator', () => {
 
     it('car-status absent: no entry', () => {
       expect(statusOut('absent')).toBeUndefined();
+    });
+  });
+
+  describe("bands per actual compound around the game's reference temperature (SP4.3c §5.6 A–C)", () => {
+    type Slick = 'C1' | 'C2' | 'C3' | 'C4' | 'C5';
+    const VISUAL = { C1: 'hard', C2: 'hard', C3: 'medium', C4: 'soft', C5: 'soft', inter: 'inter', wet: 'wet' } as const;
+    /** A car on `actual` whose carcass is `c` °C on every corner, with a 23.5 psi setup, on the default config. */
+    const on = (actual: Slick | 'inter' | 'wet', c = 95, laps: LapRecord[] = [], driver?: 'human' | 'ai' | 'none') =>
+      bandsOf(
+        withSetup(carState({ tyres: { visualCompound: VISUAL[actual], actualCompound: actual, corners: perCorner(() => ({ carcassTempC: known(c, 0) })) } }), 23.5),
+        laps,
+        { config: {}, ...(driver && { driver }) },
+      );
+    /** A lap on `actual` whose carcass ranged `min`-`max` on every corner. */
+    const carcassLap = (actual: Slick | 'inter' | 'wet', min: number, max: number) =>
+      lap({
+        lapNumber: 3,
+        visualCompound: VISUAL[actual],
+        actualCompound: actual,
+        channelRange: rangeOf({ tyres: perCorner(() => ({ surfaceC: known({ min: 60, max: 80 }, 0), carcassC: known({ min, max }, 0), pressurePsi: known({ min: 23, max: 24 }, 0) })) }),
+      });
+
+    it('the carcass band of each actual compound is its reference -20 ... +15 °C: C1 85-120, C2 75-110, C3 70-105, C4 65-100, C5 60-95, inter 45-80, wet 35-70', () => {
+      const expected = { C1: [85, 120], C2: [75, 110], C3: [70, 105], C4: [65, 100], C5: [60, 95], inter: [45, 80], wet: [35, 70] } as const;
+      for (const [actual, [lo, hi]] of Object.entries(expected)) {
+        const b = on(actual as keyof typeof expected);
+        for (const corner of corners) expect(b.tyres[corner].carcassC.band, actual).toEqual(known({ lo, hi }, 0));
+      }
+    });
+
+    it('a C1 carcass at 110 °C is in band; a C3 carcass at 110 °C is above', () => {
+      expect(on('C1', 110).tyres.fl.carcassC).toMatchObject({ band: known({ lo: 85, hi: 120 }, 0), state: { known: true, value: 'in' } });
+      expect(on('C3', 110).tyres.fl.carcassC).toMatchObject({ band: known({ lo: 70, hi: 105 }, 0), state: { known: true, value: 'above' } });
+    });
+
+    it('the band follows the actual compound, not the sidewall colour: a soft that is C3 has the C3 band, a soft that is C5 the C5 band', () => {
+      const soft = (actual: 'C3' | 'C5') => bandsOf(carState({ tyres: { visualCompound: 'soft', actualCompound: actual } }), [], { config: {} });
+      expect(soft('C3').tyres.fl.carcassC.band).toEqual(known({ lo: 70, hi: 105 }, 0));
+      expect(soft('C5').tyres.fl.carcassC.band).toEqual(known({ lo: 60, hi: 95 }, 0));
+    });
+
+    it('the judged lap is judged against the carcass band of the actual compound it was driven on: a C1 lap at 105-115 °C (110) is in, a C3 lap at the same is above', () => {
+      for (const now of ['C3', 'C1'] as const) {
+        expect(on(now, 95, [carcassLap('C1', 105, 115)]).tyres.rl.carcassC.lapState, now).toEqual(lapStateOf('in'));
+        expect(on(now, 95, [carcassLap('C3', 105, 115)]).tyres.rl.carcassC.lapState, now).toEqual(lapStateOf('above'));
+      }
+    });
+
+    it('an inter at 81 °C is out of band (above 45-80), live and on its judged lap, like every band', () => {
+      const b = on('inter', 81, [carcassLap('inter', 80, 82)]);
+      for (const corner of corners) {
+        expect(b.tyres[corner].carcassC).toMatchObject({ value: known(81, 0), band: known({ lo: 45, hi: 80 }, 0), state: { known: true, value: 'above' }, lapState: lapStateOf('above') });
+      }
+      // 80 °C is the top of the band: still in
+      expect(on('inter', 80).tyres.fl.carcassC.state).toMatchObject({ known: true, value: 'in' });
+    });
+
+    it('setup 23.5 psi on inters: the pressure band is 22.11-24.54 psi on every corner', () => {
+      const b = on('inter');
+      for (const corner of corners) {
+        expect(b.tyres[corner].pressurePsi.band).toEqual(closeBand({ lo: 22.11, hi: 24.54 }, 2));
+        expect(b.tyres[corner].pressurePsi.band).toEqual(closeBand(gasBand(23.5, TREF.inter)));
+      }
+    });
+
+    it("the pressure band is the setup on the compound's carcass band: the same 23.5 psi setup gives each compound its own band", () => {
+      for (const actual of ['C1', 'C2', 'C3', 'C4', 'C5', 'inter', 'wet'] as const) {
+        expect(on(actual).tyres.fl.pressurePsi.band, actual).toEqual(closeBand(gasBand(23.5, TREF[actual])));
+      }
+    });
+
+    it('the wet surface band is 30-55 °C; the slick surface stays 55-100 and the inter surface 30-85', () => {
+      expect(on('wet').tyres.fl.surfaceC.band).toEqual(known({ lo: 30, hi: 55 }, 0));
+      expect(on('C3').tyres.fl.surfaceC.band).toEqual(known({ lo: 55, hi: 100 }, 0));
+      expect(on('inter').tyres.fl.surfaceC.band).toEqual(known({ lo: 30, hi: 85 }, 0));
+      expect(CAR_BANDS_CONFIG.defaults).toMatchObject({ surfaceDryLo: 55, surfaceDryHi: 100, surfaceInterLo: 30, surfaceInterHi: 85, surfaceWetLo: 30, surfaceWetHi: 55 });
+    });
+
+    it('the config holds one reference per actual compound and the two carcass offsets; the per-kind carcass bands and the psi offsets are gone', () => {
+      expect(CAR_BANDS_CONFIG.defaults).toMatchObject({
+        refTempC1C: 105, refTempC2C: 95, refTempC3C: 90, refTempC4C: 85, refTempC5C: 80, refTempInterC: 65, refTempWetC: 55,
+        carcassBelowRefC: 20, carcassAboveRefC: 15,
+      });
+      for (const gone of ['carcassDryLo', 'carcassDryHi', 'carcassInterLo', 'carcassInterHi', 'carcassWetLo', 'carcassWetHi', 'pressureBelowSetupPsi', 'pressureAboveSetupPsi']) {
+        expect(CAR_BANDS_CONFIG.defaults).not.toHaveProperty(gone);
+      }
+    });
+
+    it('a reference from the config moves both the carcass and the pressure band of its compound only', () => {
+      const config = { [CAR_BANDS_CONFIG.key]: { refTempInterC: 75 } };
+      const car = (actual: 'inter' | 'C3') => withSetup(carState({ tyres: { visualCompound: VISUAL[actual], actualCompound: actual } }), 23.5);
+      const inter = bandsOf(car('inter'), [], { config }).tyres.fl;
+      expect(inter.carcassC.band).toEqual(known({ lo: 55, hi: 90 }, 0));
+      expect(inter.pressurePsi.band).toEqual(closeBand(gasBand(23.5, 75)));
+      expect(bandsOf(car('C3'), [], { config }).tyres.fl.carcassC.band).toEqual(C3_CARCASS);
+    });
+  });
+
+  describe('tyre bands on human-driven cars only (SP4.3c §5.6 D, C17)', () => {
+    // carcass and pressure above their bands now, the surface too; the last lap a rate lap with every tyre channel above all lap
+    const hotLap = lap({
+      lapNumber: 2,
+      channelRange: rangeOf({
+        tyres: perCorner(() => ({ surfaceC: known({ min: 110, max: 120 }, 0), carcassC: known({ min: 115, max: 125 }, 0), pressurePsi: known({ min: 27, max: 29 }, 0) })),
+        engineC: known({ min: 126, max: 140 }, 0),
+      }),
+    });
+    const hot = withSetup(
+      carState({
+        tyres: { corners: perCorner(() => ({ surfaceTempC: known(120, 0), carcassTempC: known(120, 0), pressurePsi: known(32, 0) })) },
+        condition: { engineTempC: known(130, 0) },
+      }),
+      25,
+    );
+    const NOT_JUDGED = { state: unknown('notApplicable'), band: unknown('notApplicable'), outForFullLap: false, lapState: NO_LAP_STATE };
+
+    for (const driver of ['ai', 'none'] as const) {
+      it(`${driver === 'ai' ? 'an AI car' : 'a car without a car-driver span'}: every tyre band notApplicable, the value kept; brakes and engine still judged`, () => {
+        const b = bandsOf(hot, [hotLap], { driver });
+        for (const corner of corners) {
+          expect(b.tyres[corner].surfaceC).toEqual({ value: known(120, 0), ...NOT_JUDGED });
+          expect(b.tyres[corner].carcassC).toEqual({ value: known(120, 0), ...NOT_JUDGED });
+          expect(b.tyres[corner].pressurePsi).toEqual({ value: known(32, 0), ...NOT_JUDGED });
+        }
+        expect(b.engineC).toMatchObject({ band: known({ lo: 0, hi: 125 }, 0), state: { known: true, value: 'above' }, outForFullLap: true, lapState: lapStateOf('above') });
+      });
+    }
+
+    it('a human car: the same values are judged on every tyre channel', () => {
+      const b = bandsOf(hot, [hotLap], { driver: 'human' });
+      for (const corner of corners) {
+        expect(b.tyres[corner].carcassC).toMatchObject({ state: { known: true, value: 'above' }, outForFullLap: true, lapState: lapStateOf('above') });
+        expect(b.tyres[corner].pressurePsi).toMatchObject({ band: P25, state: { known: true, value: 'above' }, outForFullLap: true, lapState: lapStateOf('above') });
+        expect(b.tyres[corner].surfaceC).toMatchObject({ outForFullLap: true, lapState: lapStateOf('above') });
+      }
+    });
+
+    it('per car: the human player is judged while the AI teammate beside it is not', () => {
+      const ai = { ...hot, id: carId(1), ownCar: undefined };
+      const view = situatedView({
+        cars: [hot, ai],
+        history: { laps: [hotLap, { ...hotLap, carId: carId(1) }] },
+        config: { [CAR_BANDS_CONFIG.key]: TEST_BANDS },
+        spans: [openSpan('car-driver', 'human', { car: 0 }), openSpan('car-driver', 'ai', { car: 1 })],
+      });
+      const out = calc.compute(view);
+      expect(out[carId(0)]!.tyres.fl.carcassC.state).toMatchObject({ known: true, value: 'above' });
+      expect(out[carId(1)]!.tyres.fl.carcassC).toMatchObject(NOT_JUDGED);
+    });
+
+    it('a car taken over by the AI mid-session: judged while human, notApplicable once its car-driver span is ai', () => {
+      expect(bandsOf(hot, [hotLap], { driver: 'human' }).tyres.rr.carcassC.outForFullLap).toBe(true);
+      expect(bandsOf(hot, [hotLap], { driver: 'ai' }).tyres.rr.carcassC.outForFullLap).toBe(false);
     });
   });
 });
