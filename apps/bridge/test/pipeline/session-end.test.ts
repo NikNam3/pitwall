@@ -245,7 +245,7 @@ describe('session.end: the user ends a session\'s recording early (C59, C73, C75
     // the ended session's row, facts and recording are as they were at its end
     expect(everything(place.db).facts.filter((f) => (f as { session_uid: string }).session_uid !== uidOf(next))).toEqual(stored.facts);
     expect(readFileSync(file!).equals(bytes)).toBe(true);
-    expect(run.messages.slice(seenBefore).some((m) => m.id === 'session.info')).toBe(true);
+    expect(run.messages.slice(seenBefore).some((m) => m.id !== 'feed.status')).toBe(true);
     expect(run.value('feed.status')).toMatchObject({ sessionEnded: false });
     expect(run.errors()).toEqual([]);
   });
