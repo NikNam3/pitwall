@@ -206,6 +206,8 @@ export function buildStartingPoint(view: AsOfView, outputs: ReadonlyMap<Calculat
     stopMid: new Int16Array(cars),
     stopHigh: new Int16Array(cars),
     owesStop: new Uint8Array(cars),
+    // filled from tyre-model by Task 19's implement phase
+    fittedLapsToLimit: new Int16Array(cars).fill(-1),
     // filled from rival-stops with the window (below)
     nextOdds: Array.from({ length: cars }, () => null),
     typeSwitch: Array.from({ length: cars }, () => null),

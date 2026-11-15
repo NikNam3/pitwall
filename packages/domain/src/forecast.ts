@@ -56,6 +56,8 @@ export type StartingPoint = {
   stopMid: Int16Array;
   stopHigh: Int16Array;
   owesStop: Uint8Array;
+  /** Per car the fitted set's laps left to the limit (`tyre-model`'s `fittedLapsToLimit`, floored); −1 while unknown (SP4.3c Task 19). */
+  fittedLapsToLimit: Int16Array;
   /** Per car `rival-stops`' next-compound odds; `null` while unknown (SP4.3c Task 18, O9). */
   nextOdds: (Partial<Record<NoiseCompound, number>> | null)[];
   /** Per car `rival-stops`' tyre-type switch from the game's delta; `null` while unknown (SP4.3c Task 18, O5). */
