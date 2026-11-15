@@ -16,6 +16,7 @@ import {
   sessionRemainingCalculator,
   tyreLifeCalculator,
   tyreModelCalculator,
+  tyreModelFitCalculator,
   trackWetnessCalculator,
   pitWindowCalculator,
   raceInteractionCalculator,
@@ -37,8 +38,10 @@ const CALCULATORS = [
   alarmsCalculator,
   tyreWearCalculator,
   tyreLifeCalculator,
-  // SP4.3c Task 12: tyre-life and pit-window read tyre-model (on degradation and track-wetness)
+  // SP4.3c Task 12: tyre-life and pit-window read tyre-model (on degradation and track-wetness); Task 12s (ruling R53):
+  // tyre-model reads tyre-model-fit
   tyreModelCalculator,
+  tyreModelFitCalculator,
   trackWetnessCalculator,
   pitWindowCalculator,
   degradationCalculator,

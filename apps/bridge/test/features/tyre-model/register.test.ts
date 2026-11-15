@@ -11,9 +11,9 @@ const keysOf = (decls: readonly { key: string }[] | undefined): string[] => (dec
 const entriesOf = (decls: readonly { entries: Record<string, unknown> }[] | undefined): string[] => (decls ?? []).flatMap((d) => Object.keys(d.entries));
 
 describe('tyre-model feature', () => {
-  it('registers the calculator tyre-model, no topic', () => {
+  it('registers the calculators tyre-model and tyre-model-fit (SP4.3c Task 12s, ruling R53), no topic', () => {
     expect(tyreModel.name).toBe('tyre-model');
-    expect(tyreModel.calculators.map((c) => c.id)).toEqual(['tyre-model']);
+    expect(tyreModel.calculators.map((c) => c.id).sort()).toEqual(['tyre-model', 'tyre-model-fit']);
     expect(tyreModel.topics).toEqual([]);
   });
 
