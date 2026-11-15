@@ -6,6 +6,8 @@ import { asOfNow, type EngineView } from '@pitwall/engine/readers';
 import { describe, expect, it } from 'vitest';
 import { pitWindowCalculator } from '../../src/pit-window/calculator.ts';
 import { buildStartingPoint } from '../../src/shared/forecast-field/index.ts';
+import { degradationAsOf } from '../../src/degradation/calculator.ts';
+import { DEGRADATION } from '../../src/degradation/index.ts';
 import { DRIVER_NOISE } from '../../src/driver-noise/index.ts';
 import { RACE_INTERACTION } from '../../src/race-interaction/index.ts';
 import { TYRE_LIFE } from '../../src/tyre-life/index.ts';
@@ -87,6 +89,7 @@ describe('row 7: wear 50 %, rate 4 → 5 laps to the limit in every reader', () 
     const asOf = materialised(asOfNow({ ...view, history: { ...view.history, crossings: lines }, track: TRACK }));
     const outputs = new Map<string, unknown>([
       [TYRE_MODEL, tm],
+      [DEGRADATION, degradationAsOf(asOf)],
       [DRIVER_NOISE, plainNoise(1, [], asOf.at)],
       [RACE_INTERACTION, plainInteraction(asOf.at)],
     ]);
