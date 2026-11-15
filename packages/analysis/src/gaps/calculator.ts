@@ -26,7 +26,21 @@ type Table = {
   raceSpansFolded: number;
   /** The kind of the last closed span of the race session phase: the one before the open span. */
   lastRaceSpanKind: string | undefined;
+  /** The first closed span of the race session phase: whether the engine joined the race in it (`joinedAt`). */
+  firstRaceSpan: FirstSpan | undefined;
+  /** The furthest progress any car has crossed; -1 before any crossing. */
+  furthest: number;
+  /** By car id: the progress of its first crossing (the first after the join). */
+  firstProgress: Array<number | undefined>;
+  /** The leader's first line crossing after the join (`JoinLine`), once one is known. */
+  joinLine: JoinLine | undefined;
 };
+
+/** A span of the race session phase as the join reads it: its kind and whether the engine joined in it. */
+type FirstSpan = { kind: string; joinedAt: boolean };
+
+/** A line crossing of the leader on the road: `lap` its completed laps there, at `progress` (`lap × 50`), when. */
+type JoinLine = { lap: number; progress: number; at: SessionTime };
 
 /** The start of the first `racing` span of the race, and whether lights out was seen before it, so the start is known (C3). */
 type RaceStart = { at: SessionTime; lightsOutSeen: boolean };
@@ -60,6 +74,7 @@ function foldCrossings(acc: Table, view: EngineView, from: number): void {
     track.at[progress] = (acc.current.get(m.carId)?.get(m.lap)?.[m.segment] ?? m).at;
     if (track.at.length > progress + 1) track.at.length = progress + 1; // a car that went back drops what lay ahead
     crossed[m.carId] = true;
+    foldJoinLine(acc, m, progress);
     judgeCrossing(acc.window, acc.tracks, m.carId, progress, track.at[progress] as SessionTime, thresholds);
     // segment 0 is the line at the start of its lap: it completes the lap before (none for lap 1, the start)
     const completed = m.lap - 1;
@@ -80,7 +95,28 @@ function foldCrossings(acc: Table, view: EngineView, from: number): void {
   acc.fine = fine;
 }
 
+/**
+ * The leader's first line crossing after the join, crossing by crossing (a pure fold over the crossings, C31.2; the
+ * engine records none before it joined). A car's first crossing after the join at progress p means it was at p − 1
+ * then, so the leader then was at the most of those; a line crossing that is the furthest progress yet is the leader's
+ * on the road, and it is the leader's first after the join unless a car seen later first crossed beyond it (it led the
+ * road unseen at the join): then the next such line crossing is.
+ */
+function foldJoinLine(acc: Table, m: MiniSectorCrossing, progress: number): void {
+  if (acc.firstProgress[m.carId] === undefined) {
+    acc.firstProgress[m.carId] = progress;
+    if (acc.joinLine !== undefined && progress > acc.joinLine.progress) acc.joinLine = undefined;
+  }
+  if (progress <= acc.furthest) return;
+  acc.furthest = progress;
+  // segment 0 is the line at the start of its lap: it completes the lap before (none for lap 1, the start)
+  if (acc.joinLine === undefined && m.segment === 0 && m.lap >= 2) acc.joinLine = { lap: m.lap - 1, progress, at: m.at };
+}
+
 const RACE_PHASE = sessionPhaseRaceSpans.machine;
+
+/** The race session phases before lights out: a race joined in one of them sees the lights go out. */
+const BEFORE_LIGHTS_OUT: readonly string[] = ['grid', 'formation', 'startLights'];
 
 /**
  * The race start of a `racing` span (C26): its start, known only if it directly follows a `startLights` span (or opens
@@ -98,6 +134,7 @@ function foldRaceSpans(acc: Table, view: EngineView): void {
   const spans = view.history.spans[RACE_PHASE] ?? [];
   for (let i = acc.raceSpansFolded; i < spans.length; i++) {
     const span = spans[i] as (typeof spans)[number];
+    acc.firstRaceSpan ??= { kind: span.kind, joinedAt: span.joinedAt === true };
     if (acc.raceStart === undefined && span.kind === 'racing') acc.raceStart = raceStartOf(span, acc.lastRaceSpanKind);
     acc.lastRaceSpanKind = span.kind;
   }
@@ -131,6 +168,36 @@ const raceStartAt = (start: RaceStart | undefined, race: RaceParts): Known<Sessi
   if (race !== 'race') return notRace(race);
   return start === undefined || !start.lightsOutSeen ? unknown('notReceived') : known(start.at, start.at);
 };
+
+/** The first span of the race session phase: the first closed one (the fold), else the open one (C20). */
+const firstRaceSpanNow = (acc: Table, view: EngineView): FirstSpan | undefined => {
+  if (acc.firstRaceSpan !== undefined) return acc.firstRaceSpan;
+  const open = (view.situation.byMachine[RACE_PHASE] ?? [])[0];
+  return open === undefined ? undefined : { kind: open.kind, joinedAt: open.joinedAt === true };
+};
+
+/**
+ * Where the gapper starts (C3): lights out when the engine saw it; else, in a race the engine joined after lights out
+ * (its first `racing` span not after start lights, or its first span joined past them), the leader's first line
+ * crossing after the join; `notReceived` until one is known.
+ */
+function originOf(acc: Table, view: EngineView, start: RaceStart | undefined, race: RaceParts): NonNullable<GapsOutput['origin']> {
+  if (race !== 'race') return notRace(race);
+  if (start?.lightsOutSeen === true) return known({ kind: 'lightsOut', at: start.at }, start.at);
+  const first = firstRaceSpanNow(acc, view);
+  const joined = start !== undefined || (first !== undefined && first.joinedAt && !BEFORE_LIGHTS_OUT.includes(first.kind));
+  const line = acc.joinLine;
+  if (!joined || line === undefined) return unknown('notReceived');
+  return known({ kind: 'join', lap: line.lap, at: line.at }, line.at);
+}
+
+/** The leader's lap and the part of it crossed, from its newest crossing; `notReceived` before it has one (C3). */
+function leaderProgressOf(leader: CarCrossings | undefined): GapsOutput['leaderProgress'] {
+  const at = leader === undefined ? undefined : latestTime(leader);
+  if (leader === undefined || at === undefined) return unknown('notReceived');
+  const progress = leader.fromProgress + leader.at.length - 1;
+  return known({ lap: Math.floor(progress / MINI_SECTORS) + 1, fraction: (progress % MINI_SECTORS) / MINI_SECTORS }, at);
+}
 
 /** The gap of `a` to the car ahead of it in the order: the time since that car passed where `a` is now. */
 const roadGap = (a: CarCrossings | undefined, ahead: CarCrossings | undefined): Known<Ms> =>
@@ -212,6 +279,7 @@ function build(acc: Table, view: EngineView): GapsOutput {
     };
   });
 
+  const start = raceStartNow(acc, view);
   const { neighbourhoodMs } = GAPS_CONFIG.read(view);
   const near = (gap: Known<Ms>) => gap.known && Math.abs(gap.value) <= neighbourhoodMs;
   const neighbourhood: Neighbourhood[] = [];
@@ -230,14 +298,30 @@ function build(acc: Table, view: EngineView): GapsOutput {
     fine: acc.fine,
     gapperWindow: { ours, others: othersInWindow(acc.window, ours) },
     neighbourhood,
-    raceStartAt: raceStartAt(raceStartNow(acc, view), race),
+    raceStartAt: raceStartAt(start, race),
     outOfRace: outOfRace.sort((a, b) => a - b),
     phases: phasesOf(acc, race, view),
+    leaderProgress: leaderProgressOf(leader),
+    origin: originOf(acc, view, start, race),
   };
 }
 
 const init = (view: EngineView): Table => {
-  const table: Table = { current: new Map(), tracks: [], lineTimes: {}, recent: {}, fine: {}, window: emptyWindow(), raceStart: undefined, raceSpansFolded: 0, lastRaceSpanKind: undefined };
+  const table: Table = {
+    current: new Map(),
+    tracks: [],
+    lineTimes: {},
+    recent: {},
+    fine: {},
+    window: emptyWindow(),
+    raceStart: undefined,
+    raceSpansFolded: 0,
+    lastRaceSpanKind: undefined,
+    firstRaceSpan: undefined,
+    furthest: -1,
+    firstProgress: [],
+    joinLine: undefined,
+  };
   foldCrossings(table, view, 0);
   foldRaceSpans(table, view);
   return table;

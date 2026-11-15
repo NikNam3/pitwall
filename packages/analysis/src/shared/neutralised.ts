@@ -3,7 +3,7 @@
 // `neutralised` (SC, VSC) and `suspended` (red flag) spans, and the `suspended` spans of qualifying and practice. The
 // owner of the neutralisation kind (SP4.3c O6): the open one, the last one (confirmed only), whether it is ending, and
 // the time-loss exclusion every caller of `timeLossEvents` passes; no unit matches these span kinds itself.
-import type { CarId, FrameNumber, LapRecord, MachineId, NeutralisedDetail, OpenSpan, Span } from '@pitwall/domain';
+import type { CarId, FrameNumber, MachineId, NeutralisedDetail, OpenSpan, Span } from '@pitwall/domain';
 import { membershipOf, type DeepReadonly, type EngineView, type MembershipSource } from '@pitwall/engine/readers';
 import type { TimeLossExcluded } from './time-loss/index.ts';
 
@@ -147,13 +147,5 @@ export function timeLossExcludedOf(view: ExclusionSource): TimeLossExcluded {
   return (carId, from, to) => coveredAt(carId, from) || coveredAt(carId, Math.max(from, to - 1) as FrameNumber);
 }
 
-/**
- * The leader's lap at `frame` (C26, C45): one more than the most laps any car completed by that frame, the frame itself
- * included, from the projection's laps (a provisional lap and the confirmed one that supersedes it are one lap, C25);
- * lap 1 before any lap is completed.
- */
-export function leaderLapAt(laps: readonly DeepReadonly<Pick<LapRecord, 'lapNumber' | 'frame'>>[], frame: FrameNumber): number {
-  let completed = 0;
-  for (const lap of laps) if (lap.frame <= frame && lap.lapNumber > completed) completed = lap.lapNumber;
-  return completed + 1;
-}
+// `leaderLapAt` moved to its owner, `gaps` (SP4.3c Task 6, O10); re-exported only for the tests that import it from here.
+export { leaderLapAt } from '../gaps/leader.ts';

@@ -33,4 +33,16 @@ export type GapsOutput = {
   outOfRace: CarId[];
   /** The race's neutralised phases in the leader's progress at their start and end (`GapperLines.phases`); `[]` outside a race. */
   phases: GapperLines['phases'];
+  /**
+   * The leader's progress now: the lap the leader of the order (`intervals[0]`) is on and the part of it crossed
+   * (mini-sectors / 50), from its newest crossing. `notReceived` before its first crossing (C3).
+   */
+  leaderProgress: Known<{ lap: number; fraction: number }>;
+  /**
+   * Where the gapper starts (`GapperLines.origin`), with the time it counts each car's race time from: lights out
+   * (`at` = `raceStartAt`) when the engine saw it, else the leader's first line crossing after the join (`lap` the
+   * leader's completed laps there). `notApplicable` outside a race, `notReceived` before it is known. An output
+   * without it (one built by hand) starts at `raceStartAt`, as lights out.
+   */
+  origin?: Known<{ kind: 'lightsOut'; at: SessionTime } | { kind: 'join'; lap: number; at: SessionTime }>;
 };
