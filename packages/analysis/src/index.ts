@@ -60,6 +60,8 @@ export { pitWindowCalculator } from './pit-window/calculator.ts';
 export * from './rejoin/index.ts';
 export { rejoinCalculator } from './rejoin/calculator.ts';
 export { ghostLinesOf } from './rejoin/ghost-lines.ts';
+export * from './rejoin-ghost/index.ts';
+export { rejoinGhostCalculator } from './rejoin-ghost/calculator.ts';
 export * from './sc-call/index.ts';
 export { SIMULATOR as LAP_MODEL_SIMULATOR, lapTimeMs } from './lap-model/index.ts';
 export * from './track-wetness/index.ts';
