@@ -78,7 +78,7 @@ function countedLosses(sources: readonly StoredSource[], condition: PitCondition
 const lossEntry = (condition: PitCondition): PriorDecl => {
   const key = pitLossKey(condition);
   return {
-    version: 1,
+    version: 2, // 2: the reference is pace-delta's referencePaceMs (SP4.3c Task 7, B11)
     range: [5000, 60000],
     fallback: pitLossFallback(condition),
     aggregate: (sources, ctx): Known<number> => {

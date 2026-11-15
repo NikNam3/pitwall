@@ -463,3 +463,10 @@ describe("pit-loss: the in-lap share's prior from the track file (SP4.3b Task 26
     if (k1.known) expect(k1.value).toBeCloseTo((2 * 0.06 + TRACK_SHARE) / 3, 9);
   });
 });
+
+// C62a: the aggregate changed with B11 (pace-delta's reference), so every entry's version moved and stored entries recompute.
+describe('pit-loss priors: entry versions', () => {
+  it('every pit-loss entry is at version 2', () => {
+    for (const entry of Object.values(PIT_LOSS_PRIORS.entries)) expect(entry.version).toBe(2);
+  });
+});
