@@ -33,6 +33,7 @@ import { FeedMonitor } from './feed-monitor.ts';
 import { sessionClock, type SessionClock } from './session-clock.ts';
 import { playerCarOf, SessionProcessor } from './session-processor.ts';
 import { SessionStorage, type StorageMode } from './session-storage.ts';
+import { StaleSweep } from './stale-sweep.ts';
 import type { PlanDecision, TeamFeeds } from './team-feeds.ts';
 import { TopicPublisher } from './topic-publisher.ts';
 
@@ -125,6 +126,12 @@ export type FeedPipelineOptions = {
    * team once the session's Participants name it.
    */
   teams?: TeamFeeds;
+  /**
+   * Live: the run's sweep of stale stored sessions (C59, C1a), shared by every feed of the run: the pipeline tells it its
+   * first Session packet and asks it to sweep when a session starts that continues nothing. Unset, a pipeline that
+   * continues recordings and has `storage.rebuild` sweeps on its own, as the run's one feed.
+   */
+  staleSweep?: Pick<StaleSweep, 'request' | 'sessionSeen'>;
 };
 
 /** A feed's session uid and its player car's team (`null` before Participants), as reported to `teams`. */
@@ -253,6 +260,10 @@ export class FeedPipeline {
    * session of another key starts.
    */
   #closedKey: SessionKey | undefined;
+  /** Live, continuing recordings: the run's stale sweep (`staleSweep`, or the feed's own). */
+  readonly #sweep: Pick<StaleSweep, 'request' | 'sessionSeen'> | undefined;
+  /** The feed has received its first Session packet (told to the sweep). */
+  #sawSession = false;
 
   constructor(opts: FeedPipelineOptions) {
     this.#o = opts;
@@ -274,6 +285,7 @@ export class FeedPipeline {
     this.#tracks = opts.tracks ?? ((trackId) => loadTrackFile(trackId, TRACKS_DIR, opts.log));
     this.#sessionClock = sessionClock({ sourcePath: opts.storage?.sourcePath, wallClock: this.#wallClock, log: opts.log });
     this.#recorded = new RecordedPlacement(opts.recorded?.decisions ?? []);
+    this.#sweep = this.#ownSweep();
     this.done = this.#done.promise;
     this.done.catch(() => {});
   }
@@ -489,11 +501,30 @@ export class FeedPipeline {
       return;
     }
     const stored = this.#storedRecordingOf(packet);
-    if (stored !== undefined) {
-      this.#startRestore(stored, packet);
-      return;
-    }
-    this.#deliver(packet);
+    if (stored !== undefined) this.#startRestore(stored, packet);
+    else this.#deliver(packet);
+    // Told after the packet started (or began restoring) its session: the sweep then sees it running.
+    this.#tellFirstSession(packet);
+  }
+
+  /** The feed's first Session packet (of a session uid other than 0) goes to the run's stale sweep (C59, C1a). */
+  #tellFirstSession(packet: RawPacket): void {
+    if (this.#sawSession || this.#sweep === undefined) return;
+    const header = peekHeader(packet.bytes);
+    if (header === undefined || header.packetId !== PacketId.session || header.sessionUid === 0n) return;
+    this.#sawSession = true;
+    this.#guarded('stale sweep', () => this.#sweep?.sessionSeen(this.#feedId));
+  }
+
+  /**
+   * The feed's own sweep when the run gives none (`staleSweep`): live, continuing recordings, with a rebuild, it is the
+   * run's one feed.
+   */
+  #ownSweep(): Pick<StaleSweep, 'request' | 'sessionSeen'> | undefined {
+    if (this.#o.staleSweep !== undefined) return this.#o.staleSweep;
+    const storage = this.#o.storage;
+    if (!this.#continuesRecordings || storage?.rebuild === undefined) return undefined;
+    return new StaleSweep({ feeds: [this.#feedId], db: storage.db, rebuild: storage.rebuild, running: () => [this.runningSession()], log: this.#log });
   }
 
   #deliver(packet: RawPacket): void {
@@ -781,8 +812,8 @@ export class FeedPipeline {
       ...(this.#o.calcStats && { calcStats: this.#o.calcStats }),
     });
     // A live session that continues nothing (C59): every other stored session nobody continues is finished from its
-    // recording, in the background.
-    if (continued === undefined && this.#continuesRecordings) storage?.completeStale(keyOfStart(event));
+    // recording, in the background, once every feed of the run has received its first Session packet (C1a).
+    if (continued === undefined && this.#continuesRecordings) this.#sweep?.request();
   }
 
   /** A new session's storage, if the pipeline stores. */

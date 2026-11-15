@@ -142,21 +142,6 @@ export class SessionStorage {
     }
   }
 
-  /**
-   * Live: the session `current` starts without continuing a stored recording (C59), so every other stored session whose
-   * log is not complete (any weekend, any feed) is one nobody continues: each goes to `rebuild` in the background, which
-   * finishes it from its recording (C24: the log replaced whole) or keeps it as it is when the recording is missing.
-   */
-  completeStale(current: SessionKey): void {
-    const repo = this.#access?.repo;
-    if (repo === undefined || this.#o.mode !== 'append') return;
-    try {
-      this.#rebuildInBackground(repo.incompleteSessions().filter((row) => !sameKey(row, current)));
-    } catch (error) {
-      this.#fail(error);
-    }
-  }
-
   #rebuildInBackground(rows: readonly StoredSessionRow[]): void {
     const { rebuild, log } = this.#o;
     if (rebuild === undefined) return;
