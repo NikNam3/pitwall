@@ -121,8 +121,8 @@ describe('lap end tyre sets and carcass mean', () => {
     expect(tyreSets.value).toHaveLength(20);
     expect(tyreSets.value.slice(0, 3)).toEqual([
       { actualCompound: 'C3', visualCompound: 'soft', wearPct: 40, available: true, fitted: false, recommendedSession: 15, lifeSpanLaps: 20, usableLifeLaps: 22, lapDeltaMs: -150 },
-      { actualCompound: 'C2', visualCompound: 'medium', wearPct: 0, available: true, fitted: false, recommendedSession: 15, lifeSpanLaps: 30, usableLifeLaps: 32, lapDeltaMs: -150 },
-      { actualCompound: 'C1', visualCompound: 'hard', wearPct: 12, available: true, fitted: true, recommendedSession: 15, lifeSpanLaps: 40, usableLifeLaps: 42, lapDeltaMs: -150 },
+      { actualCompound: 'C4', visualCompound: 'medium', wearPct: 0, available: true, fitted: false, recommendedSession: 15, lifeSpanLaps: 30, usableLifeLaps: 32, lapDeltaMs: -150 },
+      { actualCompound: 'C5', visualCompound: 'hard', wearPct: 12, available: true, fitted: true, recommendedSession: 15, lifeSpanLaps: 40, usableLifeLaps: 42, lapDeltaMs: -150 },
     ]);
   });
 
