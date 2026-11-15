@@ -1,7 +1,7 @@
 // The compound rule's one judgement (SP4.3b Task 11d, contract C43): whether a car still owes a stop for a second dry
 // compound. The compound-rule sub-machine holds `required` for the whole dry race (the rule applies); whether the car has
 // met it, by running two distinct dry compounds in its closed stints and its current set, is judged here, once, for every
-// unit that needs it (rival-stops, strategy).
+// unit that needs it (rival-stops today).
 import type { CarId, StintRecord, VisualCompound } from '@pitwall/domain';
 
 export type DryCompound = 'soft' | 'medium' | 'hard';

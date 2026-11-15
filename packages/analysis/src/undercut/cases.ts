@@ -4,6 +4,7 @@
 import { known, unknown, UNDERCUT_GAIN_BINS, type Known, type Ms, type Policy, type StartingPoint, type Trigger, type UndercutCase } from '@pitwall/domain';
 import { hasStopAhead, rivalNextCompound, type CallCandidate, type CallOutcome } from '../race-monte-carlo/index.ts';
 import { binShares } from '../shared/distribution.ts';
+import { lowerMedian } from '../shared/stats.ts';
 import { policyOf } from '../shared/strategy-input/index.ts';
 import { bestWith, type DpSolution } from '../strategy-dp/index.ts';
 import type { UndercutRivalInput } from './prepare.ts';
@@ -53,12 +54,6 @@ export function casesOf(start: StartingPoint, sol: DpSolution, thresholds: reado
   return out;
 }
 
-/** The lower median of `values`. */
-function lowerMedian(values: readonly number[]): number {
-  const sorted = [...values].sort((a, b) => a - b);
-  return sorted[Math.floor((sorted.length - 1) / 2)] as number;
-}
-
 /**
  * A case's value from its outcomes (spec §9.1): the mean gap change in our favour, the share ending ahead and the gain
  * bins over the scenarios where both cars ran at the gap lap; the rejoin position `rejoin`'s green one when we box now
@@ -75,7 +70,8 @@ export function caseValue(call: CaseCall, outcome: CallOutcome | undefined, gree
   }
   const boxNow = call.rival.side === 'ahead';
   const rejoins = Array.from(outcome?.rejoin ?? []).filter((p) => p > 0);
-  const rejoinPosition: Known<number> = boxNow ? greenRejoin : rejoins.length === 0 ? none : known(lowerMedian(rejoins), at);
+  const rejoinMedian = lowerMedian(rejoins);
+  const rejoinPosition: Known<number> = boxNow ? greenRejoin : rejoinMedian === undefined ? none : known(rejoinMedian, at);
   if (gains.length === 0) return { n: call.n, gainMs: none, pAhead: none, gainBins: none, rejoinPosition };
   const bins = { from: UNDERCUT_GAIN_BINS.fromMs, step: UNDERCUT_GAIN_BINS.stepMs, count: UNDERCUT_GAIN_BINS.count };
   return {

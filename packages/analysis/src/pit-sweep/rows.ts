@@ -4,6 +4,7 @@
 import { known, unknown, type Known, type PitSweepRow, type SessionTime } from '@pitwall/domain';
 import { paired, ties, type CallOutcome } from '../race-monte-carlo/index.ts';
 import { placePmf } from '../shared/distribution.ts';
+import { lowerMedian } from '../shared/stats.ts';
 
 /** What every row of one car's table reads besides its outcomes. */
 export type RowContext = {
@@ -23,13 +24,6 @@ export type RowContext = {
   at: SessionTime;
 };
 
-/** The lower middle value of `xs` (a median of whole places), `undefined` when empty. */
-function median(xs: ArrayLike<number>): number | undefined {
-  if (xs.length === 0) return undefined;
-  const s = Array.from(xs).sort((a, b) => a - b);
-  return s[Math.floor((s.length - 1) / 2)];
-}
-
 /** The mean of `xs` (non-empty). */
 const mean = (xs: ArrayLike<number>): number => {
   let s = 0;
@@ -39,7 +33,7 @@ const mean = (xs: ArrayLike<number>): number => {
 
 /** A row's simulated rejoin: the median place after the stop, unknown where it is no place (no stop in most scenarios). */
 function simulatedRejoin(o: CallOutcome, at: SessionTime): Known<number> {
-  const m = median(o.rejoin);
+  const m = lowerMedian(o.rejoin);
   return m === undefined || m < 1 ? unknown('insufficientData') : known(m, at);
 }
 
@@ -55,7 +49,7 @@ export function rowsOf(stopLaps: readonly number[], outcomes: readonly CallOutco
   return kept.map(({ stopLap, o }, i): PitSweepRow => {
     let gain = 0;
     for (const p of o.finish) if (p < ctx.position) gain++;
-    const traffic = median(o.traffic);
+    const traffic = lowerMedian(o.traffic);
     const { latest } = ctx;
     return {
       stopLap,

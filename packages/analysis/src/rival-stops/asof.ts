@@ -22,6 +22,7 @@ import {
 } from '@pitwall/domain';
 import type { AsOfView, DeepReadonly } from '@pitwall/engine/readers';
 import { owesSecondDryCompound } from '../shared/compound-rule.ts';
+import { median } from '../shared/stats.ts';
 import { TYRE_LIFE, type TyreLife, type TyreLifeOutput } from '../tyre-life/index.ts';
 import { rivalStopsPhaseRow, RIVAL_STOPS_BEHAVIOUR, type RivalStopsEffect } from './behaviour.ts';
 import { RIVAL_STOPS_CONFIG } from './config.ts';
@@ -106,11 +107,6 @@ function currentSet(h: CarHistory | undefined): CurrentSet | undefined {
 
 /** The laps a stint ran on its set when it ended: its age at fitting plus its laps. */
 const stopAge = (s: StintRecord): number => s.tyreAgeAtFitting + s.lastLap - s.firstLap + 1;
-
-const median = (sorted: readonly number[]): number => {
-  const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 === 1 ? (sorted[mid] as number) : ((sorted[mid - 1] as number) + (sorted[mid] as number)) / 2;
-};
 
 /** The laps the car's set has left by `tyre-life`: its laps to the limit, else a fresh set's life less its age. */
 function lifeLeft(life: DeepReadonly<TyreLife> | undefined, set: CurrentSet): number | undefined {
@@ -214,7 +210,7 @@ export function rivalStopsAsOf(view: AsOfView): RivalStops {
     let basis: RivalStop['basis'];
     if (peers.length > 0) {
       const sorted = peers.map((p) => p.age).sort((a, b) => a - b);
-      ages = { low: sorted[0] as number, mid: median(sorted), high: sorted.at(-1) as number };
+      ages = { low: sorted[0] as number, mid: median(sorted) as number, high: sorted.at(-1) as number };
       basis = 'peers';
     } else {
       basis = 'tyreLife';

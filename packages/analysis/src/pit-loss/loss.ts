@@ -4,6 +4,7 @@
 import { known, unknown, type CarId, type Known, type LapRecord, type Ms, type PitLossStop, type PitStopRecord } from '@pitwall/domain';
 import type { DeepReadonly } from '@pitwall/engine/readers';
 import { classifyLap, type LapClassOptions } from '../lap-classes/index.ts';
+import { median } from '../shared/stats.ts';
 import type { PIT_LOSS_CONFIG } from './config.ts';
 
 /** The effective `pit-loss` config (C47). */
@@ -11,13 +12,6 @@ export type PitLossConfig = typeof PIT_LOSS_CONFIG.defaults;
 
 /** The `pit-loss` config with the `classifyLap` options of the stops' session (its weekend phase and `lap-classes`' config). */
 export type PitLossOptions = PitLossConfig & { classes: LapClassOptions };
-
-/** The median of a non-empty list; the mean of the middle two for an even count. */
-export function median(values: readonly number[]): number {
-  const sorted = [...values].sort((a, b) => a - b);
-  const mid = sorted.length >> 1;
-  return sorted.length % 2 === 1 ? (sorted[mid] as number) : ((sorted[mid - 1] as number) + (sorted[mid] as number)) / 2;
-}
 
 /** A stop's in-lap and out-lap and the car's reference lap: the median of its `forPace` laps among the `referenceLaps` before the in-lap. */
 type StopLaps = { inLap: DeepReadonly<LapRecord>; outLap: DeepReadonly<LapRecord>; referenceMs: number };
@@ -33,8 +27,9 @@ function stopLaps(stop: DeepReadonly<PitStopRecord>, carLaps: readonly DeepReado
     const lap = byNumber.get(n);
     if (lap !== undefined && classifyLap(lap, opts.classes).forPace) references.push(lap.lapTimeMs);
   }
-  if (inLap === undefined || outLap === undefined || references.length === 0) return undefined;
-  return { inLap, outLap, referenceMs: median(references) };
+  const referenceMs = median(references);
+  if (inLap === undefined || outLap === undefined || referenceMs === undefined) return undefined;
+  return { inLap, outLap, referenceMs };
 }
 
 /**
@@ -68,7 +63,7 @@ export function inLapShareOf(stop: DeepReadonly<PitStopRecord>, carLaps: readonl
 export function sessionStops(pitStops: readonly DeepReadonly<PitStopRecord>[], laps: readonly DeepReadonly<LapRecord>[], opts: PitLossOptions): PitLossStop[] {
   if (pitStops.length === 0) return [];
   const counted = pitStops.filter((s) => !s.penaltyServed);
-  const stationaryMedian = counted.length === 0 ? undefined : median(counted.map((s) => s.stationaryTimeMs));
+  const stationaryMedian = median(counted.map((s) => s.stationaryTimeMs));
   const lapsByCar = new Map<CarId, DeepReadonly<LapRecord>[]>();
   for (const lap of laps) {
     const list = lapsByCar.get(lap.carId);

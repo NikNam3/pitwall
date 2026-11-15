@@ -18,11 +18,13 @@ import { asOfNow, type AsOfView, type DeepReadonly, type EngineView, type QuickC
 import { LAP_CLASSES_CONFIG } from '../lap-classes/index.ts';
 import { PER_LAP_RATE_CONFIG } from '../per-lap-rate/index.ts';
 import { CAR_STATUS_READS } from '../shared/car-status.ts';
+import { configOf } from '../shared/config-of.ts';
+import { lapsByCar } from '../shared/stint-laps.ts';
 import { DEGRADATION_BEHAVIOUR, phaseRow, type DegradationEffect } from './behaviour.ts';
 import { DEGRADATION, DEGRADATION_CONFIG, type DegradationOutput, type StartPrior, type StintDegradation } from './index.ts';
 import type { FilterPrior } from './kalman.ts';
 import { DEGRADATION_COMPOUNDS, defaultStart, priorKey } from './priors.ts';
-import { fitLaps, fuelResolver, lapsByCar } from './stint-fit.ts';
+import { fitLaps, fuelResolver } from './stint-fit.ts';
 
 type Lap = DeepReadonly<LapRecord>;
 type Stint = DeepReadonly<StintRecord>;
@@ -146,10 +148,6 @@ function byCar<T extends { carId: CarId }>(items: readonly T[]): Map<CarId, T[]>
   return out;
 }
 
-/** A config section's effective values (as `defineConfig`'s `read`) from the view's config. */
-const configOf = <C extends object>(section: { key: string; defaults: C }, view: Pick<AsOfView, 'config'>): C =>
-  ({ ...section.defaults, ...view.config[section.key] }) as C;
-
 /**
  * The rows of the spans open in the situation (C20) for the machines of `DEGRADATION_BEHAVIOUR`, in the table's order
  * (`behaviourFor` and `behaviourByCar` over an as-of view): the session's rows, a car's rows, and the cars with a car
@@ -189,7 +187,7 @@ export function degradationAsOf(view: AsOfView): DegradationOutput {
   const classes = { isRace, ...configOf(LAP_CLASSES_CONFIG, view) };
   const rate = configOf(PER_LAP_RATE_CONFIG, view);
   const now = view.at;
-  const lapsBy = lapsByCar(view.history.laps);
+  const lapsBy = lapsByCar(view.history);
   const recordsBy = byCar(view.history.stints);
   const player = view.fixed.playerCar;
   const fuelOf = fuelResolver(

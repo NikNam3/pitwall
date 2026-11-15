@@ -1,6 +1,6 @@
 // One stint through `degradation`'s rules (spec 4.1), shared by the calculator and the priors (so a source's `lapUse`
 // is the calculator's): each lap's use, its fuel correction, the filter over the pace laps, the basis and the wear rates.
-import { addLaps, emptyCurrentLaps, known, unknown, type CarId, type Corners, type Known, type LapRecord, type LapUse, type Ms } from '@pitwall/domain';
+import { known, unknown, type CarId, type Corners, type Known, type LapRecord, type LapUse, type Ms } from '@pitwall/domain';
 import type { DeepReadonly } from '@pitwall/engine/readers';
 import { isPaceLap, isRateLap, type LapClassOptions } from '../lap-classes/index.ts';
 import type { Rate, RateOptions } from '../per-lap-rate/index.ts';
@@ -68,17 +68,6 @@ export function fuelResolver(o: {
     const kg = (ours ??= oursOf())(lap.lapNumber);
     return kg === undefined ? own : known(kg, lap.completedAt);
   };
-}
-
-/**
- * Every car's laps, one record per lap (C25, the domain's `addLaps`), by lap number: one pass over a list holding any
- * cars' laps. A lap number is an integer key, which an object lists in ascending order.
- */
-export function lapsByCar(laps: readonly Lap[]): Map<CarId, LapRecord[]> {
-  const out = new Map<CarId, LapRecord[]>();
-  // the records are only read
-  addLaps(emptyCurrentLaps(), laps as readonly LapRecord[]).forEach((byLap, car) => out.set(car as CarId, Object.values(byLap)));
-  return out;
 }
 
 /**

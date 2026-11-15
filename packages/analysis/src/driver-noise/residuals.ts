@@ -8,6 +8,7 @@ import { tyreTypeOf } from '@pitwall/domain';
 import type { DegradationOutput, StintDegradation } from '../degradation/index.ts';
 import { freeAirLaps } from '../shared/free-air.ts';
 import { lapsByCar } from '../shared/stint-laps.ts';
+import { madSigma, median } from '../shared/stats.ts';
 import { membershipByStretch } from '../shared/stretch-membership.ts';
 import { timeLossEvents } from '../shared/time-loss/index.ts';
 import { rowOf } from './behaviour.ts';
@@ -68,16 +69,6 @@ export type CarModels = {
 
 const NOISE_COMPOUNDS: ReadonlySet<string> = new Set<NoiseCompound>(['soft', 'medium', 'hard', 'inter', 'wet']);
 
-function median(values: readonly number[]): number {
-  const sorted = [...values].sort((a, b) => a - b);
-  const mid = sorted.length >> 1;
-  const upper = sorted[mid] as number;
-  return sorted.length % 2 === 1 ? upper : ((sorted[mid - 1] as number) + upper) / 2;
-}
-
-/** 1.4826 · the median absolute deviation from `centre`: the robust σ of a normal sample. */
-const madSigma = (values: readonly number[], centre: number): number => 1.4826 * median(values.map((x) => Math.abs(x - centre)));
-
 /** The worst corner's known wear rate of a stint, else `undefined`. */
 function worstRate(stint: DeepReadonly<StintDegradation>): { ratePct: number; at: Ms } | undefined {
   let worst: { ratePct: number; at: Ms } | undefined;
@@ -135,10 +126,10 @@ function logNormalOf(sizes: readonly number[]): { median: SessionEstimate; sigma
   const logs = sizes.filter((s) => s > 0).map(Math.log);
   if (logs.length === 0) return { median: undefined, sigmaLog: undefined };
   const mean = logs.reduce((s, x) => s + x, 0) / logs.length;
-  const median = { value: Math.exp(mean), n: logs.length };
-  if (logs.length < 2) return { median, sigmaLog: undefined };
+  const sizeMedian = { value: Math.exp(mean), n: logs.length };
+  if (logs.length < 2) return { median: sizeMedian, sigmaLog: undefined };
   const sd = Math.sqrt(logs.reduce((s, x) => s + (x - mean) ** 2, 0) / (logs.length - 1));
-  return { median, sigmaLog: { value: sd, n: logs.length } };
+  return { median: sizeMedian, sigmaLog: { value: sd, n: logs.length } };
 }
 
 /** One model's estimates from its laps (`samples`), its laps with a time-loss event (`eventLosses`, a human's) and retirements. */
@@ -152,18 +143,19 @@ function estimatesOf(model: Model, samples: readonly LapSample[], eventLosses: R
   // is stable, and a human's laps with a time-loss event never enter it
   const base = free.filter((s) => model === 'ai' || !eventLosses.has(s.lap));
   let clean = base;
-  let centre = clean.length > 0 ? median(clean.map((s) => s.residual as number)) : 0;
-  let sigma = clean.length > 0 ? madSigma(clean.map((s) => s.residual as number), centre) : 0;
+  // without a clean lap the centre and σ stay 0
+  let centre = median(clean.map((s) => s.residual as number)) ?? 0;
+  let sigma = madSigma(clean.map((s) => s.residual as number)) ?? 0;
   for (let i = 0; i < 20 && base.length > 0; i++) {
     const next = base.filter((s) => (s.residual as number) - centre <= config.mistakeSigmas * sigma);
     if (next.length === clean.length || next.length === 0) break;
     clean = next;
     const values = clean.map((s) => s.residual as number);
-    centre = median(values);
-    sigma = madSigma(values, centre);
+    centre = median(values) as number;
+    sigma = madSigma(values) as number;
   }
   const cleanLaps = new Set(clean.map((s) => s.lap));
-  const centreAll = pace.length > 0 && clean.length === 0 ? median(pace.map((s) => s.residual as number)) : centre;
+  const centreAll = clean.length === 0 ? (median(pace.map((s) => s.residual as number)) ?? centre) : centre;
 
   // big events: a pace lap more than `bigEventMs` slow, apart from the mistakes (P5)
   const isBig = (s: LapSample) => !s.retiring && (s.residual as number) - centreAll > config.bigEventMs;

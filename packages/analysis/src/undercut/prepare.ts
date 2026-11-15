@@ -6,6 +6,7 @@ import type { EngineView } from '@pitwall/engine/readers';
 import { RACE_INTERACTION_CONFIG } from '../race-interaction/config.ts';
 import { REJOIN, type RejoinOutput } from '../rejoin/index.ts';
 import { behaviourFor } from '../shared/behaviour.ts';
+import { configOf } from '../shared/config-of.ts';
 import { strategyInputFrom, type StrategyInput } from '../shared/strategy-input/index.ts';
 import { UNDERCUT_BEHAVIOUR } from './behaviour.ts';
 import { UNDERCUT_CONFIG, type UndercutConfig } from './config.ts';
@@ -22,10 +23,10 @@ export type UndercutJobConfig = UndercutConfig & { closeGapMs: number };
 /** The job's input: `strategy`'s input, per our car its part, the call's config. */
 export type UndercutInput = { strategy: StrategyInput; cars: Record<CarId, UndercutCarInput>; config: UndercutJobConfig };
 
-/** The call's config of the run: `undercut`'s section of `config` over the defaults, and `race-interaction`'s close gap. */
-const configOf = (config: EngineView['config']): UndercutJobConfig => ({
-  ...(({ ...UNDERCUT_CONFIG.defaults, ...config[UNDERCUT_CONFIG.key] }) as UndercutConfig),
-  closeGapMs: RACE_INTERACTION_CONFIG.read({ config }).closeGapMs,
+/** The call's config of the run: `undercut`'s section over the defaults, and `race-interaction`'s close gap. */
+const jobConfigOf = (view: Pick<EngineView, 'config'>): UndercutJobConfig => ({
+  ...configOf(UNDERCUT_CONFIG, view),
+  closeGapMs: RACE_INTERACTION_CONFIG.read(view).closeGapMs,
 });
 
 /**
@@ -54,7 +55,7 @@ export function rivalsOf(start: StartingPoint, car: CarId, rangeMs: number): { p
 /** The job's input from the view. */
 export function prepareUndercut(view: EngineView): UndercutInput {
   const strategy = strategyInputFrom(view);
-  const config = configOf(view.config);
+  const config = jobConfigOf(view);
   const rejoin = view.outputs.get(REJOIN) as RejoinOutput | undefined;
   const cars: Record<CarId, UndercutCarInput> = {};
   for (const car of strategy.ourCars) {

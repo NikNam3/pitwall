@@ -24,7 +24,7 @@ import {
 } from '@pitwall/domain';
 import { openSpansOf, type DeepReadonly, type EngineView, type IncrementalCalculator } from '@pitwall/engine/readers';
 import { classifyLap, LAP_CLASSES_CONFIG, type LapClassOptions } from '../lap-classes/index.ts';
-import { PACE_CONFIG } from '../pace/index.ts';
+import { PACE_DELTA_CONFIG } from '../pace-delta/config.ts';
 import { behaviourFor, openSpansByCar } from '../shared/behaviour.ts';
 import { CAR_STATUS_READS } from '../shared/car-status.ts';
 import { MIN_LAPS } from '../pace-delta/index.ts';
@@ -94,7 +94,7 @@ type Acc = {
 const settings = (view: EngineView) => ({
   ...DAMAGE_CONFIG.read(view),
   ...LAP_CLASSES_CONFIG.read(view),
-  window: PACE_CONFIG.read(view).window,
+  window: PACE_DELTA_CONFIG.read(view).windowLaps,
 });
 
 /** The row of a span's kind; a kind without one is a bug in the table (C3). */
@@ -201,10 +201,10 @@ const evaluate = (track: Track, excluded: (from: Point, to: Point) => boolean): 
     const segment = from.progress % MINI_SECTORS;
     const ms = to.at - from.at;
     for (const est of track.estimates) {
-      const median = from.frame >= est.frame ? est.baseline?.[segment] : undefined;
-      if (median === undefined || median === 'fewLaps') continue;
-      est.counted.push({ endFrame: to.frame, at: to.at, lossMs: ms - median });
-      est.sumMs += ms - median;
+      const baselineMs = from.frame >= est.frame ? est.baseline?.[segment] : undefined;
+      if (baselineMs === undefined || baselineMs === 'fewLaps') continue;
+      est.counted.push({ endFrame: to.frame, at: to.at, lossMs: ms - baselineMs });
+      est.sumMs += ms - baselineMs;
     }
     foldCarSample(track.samples, segment, ms);
   }

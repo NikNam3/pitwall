@@ -6,6 +6,8 @@ import { known, unknown, type EstimateSource, type Known, type VisualCompound } 
 import { definePriors, type FallbackCtx, type PriorDecl, type PriorsCtx, type StoredSource } from '@pitwall/engine/readers';
 import { LAP_CLASSES_CONFIG } from '../lap-classes/index.ts';
 import { PER_LAP_RATE_CONFIG } from '../per-lap-rate/index.ts';
+import { configOf } from '../shared/config-of.ts';
+import { median } from '../shared/stats.ts';
 import { CORNERS, wearRatePerCorner, type Corner } from '../shared/wear-rate.ts';
 import { TYRE_LIFE_CONFIG } from './config.ts';
 
@@ -19,10 +21,6 @@ export const WEAR_LIMIT_KEY = 'tyreLife.wearLimitPct';
 
 /** The override-only key of the age basis's loss limit in ms. */
 export const AGE_LOSS_LIMIT_KEY = 'tyreLife.ageLossLimitMs';
-
-/** A config section's effective values in a priors or fallback context (C47): the defaults under `ctx.config`'s overrides. */
-const configOf = <C extends object>(section: { key: string; defaults: C }, ctx: Pick<PriorsCtx, 'config'>): C =>
-  ({ ...section.defaults, ...ctx.config[section.key] }) as C;
 
 type TyreLifeConfig = (typeof TYRE_LIFE_CONFIG)['defaults'];
 
@@ -39,13 +37,6 @@ export const limitFallback =
     value: { known: true, value: LIMIT_DEFAULTS[key].of(configOf(TYRE_LIFE_CONFIG, ctx)), at: 0 },
     source: { kind: 'default', note: LIMIT_DEFAULTS[key].note, sessionShare: 0, parts: 'config default' },
   });
-
-function median(values: readonly number[]): number {
-  const sorted = [...values].sort((x, y) => x - y);
-  const mid = sorted.length >> 1;
-  const hi = sorted[mid] as number;
-  return sorted.length % 2 === 1 ? hi : ((sorted[mid - 1] as number) + hi) / 2;
-}
 
 /** Wear per lap in % of `compound` at `corner`; `residual`: the source's value minus the set's. */
 const wearRate = (compound: VisualCompound, corner: Corner): PriorDecl => {
@@ -64,7 +55,8 @@ const wearRate = (compound: VisualCompound, corner: Corner): PriorDecl => {
         const rate = wearRatePerCorner(source.laps, { lapClasses: classes, rate: opts })[corner];
         if (rate.known) rates.push(rate.value.perLap);
       }
-      return rates.length === 0 ? unknown('insufficientData') : known(median(rates), 0);
+      const rate = median(rates);
+      return rate === undefined ? unknown('insufficientData') : known(rate, 0);
     },
     residual: (source, set): Known<number> => {
       const own = source[key];

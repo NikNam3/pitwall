@@ -9,18 +9,13 @@ import type { TyreType, VisualCompound } from '@pitwall/domain';
 import type { AsOfView, DeepReadonly, StoredSession } from '@pitwall/engine/readers';
 import { tyreTypeOf } from '@pitwall/domain';
 import { DEGRADATION_CONFIG, fitStint, phaseRow } from '../degradation/index.ts';
-import { fitLaps, fuelResolver, lapsByCar } from '../degradation/stint-fit.ts';
+import { fitLaps, fuelResolver } from '../degradation/stint-fit.ts';
 import { LAP_CLASSES_CONFIG } from '../lap-classes/index.ts';
 import { PER_LAP_RATE_CONFIG } from '../per-lap-rate/index.ts';
 import { FORECAST_FIELD_CONFIG } from '../shared/forecast-field/config.ts';
 import { priorOffsets } from '../shared/forecast-field/lap-model-params.ts';
-
-export function median(values: readonly number[]): number {
-  const sorted = [...values].sort((a, b) => a - b);
-  const mid = sorted.length >> 1;
-  const upper = sorted[mid] as number;
-  return sorted.length % 2 === 1 ? upper : ((sorted[mid - 1] as number) + upper) / 2;
-}
+import { median } from '../shared/stats.ts';
+import { lapsByCar } from '../shared/stint-laps.ts';
 
 /** The lap model's terms a lap is put on the slick scale with: per compound its dry offset against medium, per tyre type its slope. */
 export type SlickScale = {
@@ -74,7 +69,7 @@ function storedReferences(session: DeepReadonly<StoredSession>, view: Pick<AsOfV
   const config = DEGRADATION_CONFIG.read(view);
   const classes = { isRace, ...LAP_CLASSES_CONFIG.read(view) };
   const rate = PER_LAP_RATE_CONFIG.read(view);
-  const byCar = lapsByCar(projection.laps);
+  const byCar = lapsByCar(projection);
   const fuelOf = fuelResolver({
     isRace,
     ourCar: session.playerCar,
@@ -97,7 +92,8 @@ function storedReferences(session: DeepReadonly<StoredSession>, view: Pick<AsOfV
       const fit = fitStint(fitted.paceLaps, prior, config);
       if (fit.known) refs.push(fit.value.alphaMs - offset);
     }
-    if (refs.length > 0) out.push(median(refs));
+    const ref = median(refs);
+    if (ref !== undefined) out.push(ref);
   }
   return out;
 }
@@ -106,6 +102,5 @@ function storedReferences(session: DeepReadonly<StoredSession>, view: Pick<AsOfV
 export function weekendFieldReference(view: Pick<AsOfView, 'weekend' | 'config'>, scale: SlickScale): number | undefined {
   const weekend = view.weekend;
   if (weekend === undefined) return undefined;
-  const refs = weekend.sessions.flatMap((s) => storedReferences(s, view, scale));
-  return refs.length === 0 ? undefined : median(refs);
+  return median(weekend.sessions.flatMap((s) => storedReferences(s, view, scale)));
 }

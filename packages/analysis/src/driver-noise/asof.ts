@@ -6,6 +6,7 @@ import { known, unknown, type CarId, type CarNoise, type DriverNoise, type Drive
 import type { AsOfView, DeepReadonly } from '@pitwall/engine/readers';
 import { DAMAGE_CONFIG } from '../damage/config.ts';
 import { INCIDENTS_CONFIG } from '../incidents/config.ts';
+import { median } from '../shared/stats.ts';
 import { isRaceAt } from './behaviour.ts';
 import { DRIVER_NOISE_CONFIG } from './config.ts';
 import { carModelsOf, type CarModels, type Model, type ModelEstimates, type ResidualConfig } from './residuals.ts';
@@ -154,13 +155,6 @@ function carNoiseOf(car: CarModels, model: ModelEstimates, priors: Priors, human
   };
 }
 
-function median(values: readonly number[]): number {
-  const sorted = [...values].sort((a, b) => a - b);
-  const mid = sorted.length >> 1;
-  const upper = sorted[mid] as number;
-  return sorted.length % 2 === 1 ? upper : ((sorted[mid - 1] as number) + upper) / 2;
-}
-
 /** The model a car's entry reports: its driver's; a car without a car-driver span the AI's. */
 const reportedModel = (car: CarModels): Model => (car.driver === 'human' ? 'human' : 'ai');
 
@@ -185,7 +179,7 @@ function fieldOf(view: AsOfView, c: Config, cars: Map<CarId, CarModels>): Field 
     pooled.allLaps += ai.allLaps;
     fieldAt = Math.max(fieldAt, ai.at ?? 0);
   }
-  const ai = aiPriors(aiSigmas.length > 0 ? median(aiSigmas) : undefined, c);
+  const ai = aiPriors(median(aiSigmas), c);
   const k = c.shrinkLaps;
   const aiField: DriverNoise['aiField'] = {
     mistakeRatePerLap: known(shrink(rateOf(pooled.mistakes, pooled.mistakeBase), ai.mistakeRate, k).value, fieldAt),
