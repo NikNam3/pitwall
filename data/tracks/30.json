@@ -2167,25 +2167,49 @@
   "defaults": {
     "pitLossMs": {
       "green": {
-        "known": false,
-        "reason": "notReceived"
+        "known": true,
+        "value": {
+          "value": 19398,
+          "source": "OpenF1, 2024 Miami Grand Prix R, median of 10 green stops (in-lap + out-lap - 2 x median of the 3 racing laps before; stops with SC, VSC, red or yellow on in-lap or out-lap, on intermediate or wet tyres, or with the pace after off the reference by more than 5 % left out); no dry stops in the 2025 race"
+        },
+        "at": 0
       },
       "vsc": {
-        "known": false,
-        "reason": "notReceived"
+        "known": true,
+        "value": {
+          "value": 10669,
+          "source": "ratio of green, pitwall estimate; no dry stops in the 2025 race"
+        },
+        "at": 0
       },
       "sc": {
-        "known": false,
-        "reason": "notReceived"
+        "known": true,
+        "value": {
+          "value": 8729,
+          "source": "ratio of green, pitwall estimate; no dry stops in the 2025 race"
+        },
+        "at": 0
       }
     },
     "pitLossInLapShare": {
-      "known": false,
-      "reason": "notReceived"
+      "known": true,
+      "value": {
+        "value": 0.281,
+        "source": "OpenF1, 2024 Miami Grand Prix R, median of 10 green stops ((in-lap - reference) / (in-lap + out-lap - 2 x reference), reference the median of the 3 racing laps before, each stop's share clamped to [0, 1]; the green pit loss's stops); no dry stops in the 2025 race"
+      },
+      "at": 0
     },
     "compoundOffsetsMs": {
-      "known": false,
-      "reason": "notReceived"
+      "known": true,
+      "value": {
+        "value": {
+          "soft": 647,
+          "medium": 0,
+          "hard": 99
+        },
+        "source": "OpenF1, 2024 Miami Grand Prix R, median fuel-corrected racing lap (30 ms/kg, 1.8 kg/lap; 37 soft, 484 medium, 413 hard laps); no dry stops in the 2025 race"
+      },
+      "at": 0
     },
     "hazard": {
       "known": true,
@@ -2251,6 +2275,6 @@
     "generator": "pitwall-trackdata 0.1.0",
     "sources": "OpenF1 + MultiViewer; drsZones: OpenF1 qualifying car_data drs channel, median of the top five laps, detection point assumed 200 m before the zone start (not in telemetry or the FIA event notes)",
     "season": 2025,
-    "generatedOn": "2026-11-13"
+    "generatedOn": "2026-11-14"
   }
 }
