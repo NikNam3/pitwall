@@ -1,7 +1,7 @@
 // The DP's input from the strategy input (SP4.3b spec §6, §8.1; moved from `strategy/job.ts`, SP4.3b2 Task 6): the field
 // the job plans (our cars not planned modelled like rivals), `race-hazard`'s tables per lap, the plain forecast's road
 // and the traffic cost of a rejoin per lap. Pure (C2).
-import { NOISE_COMPOUNDS, type CarId, type NoiseCompound, type Policy, type RaceHazard, type StartingPoint } from '@pitwall/domain';
+import { NOISE_COMPOUNDS, tyreIndex, type CarId, type NoiseCompound, type Policy, type RaceHazard, type StartingPoint } from '@pitwall/domain';
 import { createRng, type Rng } from '@pitwall/engine/readers';
 import { raceForecast, startLapOf } from '../../race-forecast/index.ts';
 import { rivalNextCompound, type McInput } from '../../race-monte-carlo/index.ts';
@@ -81,7 +81,9 @@ export function dpInputOn(field: StartingPoint, car: CarId, hazard: Hazard, road
   const fromLap = startLapOf(field, car);
   const n = field.lapsTotal - fromLap + 1;
   const shifted = (a: Float64Array): Float64Array => Float64Array.from({ length: n }, (_, i) => a[fromLap + i - field.lap] ?? 0);
-  const rate = field.wearRatePct[car] ?? 0;
+  const current = tyreIndex(car, field.compound[car] ?? 0);
+  const rate = field.tyre.wearRatePct[current] ?? 0;
+  // SP4.3c Task 12: per-compound terms from tyre-model
   const wearRatePct = Object.fromEntries(NOISE_COMPOUNDS.map((c) => [c, rate])) as Record<NoiseCompound, number>;
   // new sets only (spec §6, K5)
   const sets = Object.fromEntries(NOISE_COMPOUNDS.map((c) => [c, 0])) as Record<NoiseCompound, number>;
@@ -97,7 +99,7 @@ export function dpInputOn(field: StartingPoint, car: CarId, hazard: Hazard, road
       wearPct: field.wearPct[car] ?? 0,
       fuelKg: field.fuelKg[car] ?? 0,
       paceMs: field.paceMs[car] ?? 0,
-      degMsPerLap: field.degMsPerLap[car] ?? 0,
+      degMsPerLap: field.tyre.degMsPerLap[current] ?? 0,
       wearRatePct,
       human: field.human[car] === 1,
     },

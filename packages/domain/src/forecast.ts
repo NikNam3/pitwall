@@ -11,6 +11,12 @@ import type { Ms } from './units.ts';
 /** The compounds in `StartingPoint.compound`'s index order. */
 export const NOISE_COMPOUNDS = ['soft', 'medium', 'hard', 'inter', 'wet'] as const satisfies readonly NoiseCompound[];
 
+/**
+ * The index of car `car`'s terms on compound `compound` (an index into `NOISE_COMPOUNDS`) in `StartingPoint.tyre`'s
+ * arrays: `car * NOISE_COMPOUNDS.length + compound`.
+ */
+export const tyreIndex = (car: number, compound: number): number => car * NOISE_COMPOUNDS.length + compound;
+
 /** A DRS zone by lap fraction (the track file's `drsZones`). */
 export type DrsZone = { detection: number; start: number; end: number };
 
@@ -31,8 +37,6 @@ export type StartingPoint = {
   fuelKg: Float64Array;
   paceMs: Float64Array;
   paceSdMs: Float64Array;
-  degMsPerLap: Float64Array;
-  degSdMs: Float64Array;
   sigmaMs: Float64Array;
   rho: Float64Array;
   mistakeRate: Float64Array;
@@ -40,7 +44,12 @@ export type StartingPoint = {
   mistakeSigmaLog: Float64Array;
   bigEventRate: Float64Array;
   retireRate: Float64Array;
-  wearRatePct: Float64Array;
+  /**
+   * The tyre terms per car and compound, each array indexed `tyreIndex(car, compound)` (`car * NOISE_COMPOUNDS.length +
+   * compound`): the wear rate (% per lap), the degradation (ms per % wear) and its σ, and the laps a fresh set lasts to
+   * its wear limit (-1: no limit known).
+   */
+  tyre: { wearRatePct: Float64Array; degMsPerLap: Float64Array; degSdMs: Float64Array; lapsToLimit: Int16Array };
   stopLow: Int16Array;
   stopMid: Int16Array;
   stopHigh: Int16Array;

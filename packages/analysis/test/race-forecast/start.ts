@@ -119,6 +119,12 @@ export function startingPoint(spec: StartSpec): StartingPoint {
     cars.forEach((c, i) => (a[i] = of(c)));
     return a;
   };
+  // the car's term in every compound's slot (`tyreIndex`)
+  const perCompound = <T extends Float64Array | Int16Array>(make: (len: number) => T, of: (c: (typeof cars)[number]) => number): T => {
+    const a = make(n * NOISE_COMPOUNDS.length);
+    cars.forEach((c, i) => a.fill(of(c), i * NOISE_COMPOUNDS.length, (i + 1) * NOISE_COMPOUNDS.length));
+    return a;
+  };
   const running = cars.map((c, i) => ({ c, i })).filter(({ c }) => c.retired !== true);
   const retired = cars.map((c, i) => ({ c, i })).filter(({ c }) => c.retired === true);
   const order = Int8Array.from([...running.sort((a, b) => a.c.gapMs - b.c.gapMs), ...retired].map(({ i }) => i));
@@ -142,8 +148,6 @@ export function startingPoint(spec: StartSpec): StartingPoint {
     fuelKg: f((l) => new Float64Array(l), (c) => c.fuelKg ?? 0),
     paceMs: f((l) => new Float64Array(l), (c) => c.paceMs),
     paceSdMs: f((l) => new Float64Array(l), (c) => c.paceSdMs ?? 0),
-    degMsPerLap: f((l) => new Float64Array(l), (c) => c.degMsPerLap ?? 0),
-    degSdMs: f((l) => new Float64Array(l), (c) => c.degSdMs ?? 0),
     sigmaMs: f((l) => new Float64Array(l), (c) => c.sigmaMs ?? 0),
     rho: f((l) => new Float64Array(l), (c) => c.rho ?? 0),
     mistakeRate: f((l) => new Float64Array(l), (c) => c.mistakeRate ?? 0),
@@ -151,7 +155,12 @@ export function startingPoint(spec: StartSpec): StartingPoint {
     mistakeSigmaLog: f((l) => new Float64Array(l), (c) => c.mistakeSigmaLog ?? 0.6),
     bigEventRate: f((l) => new Float64Array(l), (c) => c.bigEventRate ?? 0),
     retireRate: f((l) => new Float64Array(l), (c) => c.retireRate ?? 0),
-    wearRatePct: f((l) => new Float64Array(l), (c) => c.wearRatePct ?? 2),
+    tyre: {
+      wearRatePct: perCompound((l) => new Float64Array(l), (c) => c.wearRatePct ?? 2),
+      degMsPerLap: perCompound((l) => new Float64Array(l), (c) => c.degMsPerLap ?? 0),
+      degSdMs: perCompound((l) => new Float64Array(l), (c) => c.degSdMs ?? 0),
+      lapsToLimit: perCompound((l) => new Int16Array(l), () => -1),
+    },
     stopLow: f((l) => new Int16Array(l), () => lapsTotal),
     stopMid: f((l) => new Int16Array(l), () => lapsTotal),
     stopHigh: f((l) => new Int16Array(l), () => lapsTotal),

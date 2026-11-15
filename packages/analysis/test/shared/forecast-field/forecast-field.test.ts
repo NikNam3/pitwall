@@ -11,6 +11,7 @@ import {
   known,
   MINI_SECTORS,
   NOISE_COMPOUNDS,
+  tyreIndex,
   unknown,
   type CarId,
   type Corners,
@@ -147,10 +148,11 @@ describe('forecast-field (Task 16)', () => {
       // paceSdMs² = cov[0][0]
       expect(sp.paceSdMs[car]! ** 2, `car ${car}: pace σ²`).toBeCloseTo(aa, 6);
       // degradation per % wear (ruling R18): times the car's wear rate it is ν per lap, and its σ² is cov[1][1]
-      const wear = sp.wearRatePct[car]!;
+      const t = tyreIndex(car, sp.compound[car]!);
+      const wear = sp.tyre.wearRatePct[t]!;
       expect(wear, `car ${car}: wear rate`).toBeGreaterThan(0);
-      expect(sp.degMsPerLap[car]! * wear, `car ${car}: ν`).toBeCloseTo(stint.nuMsPerLap.value, 6);
-      expect((sp.degSdMs[car]! * wear) ** 2, `car ${car}: degradation σ²`).toBeCloseTo(nn, 6);
+      expect(sp.tyre.degMsPerLap[t]! * wear, `car ${car}: ν`).toBeCloseTo(stint.nuMsPerLap.value, 6);
+      expect((sp.tyre.degSdMs[t]! * wear) ** 2, `car ${car}: degradation σ²`).toBeCloseTo(nn, 6);
       stints++;
     }
     expect(stints).toBeGreaterThan(0);
@@ -207,7 +209,7 @@ describe('forecast-field (Task 16)', () => {
     const sp = valueOf(buildStartingPoint(view, upstreamOf(view, plainNoise(PARAMS.cars, HUMANS, view.at))), 'lap 6');
 
     expect(NOISE_COMPOUNDS[sp.compound[rival]!]).toBe('medium');
-    expect(sp.wearRatePct[rival]).toBe(WEAR_RATES.medium);
+    expect(sp.tyre.wearRatePct[tyreIndex(rival, sp.compound[rival]!)]).toBe(WEAR_RATES.medium);
     expect(sp.tyreAge[rival]).toBeGreaterThan(0);
     expect(sp.wearPct[rival]).toBeCloseTo(sp.tyreAge[rival]! * WEAR_RATES.medium, 9);
     expectFinite(sp);

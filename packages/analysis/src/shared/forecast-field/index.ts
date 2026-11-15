@@ -7,6 +7,7 @@ import {
   known,
   MINI_SECTORS,
   NOISE_COMPOUNDS,
+  tyreIndex,
   unknown,
   type CarId,
   type CarNoise,
@@ -180,8 +181,6 @@ export function buildStartingPoint(
     fuelKg: f64(),
     paceMs: f64(),
     paceSdMs: f64(),
-    degMsPerLap: f64(),
-    degSdMs: f64(),
     sigmaMs: f64(),
     rho: f64(),
     mistakeRate: f64(),
@@ -189,7 +188,13 @@ export function buildStartingPoint(
     mistakeSigmaLog: f64(),
     bigEventRate: f64(),
     retireRate: f64(),
-    wearRatePct: f64(),
+    tyre: {
+      wearRatePct: new Float64Array(cars * NOISE_COMPOUNDS.length),
+      degMsPerLap: new Float64Array(cars * NOISE_COMPOUNDS.length),
+      degSdMs: new Float64Array(cars * NOISE_COMPOUNDS.length),
+      // no limit known yet (Task 12: tyre-model's)
+      lapsToLimit: new Int16Array(cars * NOISE_COMPOUNDS.length).fill(-1),
+    },
     stopLow: new Int16Array(cars),
     stopMid: new Int16Array(cars),
     stopHigh: new Int16Array(cars),
@@ -227,7 +232,6 @@ export function buildStartingPoint(
     const driver = carNoise?.driver ?? 'unknown';
     sp.human[k] = driver === 'human' || (driver === 'unknown' && config.unknownDriverIsHuman) ? 1 : 0;
     const rate = Math.max(config.minWearRatePctPerLap, need.of(carNoise?.wearRatePctPerLap[compound], worstRate(degradation[id]?.at(-1))));
-    sp.wearRatePct[k] = rate;
     // wear: the worst corner where every corner is visible, else tyre age × the car's wear rate (realism, C8)
     const w = lap.wearAtEndPct;
     sp.wearPct[k] = stopped ? 0 : own !== undefined && w.fl.known && w.fr.known && w.rl.known && w.rr.known ? Math.max(w.fl.value, w.fr.value, w.rl.value, w.rr.value) : tyreAge * rate;
@@ -248,8 +252,13 @@ export function buildStartingPoint(
     const current = stints.at(-1);
     const nu = current === undefined ? degConfig.defaultNuMsPerLap : need.of(current.nuMsPerLap);
     const nuSd = current === undefined ? degConfig.defaultNuSdMs : current.cov.known ? Math.sqrt(Math.max(0, current.cov.value[1][1])) : need.of(current.nuSdMs);
-    sp.degMsPerLap[k] = nu / rate;
-    sp.degSdMs[k] = nuSd / rate;
+    // the car's current terms in every compound's slot (SP4.3c Task 12: per-compound terms from tyre-model)
+    for (let i = 0; i < NOISE_COMPOUNDS.length; i++) {
+      const t = tyreIndex(k, i);
+      sp.tyre.wearRatePct[t] = rate;
+      sp.tyre.degMsPerLap[t] = nu / rate;
+      sp.tyre.degSdMs[t] = nuSd / rate;
+    }
 
     sp.sigmaMs[k] = need.of(carNoise?.sigmaMs);
     sp.rho[k] = need.of(carNoise?.rho);
