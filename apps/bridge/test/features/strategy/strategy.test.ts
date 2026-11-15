@@ -84,15 +84,16 @@ function triggerFrames(spec: ViewSpec = {}, upTo: FrameNumber = RACE.lastFrame):
 function feed(subscribed: TopicName[]) {
   const strategy = featureOf('strategy');
   const hazard = featureOf('race-hazard');
+  const gaps = featureOf('gaps');
   const results: JobResult[] = [];
   const waiting: Array<() => void> = [];
   const jobs = new FeedJobs([strategy], (r) => {
     results.push(r);
     waiting.splice(0).forEach((w) => w());
   });
-  const registry = CalculatorRegistry.build([...hazard.calculators, ...strategy.calculators, ...jobs.calculators]);
+  const registry = CalculatorRegistry.build([...gaps.calculators, ...hazard.calculators, ...strategy.calculators, ...jobs.calculators]);
   const scheduler = new Scheduler(registry);
-  scheduler.setNeeded(demandOf([strategy, hazard], registry)(new Set(subscribed)));
+  scheduler.setNeeded(demandOf([strategy, hazard, gaps], registry)(new Set(subscribed)));
   const triggered: FrameNumber[] = [];
   /** One pass on `input`; a job whose trigger ran goes to the worker, computed for `frameId`. */
   const pass = (input: SchedulerInput, frameId: number): void => {

@@ -88,6 +88,7 @@ const segLine = (id: number, laps: number, step: number, nowLap: number, fineFro
 
 const lines = (over: Partial<GapperLines> = {}): GapperLines => ({
   reference: { kind: 'leaderAverage', carId: unknown('notApplicable') },
+  origin: known({ kind: 'lightsOut' }, 0),
   referenceLapMs: known(105_120, 0),
   cars: liveField([0, 300, 600, 900, 1100, 1500]),
   phases: [],
