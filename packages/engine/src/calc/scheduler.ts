@@ -241,6 +241,8 @@ export class Scheduler implements Snapshotable<SchedulerBookkeeping> {
   readonly #failed = new Set<CalculatorId>();
   readonly #hook: OnCalculatorRun;
   readonly #freezeOutputs: boolean;
+  /** Every object an earlier run's output already froze deeply: a later output that shares it freezes only its new objects (SP4.3c Task 12s). */
+  readonly #frozen = new WeakSet<object>();
   #needed: ReadonlySet<CalculatorId> = new Set();
 
   constructor(registry: CalculatorRegistry, opts: SchedulerOptions = {}) {
@@ -361,7 +363,7 @@ export class Scheduler implements Snapshotable<SchedulerBookkeeping> {
       let evaluation: Evaluation;
       try {
         evaluation = evaluate(calc, slot, view, this.#hook);
-        if (this.#freezeOutputs) deepFreeze(evaluation.output);
+        if (this.#freezeOutputs) deepFreeze(evaluation.output, this.#frozen);
       } catch (error) {
         this.#outputs.delete(calc.id);
         this.#failed.add(calc.id);
