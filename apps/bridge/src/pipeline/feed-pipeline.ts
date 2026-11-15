@@ -63,8 +63,10 @@ export type FeedPipelineOptions = {
    * is stored as the sessions' recording (`reprocess` reads them from there). `rulesVersion`: the rules version the logs
    * are stored with (C61). `mode`: `append` (default, live) appends each session's log as it grows; `replace` (a
    * rebuild of a recording) writes it once, at the session's end, replacing the stored one (C24). `rebuild`: rebuilds,
-   * in the background, an earlier session of the weekend whose stored log is not complete (C61). Live, with
-   * `recordingsDir`, a session whose key is stored with a recording continues that recording after a restart (C59).
+   * in the background, an earlier session of the weekend whose stored log is not complete (C61), and live, when a session
+   * starts that continues no stored recording, every other stored session not complete (C59). Live, with
+   * `recordingsDir`, a session whose key is stored with a recording continues that recording after a restart (C59); live,
+   * a key stored complete is never replaced or reopened: its packets are ignored (C24).
    */
   storage?: {
     db: Db;
@@ -136,6 +138,14 @@ export type FeedPosition = { sessionTimeMs: number; playerLap: number };
 
 type SessionStarted = Extract<TrackerEvent, { type: 'sessionStarted' }>;
 
+/** A starting session's storage key, as its first Session packet gives it. */
+const keyOfStart = (event: SessionStarted): SessionKey => ({
+  sessionUid: sessionUidString(event.sessionUid),
+  weekendId: String(event.session.weekendLinkIdentifier),
+  playerCar: playerCarOf(event.session),
+});
+const sameKey = (a: SessionKey, b: SessionKey): boolean => a.sessionUid === b.sessionUid && a.weekendId === b.weekendId && a.playerCar === b.playerCar;
+
 /** The answer to a pick (`commitDecision`), as the WebSocket server sends it back (C73). */
 export type DecisionResult = { ok: true } | { ok: false; reason: 'invalid' | 'notSupported'; message: string };
 
@@ -179,14 +189,15 @@ function withRecordedRealism(config: FeatureConfig, recordingPath: string, log: 
 type QueuedDecision =
   | { kind: 'pick'; setId: string | null }
   | { kind: 'edit'; setId: string }
-  | { kind: 'plan'; decision: PlanDecision };
+  | { kind: 'plan'; decision: PlanDecision }
+  | { kind: 'end' };
 
 /**
  * A restart's restore under way: the packets that arrive meanwhile wait in `buffer`, the decisions and calibration
  * edits in `decisions`, each in arrival order. `trackId` is the stored session's track: a pick is judged against it on
  * arrival (C73).
  */
-type Restore = { trackId: number; buffer: RawPacket[]; decisions: QueuedDecision[]; done: Promise<void> };
+type Restore = { key: SessionKey; trackId: number; buffer: RawPacket[]; decisions: QueuedDecision[]; done: Promise<void> };
 
 /**
  * Runs one feed: every datagram updates the feed's health, the tracker splits the stream into sessions and frames,
@@ -236,6 +247,12 @@ export class FeedPipeline {
   #continuation: Continuation | undefined;
   /** The datagrams being processed are the replay of a continued recording (C59). */
   #replaying = false;
+  /**
+   * The session whose packets are ignored (C59): ended by the user (`endSession`), or live a key stored complete, which is
+   * never replaced or reopened (C24). Nothing of it is recorded, stored or published, the feed's health aside, until a
+   * session of another key starts.
+   */
+  #closedKey: SessionKey | undefined;
 
   constructor(opts: FeedPipelineOptions) {
     this.#o = opts;
@@ -366,6 +383,30 @@ export class FeedPipeline {
     return { ok: true };
   }
 
+  /**
+   * The user ends the running session's recording now (`session.end`, C59, C73): the session finishes exactly as at its
+   * input's end (the frame being assembled applied, `runner.finish`, the closing spans stored, the row complete, the
+   * recording closed with its end record), and the rest of that session's packets is ignored until a Session packet of
+   * another key arrives; `feed.status` shows the session ended. Without a running session it is `invalid`. During a
+   * restart's restore it is answered ok and queued: the restored session ends once the run is live (`#applyQueued`).
+   */
+  endSession(): DecisionResult {
+    if (this.#restore !== undefined) return this.#queue({ kind: 'end' });
+    const session = this.#session;
+    if (session === undefined) return { ok: false, reason: 'invalid', message: 'this feed runs no session' };
+    this.#guarded('session end', () => {
+      for (const event of this.#tracker.end()) this.#handle(event, this.#lastReceivedAtMs);
+    });
+    this.#closedKey = session.key;
+    this.#guarded('session end', () => this.#checkFeed(this.#lastReceivedAtMs));
+    return { ok: true };
+  }
+
+  /** The session the feed runs now, or restores (C59); `undefined` without one. A stale sweep never rebuilds it. */
+  runningSession(): SessionKey | undefined {
+    return this.#restore?.key ?? this.#session?.key;
+  }
+
   start(): void {
     if (this.#started) throw new Error('FeedPipeline: already started');
     this.#started = true;
@@ -439,6 +480,14 @@ export class FeedPipeline {
       this.#restore.buffer.push(packet);
       return;
     }
+    if (this.#ignores(packet)) {
+      this.#guarded('ignored datagram', () => {
+        this.#lastReceivedAtMs = packet.receivedAtMs;
+        this.#monitor.onPacket(packet.receivedAtMs);
+        this.#checkFeed(packet.receivedAtMs);
+      });
+      return;
+    }
     const stored = this.#storedRecordingOf(packet);
     if (stored !== undefined) {
       this.#startRestore(stored, packet);
@@ -456,16 +505,48 @@ export class FeedPipeline {
     });
   }
 
+  /**
+   * A datagram of the closed session (C59): its session uid, or uid 0 (which belongs to no running session). A Session
+   * packet of another uid starts that session as any datagram does; nothing else reopens the closed one.
+   */
+  #ignores(packet: RawPacket): boolean {
+    const closed = this.#closedKey;
+    if (closed === undefined) return false;
+    const header = peekHeader(packet.bytes);
+    return header !== undefined && (header.sessionUid === 0n || sessionUidString(header.sessionUid) === closed.sessionUid);
+  }
+
+  /**
+   * Live and storing: whether the session `key` must not run, being the closed one or stored complete (C24, C59: a
+   * complete stored session is never replaced or reopened, also after a restart).
+   */
+  #isClosed(key: SessionKey): boolean {
+    const closed = this.#closedKey;
+    if (closed !== undefined && sameKey(closed, key)) return true;
+    const storage = this.#o.storage;
+    if (!this.#storesLive || storage === undefined) return false;
+    let complete = false;
+    this.#guarded('stored session lookup', () => {
+      complete = new WeekendRepository(storage.db, { log: this.#log }).sessionOf(key)?.complete === true;
+    });
+    return complete;
+  }
+
+  /** A live run that stores: it appends each session's log as it grows and replays no recording. */
+  get #storesLive(): boolean {
+    const storage = this.#o.storage;
+    return storage !== undefined && storage.sourcePath === undefined && (storage.mode ?? 'append') === 'append' && this.#o.recorded === undefined;
+  }
+
   /** A live run continues a session's recording (C59): it stores, records sessions itself and replays no recording. */
   get #continuesRecordings(): boolean {
-    const storage = this.#o.storage;
-    return storage !== undefined && storage.recordingsDir !== undefined && storage.sourcePath === undefined && (storage.mode ?? 'append') === 'append' && this.#o.recorded === undefined;
+    return this.#storesLive && this.#o.storage?.recordingsDir !== undefined;
   }
 
   /**
    * Live: the stored session `packet` starts, when it is the Session packet of a session other than the running one
    * whose key (session uid, weekend id, player car) is stored not complete with a recording that is still there (C59);
-   * else none. A complete stored session is never continued (C24): its key starts a run as any new session does.
+   * else none. A complete stored session is never continued nor replaced (C24): its key starts no run (`#isClosed`).
    */
   #storedRecordingOf(packet: RawPacket): { row: StoredSessionRow; path: string } | undefined {
     if (!this.#continuesRecordings) return undefined;
@@ -494,7 +575,8 @@ export class FeedPipeline {
    * session of their own, in a file of its own.
    */
   #startRestore(stored: { row: StoredSessionRow; path: string }, first: RawPacket): void {
-    const restore: Restore = { trackId: stored.row.trackId, buffer: [first], decisions: [], done: Promise.resolve() };
+    const { sessionUid, weekendId, playerCar } = stored.row;
+    const restore: Restore = { key: { sessionUid, weekendId, playerCar }, trackId: stored.row.trackId, buffer: [first], decisions: [], done: Promise.resolve() };
     this.#restore = restore;
     restore.done = this.#replayStored(stored, first.receivedAtMs)
       .catch((error: unknown) => {
@@ -526,7 +608,7 @@ export class FeedPipeline {
           this.calibrationEdited(entry.setId);
           return;
         }
-        const result = entry.kind === 'pick' ? this.commitDecision(entry.setId) : this.commitPlan(entry.decision);
+        const result = entry.kind === 'pick' ? this.commitDecision(entry.setId) : entry.kind === 'plan' ? this.commitPlan(entry.decision) : this.endSession();
         if (!result.ok) this.#log.warn({ feedId: this.#feedId, decision: entry, reason: result.reason, message: result.message }, 'a decision sent during the restore was not taken');
       });
     }
@@ -599,10 +681,21 @@ export class FeedPipeline {
 
   #handle(event: TrackerEvent, receivedAtMs: number): void {
     switch (event.type) {
-      case 'sessionStarted':
-        this.#startSession(event);
+      case 'sessionStarted': {
+        const key = keyOfStart(event);
+        if (!this.#isClosed(key)) {
+          this.#startSession(event);
+          return;
+        }
+        // The closed session's key again (C24, C59): it starts no run, and the tracker lets go of it, so the frames of
+        // this datagram are dropped and the following datagrams of its uid are ignored before the tracker.
+        this.#closedKey = key;
+        this.#tracker.end();
         return;
+      }
       case 'frame':
+        // A frame of a session that runs no processor (a closed one) changes nothing.
+        if (this.#session === undefined) return;
         this.#updatePosition(event.frame);
         this.#updateTeam(event.frame);
         this.#session?.push(event.frame);
@@ -643,6 +736,7 @@ export class FeedPipeline {
   #startSession(event: SessionStarted): void {
     const { feedId, hub, log, dumpsDir } = this.#o;
     this.#ended = undefined;
+    this.#closedKey = undefined;
     this.#reportSeat({ sessionUid: String(event.sessionUid), team: null });
     this.#alerts.clearWriteFailures(this.#sessionTime());
     hub.resetFeed(feedId);
@@ -686,6 +780,9 @@ export class FeedPipeline {
       ...(dumpsDir !== undefined && { dumpsDir }),
       ...(this.#o.calcStats && { calcStats: this.#o.calcStats }),
     });
+    // A live session that continues nothing (C59): every other stored session nobody continues is finished from its
+    // recording, in the background.
+    if (continued === undefined && this.#continuesRecordings) storage?.completeStale(keyOfStart(event));
   }
 
   /** A new session's storage, if the pipeline stores. */
@@ -813,7 +910,7 @@ export class FeedPipeline {
   /** Publishes `feed.status` and the feed-health insights as they stand at `nowMs`. */
   #checkFeed(nowMs: number, metrics: FrameMetrics = this.#tracker.metrics): void {
     const view = this.#monitor.view(metrics, nowMs);
-    const status = feedStatusOf(this.#feedId, view);
+    const status = feedStatusOf(this.#feedId, view, this.#closedKey !== undefined);
     // The pre-session producer: the feed is watched before any session exists, so the pipeline publishes it per
     // datagram. Inside a session the `feed-status` feature also publishes the same value per frame. Two producers
     // by decision, until a feed-level binding kind replaces this one (sub-project 2).

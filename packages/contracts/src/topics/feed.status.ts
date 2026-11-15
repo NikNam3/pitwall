@@ -13,6 +13,11 @@ export type FeedStatus = {
   cadenceMs?: number;
   latencyMs?: number;
   wrongFormat?: number;
+  /**
+   * The feed's session ended and the rest of its packets are ignored (C59: ended by the user, or a key stored complete),
+   * until a session of another key starts. The bridge always sets it; a value without it reads as `false`.
+   */
+  sessionEnded?: boolean;
 };
 
 export default defineTopic<NoParams, FeedStatus>({ owner: 'core', mode: 'state', maxHz: 2 });

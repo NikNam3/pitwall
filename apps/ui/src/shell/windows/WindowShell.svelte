@@ -20,6 +20,7 @@
     layoutEditCommand,
     panelCommands,
     panelRemoveCommands,
+    sessionEndCommand,
     windowCommands,
     type CommandContext,
     type ShellOverlay,
@@ -281,6 +282,7 @@
     ...(defaultFeed === undefined || activeCalibration === undefined
       ? []
       : calibrationCommands(trackSets, { send, feedId: defaultFeed, pick: () => openGarage('calibration-panel') })),
+    ...(defaultFeed === undefined ? [] : [sessionEndCommand({ send, feedId: defaultFeed })]),
     ...(editing
       ? [
           layoutEditAddCommand(addToActiveGroup),

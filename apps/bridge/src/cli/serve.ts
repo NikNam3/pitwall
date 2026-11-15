@@ -21,7 +21,7 @@ import { UiState } from '../ui-state/ui-state.ts';
 import { StartupError } from '../startup-error.ts';
 import type { Db, SessionKey, StoredSessionRow } from '../storage/db.ts';
 import { WeekendRepository } from '../storage/weekend-repository.ts';
-import { WsServer, type ActionOutcome, type ChooseAction } from '../ws/server.ts';
+import { WsServer, type ActionOutcome, type ChooseAction, type EndSessionAction } from '../ws/server.ts';
 import { recordingDecisions } from '../pipeline/decision-sidecars.ts';
 import { recordingProfiles } from '../pipeline/profile-sidecar.ts';
 import { ProfileStore } from '../drivers/store.ts';
@@ -170,7 +170,9 @@ export async function serve(opts: ServeOptions): Promise<number> {
       : undefined;
     if (profiles) undo.push(() => profiles.close());
     // A rebuild changes the stored projections the sets' sources and the persons' links rest on (C61).
+    // A session a feed is running (or restoring) right now is no stale session: it is never rebuilt under it (C59).
     const rebuildThenRecompute = rebuild && (async (row: StoredSessionRow) => {
+      if ([...pipelines.values()].some((pipeline) => { const running = pipeline.runningSession(); return running !== undefined && sameSession(row, running); })) return;
       await rebuild(row);
       calibration?.recompute('rebuild');
       profiles?.recompute('rebuild');
@@ -205,6 +207,12 @@ export async function serve(opts: ServeOptions): Promise<number> {
           if (!feedIds.includes(action.feedId)) return { ok: false, reason: 'invalid', message: `no feed ${action.feedId}` };
           const pipeline = pipelines.get(action.feedId);
           return pipeline === undefined ? { ok: false, reason: 'notSupported' } : pipeline.commitDecision(action.setId);
+        },
+        // Ending a session's recording is the feed's pipeline's (C59, C73).
+        endSession: (action: EndSessionAction): ActionOutcome => {
+          if (!feedIds.includes(action.feedId)) return { ok: false, reason: 'invalid', message: `no feed ${action.feedId}` };
+          const pipeline = pipelines.get(action.feedId);
+          return pipeline === undefined ? { ok: false, reason: 'notSupported' } : pipeline.endSession();
         },
         // A plan is a decision of the team's running sessions (C1a, C76): the plan routing takes it.
         plan: (action: PlanAction): ActionOutcome =>

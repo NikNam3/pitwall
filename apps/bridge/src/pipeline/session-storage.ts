@@ -65,6 +65,7 @@ export type SessionStorageOptions = {
 };
 
 const keyOf = (row: SessionKey): SessionKey => ({ sessionUid: row.sessionUid, weekendId: row.weekendId, playerCar: row.playerCar });
+const sameKey = (a: SessionKey, b: SessionKey): boolean => a.sessionUid === b.sessionUid && a.weekendId === b.weekendId && a.playerCar === b.playerCar;
 
 /**
  * One session's access to the database. Never throws: the first failure goes to `onError` and turns storage off
@@ -133,7 +134,7 @@ export class SessionStorage {
     if (repo === undefined) return undefined;
     try {
       const { context, incomplete } = repo.weekendContext(row.weekendId, player, keyOf(row), { startedAt: row.startedAt });
-      if (incomplete.length > 0) this.#rebuildInBackground(repo, row.weekendId, incomplete);
+      if (incomplete.length > 0) this.#rebuildInBackground(repo.sessionsOf(row.weekendId).filter((s) => incomplete.some((k) => sameKey(k, s))));
       return context;
     } catch (error) {
       this.#fail(error);
@@ -141,11 +142,25 @@ export class SessionStorage {
     }
   }
 
-  #rebuildInBackground(repo: WeekendRepository, weekendId: string, keys: readonly SessionKey[]): void {
+  /**
+   * Live: the session `current` starts without continuing a stored recording (C59), so every other stored session whose
+   * log is not complete (any weekend, any feed) is one nobody continues: each goes to `rebuild` in the background, which
+   * finishes it from its recording (C24: the log replaced whole) or keeps it as it is when the recording is missing.
+   */
+  completeStale(current: SessionKey): void {
+    const repo = this.#access?.repo;
+    if (repo === undefined || this.#o.mode !== 'append') return;
+    try {
+      this.#rebuildInBackground(repo.incompleteSessions().filter((row) => !sameKey(row, current)));
+    } catch (error) {
+      this.#fail(error);
+    }
+  }
+
+  #rebuildInBackground(rows: readonly StoredSessionRow[]): void {
     const { rebuild, log } = this.#o;
     if (rebuild === undefined) return;
-    const same = (a: SessionKey, b: SessionKey) => a.sessionUid === b.sessionUid && a.weekendId === b.weekendId && a.playerCar === b.playerCar;
-    for (const stored of repo.sessionsOf(weekendId).filter((s) => keys.some((k) => same(k, s)))) {
+    for (const stored of rows) {
       rebuild(stored).catch((error: unknown) => {
         log.error({ sessionUid: stored.sessionUid, weekendId: stored.weekendId, playerCar: stored.playerCar, err: error }, 'stored session not rebuilt');
       });
