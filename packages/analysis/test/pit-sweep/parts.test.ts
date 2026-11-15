@@ -65,7 +65,6 @@ describe('pit-sweep: one part per car and compound (Task 18q)', () => {
         auto: whole.auto,
         flag: whole.flag,
         latest: whole.latest,
-        greenRejoin: whole.greenRejoin,
       });
       // a part's run sweeps its car and its compound only
       const out = run(structuredClone(part), createRng(SEED));

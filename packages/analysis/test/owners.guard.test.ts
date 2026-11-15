@@ -98,6 +98,16 @@ const PASS_CURVE = /\bslopePerMs\s*\*/;
  */
 const BURN_FROM_FUEL = /\bburn\w*(?:\[[^\]\n]*\])?\s*=(?!=)[^;\n]*\bfuel\w*[^;\n]*\//;
 
+/**
+ * A stop's cost taken from the raw loss: a pit loss read by condition (`pitLossMs.green`, `pitLossMs[condition]`; the
+ * track file's `defaults.pitLossMs` left out, it is `pit-loss`'s and `forecast-field`'s source), as the DP's
+ * `stopCostMs`, its rain threshold and `trafficOf` did (SP4.3c Task 17, O8).
+ */
+const STOP_COST_FROM_LOSS = /(?<!defaults\.)\bpitLossMs\s*(?:\.\s*(?:green|vsc|sc|inLapShare)\b|\[)/;
+
+/** The stop model's terms: the human saving, the double stack, and `rejoin`'s private rule (SP4.3c Task 17, O8). */
+const STOP_MODEL_TERMS = ['HUMAN_STOP_SAVING_MS', 'DOUBLE_STACK_MS', 'passedBy'];
+
 /** `code` without its string and template literals (a note that quotes "70" is no literal of the limit). */
 const withoutStrings = (code: string): string => code.replace(/'(?:[^'\\\n]|\\.)*'|"(?:[^"\\\n]|\\.)*"|`(?:[^`\\]|\\.)*`/g, "''");
 
@@ -172,6 +182,10 @@ const OWNERS: OwnerRow[] = [
   // SP4.3c Task 15 (O15): the burn the simulators use is `shared/fuel-burn.ts`' through the starting point; no other
   // unit computes a burn from a fuel load (`race-forecast/field.ts`, `strategy-dp/thresholds.ts`, `strategy-dp/state.ts`).
   { judgement: 'the fuel burn', owner: 'shared/fuel-burn.ts', source: (u) => codeMatches(u, BURN_FROM_FUEL), allowed: [] },
+  // SP4.3c Task 17 (O8, B8): the rejoin of a stopper and the stop's cost (in-lap share, human saving, double stack,
+  // pit-exit yield) are `race-forecast`'s (`stopperRejoin`, `stopCostMs`); no other unit prices a stop from the raw loss
+  // or holds the model's terms (`rejoin`'s private rule, the DP's inline costs and `trafficOf`'s rejoin are deleted).
+  { judgement: 'rejoin of a stopper', owner: 'race-forecast', source: (u) => codeMatches(u, STOP_COST_FROM_LOSS) || codeNames(u, STOP_MODEL_TERMS), allowed: [] },
 ];
 
 /** A path as the guard shows it: repo-relative with forward slashes. */

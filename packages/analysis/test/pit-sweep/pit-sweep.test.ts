@@ -315,22 +315,27 @@ describe('pit-sweep: the job', () => {
   });
 
   // row 6
-  it('the row at L = now takes rejoin\'s green rejoin position (C43)', () => {
+  // SP4.3c Task 17 (O8, B8): one table, one rejoin model; `rejoin`'s green position mixed into the row at L = now is gone
+  it('every row takes its rejoin from one model, the row at L = now too: the simulated rejoin; rejoin\'s output moves no row (B8)', () => {
     const cars = RACE().viewAt(1).live.cars.length;
+    const positions: unknown[] = [];
     for (const green of [1, cars]) {
       rec.calls = [];
       const out = swept({ window: { compounds: ['hard'] }, greenRejoin: { [PLAYER]: green, [TEAMMATE]: green } });
+      const ofRun: unknown[] = [];
       for (const car of OURS) {
         const t = tableOf(carOf(out, car), 'hard');
-        expect(t.rows[0]!.rejoinPosition, `car ${car}, green ${green}`).toMatchObject({ known: true, value: green });
-        // a later stop: the simulated rejoin, the median over the scenarios
+        // every stop, now and later: the simulated rejoin, the median over the scenarios
         const { result } = callOf(car, 'hard');
-        t.rows.slice(1).forEach((row, i) => {
-          const [lo, hi] = middles(result.outcomes[i + 1]!.rejoin);
-          expect(row.rejoinPosition.known && row.rejoinPosition.value >= lo && row.rejoinPosition.value <= hi, `car ${car} L${row.stopLap}: ${json(row.rejoinPosition)}`).toBe(true);
+        t.rows.forEach((row, i) => {
+          const [lo, hi] = middles(result.outcomes[i]!.rejoin);
+          expect(row.rejoinPosition.known && row.rejoinPosition.value >= lo && row.rejoinPosition.value <= hi, `car ${car} L${row.stopLap}, green ${green}: ${json(row.rejoinPosition)}`).toBe(true);
         });
+        ofRun.push(t.rows.map((r) => r.rejoinPosition));
       }
+      positions.push(ofRun);
     }
+    expect(positions[1], "rejoin's green position reaches no row").toEqual(positions[0]);
   });
 
   // row 7
