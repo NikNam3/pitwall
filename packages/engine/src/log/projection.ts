@@ -256,6 +256,34 @@ export function situationAt(source: MembershipSource, frame: FrameNumber): Reado
 }
 
 /**
+ * Every visible span covering at least one frame of `[fromFrame, toFrame)` (C26): the closed ones of
+ * `source.history.spans` and the open ones of `source.situation`, from frame numbers only. `machine` keeps that
+ * sub-machine's spans, `carId` that car's spans. An empty range finds nothing; `toFrame` may be `Infinity`.
+ */
+export function spansOverlapping(
+  source: { history: Pick<MembershipSource['history'], 'spans'>; situation?: Pick<Situation, 'byMachine'> },
+  fromFrame: FrameNumber | number,
+  toFrame: FrameNumber | number,
+  machine?: MachineId,
+  carId?: CarId,
+): readonly DeepReadonly<OpenSpan>[] {
+  if (!(fromFrame < toFrame)) return [];
+  const found: DeepReadonly<OpenSpan>[] = [];
+  const add = (spans: readonly DeepReadonly<OpenSpan & { endFrame?: FrameNumber }>[] | undefined) => {
+    for (const s of spans ?? []) {
+      if (carId !== undefined && s.carId !== carId) continue;
+      if (s.startFrame < toFrame && (s.endFrame === undefined || fromFrame < s.endFrame)) found.push(s);
+    }
+  };
+  const bySource = [source.history.spans, source.situation?.byMachine ?? {}] as const;
+  for (const spansOf of bySource) {
+    if (machine !== undefined) add(spansOf[machine]);
+    else for (const spans of Object.values(spansOf)) add(spans);
+  }
+  return found;
+}
+
+/**
  * The spans a fact belongs to (C26), from the frame it describes: of `situationAt(source, fact.frame)`, the spans of
  * session-scoped machines (the clock's included) and, for a car's fact, its car's spans of car-scoped machines. Each
  * machine's scope is its span declaration's in domain (`scopeOf`, C15); a machine without one, and zone spans, never

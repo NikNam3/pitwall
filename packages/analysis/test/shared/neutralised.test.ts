@@ -266,6 +266,29 @@ describe('timeLossExcludedOf (Task 4, B6): membership from the projection module
     const before = neutralisation({ kind: 'SC', start: SLOW_START - 60_000, end: SLOW_START - 10_000 });
     expect(slow(viewOf({ miniSectors: race(), phases: [before] }))).toBe(false);
   });
+
+  // SP4.3c Task 4c (C26): any shared frame excludes, by the projection module's span-range query. A span lying wholly
+  // inside one mini-sector covers neither its first nor its last frame, and is excluded all the same.
+  it('a neutralisation lying wholly inside the mini-sector (opened after its start frame, closed before its end frame) excludes every car', () => {
+    const inside = neutralisation({ kind: 'VSC', start: SLOW_START + 1_000, end: SLOW_START + 2_000 });
+    const view = viewOf({ miniSectors: race(), phases: [inside] });
+    expect(slow(view)).toBe(true);
+    expect(slow(view, 3)).toBe(true);
+  });
+
+  it("a pit visit lying wholly inside the car's mini-sector excludes that car, not another", () => {
+    const visit = location(7, [{ kind: 'pitLane', at: SLOW_START + 1_000 }, { kind: 'track', at: SLOW_START + 2_000 }]);
+    const view = viewOf({ miniSectors: race(), spans: visit });
+    expect(slow(view)).toBe(true);
+    expect(slow(view, 6)).toBe(false);
+  });
+
+  it("a span closing on the mini-sector's start frame, or opening on its end frame, shares no frame with it", () => {
+    const before = neutralisation({ kind: 'SC', start: SLOW_START - 30_000, end: SLOW_START });
+    expect(slow(viewOf({ miniSectors: race(), phases: [before] }))).toBe(false);
+    const after = neutralisation({ kind: 'SC', start: SLOW_END, end: SLOW_END + 30_000 });
+    expect(slow(viewOf({ miniSectors: race(), phases: [after] }))).toBe(false);
+  });
 });
 
 // Guard row (spec §5.8, Task 4): judgement "neutralisation kind", owner `shared/neutralised.ts`. `owners.guard.test.ts`
@@ -323,10 +346,11 @@ describe('guard: no unit judges span coverage from frame numbers itself (Task 4b
       .flatMap((line, i) => (covers(line) ? [`${name}:${i + 1}: ${line.trim()}`] : []));
   };
   /**
-   * Units outside Task 4b's scope found with the same own coverage test (reported for their own task): each must still
-   * offend, so the list only shrinks; once fixed, its entry goes.
+   * Units found with the same own coverage test (reported for their own task): each must still offend, so the list only
+   * shrinks; once fixed, its entry goes. Empty since SP4.3c Task 4c: battle, forecast-score's experiments and sc-call ask
+   * the projection module's span-range query (`spansOverlapping`).
    */
-  const PENDING = ['battle/battle.ts', 'forecast-score/experiments.ts', 'sc-call/prepare.ts'];
+  const PENDING: readonly string[] = [];
 
   it('the pattern finds a two-sided bound comparison, never an arrow, a field copy or a one-sided test', () => {
     expect(covers('if (skips.some((s) => from.frame < s.endFrame && to.frame > s.startFrame)) return;')).toBe(true);
@@ -344,6 +368,17 @@ describe('guard: no unit judges span coverage from frame numbers itself (Task 4b
 
   it('the pending units still offend (remove an entry once its unit asks the projection module)', () => {
     for (const p of PENDING) expect(offendersIn(join(SRC, p)), p).not.toEqual([]);
+  });
+
+  it('battle and sc-call compare no span bound at all, one-sided included: the open-span cuts go too (Task 4c)', () => {
+    const oneSided = files(SRC)
+      .filter((file) => ['battle/', 'sc-call/'].some((dir) => relative(SRC, file).split('\\').join('/').startsWith(dir)))
+      .flatMap((file) =>
+        codeOf(readFileSync(file, 'utf8'))
+          .split('\n')
+          .flatMap((line, i) => (START.test(line) || END.test(line) ? [`${relative(SRC, file)}:${i + 1}: ${line.trim()}`] : [])),
+      );
+    expect(oneSided).toEqual([]);
   });
 
   it('damage reads no span frame: its exclusion is the shared rule over the projection module', () => {

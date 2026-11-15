@@ -3,7 +3,7 @@
 // whether the car already boxed under the neutralisation out now, and its behaviour row (C44). Structured-cloneable
 // (C51).
 import { unknown, type CarId, type EstimateSource, type Known, type Ms, type Rejoin } from '@pitwall/domain';
-import type { CalculatorId, EngineView } from '@pitwall/engine/readers';
+import { spansOverlapping, type CalculatorId, type EngineView } from '@pitwall/engine/readers';
 import { openNeutralisation } from '../shared/neutralised.ts';
 import { RACE_HAZARD } from '../race-hazard/id.ts';
 import { REJOIN, type RejoinOutput } from '../rejoin/index.ts';
@@ -55,12 +55,14 @@ export function prepareScCall(view: EngineView): ScCallInput {
   const open = now !== null && now.kind !== 'red' ? now.span : undefined;
   const neutralised: ScCondition | null = now?.kind === 'SC' ? 'sc' : now?.kind === 'VSC' ? 'vsc' : null;
   const rejoin = view.outputs.get(REJOIN) as RejoinOutput | undefined;
-  const boxStops = view.history.spans['car-activity-race'] ?? [];
   const cars: Record<CarId, ScCallCar> = {};
   for (const car of strategy.ourCars) {
     const own = rejoin?.cars[car] as Rejoin | undefined;
-    // a stop that ended once the neutralisation was out: the car boxed under it
-    const boxedUnder = open !== undefined && boxStops.some((s) => s.carId === car && s.kind === 'boxStop' && s.endFrame > open.startFrame);
+    // a stop that ended once the neutralisation was out: a closed box stop of the projection (the open one is no stop
+    // yet) covering a frame from the neutralisation's first on, by the projection module's span-range query (C26)
+    const boxedUnder =
+      open !== undefined &&
+      spansOverlapping({ history: view.history }, open.startFrame, Infinity, 'car-activity-race', car).some((s) => s.kind === 'boxStop');
     cars[car] = {
       effect: effectOf(behaviourFor(SC_CALL_BEHAVIOUR, view, car)),
       boxedUnder,
