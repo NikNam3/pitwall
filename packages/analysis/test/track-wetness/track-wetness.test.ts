@@ -162,7 +162,7 @@ describe('track-wetness (spec 5.1)', () => {
     expect(CALCULATORS.find((c) => c.id === TRACK_WETNESS)).toBe(trackWetnessCalculator);
     expect(trackWetnessCalculator.kind).toBe('quick');
     expect(trackWetnessCalculator.cadence).toBe('lapCompleted');
-    expect(trackWetnessCalculator.reads).toEqual(['laps', 'stints', 'miniSectors', 'session', 'spans:weekend-phase', 'spans:session-phase-race', { calculator: 'degradation' }]);
+    expect(trackWetnessCalculator.reads).toEqual(['laps', 'stints', 'miniSectors', 'session', 'decisions', 'spans:weekend-phase', 'spans:session-phase-race', { calculator: 'degradation' }]);
     const folder = (await loadUnitFolders()).find((f) => f.unit === TRACK_WETNESS);
     expect(Object.keys(folder?.table ?? {}).sort()).toEqual(['session-phase-race', 'weekend-phase']);
   });
