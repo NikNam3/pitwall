@@ -44,6 +44,7 @@ import { TRACK_WETNESS, trackWetnessAsOf } from '../../track-wetness/index.ts';
 import { tyreLifeCalculator } from '../../tyre-life/calculator.ts';
 import { TYRE_LIFE, tyreLifeAsOf } from '../../tyre-life/index.ts';
 import { ourCars } from '@pitwall/domain';
+import { configOf } from '../config-of.ts';
 import { FORECAST_FIELD_CONFIG } from './config.ts';
 import { lapModelParams } from './lap-model-params.ts';
 import { distanceAsOf, distanceOf, leaderTimeAt, leaderTimes, newestCrossings, orderOf } from './placement.ts';
@@ -64,9 +65,6 @@ export const FORECAST_UNITS: readonly AsOfUnit[] = [
   { id: RIVAL_STOPS, reads: rivalStopsCalculator.reads, asOf: rivalStopsAsOf },
   { id: RACE_INTERACTION, reads: raceInteractionCalculator.reads, asOf: raceInteractionAsOf },
 ];
-
-const configOf = <C extends object>(section: { key: string; defaults: C }, view: Pick<AsOfView, 'config'>): C =>
-  ({ ...section.defaults, ...view.config[section.key] }) as C;
 
 const isNoiseCompound = (c: string): c is NoiseCompound => (NOISE_COMPOUNDS as readonly string[]).includes(c);
 

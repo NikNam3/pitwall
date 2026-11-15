@@ -6,7 +6,8 @@ import { definePriors, type FallbackCtx, type PriorDecl, type PriorsCtx, type St
 import { LAP_CLASSES_CONFIG } from '../lap-classes/index.ts';
 import { phaseRow } from './behaviour.ts';
 import { PIT_LOSS_CONFIG } from './config.ts';
-import { median, sessionStops, type PitLossOptions } from './loss.ts';
+import { median } from '../shared/stats.ts';
+import { sessionStops, type PitLossOptions } from './loss.ts';
 
 /** The conditions a stop is made under: its record's flag. */
 export const PIT_CONDITIONS = ['green', 'vsc', 'sc'] as const satisfies readonly PitCondition[];
@@ -80,8 +81,8 @@ const lossEntry = (condition: PitCondition): PriorDecl => {
     aggregate: (sources, ctx): Known<number> => {
       const override = ctx.overrides[key];
       if (override !== undefined) return known(override, 0);
-      const losses = countedLosses(sources, condition, ctx);
-      return losses.length === 0 ? unknown('insufficientData') : known(Math.round(median(losses)), 0);
+      const lossMs = median(countedLosses(sources, condition, ctx));
+      return lossMs === undefined ? unknown('insufficientData') : known(Math.round(lossMs), 0);
     },
     /** The stops the aggregate's median rests on (the panel's STOPS column). */
     samples: (sources, ctx) => countedLosses(sources, condition, ctx).length,

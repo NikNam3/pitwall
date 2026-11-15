@@ -29,6 +29,7 @@ import {
 import { membershipOf, type DeepReadonly, type MembershipSource, type Projection } from '@pitwall/engine/readers';
 import { DRIVER_NOISE_CONFIG } from '../driver-noise/config.ts';
 import { freeAirLaps } from '../shared/free-air.ts';
+import { median } from '../shared/stats.ts';
 import { RACE_INTERACTION_BEHAVIOUR } from './behaviour.ts';
 import type { RaceInteractionConfig } from './config.ts';
 
@@ -190,13 +191,6 @@ function filterSources(source: MembershipSource): (car: CarId) => MembershipSour
 /** Entry `i` of `xs`, NaN outside it. */
 const nth = (xs: ArrayLike<number>, i: number): number => xs[i] ?? Number.NaN;
 
-/** The median of a non-empty list (sorts it). */
-const median = (values: number[]): number => {
-  const sorted = values.sort((a, b) => a - b);
-  const mid = sorted.length >> 1;
-  return sorted.length % 2 === 1 ? nth(sorted, mid) : (nth(sorted, mid - 1) + nth(sorted, mid)) / 2;
-};
-
 /** The race order at one point of one lap: the cars that passed it by time, their times, and each car's rank (-1 without). */
 type Order = { cars: CarId[]; at: number[]; rank: Int16Array };
 
@@ -334,7 +328,8 @@ export function episodesOf(
       const record = lapOf(car, lap);
       if (record !== undefined && isUsable(car, lap)) lapTimes.push(record.lapTimeMs);
     }
-    if (lapTimes.length > 0) fieldMedian[lap] = median(lapTimes);
+    const lapMedian = median(lapTimes);
+    if (lapMedian !== undefined) fieldMedian[lap] = lapMedian;
   }
   const pace = new Float64Array(carSlots).fill(Number.NaN);
   const free = freeAirLaps(history, freeAirGapMs);
@@ -348,7 +343,8 @@ export function episodesOf(
       all.push(residual);
       if (free.isFree(car, lap)) freeAir.push(residual);
     }
-    if (all.length > 0) pace[car] = median(freeAir.length > 0 ? freeAir : all);
+    const carPace = median(freeAir.length > 0 ? freeAir : all);
+    if (carPace !== undefined) pace[car] = carPace;
   }
 
   /** Whether `car` has DRS at braking zone `z` of lap `lap` (relative: the car ahead is not itself in range). */

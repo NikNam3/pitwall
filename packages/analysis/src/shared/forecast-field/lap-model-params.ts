@@ -3,14 +3,12 @@
 import type { LapModelParams, NoiseCompound } from '@pitwall/domain';
 import type { AsOfView, CalculatorId, DeepReadonly } from '@pitwall/engine/readers';
 import { DEGRADATION, DEGRADATION_CONFIG, type DegradationOutput } from '../../degradation/index.ts';
+import { configOf } from '../config-of.ts';
 import { FORECAST_FIELD_CONFIG } from './config.ts';
 
 /** The dry compounds whose offsets are fitted against medium (medium is 0). */
 const FITTED = ['soft', 'hard'] as const satisfies readonly NoiseCompound[];
 type Fitted = (typeof FITTED)[number];
-
-const configOf = <C extends object>(section: { key: string; defaults: C }, view: Pick<AsOfView, 'config'>): C =>
-  ({ ...section.defaults, ...view.config[section.key] }) as C;
 
 /** The prior of the fitted offsets against medium: the track file's (relative to its medium), else the config's. */
 export function priorOffsets(view: Pick<AsOfView, 'track' | 'config'>): Record<Fitted, number> {

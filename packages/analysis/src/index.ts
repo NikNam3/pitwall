@@ -23,8 +23,6 @@ export { lapOverviewCalculator } from './lap-overview/calculator.ts';
 export * from './lap-times/index.ts';
 export { lapTimesCalculator } from './lap-times/calculator.ts';
 export { boardFor } from './lap-times/lap-times.ts';
-export * from './pace/index.ts';
-export { paceCalculator } from './pace/calculator.ts';
 export { fuelCalculator } from './fuel/calculator.ts';
 export * from './pace-delta/index.ts';
 export * from './per-lap-rate/index.ts';

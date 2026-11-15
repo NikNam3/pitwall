@@ -19,9 +19,9 @@ import {
 } from '@pitwall/domain';
 import { membershipOf, openSpansOf, type DeepReadonly, type EngineView, type QuickCalculator } from '@pitwall/engine/readers';
 import { isPaceLap, LAP_CLASSES_CONFIG, type LapClassOptions } from '../lap-classes/index.ts';
-import { median } from '../pit-loss/loss.ts';
 import { PIT_LOSS } from '../pit-loss/index.ts';
 import { behaviourFor } from '../shared/behaviour.ts';
+import { median } from '../shared/stats.ts';
 import { CROSSOVER_BEHAVIOUR, phaseRow, type CrossoverEffect } from './behaviour.ts';
 import { CROSSOVER_CONFIG } from './config.ts';
 import { CROSSOVER, type CrossoverOutput } from './index.ts';
@@ -82,9 +82,10 @@ function greenLaps(view: EngineView, classes: LapClassOptions): TypedLap[] {
 
 /** The median of `laps` (integer ms, C4), known since the newest one's completion; `insufficientData` below `minCars`. */
 function medianOf(laps: readonly Lap[], minCars: number): Known<Ms> {
-  if (laps.length === 0 || laps.length < minCars) return unknown('insufficientData');
+  const lapMs = median(laps.map((l) => l.lapTimeMs));
+  if (lapMs === undefined || laps.length < minCars) return unknown('insufficientData');
   const at = laps.reduce((t, l) => Math.max(t, l.completedAt), 0);
-  return known(Math.round(median(laps.map((l) => l.lapTimeMs))), at);
+  return known(Math.round(lapMs), at);
 }
 
 /** Per lap number with a green lap, ascending, the median of each type's green laps. */

@@ -1,5 +1,6 @@
 // `per-lap-rate` (spec 4): robust per-lap rates and the laps until a target. Functions, imported by the analyses that use them.
 import { known, unknown, type Known, type SessionTime } from '@pitwall/domain';
+import { median } from '../shared/stats.ts';
 
 export * from './config.ts';
 
@@ -30,7 +31,8 @@ export function perLapGainRate(samples: GainSample[], opts: RateOptions): Known<
   if (used === undefined || newest === undefined) return unknown('insufficientData');
   const gains: number[] = [];
   for (const s of used) gains.push(s.gain);
-  return known({ perLap: median(gains), samples: used.length }, newest.at);
+  // `used` holds `newest`, so there is a gain
+  return known({ perLap: median(gains) as number, samples: used.length }, newest.at);
 }
 
 /** A value sampled once a lap, e.g. a gap at the line; `at` is when it was taken. The result's `at` is the newest used sample's. */
@@ -50,31 +52,9 @@ export function perLapRate(samples: RateSample[], opts: RateOptions): Known<Rate
       if (b.lap !== a.lap) slopes.push((b.value - a.value) / (b.lap - a.lap));
     }
   });
-  if (slopes.length === 0) return unknown('insufficientData');
-  return known({ perLap: median(slopes), samples: used.length }, newest.at);
-}
-
-/** Above this many values `median` sorts with `Array.prototype.sort`; at or below it, by insertion (a window is small). */
-const INSERTION_SORT_MAX = 16;
-
-/** Sorts `values` ascending in place, stable, as `sort((x, y) => x - y)` does. */
-function sortAscending(values: number[]): number[] {
-  if (values.length > INSERTION_SORT_MAX) return values.sort((x, y) => x - y);
-  for (let i = 1; i < values.length; i++) {
-    const v = values[i] as number;
-    let j = i - 1;
-    for (; j >= 0 && (values[j] as number) > v; j--) values[j + 1] = values[j] as number;
-    values[j + 1] = v;
-  }
-  return values;
-}
-
-/** The median of `values`, a fresh array of its caller's, which it sorts in place. */
-function median(values: number[]): number {
-  const sorted = sortAscending(values);
-  const mid = sorted.length >> 1;
-  const hi = sorted[mid] as number;
-  return sorted.length % 2 === 1 ? hi : ((sorted[mid - 1] as number) + hi) / 2;
+  const perLap = median(slopes);
+  if (perLap === undefined) return unknown('insufficientData');
+  return known({ perLap, samples: used.length }, newest.at);
 }
 
 /** Laps until the value reaches `target` at `rate`; `notApplicable` when the rate moves away from it. A known result carries the rate's `at`. */

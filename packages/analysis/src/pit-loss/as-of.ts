@@ -18,9 +18,10 @@ import {
 import type { AsOfView, DeepReadonly, EngineView } from '@pitwall/engine/readers';
 import { LAP_CLASSES_CONFIG } from '../lap-classes/index.ts';
 import { behaviourFor } from '../shared/behaviour.ts';
+import { median } from '../shared/stats.ts';
 import { PIT_LOSS_BEHAVIOUR, phaseRow, type PitLossEffect } from './behaviour.ts';
 import { PIT_LOSS_CONFIG } from './config.ts';
-import { inLapShareOf, median, sessionStops, type PitLossOptions } from './loss.ts';
+import { inLapShareOf, sessionStops, type PitLossOptions } from './loss.ts';
 import { inLapSharePrior, PIT_CONDITIONS, pitLossFallback, pitLossKey } from './priors.ts';
 
 /**
@@ -54,9 +55,9 @@ const stopsWord = (n: number): string => (n === 1 ? '1 stop' : `${n} stops`);
 /** The estimate of one condition from its counted stops' losses and its prior (spec 4.3, 4.4). */
 const estimateOf = (losses: readonly Extract<Known<Ms>, { known: true }>[], prior: Prior, k: number): Pick<PitLossEstimate, 'lossMs' | 'source'> => {
   const n = losses.length;
-  if (n === 0) return { lossMs: prior.value.known ? known(Math.round(prior.value.value), prior.value.at) : prior.value, source: prior.source };
-  const lossesAt = losses.reduce((at, l) => Math.max(at, l.at), 0);
   const sessionMedian = median(losses.map((l) => l.value));
+  if (sessionMedian === undefined) return { lossMs: prior.value.known ? known(Math.round(prior.value.value), prior.value.at) : prior.value, source: prior.source };
+  const lossesAt = losses.reduce((at, l) => Math.max(at, l.at), 0);
   if (!prior.value.known) return { lossMs: known(Math.round(sessionMedian), lossesAt), source: { kind: 'session', sessionShare: 1, parts: stopsWord(n) } };
   const sessionShare = n / (n + k);
   const value = (n * sessionMedian + k * prior.value.value) / (n + k);
@@ -68,9 +69,10 @@ const estimateOf = (losses: readonly Extract<Known<Ms>, { known: true }>[], prio
 /** The median stationary time of a condition's stops that served no penalty (R12), known since the newest one's pit-lane exit. */
 const stationaryMedianOf = (view: AsOfView, condition: PitCondition): Known<Ms> => {
   const records = view.history.pitStops.filter((s) => s.flag === condition && !s.penaltyServed);
-  if (records.length === 0) return unknown('insufficientData');
+  const stationaryMs = median(records.map((s) => s.stationaryTimeMs));
+  if (stationaryMs === undefined) return unknown('insufficientData');
   const at = records.reduce((t, s) => Math.max(t, s.pitLaneExit), 0);
-  return known(Math.round(median(records.map((s) => s.stationaryTimeMs))), at);
+  return known(Math.round(stationaryMs), at);
 };
 
 /** A counted stop's in-lap share (`inLapShareOf`), known since its loss is. */
@@ -105,9 +107,10 @@ function inLapSharesOf(view: AsOfView, laps: readonly LapRecord[], stops: readon
 /** A condition's in-lap share: the blend `(n · sessionMedian + k · prior) / (n + k)` of its stops' shares and the prior (`inLapSharePrior`). */
 const inLapShareBlend = (shares: readonly Share[], prior: number, k: number): Known<number> => {
   const n = shares.length;
-  if (n === 0) return known(prior, 0);
+  const sessionMedian = median(shares.map((s) => s.value));
+  if (sessionMedian === undefined) return known(prior, 0);
   const at = shares.reduce((t, s) => Math.max(t, s.at), 0);
-  return known((n * median(shares.map((s) => s.value)) + k * prior) / (n + k), at);
+  return known((n * sessionMedian + k * prior) / (n + k), at);
 };
 
 /** The output of `pit-loss` as of the view's frame. */

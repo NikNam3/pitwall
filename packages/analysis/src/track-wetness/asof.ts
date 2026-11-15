@@ -17,8 +17,9 @@ import { tyreTypeOf } from '@pitwall/domain';
 import { DEGRADATION, DEGRADATION_CONFIG, fitStint, type DegradationOutput, type StintDegradation } from '../degradation/index.ts';
 import { DRIVER_NOISE_CONFIG } from '../driver-noise/config.ts';
 import { freeAirLaps, type FreeAirLaps } from '../shared/free-air.ts';
+import { median } from '../shared/stats.ts';
 import { sessionEffect } from './behaviour.ts';
-import { median, slickScaleOf, weekendFieldReference, type SlickScale } from './dry-reference.ts';
+import { slickScaleOf, weekendFieldReference, type SlickScale } from './dry-reference.ts';
 import { TRACK_WETNESS_CONFIG } from './config.ts';
 import { runWetnessFilter, type WetnessFilterConfig } from './kalman.ts';
 
@@ -61,9 +62,9 @@ function commonModes(stints: readonly Stint[], nuOf: (s: Stint) => number, leade
   for (const stint of stints) {
     const nu = nuOf(stint);
     const free = stint.laps.filter((l) => l.free && l.lap <= leaderLap);
-    if (free.length === 0) continue;
     const detrended = free.map((l) => ({ lap: l.lap, at: l.at, ms: l.ms - nu * l.tyreAge }));
     const reference = median(detrended.slice(0, config.dryReferenceLaps).map((d) => d.ms));
+    if (reference === undefined) continue;
     for (const d of detrended) {
       const ofLap = residuals[d.lap] as Partial<Record<TyreType, Slot>>;
       const slot = (ofLap[stint.type] ??= { values: [], at: 0 });
@@ -76,7 +77,8 @@ function commonModes(stints: readonly Stint[], nuOf: (s: Stint) => number, leade
     const commonModeMs = {} as Record<TyreType, Known<Ms>>;
     for (const type of TYPES) {
       const r = residuals[lap]?.[type];
-      commonModeMs[type] = r === undefined ? unknown('insufficientData') : known(Math.round(median(r.values)), r.at);
+      // a slot holds a value from the lap that made it
+      commonModeMs[type] = r === undefined ? unknown('insufficientData') : known(Math.round(median(r.values) as number), r.at);
     }
     byLap.push({ lap, commonModeMs });
   }
@@ -135,7 +137,7 @@ function measurementsOf(view: AsOfView, stints: readonly Stint[], nuOf: (s: Stin
     const stint = stints[i] as Stint;
     if (stint.type !== 'slick') return undefined;
     const dry = rs.filter((r) => !wet.has(r.lap.lap)).slice(0, config.dryReferenceLaps);
-    return dry.length === 0 ? undefined : median(dry.map((r) => r.ms));
+    return median(dry.map((r) => r.ms));
   });
   const ownByCar = new Map<CarId, number[]>();
   stintRef.forEach((ref, i) => {
@@ -146,8 +148,9 @@ function measurementsOf(view: AsOfView, stints: readonly Stint[], nuOf: (s: Stin
     of.push(ref - offset);
     ownByCar.set(stint.car, of);
   });
-  const own = new Map([...ownByCar].map(([car, refs]) => [car, median(refs)] as const));
-  let field: number | undefined = own.size > 0 ? median([...own.values()]) : undefined;
+  // a car's list holds the reference that made it
+  const own = new Map([...ownByCar].map(([car, refs]) => [car, median(refs) as number] as const));
+  let field = median([...own.values()]);
   field ??= weekendFieldReference(view, scale);
 
   type Slot = { own: number[]; field: number[]; ownAt: Ms; fieldAt: Ms };
@@ -185,8 +188,10 @@ function measurementsOf(view: AsOfView, stints: readonly Stint[], nuOf: (s: Stin
     for (const type of TYPES) {
       const slot = slots[lap]?.[type];
       if (slot === undefined) continue;
-      if (slot.own.length > 0) m = { value: median(slot.own), at: slot.ownAt };
-      else if (slot.field.length > 0) m = { value: median(slot.field), at: slot.fieldAt };
+      const ownMedian = median(slot.own);
+      const fieldMedian = median(slot.field);
+      if (ownMedian !== undefined) m = { value: ownMedian, at: slot.ownAt };
+      else if (fieldMedian !== undefined) m = { value: fieldMedian, at: slot.fieldAt };
       if (m !== undefined) break;
     }
     out.push(m);

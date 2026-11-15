@@ -3,6 +3,8 @@ import { known, unknown, type Known, type LapRecord, type Ms, type SessionTime }
 import type { DeepReadonly } from '@pitwall/engine/readers';
 import { classifyLap, type LapClassOptions } from '../lap-classes/index.ts';
 
+export * from './config.ts';
+
 /** The pace laps `paceDelta` needs on each side of the event. */
 export const MIN_LAPS = 2;
 

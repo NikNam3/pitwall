@@ -15,10 +15,11 @@ import { known, SC_CALL_GAIN_BINS, unknown, type CarId, type Known, type Policy,
 import type { Rng } from '@pitwall/engine/readers';
 import { startLapOf } from '../race-forecast/index.ts';
 import { scoreCalls, type CallInput, type McInput } from '../race-monte-carlo/index.ts';
+import { configOf } from '../shared/config-of.ts';
 import { binShares } from '../shared/distribution.ts';
 import { committedField, mcSettingsFrom, notPlannedWhy, plannedCars, plannedField, policyOf, strategyConfigOf, toDpInput, toMcHazard } from '../shared/strategy-input/index.ts';
 import { bestWith, dpResult, solveDp, type DpSolution, type DpUnder } from '../strategy-dp/index.ts';
-import { SC_CALL_CONFIG, type ScCallConfig } from './config.ts';
+import { SC_CALL_CONFIG } from './config.ts';
 import type { ScCallCar, ScCallInput, ScCondition } from './prepare.ts';
 
 export type { ScCallInput } from './prepare.ts';
@@ -106,9 +107,6 @@ function rowOn(
   };
 }
 
-/** `sc-call`'s config of the run: its section over the defaults. */
-const configOf = (config: ScCallInput['strategy']['config']): ScCallConfig => ({ ...SC_CALL_CONFIG.defaults, ...config[SC_CALL_CONFIG.key] }) as ScCallConfig;
-
 /** Car `carId`'s call on the known starting point `start`. */
 function callFor(input: ScCallInput, start: StartingPoint, at: number, carId: CarId, car: ScCallCar, rng: Rng): ScCall {
   const { strategy } = input;
@@ -123,7 +121,7 @@ function callFor(input: ScCallInput, start: StartingPoint, at: number, carId: Ca
   const dp = toDpInput(strategy, carId);
   const sol = solveDp(dp);
   const { thresholds } = dpResult(sol);
-  const cap = configOf(strategy.config).maxScenarioPolicies;
+  const cap = configOf(SC_CALL_CONFIG, strategy).maxScenarioPolicies;
   // the call's car alone, or with a committed teammate as certain input; an uncommitted teammate is modelled like a rival
   const sets: StartingPoint['sets'] = { [carId]: field.sets[carId] ?? [] };
   const mates = committedField(strategy, carId);

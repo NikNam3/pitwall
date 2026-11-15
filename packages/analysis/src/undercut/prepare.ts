@@ -5,6 +5,7 @@ import { unknown, type CarId, type Known, type StartingPoint } from '@pitwall/do
 import type { EngineView } from '@pitwall/engine/readers';
 import { REJOIN, type RejoinOutput } from '../rejoin/index.ts';
 import { behaviourFor } from '../shared/behaviour.ts';
+import { configOf } from '../shared/config-of.ts';
 import { strategyInputFrom, type StrategyInput } from '../shared/strategy-input/index.ts';
 import { UNDERCUT_BEHAVIOUR } from './behaviour.ts';
 import { UNDERCUT_CONFIG, type UndercutConfig } from './config.ts';
@@ -17,9 +18,6 @@ export type UndercutCarInput = { applicable: boolean; position: number; rivals: 
 
 /** The job's input: `strategy`'s input, per our car its part, the call's config. */
 export type UndercutInput = { strategy: StrategyInput; cars: Record<CarId, UndercutCarInput>; config: UndercutConfig };
-
-/** `undercut`'s config of the run: its section of `config` over the defaults. */
-const configOf = (config: EngineView['config']): UndercutConfig => ({ ...UNDERCUT_CONFIG.defaults, ...config[UNDERCUT_CONFIG.key] }) as UndercutConfig;
 
 /**
  * Car `car`'s rivals on `start` (spec §9.1): the car directly ahead and directly behind within `rangeMs`, then the next
@@ -47,7 +45,7 @@ export function rivalsOf(start: StartingPoint, car: CarId, rangeMs: number): { p
 /** The job's input from the view. */
 export function prepareUndercut(view: EngineView): UndercutInput {
   const strategy = strategyInputFrom(view);
-  const config = configOf(view.config);
+  const config = configOf(UNDERCUT_CONFIG, view);
   const rejoin = view.outputs.get(REJOIN) as RejoinOutput | undefined;
   const cars: Record<CarId, UndercutCarInput> = {};
   for (const car of strategy.ourCars) {

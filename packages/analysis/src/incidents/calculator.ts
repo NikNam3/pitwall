@@ -42,7 +42,7 @@ import { ALARMS_CONFIG } from '../alarms/index.ts';
 import { DAMAGE_CONFIG } from '../damage/index.ts';
 import { GAPS_CONFIG } from '../gaps/index.ts';
 import { LAP_CLASSES_CONFIG } from '../lap-classes/index.ts';
-import { PACE_CONFIG } from '../pace/index.ts';
+import { PACE_DELTA_CONFIG } from '../pace-delta/config.ts';
 import { paceDeltaAround } from '../pace-delta/index.ts';
 import { emptyDamageJumps, finishJump, foldDamageJumps, type DamageJumpFold, type FinishedJump } from '../shared/damage-jumps.ts';
 import { isNeutralisation, leaderLapAt, NEUTRALISATION_MACHINES, NEUTRALISATION_READS, neutralisationKind, type NeutralisationKind } from '../shared/neutralised.ts';
@@ -210,7 +210,7 @@ const settings = (view: EngineView) => {
     jumpWindowMs,
     warningLimit: ALARMS_CONFIG.read(view).warningsBeforePenalty,
     neighbourhoodMs: GAPS_CONFIG.read(view).neighbourhoodMs,
-    window: PACE_CONFIG.read(view).window,
+    window: PACE_DELTA_CONFIG.read(view).windowLaps,
     maxNeutralisedMs: LAP_CLASSES_CONFIG.read(view).maxNeutralisedMs,
   };
 };
