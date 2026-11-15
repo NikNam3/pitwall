@@ -293,9 +293,9 @@ describe('crossover calculator', () => {
       'session-phase-race': phaseRows,
       'weekend-phase': {
         race: { isRace: true },
-        practice: { notApplicable: true },
-        qualifying: { notApplicable: true },
-        none: { notApplicable: true },
+        practice: { isRace: false, notApplicable: true },
+        qualifying: { isRace: false, notApplicable: true },
+        none: { isRace: false, notApplicable: true },
       },
     });
   });
