@@ -41,14 +41,13 @@ import {
 import { openSpansOf, type ChangeTag, type DeepReadonly, type EngineView, type IncrementalCalculator } from '@pitwall/engine/readers';
 import { ALARMS_CONFIG } from '../alarms/index.ts';
 import { DAMAGE_CONFIG } from '../damage/index.ts';
-import { GAPS_CONFIG } from '../gaps/index.ts';
+import { GAPS_CONFIG, leaderLapAt } from '../gaps/index.ts';
 import { LAP_CLASSES_CONFIG } from '../lap-classes/index.ts';
 import { PACE_DELTA_CONFIG } from '../pace-delta/config.ts';
 import { paceDeltaAround } from '../pace-delta/index.ts';
 import { emptyDamageJumps, finishJump, foldDamageJumps, type DamageJumpFold, type FinishedJump } from '../shared/damage-jumps.ts';
 import {
   isNeutralisation,
-  leaderLapAt,
   NEUTRALISATION_MACHINES,
   NEUTRALISATION_READS,
   neutralisationKind,

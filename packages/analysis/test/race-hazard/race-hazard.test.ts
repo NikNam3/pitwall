@@ -28,6 +28,9 @@ import {
   trackWith,
   withLobby,
 } from './support.ts';
+import { GAPS, type GapsOutput } from '../../src/gaps/index.ts';
+import { gapsCalculator } from '../../src/gaps/calculator.ts';
+import { gapsOutput, orderOf } from '../gaps/output.ts';
 
 type Level = 'off' | 'reduced' | 'standard' | 'increased';
 
@@ -62,6 +65,38 @@ type ViewOver = {
   config?: EngineView['config'];
 };
 
+/**
+ * The leader's progress at frame `frame` in the views' model (it completes lap i on frame 100 i): `frame / 100` laps
+ * completed plus the part of the current one, on `gaps`' x (completed laps + mini-sectors / 50).
+ */
+const progressAt = (frame: number): number => frame / 100;
+
+/** A neutralisation span's phase on `gaps`' x (`GapsOutput.phases`): an SC or VSC by its car, a suspension `red`; other kinds none. */
+function phaseOf(span: OpenSpan | Span): GapsOutput['phases'] {
+  if ('endFrame' in span && !span.confirmed) return [];
+  const kind = span.kind === 'suspended' ? 'red' : span.kind === 'neutralised' ? ((span.detail as { car: 'SC' | 'VSC' }).car) : undefined;
+  if (kind === undefined) return [];
+  return [
+    {
+      kind,
+      fromLap: progressAt(span.startFrame),
+      toLap: 'endFrame' in span ? known(progressAt(span.endFrame), span.end) : unknown('notApplicable'),
+      span: { machine: span.machine, id: span.id },
+    },
+  ];
+}
+
+/**
+ * `gaps`' output for these views (SP4.3c Task 6, O10): the leader (car 0) ahead of car 1, its progress now lap `done + 1`
+ * just begun (as the session time 1 s after its line crossing), and the neutralisations as phases on its progress.
+ */
+const gapsFor = (done: number, spans: readonly (OpenSpan | Span)[]): GapsOutput =>
+  gapsOutput({
+    intervals: orderOf([carId(0), carId(1)]),
+    leaderProgress: known({ lap: done + 1, fraction: 0.01 }, 90_000 * done + 1_000),
+    phases: spans.flatMap(phaseOf),
+  });
+
 /** A race view: the leader has completed `done` laps of `total`, the lobby's SC setting is `level`. */
 function view({ done = 0, total = 44, level = 'standard', open = openPhase('racing'), closed = [], weekendPhase, track = TRACK, config = {} }: ViewOver = {}): EngineView {
   const situation = weekendPhase === undefined ? RACING : { ...RACING, weekendPhase };
@@ -73,6 +108,7 @@ function view({ done = 0, total = 44, level = 'standard', open = openPhase('raci
     track,
     config,
     sessionTime: 90_000 * done + 1_000,
+    outputs: new Map([[GAPS, gapsFor(done, [...closed, open])]]),
   });
 }
 
@@ -126,6 +162,36 @@ describe('race-hazard', () => {
     }
   });
 
+  // SP4.3c Task 6 (O10, C43, C25): the leader's lap now is `gaps`' `leaderProgress`, never the unit's own reading of
+  // the lap records (a provisional lap and the confirmed one that supersedes it are one lap)
+  describe("the leader's lap is gaps' leaderProgress", () => {
+    /** A view after the leader's lap 10 whose lap records are `laps` and whose `gaps` says the leader is on lap `lap`. */
+    const withRecords = (laps: LapRecord[], lap: number): EngineView => {
+      const base = view({ done: 10 });
+      return {
+        ...base,
+        history: { ...base.history, laps },
+        outputs: new Map([[GAPS, gapsOutput({ intervals: orderOf([carId(0), carId(1)]), leaderProgress: known({ lap, fraction: 0.01 }, 0) })]]),
+      };
+    };
+
+    it('a provisional and a confirmed record of the leader\'s lap 10 give one answer: laps 11 to 44 remain', () => {
+      const records = leaderLaps(10);
+      const provisional: LapRecord = { ...records[records.length - 2]!, status: 'provisional' } as LapRecord;
+      const confirmed: LapRecord = { ...records[records.length - 2]!, supersedes: { list: 'laps', index: records.length - 2 } } as LapRecord;
+      const onlyProvisional = hazardOf(withRecords([...records.slice(0, -2), provisional], 11));
+      const both = hazardOf(withRecords([...records.slice(0, -2), provisional, confirmed], 11));
+      expect(valueOf(onlyProvisional).byLap.map((e) => e.lap)).toEqual(Array.from({ length: 34 }, (_, i) => i + 11));
+      expect(both).toEqual(onlyProvisional);
+    });
+
+    it('the remaining laps follow gaps, not the lap records: records through lap 9, the leader on lap 12, laps 12 to 44 remain', () => {
+      const out = hazardOf(withRecords(leaderLaps(9), 12));
+      expect(valueOf(out).byLap.map((e) => e.lap)).toEqual(Array.from({ length: 33 }, (_, i) => i + 12));
+      expectTable(out, 12, 44, 1, 'the leader on lap 12');
+    });
+  });
+
   it('an open neutralised span gives active with the duration pmf conditioned on its laps run; returning ends it this lap', () => {
     // an SC opened in the leader's lap 6 (frame 550)
     const sc = (stages: Array<'deployed' | 'returning'> = ['deployed']) => ({ ...openNeutralisation({ kind: 'SC', start: 495_000, startFrame: 550 }), detail: scDetail(...stages) });
@@ -173,6 +239,45 @@ describe('race-hazard', () => {
     const endedBefore = hazardOf(view({ done: 6, closed: [SC_LAST_LAP], open: openPhase('racing', 550) }));
     expect(entry(endedBefore, 7)).toEqual({ lap: 7, sc: 0, vsc: 0 });
     expectTable(endedBefore, 8, 44, 1, 'ended in lap 6');
+  });
+
+  // SP4.3c Task 6 fix round (F1, C26): the phases' bounds and the leader's lap now come from `gaps`, one source, and the
+  // phase of a neutralisation is the one that names its span (machine and span id), never one matched by time. Each
+  // case lists a decoy phase first: another span's, at the same session time; the right one gives values the lap
+  // records (`leaderLapAt`) would not, so only `gaps`' phase of that span passes.
+  describe("the neutralisation's phase is gaps' phase of its span (by span id)", () => {
+    /** `view(over)` with `gaps`' output: the leader on lap `done + 1`, the phases `phases`. */
+    const withPhases = (over: ViewOver & { done: number }, phases: GapsOutput['phases']): EngineView => ({
+      ...view(over),
+      outputs: new Map([[GAPS, gapsOutput({ intervals: orderOf([carId(0), carId(1)]), leaderProgress: known({ lap: over.done + 1, fraction: 0.01 }, 0), phases })]]),
+    });
+
+    it('the open one: its laps run count from the phase of its span, not the first open phase listed', () => {
+      // an SC open since frame 550 (span id 2), the leader on lap 8 (7 done); gaps places its start at 4.5 (4 laps done
+      // then): run 3. A decoy open phase of span 8 at 6.5 (run 1) comes first; the lap records give 5 (run 2).
+      const sc = { ...openNeutralisation({ kind: 'SC', start: 495_000, startFrame: 550, id: 2 }), detail: scDetail('deployed') };
+      const phases: GapsOutput['phases'] = [
+        { kind: 'SC', fromLap: 6.5, toLap: unknown('notApplicable'), span: { machine: RACE_PHASES, id: 8 } },
+        { kind: 'SC', fromLap: 4.5, toLap: unknown('notApplicable'), span: { machine: RACE_PHASES, id: 2 } },
+      ];
+      const active = valueOf(hazardOf(withPhases({ done: 7, open: sc }, phases))).active;
+      expect(active?.condition).toBe('sc');
+      expectPmf(active?.remainingLaps, conditioned(HAZARD.durationLaps.sc, 3), 'run 3, from the phase of span 2');
+    });
+
+    it('the last closed one: its end is the phase of its span, not a phase that ended at the same session time', () => {
+      // an SC (span id 4) closed on frame 550 at 495 000, the leader on lap 7 (6 done). gaps ends its phase at 4.5 (in
+      // lap 5): laps 5 and 6 blocked, lap 7 on the table's. A decoy phase of span 9 ends at the same session time at 6.5
+      // (lap 7, blocking 7 and 8); the lap records give lap 6 (blocking 7).
+      const closed = neutralisation({ kind: 'SC', start: 225_000, end: 495_000, startFrame: 250, endFrame: 550, id: 4 });
+      const phases: GapsOutput['phases'] = [
+        { kind: 'SC', fromLap: 2.5, toLap: known(6.5, 495_000), span: { machine: RACE_PHASES, id: 9 } },
+        { kind: 'SC', fromLap: 2.5, toLap: known(4.5, 495_000), span: { machine: RACE_PHASES, id: 4 } },
+      ];
+      const out = hazardOf(withPhases({ done: 6, closed: [closed], open: openPhase('racing', 550) }, phases));
+      expect(valueOf(out).active).toBeNull();
+      expectTable(out, 7, 44, 1, 'ended in lap 5 by the phase of span 4');
+    });
   });
 
   // SP4.3c Task 4 (B7, C18): a span closed with `confirmed: false` never was a neutralisation, so it blocks no start;
@@ -237,7 +342,8 @@ describe('race-hazard', () => {
   it('runs only on its changes: a frame without a new leader lap, span change or settings change does not run it', () => {
     const calc = raceHazardCalculator();
     expect([...calc.reads].sort()).toEqual([...READS].sort());
-    const scheduler = new Scheduler(CalculatorRegistry.build([guarded(calc)]), { freezeOutputs: true });
+    // `gaps` runs before it (its reads, SP4.3c Task 6); its own frames never make `race-hazard` run (C41)
+    const scheduler = new Scheduler(CalculatorRegistry.build([guarded(gapsCalculator), guarded(calc)]), { freezeOutputs: true });
     scheduler.setNeeded([RACE_HAZARD]);
 
     // the frames: each the view of a race moment, with the change tags and the delta of that frame
@@ -284,7 +390,7 @@ describe('race-hazard', () => {
     const target = race.framesOfLap(6)[2]!;
     const undone = race.framesOfLap(9)[1]!;
     const make = () => {
-      const s = new Scheduler(CalculatorRegistry.build([guarded(raceHazardCalculator())]), { freezeOutputs: true });
+      const s = new Scheduler(CalculatorRegistry.build([guarded(gapsCalculator), guarded(raceHazardCalculator())]), { freezeOutputs: true });
       s.setNeeded([RACE_HAZARD]);
       return s;
     };

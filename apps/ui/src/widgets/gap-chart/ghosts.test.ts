@@ -14,7 +14,7 @@
 //    loss's source for the badge; `text.pit` is the header's word before them; no `rejoin.car` gives `[]`.
 import { describe, expect, it } from 'vitest';
 import type { CarOverview, SessionInfo } from '@pitwall/contracts';
-import { carId, unknown } from '@pitwall/domain';
+import { carId, known, unknown } from '@pitwall/domain';
 import type { GapperLines, GhostLines } from '@pitwall/domain';
 import { ourCars } from '../../kit/car/our-cars.ts';
 import { endLabels, placeLabels } from '../../kit/chart/labels.ts';
@@ -111,6 +111,7 @@ describe('ghost labels through placeLabels', () => {
   const pts = (step: number) => [18, 19, 20, 21, 22, 23].map((lap) => ({ lap, gapMs: step * lap }));
   const lines: GapperLines = {
     reference: { kind: 'leaderAverage', carId: unknown('notApplicable') },
+    origin: known({ kind: 'lightsOut' }, 0),
     referenceLapMs: unknown('insufficientData'),
     cars: [
       { carId: carId(2), points: pts(0), now: unknown('notApplicable') },

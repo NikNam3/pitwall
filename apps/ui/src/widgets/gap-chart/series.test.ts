@@ -96,6 +96,7 @@ describe('gapSeries', () => {
   const cars = [car(0, 'Kuhnlein', 7, 44), car(1, 'Zhou', 7, 24), car(2, 'Max Verstappen', 2, 1), car(3, 'Lando Norris', 8, 4), car(4, 'Oscar Piastri', 8, 81)];
   const lines: GapperLines = {
     reference: { kind: 'leaderAverage', carId: unknown('notApplicable') },
+    origin: known({ kind: 'lightsOut' }, toSessionTime(0)),
     referenceLapMs: known(105_000, toSessionTime(0)),
     cars: [
       line(2, pts([1, 250], [1.02, 260], [2, 500]), NO_NOW),
@@ -164,7 +165,7 @@ describe('gapSeries', () => {
   });
 
   it('is empty when the reference is unknown and no car has data', () => {
-    expect(gapSeries({ reference: { kind: 'leaderAverage', carId: unknown('notApplicable') }, referenceLapMs: unknown('insufficientData'), cars: [], phases: [] }, cars, ours)).toEqual([]);
+    expect(gapSeries({ reference: { kind: 'leaderAverage', carId: unknown('notApplicable') }, origin: known({ kind: 'lightsOut' }, toSessionTime(0)), referenceLapMs: unknown('insufficientData'), cars: [], phases: [] }, cars, ours)).toEqual([]);
   });
 });
 
@@ -175,6 +176,7 @@ describe('gapSeries: the live point', () => {
   const ours = ourCars(session(0, 1));
   const lines: GapperLines = {
     reference: { kind: 'leaderAverage', carId: unknown('notApplicable') },
+    origin: known({ kind: 'lightsOut' }, toSessionTime(0)),
     referenceLapMs: known(105_000, toSessionTime(0)),
     cars: [
       line(2, pts([1, 250], [2, 500], [2.2, 600]), live(2.4, 700)),
@@ -243,6 +245,7 @@ describe('gapSeries: lap 1', () => {
   const ours = ourCars(session(0));
   const lapOne: GapperLines = {
     reference: { kind: 'fixed', carId: unknown('notApplicable') },
+    origin: known({ kind: 'lightsOut' }, toSessionTime(0)),
     referenceLapMs: known(90_000, toSessionTime(0)),
     cars: [
       line(2, [], live(0.42, 300)),

@@ -1,6 +1,6 @@
 // The maths of `gaps` (spec 6.1): gaps from the mini-sector crossings and every car's gap to one car; the gapper is
 // `shared/gapper-lines.ts`.
-import { known, MINI_SECTORS, unknown, type CarId, type GapToCar, type Known, type Ms, type SessionTime } from '@pitwall/domain';
+import { known, MINI_SECTORS, unknown, type CarId, type GapToCar, type Known, type Ms } from '@pitwall/domain';
 import { latestOf, latestTime, timeAt, type CarCrossings } from '../shared/gapper-lines.ts';
 import type { GapsOutput } from './index.ts';
 
@@ -16,27 +16,6 @@ export const progressOf = (m: { lap: number; segment: number }): number => (m.la
 export const RECENT_CROSSINGS = 2 * MINI_SECTORS;
 
 const NOT_APPLICABLE = unknown('notApplicable');
-
-/**
- * The car's furthest progress by `t`: its newest crossing at or before `t` (crossing times grow with progress; holes are
- * skipped), by binary search. `undefined` before its first crossing.
- */
-export function progressAt(c: CarCrossings, t: SessionTime): number | undefined {
-  let lo = 0;
-  let hi = c.at.length - 1;
-  let best: number | undefined;
-  while (lo <= hi) {
-    const mid = (lo + hi) >> 1;
-    let i = mid;
-    while (i >= lo && c.at[i] === undefined) i--;
-    if (i < lo) lo = mid + 1;
-    else if ((c.at[i] as SessionTime) <= t) {
-      best = i;
-      lo = mid + 1;
-    } else hi = i - 1;
-  }
-  return best === undefined ? undefined : c.fromProgress + best;
-}
 
 /** The car's last `RECENT_CROSSINGS` crossings, as a new object. */
 export const recentOf = (c: CarCrossings): CarCrossings => {

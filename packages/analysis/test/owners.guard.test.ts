@@ -38,11 +38,27 @@ function codeNames(unit: UnitDecl, names: readonly string[]): boolean {
   return sourceFiles(join(ROOT, unit.folder)).some((file) => pattern.test(codeOf(readFileSync(file, 'utf8'))));
 }
 
+/** Whether the code (comments left out) of a unit's source files matches `pattern`. */
+function codeMatches(unit: UnitDecl, pattern: RegExp): boolean {
+  if (unit.folder === undefined) return false;
+  return sourceFiles(join(ROOT, unit.folder)).some((file) => pattern.test(codeOf(readFileSync(file, 'utf8'))));
+}
+
+/**
+ * The leader taken from the raw order: a car state's `position === 1` (the live timing) or a lap record's
+ * `positionAtEnd === 1`, compared either way.
+ */
+const LEADER_BY_POSITION = /\bposition(?:AtEnd)?\s*[!=]==?\s*1\b|\b1\s*[!=]==?\s*\w+\.position(?:AtEnd)?\b/;
+
 /** The owners (spec §5.2–§5.3); each owner task adds its row. */
 const OWNERS: OwnerRow[] = [
   // SP4.3c Task 5 (O7): which laps count is `lap-classes`' (`isNeutralisedLap`, `touchesNeutralisation`); no other unit
   // reads a lap record's SC or VSC share itself. Expressed by name: `lap-classes` has no private module to import.
   { judgement: 'lap counts', owner: 'lap-classes', source: (u) => codeNames(u, ['scShare', 'vscShare']), allowed: [] },
+  // SP4.3c Task 6 (O10): gaps, the order and the leader's progress now are `gaps`' (`intervals`, `leaderProgress`); no
+  // other unit finds the leader now in the raw order (the live timing's position, a lap record's position at its end).
+  // `forecast-score` scores past races lap by lap from their stored laps (`forecasts.ts`), not the race now.
+  { judgement: 'gaps and order now', owner: 'gaps', source: (u) => codeMatches(u, LEADER_BY_POSITION), allowed: ['forecast-score'] },
 ];
 
 /** A path as the guard shows it: repo-relative with forward slashes. */
@@ -159,6 +175,14 @@ describe('owners guard (spec §5.8)', () => {
       const gaps = unit('gaps');
       expect(lapClasses !== undefined && codeNames(lapClasses, ['scShare'])).toBe(true);
       expect(gaps !== undefined && codeNames(gaps, ['scShare', 'vscShare'])).toBe(false);
+    });
+
+    it('the leader-by-position pattern finds a leader read from the order, in code only', () => {
+      expect(LEADER_BY_POSITION.test(codeOf('const leader = cars.find((c) => c.timing.position === 1);'))).toBe(true);
+      expect(LEADER_BY_POSITION.test(codeOf('if (lap.positionAtEnd !== 1) continue;'))).toBe(true);
+      expect(LEADER_BY_POSITION.test(codeOf('if (1 === car.position) x();'))).toBe(true);
+      expect(LEADER_BY_POSITION.test(codeOf('// the car with position === 1\nconst p = position === 10;'))).toBe(false);
+      expect(LEADER_BY_POSITION.test(codeOf('const g = timing.gridPosition - timing.position;'))).toBe(false);
     });
 
     it('a row names every unit but the owner and the allowed ones that reads its source, by reads or by import', () => {

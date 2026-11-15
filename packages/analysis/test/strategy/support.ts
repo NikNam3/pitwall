@@ -34,6 +34,7 @@ import type { BuilderRace } from '../../../../test-support/builders/long-race.ts
 import { generateRace, GENERATOR_DEFAULTS, type GeneratorParams } from '../../../../test-support/race-generator/index.ts';
 import { zandvoortTrack } from '../../../../test-support/track.ts';
 import { raceHazardCalculator } from '../../src/race-hazard/index.ts';
+import { withGaps } from '../gaps/output.ts';
 import type { McInput } from '../../src/race-monte-carlo/index.ts';
 import { STRATEGY_JOB } from '../../src/strategy/index.ts';
 
@@ -176,7 +177,8 @@ export function viewAtFrame(race: BuilderRace, frame: FrameNumber, spec: ViewSpe
     config: { strategy: { maxScenarioPolicies: TEST_CAP, ...spec.config } },
     outputs: new Map(),
   };
-  const hazard = spec.hazard ?? raceHazardCalculator.compute(base);
+  // `race-hazard` reads `gaps`' leader progress (SP4.3c Task 6): `gaps` over the same view first
+  const hazard = spec.hazard ?? raceHazardCalculator.compute(withGaps(base));
   return { ...base, outputs: new Map([['race-hazard', hazard]]) };
 }
 

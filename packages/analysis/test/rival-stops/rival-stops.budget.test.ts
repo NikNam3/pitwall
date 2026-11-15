@@ -8,6 +8,8 @@ import { degradationCalculator } from '../../src/degradation/calculator.ts';
 import { rivalStopsCalculator } from '../../src/rival-stops/calculator.ts';
 import { SESSION_REMAINING } from '../../src/session-remaining/index.ts';
 import { sessionRemainingCalculator } from '../../src/session-remaining/calculator.ts';
+import { GAPS } from '../../src/gaps/index.ts';
+import { gapsOf } from '../gaps/output.ts';
 import { TYRE_LIFE } from '../../src/tyre-life/index.ts';
 import { tyreLifeCalculator } from '../../src/tyre-life/calculator.ts';
 import { longRace } from '../../../../test-support/builders/long-race.ts';
@@ -26,6 +28,7 @@ describe('rival-stops budget', () => {
     const views = frames
       .map((frame) => {
         const outputs = new Map<string, unknown>();
+        outputs.set(GAPS, gapsOf(race.viewAt(frame, { outputs })));
         outputs.set(DEGRADATION, degradationCalculator.compute(race.viewAt(frame, { outputs })));
         outputs.set(TYRE_LIFE, tyreLifeCalculator.compute(race.viewAt(frame, { outputs })));
         outputs.set(SESSION_REMAINING, sessionRemainingCalculator.compute(race.viewAt(frame, { outputs })));
