@@ -10,6 +10,8 @@ import { describe, expect, it } from 'vitest';
 import { lapOverviewCalculator } from '../../src/lap-overview/calculator.ts';
 import * as lapOverviewIndex from '../../src/lap-overview/index.ts';
 import type { LapOverviewOutput } from '../../src/lap-overview/index.ts';
+import { LAP_CLASSES_CONFIG } from '../../src/lap-classes/index.ts';
+import { bestsOf, sessionBestsOf } from '../../src/lap-times/lap-times.ts';
 import { lap, neutralisation, RACE_PHASES } from '../../../../test-support/builders/index.ts';
 import { guardedQuick, PRACTICE, situatedView, type Situated } from '../situated.ts';
 
@@ -182,6 +184,37 @@ describe('lap-overview: bests', () => {
     expect(bests(later, 0)).toEqual(['none', 'none', 'personal']);
     expect(bests(later, 1)).toEqual(['none', 'none', 'session']);
     expect(bests(later, 2)).toEqual(['personal']);
+  });
+
+  // SP4.3c Task 7 (O14, C43): the bests are `lap-times`' (`bestsOf`, `sessionBestsOf`), so the overview and the board agree
+  it('an exact-ms tie for the session best goes to the earlier completedAt, as lap-times rules, whichever car comes first in the laps', () => {
+    // car 1's laps come first in the projection; car 0 sets the 90 000 first (185 500 before 185 600)
+    const tie: LapRecord[] = [
+      lapOf(1, 1, 95_000, { completedAt: 95_000 }),
+      lapOf(0, 1, 95_500, { completedAt: 95_500 }),
+      lapOf(0, 2, 90_000, { completedAt: 185_500 }),
+      lapOf(1, 2, 90_000, { completedAt: 185_600 }),
+    ];
+    const out = calc.compute(view({ laps: tie }));
+    expect(lapIn(out, 0, 2).best).toBe('session');
+    expect(lapIn(out, 1, 2).best).toBe('personal');
+
+    // the same holder as lap-times' session best
+    const classes = { isRace: true, ...LAP_CLASSES_CONFIG.defaults };
+    const byCar = new Map([0, 1].map((car) => [carId(car), bestsOf(tie.filter((l) => l.carId === carId(car)), classes)]));
+    const holder = sessionBestsOf(byCar).lap;
+    expect(holder).toMatchObject({ carId: carId(0), lapNumber: 2 });
+    for (const car of [0, 1]) {
+      const sessionLap = lapsOf(out, car).find((l) => l.best === 'session');
+      expect(sessionLap?.lapNumber).toBe(holder?.carId === carId(car) ? holder.lapNumber : undefined);
+    }
+  });
+
+  it('a tie within a car: its earlier lap is its best, as lap-times rules', () => {
+    const laps = [lapOf(2, 1, 95_000), lapOf(2, 2, 91_000), lapOf(2, 3, 91_000)];
+    const out = calc.compute(view({ laps }));
+    expect(bests(out, 2)).toEqual(['none', 'session', 'none']);
+    expect(bestsOf(laps, { isRace: true, ...LAP_CLASSES_CONFIG.defaults }).lap?.lapNumber).toBe(2);
   });
 });
 

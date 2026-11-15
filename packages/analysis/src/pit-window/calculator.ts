@@ -5,6 +5,7 @@
 import { known, unknown, type CarId, type Known, type PitWindow, type PitWindowSet, type PitWindowState, type VisualCompound } from '@pitwall/domain';
 import { openSpansOf, type EngineView, type QuickCalculator } from '@pitwall/engine/readers';
 import { behaviourFor, type BehaviourTable } from '../shared/behaviour.ts';
+import { owesSecondDryCompound } from '../shared/compound-rule.ts';
 import { ourCars } from '@pitwall/domain';
 import { TYRE_LIFE, type TyreLife, type TyreLifeOutput } from '../tyre-life/index.ts';
 import { PIT_WINDOW_BEHAVIOUR, phaseRow, type PitWindowEffect } from './behaviour.ts';
@@ -119,8 +120,10 @@ function pitWindowOf(view: EngineView, car: CarId, life: TyreLife | undefined, w
   const last: Known<number> = lapsToLimit.known ? known(currentLap + Math.floor(lapsToLimit.value), lapsToLimit.at) : lapsToLimit;
   const latest: Known<number> = last.known ? known(Math.min(last.value, flag - 1), last.at) : last;
 
+  // whether the car still owes the compound rule: the shared judgement over its stints and the fitted set (B4, C43)
+  const owesRule = owesSecondDryCompound(effect.ruleRequired === true ? 'required' : 'waived', view.history, car, fitted);
   // without the rule to meet, a set that runs the final lap needs no stop
-  const noStop = effect.ruleRequired !== true && last.known && last.value >= flag;
+  const noStop = !owesRule && last.known && last.value >= flag;
   // a set that runs to the flag is never past its limit: `latest` is only capped at flag − 1 (SP4.2 fix re-review)
   const pastLimit = (lapsToLimit.known && lapsToLimit.value < 1) || (!noStop && latest.known && currentLap > latest.value);
   const stopNeeded: Known<boolean> = latest.known ? known(!noStop, latest.at) : latest;
@@ -128,7 +131,7 @@ function pitWindowOf(view: EngineView, car: CarId, life: TyreLife | undefined, w
   if (!noStop) {
     for (const s of tyres.sets.value.sets) {
       if (!s.available || s.fitted || s.wearPct !== 0 || compounds.includes(s.visualCompound)) continue;
-      if (effect.ruleRequired === true && s.visualCompound === fitted) continue;
+      if (owesRule && s.visualCompound === fitted) continue;
       compounds.push(s.visualCompound);
     }
   }
@@ -162,7 +165,7 @@ function pitWindowOf(view: EngineView, car: CarId, life: TyreLife | undefined, w
 export const pitWindowCalculator: QuickCalculator<PitWindowOutput> = {
   id: PIT_WINDOW,
   kind: 'quick',
-  reads: [{ calculator: TYRE_LIFE }, 'identity', 'tyres', 'session', 'laps', 'pitStops', 'decisions', 'timing', 'spans:weekend-phase', 'spans:compound-rule', 'spans:car-activity-race'],
+  reads: [{ calculator: TYRE_LIFE }, 'identity', 'tyres', 'session', 'laps', 'pitStops', 'stints', 'decisions', 'timing', 'spans:weekend-phase', 'spans:compound-rule', 'spans:car-activity-race'],
   cadence: { hz: 4 },
   compute: (view): PitWindowOutput => {
     // the session's row (the weekend phase), over the race's (C14: a pending phase reads as the race)

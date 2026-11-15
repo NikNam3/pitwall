@@ -1,4 +1,5 @@
-// `pace-delta` (spec 4): time lost per lap after an event. A function, imported by the analyses that use it.
+// `pace-delta` (spec 4): time lost per lap after an event, and the reference pace before one (SP4.3c O12: `pit-loss`'s
+// reference lap). Functions, imported by the units that use them.
 import { known, unknown, type Known, type LapRecord, type Ms, type SessionTime } from '@pitwall/domain';
 import type { DeepReadonly } from '@pitwall/engine/readers';
 import { classifyLap, type LapClassOptions } from '../lap-classes/index.ts';
@@ -26,6 +27,25 @@ export function paceDelta(beforeMs: Ms[], afterMs: Ms[], at: SessionTime): Known
   return known(Math.round(mean(afterMs) - mean(beforeMs)) + 0, at);
 }
 
+/** One car's pace laps among `laps` (by `opts`' lap-class options), by lap number. */
+const paceLaps = (laps: readonly DeepReadonly<LapRecord>[], opts: PaceDeltaOptions): DeepReadonly<LapRecord>[] =>
+  laps.filter((l) => classifyLap(l, opts).forPace).sort((a, b) => a.lapNumber - b.lapNumber);
+
+/**
+ * The reference pace before lap `beforeLap` of one car (SP4.3c O12, C43): the mean of its last `window` pace laps before
+ * the lap (the lap itself not among them), rounded to whole ms, as of the newest lap used. Fewer pace laps than the
+ * window: the mean of those there are; none: `unknown('insufficientData')`. `laps` holds one record per lap (see the
+ * domain's `currentLaps`), in any order.
+ */
+export function referencePaceMs(laps: readonly DeepReadonly<LapRecord>[], beforeLap: number, opts: PaceDeltaOptions): Known<Ms> {
+  const before = paceLaps(laps, opts)
+    .filter((l) => l.lapNumber < beforeLap)
+    .slice(-opts.window);
+  const last = before[before.length - 1];
+  if (last === undefined) return unknown('insufficientData');
+  return known(Math.round(mean(before.map((l) => l.lapTimeMs))), last.completedAt);
+}
+
 /**
  * `paceDelta` around lap `lap` of one car: its last `window` pace laps before the lap against its first `window` pace
  * laps after it (the lap itself in neither), as of the newest lap used. `laps` holds one record per lap (see the
@@ -37,7 +57,7 @@ export function paceDeltaAround(
   lap: number,
   opts: PaceDeltaOptions,
 ): Known<Ms> {
-  const pace = laps.filter((l) => classifyLap(l, opts).forPace).sort((a, b) => a.lapNumber - b.lapNumber);
+  const pace = paceLaps(laps, opts);
   const before = pace.filter((l) => l.lapNumber < lap).slice(-opts.window);
   const after = pace.filter((l) => l.lapNumber > lap).slice(0, opts.window);
   const last = after[after.length - 1];

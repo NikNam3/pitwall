@@ -1,7 +1,7 @@
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 import { known, unknown, type SessionTime } from '@pitwall/domain';
-import { paceDelta, paceDeltaAround } from '../../src/pace-delta/index.ts';
+import { paceDelta, paceDeltaAround, referencePaceMs } from '../../src/pace-delta/index.ts';
 import { PACE_DELTA_CONFIG } from '../../src/pace-delta/config.ts';
 import * as analysis from '../../src/index.ts';
 import { lap } from '../../../../test-support/builders/index.ts';
@@ -193,5 +193,42 @@ describe('PACE_DELTA_CONFIG', () => {
     expect(analysis).not.toHaveProperty('paceCalculator');
     expect(analysis).not.toHaveProperty('PACE_CONFIG');
     expect(analysis).not.toHaveProperty('PACE');
+  });
+});
+
+// SP4.3c Task 7 (O12, B11, C43): the one reference pace before an event, which `pit-loss` reads too. Its options are
+// `paceDeltaAround`'s: the window (`pace-delta.windowLaps`) and the caller's `lap-classes` options.
+describe('referencePaceMs', () => {
+  const race = { window: 3, isRace: true, maxNeutralisedMs: 1000 };
+  /** Car 0's lap `n` taking `ms`, completed at `n · 100 000`. */
+  const lapN = (n: number, ms: number, over: Parameters<typeof lap>[0] = {}) => lap({ lapNumber: n, lapTimeMs: ms, completedAt: n * 100_000, ...over });
+  const INVALID = { valid: { lap: false, sectors: [false, false, false] as [boolean, boolean, boolean] } };
+
+  it('the mean (not the median) of the last `window` pace laps before the lap, as of the newest of them', () => {
+    const laps = [lapN(1, 99_000), lapN(2, 90_000), lapN(3, 91_000), lapN(4, 92_000), lapN(5, 96_000), lapN(6, 80_000), lapN(7, 80_000)];
+    // laps 3, 4, 5: mean 93 000 (the median would be 92 000); lap 6 itself and lap 7 after it are in none
+    expect(referencePaceMs(laps, 6, race)).toEqual(known(93_000, 500_000));
+  });
+
+  it('takes laps in any order; a lap that is no pace lap is skipped, so the window reaches further back', () => {
+    // lap 4 is invalid: the last three pace laps before lap 6 are 2, 3, 5 (mean 92 333.3)
+    const laps = [lapN(5, 96_000), lapN(2, 90_000), lapN(4, 70_000, INVALID), lapN(3, 91_000)];
+    expect(referencePaceMs(laps, 6, race)).toEqual(known(92_333, 500_000));
+    // an in-lap is no pace lap either
+    const withInLap = [lapN(2, 90_000), lapN(3, 91_000), lapN(4, 92_000), lapN(5, 99_000, { inLap: true })];
+    expect(referencePaceMs(withInLap, 6, race)).toEqual(known(91_000, 400_000));
+  });
+
+  it('fewer pace laps than the window: the mean of those there are, in whole ms (C4)', () => {
+    // 90 000.5 rounds to 90 001
+    expect(referencePaceMs([lapN(2, 90_000), lapN(3, 90_001)], 4, race)).toEqual(known(90_001, 300_000));
+    expect(referencePaceMs([lapN(2, 90_000)], 4, race)).toEqual(known(90_000, 200_000));
+  });
+
+  it('no pace lap before the lap: insufficientData, never 0 (C3); lap 1 of a race is no pace lap, of practice it is', () => {
+    expect(referencePaceMs([], 5, race)).toEqual(unknown('insufficientData'));
+    expect(referencePaceMs([lapN(5, 90_000), lapN(6, 90_000)], 5, race)).toEqual(unknown('insufficientData'));
+    expect(referencePaceMs([lapN(1, 90_000)], 2, race)).toEqual(unknown('insufficientData'));
+    expect(referencePaceMs([lapN(1, 90_000)], 2, { ...race, isRace: false })).toEqual(known(90_000, 100_000));
   });
 });

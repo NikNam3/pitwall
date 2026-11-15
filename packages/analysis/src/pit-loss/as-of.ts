@@ -17,6 +17,7 @@ import {
 } from '@pitwall/domain';
 import type { AsOfView, DeepReadonly, EngineView } from '@pitwall/engine/readers';
 import { LAP_CLASSES_CONFIG } from '../lap-classes/index.ts';
+import { PACE_DELTA_CONFIG } from '../pace-delta/config.ts';
 import { behaviourFor } from '../shared/behaviour.ts';
 import { median } from '../shared/stats.ts';
 import { PIT_LOSS_BEHAVIOUR, phaseRow, type PitLossEffect } from './behaviour.ts';
@@ -121,6 +122,7 @@ export function pitLossAsOf(view: AsOfView): PitLosses {
   const session: PitLossEffect = Object.assign({}, phaseRow('pending'), ...behaviourFor(PIT_LOSS_BEHAVIOUR, readers));
   const opts: PitLossOptions = {
     ...PIT_LOSS_CONFIG.read(readers),
+    window: PACE_DELTA_CONFIG.read(readers).windowLaps,
     classes: { isRace: session.isRace === true, ...LAP_CLASSES_CONFIG.read(readers) },
   };
   const laps = currentLaps(view.history.laps as readonly LapRecord[]);
