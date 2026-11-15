@@ -3,7 +3,7 @@ import { STRATEGY } from '@pitwall/analysis';
 import type { Computed, ServerMessage, TopicName } from '@pitwall/contracts';
 import { carId, type CarId, type McRow, type StrategyOutput } from '@pitwall/domain';
 import type { EngineView } from '@pitwall/engine/readers';
-import { loadFeatureConfig, recordingConfig } from '../../feature-config.ts';
+import { loadFeatureConfig, recordingConfig, type FeatureConfig } from '../../feature-config.ts';
 import type { Feature } from '../../features/feature.ts';
 import { FEATURES } from '../../features/index.generated.ts';
 import type { FeedPipeline } from '../../pipeline/feed-pipeline.ts';
@@ -18,7 +18,7 @@ const TOPIC: TopicName = 'strategy.plans';
 const CLIENT = 'pitwall-strategy';
 const SUBSCRIPTION = 'plans';
 
-type Flags = { 'at-lap'?: string | undefined; car?: string | undefined; json?: string | undefined };
+type Flags = { 'at-lap'?: string | undefined; car?: string | undefined; json?: string | undefined; runs?: string | undefined };
 type Ranked = Extract<StrategyOutput[CarId], { known: true }>['value'];
 
 /** A whole number from `min`, or a usage error naming the flag. */
@@ -81,18 +81,28 @@ function reportLines(output: StrategyOutput, lap: number): string[] {
   return lines;
 }
 
+/**
+ * `config` with the `strategy` job's run counts set for this call (`--runs n`, C47; ruling R40): `n0`, the scenarios
+ * per candidate, is n, and the cap `maxScenarioPolicies` is lifted, so the cap never cuts a candidate below n. A new
+ * object: the recording's config, its sidecar and the data dir's `config.json` stay as they are.
+ */
+function withRuns(config: FeatureConfig, runs: number): FeatureConfig {
+  return { ...config, strategy: { ...config['strategy'], n0: runs, maxScenarioPolicies: Number.MAX_SAFE_INTEGER } };
+}
+
 /** Whether the projection holds the record of car `car` completing lap `lap`. */
 function completed(view: EngineView, car: CarId, lap: number): boolean {
   return view.history.laps.some((l) => l.carId === car && l.lapNumber === lap);
 }
 
 /**
- * `pitwall strategy <recording> --at-lap n [--car id] [--json <file>]` (SP4.3b spec §8.3): reprocesses the recording as
+ * `pitwall strategy <recording> --at-lap n [--car id] [--runs n] [--json <file>]` (SP4.3b spec §8.3): reprocesses the recording as
  * `pitwall score` does, its sidecars included (C38), with `strategy.plans` subscribed, up to the frame on which our car
  * (`--car`, default the player car) completes lap n; waits for that frame's job result and prints per our car its
  * ranked rows and the run's metadata. The recording is held back while a job runs. `--json` writes the
  * `StrategyOutput`. No result (a lap the car never completes, a run the session's end cancelled) is an empty report,
- * exit 0 (R50). Stores nothing (C32). `features` is the generated index (a test seam).
+ * exit 0 (R50). `--runs n` runs n scenarios per candidate for this call only (C47, R40). Stores nothing, publishes
+ * nothing and writes no sidecar (C32, C47). `features` is the generated index (a test seam).
  */
 export async function run(positionals: string[], values: Flags, io: CliIo, features: readonly Feature[] = FEATURES): Promise<number> {
   const path = positionals[0];
@@ -100,8 +110,10 @@ export async function run(positionals: string[], values: Flags, io: CliIo, featu
   if (values['at-lap'] === undefined) throw new UsageError('strategy needs --at-lap n');
   const lap = wholeNumber('at-lap', values['at-lap'], 1);
   const wanted = values.car === undefined ? undefined : carId(wholeNumber('car', values.car, 0));
+  const runs = values.runs === undefined ? undefined : wholeNumber('runs', values.runs, 1);
   const log = cliLogger(io, 'warn');
-  const config = recordingConfig(path, features, loadFeatureConfig(dataRoot(io.env), features), log);
+  const recorded = recordingConfig(path, features, loadFeatureConfig(dataRoot(io.env), features), log);
+  const config = runs === undefined ? recorded : withRuns(recorded, runs);
 
   const gate = new JobGate();
   const source = new GatedSource(path, gate);
