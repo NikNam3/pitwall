@@ -20,6 +20,7 @@
 //   `scripts/gen-strategy-reference.ts` builds its input with them.
 import { known, unknown, type CarId, type Known, type McRow, type Policy, type StartingPoint, type StrategyOutput } from '@pitwall/domain';
 import type { Rng } from '@pitwall/engine/readers';
+import { RACE_INTERACTION_CONFIG } from '../race-interaction/config.ts';
 import { raceMonteCarlo, type McCandidate, type McConfig, type McInput, type McResult } from '../race-monte-carlo/index.ts';
 import { committedField, dpInputOn, followable, mcSettingsFrom, notPlannedWhy, plainRoad, plannedCars, plannedField, strategyConfigOf, toMcHazard, type StrategyInput } from '../shared/strategy-input/index.ts';
 import { strategyDp } from '../strategy-dp/index.ts';
@@ -76,7 +77,7 @@ export function candidatesForRun(input: StrategyInput, rng: Rng): { mc: McInput 
   const committed: Record<CarId, Policy | null> = {};
   for (const car of planned) {
     const dp = strategyDp(dpInputOn(field, car, hazard, road, config.trafficGapMs));
-    const own = candidatesOf(field, car, dp, config);
+    const own = candidatesOf(field, car, dp, { ...config, closeGapMs: RACE_INTERACTION_CONFIG.read(input).closeGapMs });
     const original = input.committed[car] ?? null;
     let plan: CarPlan = { candidates: own, followed: null, original: null, infeasible: null };
     if (original !== null) {

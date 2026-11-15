@@ -3,7 +3,7 @@
 // either way (`neighbour`; the supervisor's ruling: the best plan's only, so the count stays inside the cap); the rule
 // candidates on the best plan (`rule`): mirror the rival directly ahead and the one directly behind (the first stop at
 // its likeliest stop lap, `stopMid`), cover the car behind and extend past the car ahead (a `rivalPits` trigger within
-// `ruleGapMs`). Every policy is `policyOf(plan, thresholds)`; no policy twice.
+// `closeGapMs`, `race-interaction`'s, the one close gap, C43). Every policy is `policyOf(plan, thresholds)`; no policy twice.
 //
 // SP4.3b Task 23a (supervisor rulings, 2026-11-13): at most `dpPlansMax` DP plans, the best by `expectedMs` (box-now and
 // stay-out besides); inter and wet plans only where rain can come (the track's wetness at the DP's rain threshold, or
@@ -18,6 +18,9 @@ import type { DpPlan, DpResult } from '../strategy-dp/index.ts';
 import type { StrategyConfig } from './config.ts';
 
 export { policyOf };
+
+/** The candidates' config: `strategy`'s and the cover and extend rules' gap, `race-interaction`'s `closeGapMs` (C43). */
+export type CandidatesConfig = StrategyConfig & { closeGapMs: number };
 
 type Stops = DpPlan['stops'];
 
@@ -58,7 +61,7 @@ function rainCanCome(start: StartingPoint, fromLap: number, thresholds: readonly
 }
 
 /** Car `car`'s candidates from its DP result (spec §8.1 step 1); the committed row is the job's. */
-export function candidatesOf(start: StartingPoint, car: CarId, dp: DpResult, config: StrategyConfig): McCandidate[] {
+export function candidatesOf(start: StartingPoint, car: CarId, dp: DpResult, config: CandidatesConfig): McCandidate[] {
   const out: McCandidate[] = [];
   const seen = new Set<string>();
   const add = (policy: Policy, source: McCandidate['source'], rule: McCandidate['rule'] = null): void => {
@@ -102,7 +105,7 @@ export function candidatesOf(start: StartingPoint, car: CarId, dp: DpResult, con
       const stops = moveStop(best.stops, 0, start.stopMid[rival] ?? start.lapsTotal, fromLap, start.lapsTotal);
       if (stops !== null) add(policyOf({ stops }, thresholds), 'rule', rule);
     }
-    const rivalPits = (carId: CarId, action: 'cover' | 'extend'): Trigger => ({ kind: 'rivalPits', carId, withinMs: config.ruleGapMs, action });
+    const rivalPits = (carId: CarId, action: 'cover' | 'extend'): Trigger => ({ kind: 'rivalPits', carId, withinMs: config.closeGapMs, action });
     if (behind !== undefined) add(policyOf(best, [...thresholds, rivalPits(behind, 'cover')]), 'rule', 'cover');
     if (ahead !== undefined) add(policyOf(best, [...thresholds, rivalPits(ahead, 'extend')]), 'rule', 'extend');
   }

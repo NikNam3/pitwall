@@ -13,7 +13,7 @@ import { known, unknown, type CarId, type Known, type PitSweepCar, type PitSweep
 import type { Rng } from '@pitwall/engine/readers';
 import { startLapOf } from '../race-forecast/index.ts';
 import { scoreCalls, type CallCandidate } from '../race-monte-carlo/index.ts';
-import { committedField, mcSettingsFrom, notPlannedWhy, plannedCars, plannedField, policyOf, toDpInput, toMcHazard } from '../shared/strategy-input/index.ts';
+import { committedField, mcSettingsFrom, notPlannedWhy, plannedCars, plannedField, policyOf, strategyConfigOf, toDpInput, toMcHazard } from '../shared/strategy-input/index.ts';
 import { bestWith, dpResult, solveDp } from '../strategy-dp/index.ts';
 import type { PitSweepInput, SweepCar } from './prepare.ts';
 import { rowsOf } from './rows.ts';
@@ -63,7 +63,8 @@ function tablesOf(input: PitSweepInput, start: StartingPoint, at: SessionTime, c
     }
     if (candidates.length === 0) continue;
     const scenarios = Math.max(1, Math.floor(config.maxScenarioPolicies / candidates.length));
-    const traffic = { gapMs: config.trafficGapMs, laps: config.trafficLaps };
+    // the one traffic gap (C43): strategy's, as the DP's and sc-call's
+    const traffic = { gapMs: strategyConfigOf(strategy.config).trafficGapMs, laps: config.trafficLaps };
     const { outcomes } = scoreCalls({ start: callStart, car, candidates, committed, hazard, rivalRules, scenarios, traffic }, rng);
     const rows = rowsOf(stopLaps, outcomes, { now, position, cars: callStart.cars, latest: c.latest, greenRejoin: c.greenRejoin, zTie, tieBand, at });
     if (rows.length === 0) continue;

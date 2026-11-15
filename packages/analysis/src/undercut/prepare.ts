@@ -3,6 +3,7 @@
 // rejoin position (a box-now case's, C43); the call's config. Structured-cloneable.
 import { unknown, type CarId, type Known, type StartingPoint } from '@pitwall/domain';
 import type { EngineView } from '@pitwall/engine/readers';
+import { RACE_INTERACTION_CONFIG } from '../race-interaction/config.ts';
 import { REJOIN, type RejoinOutput } from '../rejoin/index.ts';
 import { behaviourFor } from '../shared/behaviour.ts';
 import { strategyInputFrom, type StrategyInput } from '../shared/strategy-input/index.ts';
@@ -15,11 +16,17 @@ export type UndercutRivalInput = { carId: CarId; side: 'ahead' | 'behind'; posit
 /** One of our cars: whether its situation lets the call run, its place, the rivals in range, `rejoin`'s green position. */
 export type UndercutCarInput = { applicable: boolean; position: number; rivals: UndercutRivalInput[]; greenRejoin: Known<number> };
 
-/** The job's input: `strategy`'s input, per our car its part, the call's config. */
-export type UndercutInput = { strategy: StrategyInput; cars: Record<CarId, UndercutCarInput>; config: UndercutConfig };
+/** The call's config: `undercut`'s and the rivals' range, the one close gap, `race-interaction`'s `closeGapMs` (C43). */
+export type UndercutJobConfig = UndercutConfig & { closeGapMs: number };
 
-/** `undercut`'s config of the run: its section of `config` over the defaults. */
-const configOf = (config: EngineView['config']): UndercutConfig => ({ ...UNDERCUT_CONFIG.defaults, ...config[UNDERCUT_CONFIG.key] }) as UndercutConfig;
+/** The job's input: `strategy`'s input, per our car its part, the call's config. */
+export type UndercutInput = { strategy: StrategyInput; cars: Record<CarId, UndercutCarInput>; config: UndercutJobConfig };
+
+/** The call's config of the run: `undercut`'s section of `config` over the defaults, and `race-interaction`'s close gap. */
+const configOf = (config: EngineView['config']): UndercutJobConfig => ({
+  ...(({ ...UNDERCUT_CONFIG.defaults, ...config[UNDERCUT_CONFIG.key] }) as UndercutConfig),
+  closeGapMs: RACE_INTERACTION_CONFIG.read({ config }).closeGapMs,
+});
 
 /**
  * Car `car`'s rivals on `start` (spec §9.1): the car directly ahead and directly behind within `rangeMs`, then the next
@@ -52,7 +59,7 @@ export function prepareUndercut(view: EngineView): UndercutInput {
   const cars: Record<CarId, UndercutCarInput> = {};
   for (const car of strategy.ourCars) {
     const applicable = behaviourFor(UNDERCUT_BEHAVIOUR, view, car).every((row) => row === 'compute');
-    const { position, rivals } = strategy.start.known ? rivalsOf(strategy.start.value, car, config.undercutRangeMs) : { position: 0, rivals: [] };
+    const { position, rivals } = strategy.start.known ? rivalsOf(strategy.start.value, car, config.closeGapMs) : { position: 0, rivals: [] };
     const greenRejoin = rejoin?.cars[car]?.conditions.green.rejoinPosition ?? unknown('insufficientData');
     cars[car] = { applicable, position, rivals, greenRejoin };
   }

@@ -6,8 +6,12 @@ import type { DpInput } from '../strategy-dp/types.ts';
 /** One candidate policy for one of our cars, where it came from and, for a rule candidate, its rule (else `null`). */
 export type McCandidate = { policy: Policy; source: McSource; rule: McRow['rule'] };
 
-/** The rivals' reaction rules (spec §7.2): under an SC a rival owing a stop with tyres ≥ `aMin` laps boxes with `q`. */
-export type RivalRules = { q: number; aMin: number; reactionLaps: number; coverRule: boolean };
+/**
+ * The rivals' reaction rules (spec §7.2): under an SC a rival owing a stop with tyres ≥ `aMin` laps boxes with `q`; with
+ * `coverRule`, a rival ahead of our stopping car by at most `coverGapMs` (ms; `race-interaction`'s `closeGapMs`, the one
+ * close gap, C43) at the line ending our in-lap covers with a stop on the next lap.
+ */
+export type RivalRules = { q: number; aMin: number; reactionLaps: number; coverRule: boolean; coverGapMs: number };
 
 /** The search and ranking (spec §7.3) and the points table (position 1 first) as the run uses them. */
 export type McConfig = {

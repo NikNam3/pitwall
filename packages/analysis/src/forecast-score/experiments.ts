@@ -10,6 +10,9 @@ import { raceLaps, type RaceLaps } from './laps.ts';
 /** The effective config of `forecast-score`. */
 export type ForecastScoreConfig = typeof FORECAST_SCORE_CONFIG.defaults;
 
+/** The natural experiments' config: `forecast-score`'s and the one close gap, `race-interaction`'s `closeGapMs` (C43). */
+export type ExperimentsConfig = ForecastScoreConfig & { closeGapMs: number };
+
 export type CaseKind = 'rejoin' | 'undercut' | 'scStop';
 
 /**
@@ -84,7 +87,7 @@ const overlaps = (span: Neutralisation, from: FrameNumber, to: FrameNumber): boo
  * stop, but a repair (stationary longer than `repairStationaryMs`) and a penalty stop (`penaltyServed`). Every kind:
  * dry laps only, weather crossovers excluded; the undercut and the SC stop leave repairs and penalty stops out too.
  */
-export function naturalExperiments(history: Projection, config: ForecastScoreConfig, situation?: Situation): Experiments {
+export function naturalExperiments(history: Projection, config: ExperimentsConfig, situation?: Situation): Experiments {
   const race = raceLaps(history);
   const neutralisations = neutralisedSpans(history, situation ?? { weekendPhase: { kind: 'pending' }, byMachine: {} });
   const usable = (s: DeepReadonly<PitStopRecord>) => !s.penaltyServed && s.stationaryTimeMs <= config.repairStationaryMs && !race.crossover(s.carId, s.lap);

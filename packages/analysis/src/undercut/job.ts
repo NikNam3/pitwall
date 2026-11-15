@@ -84,7 +84,7 @@ function carValue(input: UndercutInput, start: StartingPoint, at: number, car: C
       cases: calls.flatMap((c, i) => (c.rival.carId === r.carId ? [caseValue(c, outcomes[i], own.greenRejoin, at)] : [])),
     };
   });
-  return { carId: car, lap, position: own.position, rangeMs: input.config.undercutRangeMs, rivals };
+  return { carId: car, lap, position: own.position, rangeMs: input.config.closeGapMs, rivals };
 }
 
 /** Per our car the undercut cases (runs in a worker). */

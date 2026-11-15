@@ -41,6 +41,12 @@ export const RACE_INTERACTION_CONFIG = defineConfig('race-interaction', {
   drsRangeMs: 1000,
   /** The first lap DRS is enabled in a race. Source: the sporting regulations (DRS from lap 3). */
   drsFromLap: 3,
+  /**
+   * Two cars within this gap are close (ms): the one close gap (C43) of the undercut and overcut experiments
+   * (`forecast-score`), `undercut`'s rivals, `strategy`'s cover and extend rules and `race-monte-carlo`'s cover rule.
+   * Source: research 12 §8.
+   */
+  closeGapMs: 3000,
   /** A lap ending with this much damage or more on a wing (front left, front right, rear) is left out (%). Source: spec 5.5. */
   aeroDamageMaxPct: 10,
   /** A race stint the calibration suggests as a source has at least this many following episodes of its car. Source: SP4.3a plan Task 12. */
