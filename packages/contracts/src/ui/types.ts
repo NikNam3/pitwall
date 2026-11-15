@@ -59,7 +59,9 @@ export type UiAction =
   // shape and range only (C73), whether the plan can still be followed is the `strategy` job's judgement (C43).
   /** Commits `policy` for `carId`, its triggers with their thresholds as the user saw them. */
   | { kind: 'plan.commit'; feedId: FeedId; carId: CarId; policy: Policy }
-  | { kind: 'plan.clear'; feedId: FeedId; carId: CarId };
+  | { kind: 'plan.clear'; feedId: FeedId; carId: CarId }
+  /** Ends the feed's session recording now (C59): the run finishes as at the session's end; the rest of that session is ignored. */
+  | { kind: 'session.end'; feedId: FeedId };
 
 /** The driver-profile uiActions (C62c), for the CLI's and the driver-profile panel's edits; answered as every uiAction (`ActionOutcome`, C73). */
 export type DriverAction = Extract<UiAction, { kind: `drivers.${string}` }>;

@@ -185,6 +185,8 @@ export const decodeUiAction = (raw: unknown): UiAction | undefined => {
     }
     case 'plan.clear':
       return isString(raw.feedId) && isCarSlot(raw.carId) ? { kind: raw.kind, feedId: raw.feedId as FeedId, carId: raw.carId as CarId } : undefined;
+    case 'session.end':
+      return isString(raw.feedId) ? { kind: raw.kind, feedId: raw.feedId as FeedId } : undefined;
     default:
       return undefined;
   }

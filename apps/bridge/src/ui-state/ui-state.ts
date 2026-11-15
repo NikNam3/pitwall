@@ -135,6 +135,9 @@ export class UiState {
       case 'calibration.prefer':
         // The calibration store's (C62a), not UI state.
         return INVALID;
+      case 'session.end':
+        // The feed pipeline's (C59, SP4.3c Task 10b), not UI state.
+        return INVALID;
       case 'drivers.add':
       case 'drivers.link':
       case 'drivers.exclude':
