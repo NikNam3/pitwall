@@ -2,8 +2,8 @@
 // the person's linked sessions' human-span laps, each session's values from `runAsOf([degradation, track-wetness,
 // driver-noise], asOfStored(session, ctx))` (plan review P2): the linked car's entry with its human model's values,
 // weighted by the laps it rests on. A wear rate enters only where the car's own wear was measured on the compound.
-import { known, unknown, type CarNoise, type Known, type NoiseCompound } from '@pitwall/domain';
-import { asOfStored, defineProfiles, runAsOf, type AsOfUnit, type AsOfView, type ProfileCtx, type ProfileEntryDecl, type StoredDriverSession } from '@pitwall/engine/readers';
+import { carDriverSpans, currentLaps, known, unknown, type CarNoise, type Known, type LapRecord, type NoiseCompound } from '@pitwall/domain';
+import { asOfStored, defineProfiles, membershipOf, runAsOf, type AsOfUnit, type AsOfView, type ProfileCtx, type ProfileEntryDecl, type StoredDriverSession } from '@pitwall/engine/readers';
 import { degradationAsOf, degradationCalculator } from '../degradation/calculator.ts';
 import { trackWetnessAsOf } from '../track-wetness/asof.ts';
 import { trackWetnessCalculator } from '../track-wetness/calculator.ts';
@@ -68,7 +68,19 @@ const COMPOUNDS: readonly NoiseCompound[] = ['soft', 'medium', 'hard', 'inter', 
 const sizeOf = (pick: (s: { medianMs: number; sigmaLog: number }) => number) => (n: CarNoise): Known<number> =>
   n.mistakeSize.known ? known(pick(n.mistakeSize.value), n.mistakeSize.at) : n.mistakeSize;
 
+const CAR_DRIVER = carDriverSpans.machine;
+
+/**
+ * The samples one linked session gives the person's profile (B2; C25, C26, C28): the linked car's current laps whose
+ * described frame the projection module's membership puts in one of the car's `human` car-driver spans.
+ */
+function humanLapSamples(session: StoredDriverSession): number {
+  const source = { history: session.projection };
+  return currentLaps(session.projection.laps as readonly LapRecord[]).filter((l) => l.carId === session.carId && membershipOf(source, l)[CAR_DRIVER]?.kind === 'human').length;
+}
+
 export const DRIVER_NOISE_PROFILES = defineProfiles('driver-noise', {
+  samples: humanLapSamples,
   entries: {
     [PROFILE_KEYS.sigmaMs]: modelEntry((n) => n.sigmaMs, [0, 10_000]),
     [PROFILE_KEYS.rho]: modelEntry((n) => n.rho, [-1, 1]),

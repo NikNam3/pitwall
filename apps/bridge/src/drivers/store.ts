@@ -15,7 +15,7 @@ import type { Logger } from '../log.ts';
 import type { SessionKey } from '../storage/db.ts';
 import type { DriverSessionRow, DriverSessions } from '../storage/weekend-repository.ts';
 import { ProfileRunner, ProfilesCache, sha256, withOverrides, type LinkedSession } from './compute.ts';
-import { humanLapCount, linkMatches, newestFirst, personOf, seatLinks, storedSlots, unlinkedSlots, type StoredSlot } from './links.ts';
+import { linkMatches, newestFirst, personOf, seatLinks, storedSlots, unlinkedSlots, type StoredSlot } from './links.ts';
 import { loadPersons, sameSession, takeLock, writePerson } from './persons.ts';
 import { checkAction } from './validate.ts';
 
@@ -266,9 +266,10 @@ export class ProfileStore {
       .toSorted(newestFirst)
       .flatMap((slot): PersonSession[] => {
         const { row } = slot;
-        if (row.stale) return [];
+        const linked = linkedSession(slot);
+        if (row.stale || linked === undefined) return [];
         return [{
-          session: slot.session, date: row.startedAt, trackId: row.trackId, phase: row.phase, laps: humanLapCount(slot),
+          session: slot.session, date: row.startedAt, trackId: row.trackId, phase: row.phase, laps: this.#runner.samples(linked, person.overrides),
           excluded: person.excluded.some((e) => sameSession(e, slot.session)),
         }];
       });

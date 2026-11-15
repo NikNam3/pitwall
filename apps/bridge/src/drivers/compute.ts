@@ -128,6 +128,17 @@ export class ProfileRunner {
     return values;
   }
 
+  /**
+   * The samples one linked session gives a person's profile (its human laps, C43, C62c): the first declaring unit's
+   * count, 0 when no unit declares one. A count that throws is logged and gives 0 (C48).
+   */
+  samples(session: LinkedSession, overrides: Readonly<Record<string, number>>): number {
+    const decl = this.#decls.find((d) => d.samples !== undefined);
+    if (decl === undefined) return 0;
+    const ctx: ProfileCtx = { config: this.#config, overrides };
+    return this.#call(decl, 'samples', () => decl.samples?.(session.stored, ctx)) ?? 0;
+  }
+
   #call<T>(decl: ProfilesDecl, what: string, run: () => T): T | undefined {
     try {
       return run();

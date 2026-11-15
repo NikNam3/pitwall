@@ -1,5 +1,4 @@
 // The rows of the tyre-life display: pure, so the component only prints them (displays do no arithmetic).
-import { known } from '@pitwall/domain';
 import type { Known, TyreWear, UnknownReason } from '@pitwall/domain';
 import { barCells } from '../../kit/bar/bar.ts';
 import type { BarCells, BarInput } from '../../kit/bar/bar.ts';
@@ -41,13 +40,11 @@ export function ageText(age: number): string {
 
 const reasonOf = (k: Known<unknown>): UnknownReason | undefined => (k.known ? undefined : k.reason);
 
-/** The four corners FL, FR, RL, RR. The game's life span is marked at the wear the corner's own rate reaches by then. */
+/** The four corners FL, FR, RL, RR. The game's life span is marked at `tyre-wear`'s `wearAtLifeSpanPct` (B1). */
 export function tyreLifeRows(wear: TyreWear, cols: number): TyreLifeRow[] {
   return ORDER.map((corner) => {
     const c = wear.corners[corner];
-    const life = wear.gameLifeSpanLaps;
-    const marker = c.ratePctPerLap.known && life.known ? known(c.ratePctPerLap.value * life.value, c.ratePctPerLap.at) : undefined;
-    const barInput: BarInput = { value: c.wearPct, min: 0, max: 100, cols, limit: wear.limitPct, marker };
+    const barInput: BarInput = { value: c.wearPct, min: 0, max: 100, cols, limit: wear.limitPct, marker: wear.wearAtLifeSpanPct[corner] };
     const bar = barCells(barInput);
     return {
       corner,

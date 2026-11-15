@@ -69,6 +69,7 @@ const wearOk = (): TyreWear => ({
   limitPct: 80,
   warnLaps: 3,
   gameLifeSpanLaps: known(30, 0),
+  wearAtLifeSpanPct: perCorner(() => known(60, 0)),
 });
 const fuelOk = (): FuelState => ({
   kg: known(50, 0),

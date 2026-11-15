@@ -52,12 +52,30 @@ const viewOf = (tyreLife: TyreLifeOutput, config: EngineView['config'] = {}): En
     config,
   });
 
-/** What `tyreWear.car` holds for a car with `tyre-life` entry `l`: its corners, its limit and life span, and `warnLaps`. */
+/**
+ * The wear a corner reaches at the game's life span (B1, the formula moved from `tyre-life-bar/rows.ts`): its rate ×
+ * the life span, at the rate's time; unknown with the rate's reason while the rate is unknown, else the life span's.
+ */
+const atLifeSpan = (rate: Known<number>, lifeSpan: Known<number>): Known<number> =>
+  !rate.known ? rate : !lifeSpan.known ? lifeSpan : known(rate.value * lifeSpan.value, rate.at);
+
+/** What `tyreWear.car` holds for a car with `tyre-life` entry `l`: its corners, its limit and life span, the marker, and `warnLaps`. */
 const projected = (l: TyreLife, warnLaps: number): TyreWear => ({
   corners: l.corners,
   limitPct: l.limitPct,
   warnLaps,
   gameLifeSpanLaps: l.gameLifeSpanLaps,
+  wearAtLifeSpanPct: {
+    fl: atLifeSpan(l.corners.fl.ratePctPerLap, l.gameLifeSpanLaps),
+    fr: atLifeSpan(l.corners.fr.ratePctPerLap, l.gameLifeSpanLaps),
+    rl: atLifeSpan(l.corners.rl.ratePctPerLap, l.gameLifeSpanLaps),
+    rr: atLifeSpan(l.corners.rr.ratePctPerLap, l.gameLifeSpanLaps),
+  },
+});
+
+/** One corner as the `tyre-life-bar` gallery builds it (`apps/ui/src/widgets/tyre-life-bar/gallery.ts`). */
+const galleryCorner = (wearPct: number, rate: number, laps: number) => ({
+  wearPct: known(wearPct, 100), ratePctPerLap: known(rate, 100), lapsToLimit: known(laps, 100),
 });
 
 describe('tyre-wear analysis', () => {
@@ -85,6 +103,39 @@ describe('tyre-wear analysis', () => {
 
   it('warnLaps is the alarms config default (3)', () => {
     expect(calc.compute(viewOf({ [carId(0)]: life() }))[carId(0)]!.warnLaps).toBe(3);
+  });
+
+  // B1 (C43, C65): the life-span marker is tyre-wear's judgement; the display draws the field as given.
+  it('wearAtLifeSpanPct equals the old widget`s marker (rate x life span) on the tyre-life-bar gallery fixture', () => {
+    // The gallery's late stint (rates 1.9, 2, 1.6, 1.7 %/lap) on a 22-lap life span: the old widget drew 1.9 x 22 % etc.
+    const lateStint = life({
+      corners: { fl: galleryCorner(61, 1.9, 4), fr: galleryCorner(66, 2, 2), rl: galleryCorner(57, 1.6, 8), rr: galleryCorner(60, 1.7, 5) },
+      gameLifeSpanLaps: known(22, 100),
+    });
+    const out = calc.compute(viewOf({ [carId(0)]: lateStint }))[carId(0)]!;
+    expect(out.wearAtLifeSpanPct).toEqual({
+      fl: known(1.9 * 22, 100),
+      fr: known(2 * 22, 100),
+      rl: known(1.6 * 22, 100),
+      rr: known(1.7 * 22, 100),
+    });
+    // The rates' time, not the life span's: the marker moves with the rate.
+    const later = life({ corners: { ...lateStint.corners, fl: { ...galleryCorner(61, 1.9, 4), ratePctPerLap: known(1.9, 5_000) } }, gameLifeSpanLaps: known(22, 100) });
+    expect(calc.compute(viewOf({ [carId(0)]: later }))[carId(0)]!.wearAtLifeSpanPct.fl).toEqual(known(1.9 * 22, 5_000));
+  });
+
+  it('wearAtLifeSpanPct is unknown with the rate`s reason while the rate is unknown, else with the life span`s', () => {
+    // life(): rl has no rate yet (insufficientData); the others have one, on a known 22-lap life span.
+    const out = calc.compute(viewOf({ [carId(0)]: life() }))[carId(0)]!;
+    expect(out.wearAtLifeSpanPct.rl).toEqual(insufficient);
+    expect(out.wearAtLifeSpanPct.fl).toEqual(known(2 * 22, 90_000));
+    // The game gives no life span: every corner with a rate is unknown for the life span's reason.
+    const noLife = calc.compute(viewOf({ [carId(0)]: life({ gameLifeSpanLaps: unknown('notReceived') }) }))[carId(0)]!;
+    expect(noLife.wearAtLifeSpanPct.fl).toEqual(unknown('notReceived'));
+    expect(noLife.wearAtLifeSpanPct.rl).toEqual(insufficient);
+    // Realism hides the rival's wear: its marker is hidden too.
+    const rival = calc.compute(viewOf({ [carId(3)]: hiddenLife() }))[carId(3)]!;
+    expect(Object.values(rival.wearAtLifeSpanPct)).toEqual([hidden, hidden, hidden, hidden]);
   });
 
   it('warnLaps follows the alarms config override', () => {

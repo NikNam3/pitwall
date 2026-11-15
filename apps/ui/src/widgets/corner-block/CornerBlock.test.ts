@@ -30,7 +30,7 @@ const bands: CarBands = {
 };
 const wear: TyreWear = {
   corners: four(() => ({ wearPct: k(18), ratePctPerLap: k(1.5), lapsToLimit: k(30) })),
-  limitPct: 70, warnLaps: 3, gameLifeSpanLaps: k(25),
+  limitPct: 70, warnLaps: 3, gameLifeSpanLaps: k(25), wearAtLifeSpanPct: four(() => k(37.5)),
 };
 
 const show = (mode: 'compact' | 'full', telemetryAt: number, newestAt: number) =>

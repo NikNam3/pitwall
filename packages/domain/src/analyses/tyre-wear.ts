@@ -12,4 +12,6 @@ export type TyreWear = {
   warnLaps: number;
   /** The fitted set's life span as the game states it (`TyreSet.lifeSpanLaps`): a reference marker, the game's figure. */
   gameLifeSpanLaps: Known<number>;
+  /** Per corner the wear the set reaches at the game's life span (its rate × `gameLifeSpanLaps`): the marker the display draws (B1). */
+  wearAtLifeSpanPct: Corners<Known<Percent>>;
 };
