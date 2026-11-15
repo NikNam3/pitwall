@@ -12,7 +12,7 @@
 // part and is stopped (a clean bridge stop), the restarted run gets the rest, with receive times on another origin (a new
 // process's monotonic clock) and a wall clock at which the gap since the last record is the segment's own. Data dirs,
 // databases and recordings are temporary directories the tests make.
-import { mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Writable } from 'node:stream';
@@ -419,6 +419,41 @@ describe('decisions sent while a restarted run restores its recording (C76, C38,
     } finally {
       db.close();
     }
+  });
+
+  it('a pick of a set the stored session\'s track does not have is answered invalid at once and never reaches the sidecar (C73)', async () => {
+    const MONZA = 11;
+    const sets: FakeSet[] = [
+      { trackId: ZANDVOORT, id: 'dry', name: 'Dry', sources: 2, entries: { 'pitLoss.ms.green': known(21_000, 0) } },
+      { trackId: ZANDVOORT, id: 'wet', name: 'Wet', sources: 1, entries: { 'pitLoss.ms.green': known(25_000, 0) } },
+      // a set of another track: unknown on the stored session's track (Zandvoort)
+      { trackId: MONZA, id: 'monza', name: 'Monza', sources: 1, entries: { 'pitLoss.ms.green': known(19_000, 0) } },
+    ];
+    const place = newPlace();
+    await firstRun(segment, { place, wallMs: W0, extra: { calibration: fakeCalibration(sets).store } });
+    const file = onlyRecording(place);
+    // the first run committed no decision: its decisions sidecar, if written, is empty
+    const sidecarBefore = existsSync(decisionsSidecarPath(file)) ? readJson(decisionsSidecarPath(file)) : [];
+    expect(sidecarBefore).toEqual([]);
+    const againCal = fakeCalibration(sets);
+    const probe = decisionsProbe();
+    const again = livePipeline(new ArraySource(F, restarted(segment)), { place, wallMs: restartWall(segment), features: [probe.feature], extra: { calibration: againCal.store } });
+    again.pipeline.start();
+    // the rest has arrived and is buffered: the restore is under way; unknown sets are rejected as outside a restore
+    expect(again.pipeline.commitDecision('gone')).toMatchObject({ ok: false, reason: 'invalid' });
+    expect(again.pipeline.commitDecision('monza')).toMatchObject({ ok: false, reason: 'invalid' });
+    // a known set is still queued and applied at the first live frame
+    expect(again.pipeline.commitDecision('wet')).toEqual({ ok: true });
+    await again.pipeline.done;
+    expect(again.errors).toEqual([]);
+
+    const picked = probe.seen.at(-1)!.filter((d) => d.kind === 'calibrationChosen');
+    expect(picked).toHaveLength(1);
+    expect(picked[0]).toMatchObject({ setId: 'wet', snapshot: againCal.snapshotNow(ZANDVOORT, 'wet').fingerprint });
+    // the decisions sidecar gained the known pick only
+    const sidecar = readJson(decisionsSidecarPath(file)) as Array<{ decision: { kind: string; setId?: string | null } }>;
+    expect(sidecar.map((e) => [e.decision.kind, e.decision.setId])).toEqual([['calibrationChosen', 'wet']]);
+    expect(JSON.stringify(sidecar)).not.toMatch(/"gone"|"monza"/);
   });
 });
 
