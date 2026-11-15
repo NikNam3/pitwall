@@ -9,6 +9,6 @@ export default defineFeature({
     bindState('incidents.feed', incidentsCalculator, (out) => out.feed),
     bindState('incidents.markers', incidentsCalculator, (out) => out.markers),
   ],
-  // `pace-delta`'s window, read by incidents and damage; a key is declared once
+  // `pace-delta`'s window, read by incidents, damage and pit-loss; a key is declared once
   config: [INCIDENTS_CONFIG, PACE_DELTA_CONFIG],
 });
