@@ -4,7 +4,9 @@
 // their record index), buffers the packets that arrive meanwhile, writes them after a resume record, applies them and
 // goes live. The continued run equals one run that never stopped (C38): its projection, its topics, the topic stream of
 // its recording, and `pitwall reprocess` of it. Storage appends only what lies beyond each stored list (C24); a changed
-// rules version makes the replay a rebuild that replaces the log whole (C61).
+// rules version makes the replay a rebuild that replaces the log whole (C61). Decisions and calibration edits that arrive
+// during the restore are queued in arrival order and handed to the run at its first live frame, placed in the decisions
+// sidecar at that record index, as for a feed that joins the team later (C76, supervisor ruling); none is rejected.
 //
 // Every run here is a live run of one committed segment (C84) split at a Session packet: the first run gets the first
 // part and is stopped (a clean bridge stop), the restarted run gets the rest, with receive times on another origin (a new
@@ -16,7 +18,7 @@ import { join } from 'node:path';
 import { Writable } from 'node:stream';
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { ServerMessage, TopicName } from '@pitwall/contracts';
-import { known, trackDataOf, unknown, type FeedId, type PriorsEntries } from '@pitwall/domain';
+import { carId, known, trackDataOf, unknown, type DecisionRecord, type FeedId, type PriorsEntries } from '@pitwall/domain';
 import { defineConfig, type EngineView, type QuickCalculator } from '@pitwall/engine';
 import { PacketId, peekHeader } from '@pitwall/protocol';
 import { zandvoortTrackFile } from '../../../../test-support/track.ts';
@@ -29,7 +31,8 @@ import { TopicHub } from '../../src/hub/topic-hub.ts';
 import type { PacketSource, RawPacket } from '../../src/input/packet-source.ts';
 import { createLogger } from '../../src/log.ts';
 import { decisionsSidecarPath, priorsSidecarPath } from '../../src/pipeline/decision-sidecars.ts';
-import { FeedPipeline, type FeedPipelineOptions } from '../../src/pipeline/feed-pipeline.ts';
+import { FeedPipeline, type DecisionResult, type FeedPipelineOptions } from '../../src/pipeline/feed-pipeline.ts';
+import type { PlanDecision } from '../../src/pipeline/team-feeds.ts';
 import { topicStreamHash } from '../../src/pipeline/stream-hash.ts';
 import { readPwrec } from '../../src/pwrec/reader.ts';
 import { dataDir } from '../../src/storage/data-dir.ts';
@@ -37,7 +40,8 @@ import { openDatabase, type Db, type SessionKey } from '../../src/storage/db.ts'
 import { trackSidecarPath } from '../../src/track-files/load.ts';
 import { segmentPath } from '../fixtures/replay.ts';
 import { ArraySource, type PreparedPacket } from '../helpers/array-source.ts';
-import { fakeCalibration } from '../helpers/fake-calibration.ts';
+import { fakeCalibration, type FakeSet } from '../helpers/fake-calibration.ts';
+import { HookedSource } from '../helpers/hooked-source.ts';
 import { ManualSource } from '../helpers/manual-source.ts';
 import { rawRecords } from '../pwrec/helpers.ts';
 import { factRows, forbidFactRewrites } from '../storage/records.ts';
@@ -313,6 +317,105 @@ describe('a live session continues its recording across a bridge restart (C38, C
     const db = openDatabase(dirs.dbPath);
     try {
       expect(factRows(db, key)).toEqual(live);
+    } finally {
+      db.close();
+    }
+  });
+});
+
+/** A unit that keeps the projection's decisions each frame; it reads `feed`, so it runs every frame. */
+function decisionsProbe(): { feature: Feature; seen: DecisionRecord[][] } {
+  const seen: DecisionRecord[][] = [];
+  const calc: QuickCalculator<number> = {
+    kind: 'quick',
+    id: 'test.restart-decisions-probe',
+    reads: ['feed', 'decisions'],
+    cadence: 'frame',
+    compute: (view) => {
+      seen.push(structuredClone([...(view.history as unknown as { decisions: readonly DecisionRecord[] }).decisions]));
+      return seen.length;
+    },
+  };
+  return { feature: defineFeature({ name: 'restart-decisions-probe', calculators: [calc], topics: [] }), seen };
+}
+
+const readJson = (path: string): unknown => JSON.parse(readFileSync(path, 'utf8'));
+
+describe('decisions sent while a restarted run restores its recording (C76, C38, C59)', { timeout: 180_000 }, () => {
+  it('a calibration edit, a plan and a calibration pick sent during the restore are applied at the first live frame, in order', async () => {
+    const sets = (dry: number): FakeSet[] => [
+      { trackId: ZANDVOORT, id: 'dry', name: 'Dry', sources: 2, entries: { 'pitLoss.ms.green': known(dry, 0) } },
+      { trackId: ZANDVOORT, id: 'wet', name: 'Wet', sources: 1, entries: { 'pitLoss.ms.green': known(25_000, 0) } },
+    ];
+    const player = carId(peekHeader(segment.rest[0]!.bytes)!.playerCarIndex);
+    const plan: PlanDecision = { kind: 'planCommitted', carId: player, policy: { stops: [{ lap: 30, compound: 'hard' }], triggers: [] } };
+    /** What the user and a teammate send, in this order: an edit of the set the run uses, a plan, a pick. */
+    const send = (pipeline: FeedPipeline, cal: ReturnType<typeof fakeCalibration>): DecisionResult[] => {
+      cal.edit(ZANDVOORT, 'dry', { 'pitLoss.ms.green': known(22_000, 0) });
+      pipeline.calibrationEdited('dry');
+      return [pipeline.commitPlan(plan), pipeline.commitDecision('wet')];
+    };
+
+    // one run that never stopped: the run preselects `dry`; the three are sent just before the first packet after the split
+    const wholeCal = fakeCalibration(sets(21_000));
+    const wholeProbe = decisionsProbe();
+    const wholePlace = newPlace();
+    let wholeAnswers: DecisionResult[] = [];
+    const wholeSource = new HookedSource(new ArraySource(F, segment.packets), {
+      after: (i) => { if (i === segment.split - 1) wholeAnswers = send(whole.pipeline, wholeCal); },
+    });
+    const whole = livePipeline(wholeSource, { place: wholePlace, wallMs: W0, features: [wholeProbe.feature], extra: { calibration: wholeCal.store } });
+    whole.pipeline.start();
+    await whole.pipeline.done;
+    expect(whole.errors).toEqual([]);
+    expect(wholeAnswers).toEqual([{ ok: true }, { ok: true }]);
+    const wanted = wholeProbe.seen.at(-1)!;
+    expect(wanted.map((d) => d.kind)).toEqual(['calibrationChosen', 'planCommitted', 'calibrationChosen']);
+
+    // the first run stops at the split; the restarted run gets the rest, and the three are sent while it restores
+    const root = tmp();
+    const dirs = dataDir({ PITWALL_DATA_DIR: root });
+    const place: Place = { db: openDatabase(dirs.dbPath), recordingsDir: dirs.recordings };
+    const firstCal = fakeCalibration(sets(21_000));
+    await firstRun(segment, { place, wallMs: W0, features: [decisionsProbe().feature], extra: { calibration: firstCal.store } });
+    const againCal = fakeCalibration(sets(21_000));
+    const probe = decisionsProbe();
+    const again = livePipeline(new ArraySource(F, restarted(segment)), { place, wallMs: restartWall(segment), features: [probe.feature], extra: { calibration: againCal.store } });
+    again.pipeline.start();
+    // the rest has arrived and is buffered: the restore of the stored recording is under way; nothing is rejected
+    expect(send(again.pipeline, againCal)).toEqual([{ ok: true }, { ok: true }]);
+    await again.pipeline.done;
+    expect(again.errors).toEqual([]);
+
+    // the projection's decisions are one run's: in arrival order, each describing the first live frame
+    const got = probe.seen.at(-1)!;
+    expect(got).toEqual(wanted);
+    expect(new Set(got.map((d) => d.frame)).size).toBe(1);
+    // the decisions sidecar holds them at the record index after the resume record: the first part's records of the session
+    const file = onlyRecording(place);
+    const sessionUid = peekHeader(segment.rest[0]!.bytes)!.sessionUid;
+    const firstPartRecords = segment.first.filter((p) => [sessionUid, 0n].includes(peekHeader(p.bytes)?.sessionUid ?? -1n)).length;
+    const sidecar = readJson(decisionsSidecarPath(file)) as Array<{ recordIndex: number; decision: { kind: string } }>;
+    expect(sidecar.map((e) => [e.recordIndex, e.decision.kind])).toEqual([
+      [firstPartRecords, 'calibrationChosen'], [firstPartRecords, 'planCommitted'], [firstPartRecords, 'calibrationChosen'],
+    ]);
+    expect(sidecar).toEqual(readJson(decisionsSidecarPath(onlyRecording(wholePlace))));
+    expect(readJson(priorsSidecarPath(file))).toEqual(readJson(priorsSidecarPath(onlyRecording(wholePlace))));
+    // the stored log is one run's
+    const key = onlyKey(place.db);
+    const live = factRows(place.db, key);
+    expect(live).toEqual(factRows(wholePlace.db, onlyKey(wholePlace.db)));
+
+    // `pitwall reprocess` of the continued file gives the same decisions (C38)
+    place.db.close();
+    const out: string[] = [], err: string[] = [];
+    const io: CliIo = { out: (l) => out.push(l), err: (l) => err.push(l), env: { PITWALL_DATA_DIR: root }, signal: new AbortController().signal };
+    expect(await main(['reprocess'], io)).toBe(0);
+    expect(err).toEqual([]);
+    const db = openDatabase(dirs.dbPath);
+    try {
+      expect(factRows(db, key)).toEqual(live);
+      expect(factRows(db, key).filter((row) => row.list === 'decisions')).toHaveLength(3);
     } finally {
       db.close();
     }
