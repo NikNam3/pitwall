@@ -142,6 +142,7 @@ export const commandTitles = {
   workbookOpen: (n: number): string => `Open workbook ${n}`,
   workbookPick: 'Pick a workbook',
   workbookSaveAs: 'Save workbook as',
+  workbookReset: 'Reset workbook to default',
   alertsAckAll: 'Acknowledge all alerts',
   alertAck: (key: string): string => `Acknowledge alert ${key}`,
   devInspect: 'Inspect a widget (dev)',

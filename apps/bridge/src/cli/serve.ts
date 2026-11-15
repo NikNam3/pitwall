@@ -121,8 +121,10 @@ export async function serve(opts: ServeOptions): Promise<number> {
     const planRouting = new PlanRouting({ teams, pipelines });
     const feeds = (): FeedInfo[] => labels.map((label) => ({ ...label, team: teams.team(label.feedId) }));
     // Seeded first, so the UI state opens on the shipped workbooks, never on its own fallback, and on every start path.
-    if (opts.uiDir !== undefined) await seedDefaultWorkbooks(opts.uiDir, DEFAULT_WORKBOOKS_DIR);
-    const uiState = opts.uiDir === undefined ? undefined : UiState.open(opts.uiDir, hub, cliLogger(io, 'warn'));
+    // Today's date names the backup of a user file a shipped default replaces; the bridge, the I/O shell, reads it here only.
+    const now = (): string => new Date().toISOString().slice(0, 10);
+    if (opts.uiDir !== undefined) await seedDefaultWorkbooks(opts.uiDir, DEFAULT_WORKBOOKS_DIR, now);
+    const uiState = opts.uiDir === undefined ? undefined : UiState.open(opts.uiDir, hub, cliLogger(io, 'warn'), { dir: DEFAULT_WORKBOOKS_DIR, now });
     if (uiState) {
       undo.push(() => uiState.close());
       // Acknowledgements of occurrences that have ended are dropped, so state.json does not grow forever.
