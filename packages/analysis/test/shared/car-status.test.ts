@@ -1,11 +1,14 @@
 // The shared car-status reads (`shared/car-status.ts`, contract C17, C20, C43): a unit reads whether a car is in the
-// session or competes from car-status's open span, never from `car.active` or the game's result status.
-import { carId, known, unknown, type OpenSpan } from '@pitwall/domain';
+// session from car-status's open span, never from `car.active` or the game's result status. SP4.3c Task 5 (O7): one
+// in-session row set (`IN_SESSION_ROWS`) the units spread into their behaviour tables instead of copying it; the unused
+// `carStatusKind`, `inSession` and `competing` are deleted with their tests.
+import { carId, carStatusSpans, unknown, type OpenSpan } from '@pitwall/domain';
 import { describe, expect, it } from 'vitest';
 import { guardedView } from '../../../engine/test/support/scheduler.ts';
 import { UndeclaredReadError } from '../../../engine/test/support/guarded-input.ts';
 import { engineView } from '../../../../test-support/builders/index.ts';
-import { CAR_STATUS_READS, carStatusKind, competing, inSession } from '../../src/shared/car-status.ts';
+import { CAR_STATUS_READS, carsInSession, IN_SESSION_ROWS } from '../../src/shared/car-status.ts';
+import { loadUnitFolders } from '../units.ts';
 
 /** An open car-status span of car `car`, since `start`. */
 const status = (car: number, kind: string, start = 2_000): OpenSpan => ({
@@ -28,27 +31,40 @@ const viewOf = (...kinds: string[]) =>
 describe('car status', () => {
   const view = viewOf('competing', 'retired', 'disqualified', 'absent');
 
-  it('carStatusKind is the kind of the car span open now, known since it started', () => {
-    expect(carStatusKind(view, carId(0))).toEqual(known('competing', 1_000));
-    expect(carStatusKind(view, carId(1))).toEqual(known('retired', 2_000));
-    expect(carStatusKind(view, carId(3))).toEqual(known('absent', 4_000));
-  });
-
-  it('carStatusKind is notReceived while car-status has no span open for the car', () => {
-    expect(carStatusKind(view, carId(7))).toEqual(unknown('notReceived'));
-    expect(carStatusKind(engineView(), carId(0))).toEqual(unknown('notReceived'));
-  });
-
-  it('inSession: any status but absent; not while no span is open', () => {
-    expect([0, 1, 2, 3, 7].map((id) => inSession(view, carId(id)))).toEqual([true, true, true, false, false]);
-  });
-
-  it('competing: only the status competing', () => {
-    expect([0, 1, 2, 3, 7].map((id) => competing(view, carId(id)))).toEqual([true, false, false, false, false]);
+  it('carsInSession: every car with any status but absent, by id ascending; none while no span is open', () => {
+    expect(carsInSession(view)).toEqual([0, 1, 2]);
+    expect(carsInSession(engineView())).toEqual([]);
   });
 
   it('reads car-status as spans:car-status (C41)', () => {
-    expect(inSession(guardedView(view, [CAR_STATUS_READS]), carId(0))).toBe(true);
-    expect(() => competing(guardedView(view, ['timing']), carId(0))).toThrow(UndeclaredReadError);
+    expect(carsInSession(guardedView(view, [CAR_STATUS_READS]))).toEqual([0, 1, 2]);
+    expect(() => carsInSession(guardedView(view, ['timing']))).toThrow(UndeclaredReadError);
+  });
+});
+
+describe('IN_SESSION_ROWS: one in-session row set (SP4.3c Task 5, O7)', () => {
+  it('one row per car-status kind: every status but absent is in the session', () => {
+    expect(Object.keys(IN_SESSION_ROWS).sort()).toEqual([...carStatusSpans.kinds].sort());
+    expect(IN_SESSION_ROWS).toEqual({ competing: { inSession: true }, retired: { inSession: true }, disqualified: { inSession: true }, absent: { inSession: false } });
+  });
+
+  /** The units that copied the in-session rows before Task 5 (the plan's list). */
+  const COPIERS = ['car-bands', 'damage', 'degradation', 'ers', 'fuel', 'pit-stop-count', 'tyre-life'];
+
+  it('every unit that copied the rows spreads them: each car-status row agrees with IN_SESSION_ROWS', async () => {
+    const folders = await loadUnitFolders();
+    const problems: string[] = [];
+    for (const unit of COPIERS) {
+      const rows = folders.find((f) => f.unit === unit)?.table?.[carStatusSpans.machine] as Readonly<Record<string, unknown>> | undefined;
+      if (rows === undefined) {
+        problems.push(`${unit}: no car-status rows`);
+        continue;
+      }
+      for (const kind of carStatusSpans.kinds) {
+        const row = rows[kind] as Record<string, unknown> | undefined;
+        if (row?.['inSession'] !== IN_SESSION_ROWS[kind].inSession) problems.push(`${unit} ${kind}: inSession ${String(row?.['inSession'])}`);
+      }
+    }
+    expect(problems).toEqual([]);
   });
 });
