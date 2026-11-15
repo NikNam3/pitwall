@@ -15,6 +15,7 @@ import { carId, known, NOISE_COMPOUNDS, unknown, type CarState, type LapRecord, 
 import type { EngineView } from '@pitwall/engine/readers';
 import { describe, expect, it } from 'vitest';
 import { DEGRADATION, type DegradationOutput, type StintDegradation } from '../../src/degradation/index.ts';
+import { degradationCalculator } from '../../src/degradation/calculator.ts';
 import { INTER_CONFIG, SLICK_CONFIG, TYRE_MODEL, TYRE_MODEL_CONFIG, tyreModelCalculator, WET_CONFIG } from '../../src/tyre-model/index.ts';
 import { inter } from '../../src/tyre-model/types/inter.ts';
 import { slick } from '../../src/tyre-model/types/slick.ts';
@@ -498,15 +499,38 @@ describe('row 6: the loss per % of wear (research 22 §1.6)', () => {
 describe('fix round F1: ν and the loss per % from the stint`s own fit (spec §5.2, ruling R38 corrected)', () => {
   /**
    * A degradation stint of car `car` on `visual` over laps `firstLap`–`lastLap`, ν `nu` ms per lap; every lap a pace
-   * lap the filter used, unless `use` says otherwise.
+   * lap the filter used, unless `use` says otherwise (or `paceLaps` says how many of the first laps it used: the rest
+   * excluded). As `degradation` gives it, the posterior's covariance is known from two pace laps on (`fitStint`'s), and
+   * the source is the session's only then (fix round 2).
    */
-  const degStint = (o: { car?: number; visual?: NoiseCompound; stint?: number; firstLap: number; lastLap: number; nu: number; use?: LapUse }): StintDegradation => {
+  const degStint = (o: { car?: number; visual?: NoiseCompound; stint?: number; firstLap: number; lastLap: number; nu: number; use?: LapUse; paceLaps?: number }): StintDegradation => {
     const visual = o.visual ?? 'medium';
     const at = o.lastLap * LAP_MS;
     const laps = Array.from({ length: o.lastLap - o.firstLap + 1 }, (_, i) => {
       const lapNumber = o.firstLap + i;
-      return { lapNumber, tyreAge: i, lapTimeMs: 90_000 as Ms, correctedMs: known(89_000 as Ms, lapNumber * LAP_MS), use: o.use ?? ('used' as LapUse) };
+      const use: LapUse = o.paceLaps !== undefined ? (i < o.paceLaps ? 'used' : { excluded: 'neutralised' }) : (o.use ?? 'used');
+      return { lapNumber, tyreAge: i, lapTimeMs: 90_000 as Ms, correctedMs: known(89_000 as Ms, lapNumber * LAP_MS), use };
     });
+    const used = laps.filter((l) => l.use === 'used').length;
+    if (used < 2) {
+      // degradation's fit on fewer than two pace laps: ν mostly the filter's prior, no covariance, the start's source
+      return {
+        stint: o.stint ?? 1,
+        firstLap: o.firstLap,
+        lastLap: o.lastLap,
+        actual: ACTUAL[visual],
+        visual,
+        basePaceMs: known(89_000 as Ms, at),
+        nuMsPerLap: known(o.nu, at),
+        nuSdMs: known(28, at),
+        basis: 'wear',
+        fuelCorrected: true,
+        source: { kind: 'default', note: 'config', sessionShare: 0.1, parts: `${used} lap + default` },
+        cov: unknown('insufficientData'),
+        startPrior: { nuMsPerLap: 50, nuSdMs: 30, alphaOffsetMs: unknown('notApplicable'), source: { kind: 'default', note: 'config', sessionShare: 0, parts: 'default' } },
+        laps,
+      };
+    }
     return {
       stint: o.stint ?? 1,
       firstLap: o.firstLap,
@@ -589,6 +613,40 @@ describe('fix round F1: ν and the loss per % from the stint`s own fit (spec §5
     expect(m.nuMsPerLap.source).toBe('game');
     expect(valueOf(m.nuMsPerLap)).toBeCloseTo(150 * 2, 9);
     expect(m.lossMsPerPct.source).toBe('game');
+  });
+
+  it('fix round 2: a stint with one used lap is no fit of the session`s own (ν mostly the filter`s prior): the game`s values, not measured', () => {
+    const m = fittedOf(fitView(degradation([degStint({ firstLap: 1, lastLap: 5, nu: 90, paceLaps: 1 })])));
+    expect(m.nuMsPerLap.source).not.toBe('measured');
+    expect(m.nuMsPerLap.source).toBe('game');
+    expect(valueOf(m.nuMsPerLap)).toBeCloseTo(150 * 2, 9);
+    expect(m.lossMsPerPct.source).toBe('game');
+    expect(valueOf(m.lossMsPerPct)).toBeCloseTo(150, 9);
+  });
+
+  it('fix round 2: a stint with two used laps is the session`s own fit (its covariance known): ν measured', () => {
+    const m = fittedOf(fitView(degradation([degStint({ firstLap: 1, lastLap: 5, nu: 90, paceLaps: 2 })])));
+    expect(m.nuMsPerLap.source).toBe('measured');
+    expect(valueOf(m.nuMsPerLap)).toBeCloseTo(90, 9);
+    expect(m.lossMsPerPct.source).toBe('measured');
+    expect(valueOf(m.lossMsPerPct)).toBeCloseTo(90 / 2, 9);
+  });
+
+  it('fix round 2: on degradation`s real output (its calculator over the same laps), ν is measured exactly from two pace laps on', () => {
+    const seen = new Set<number>();
+    for (const n of [1, 2, 3, 4]) {
+      const gains = Array.from({ length: n }, () => 2);
+      const deg = degradationCalculator.compute(fitView(undefined, { gains }));
+      const stint = deg[carId(0)]?.at(-1);
+      if (stint === undefined) throw new Error(`no degradation stint over ${n} laps`);
+      const paceLaps = stint.laps.filter((l) => l.use === 'used').length;
+      seen.add(paceLaps);
+      const m = fittedOf(fitView(new Map([[DEGRADATION, deg]]), { gains }));
+      expect(m.nuMsPerLap.source === 'measured', `${n} laps, ${paceLaps} pace laps`).toBe(paceLaps >= 2);
+    }
+    // the case of the finding is exercised: a stint with exactly one pace lap
+    expect(seen.has(1)).toBe(true);
+    expect([...seen].some((p) => p >= 2)).toBe(true);
   });
 
   it('a fit whose stint has no measured rate yet: ν the fit`s (measured), the loss per % not ν ÷ a prior rate (here the default: 4 % wear is below minWearForLossPct)', () => {

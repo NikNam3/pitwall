@@ -16,9 +16,11 @@ import * as tyreLifeUnit from '../../src/tyre-life/index.ts';
 import { TYRE_LIFE } from '../../src/tyre-life/index.ts';
 import { tyreLifeCalculator } from '../../src/tyre-life/calculator.ts';
 import { TYRE_MODEL } from '../../src/tyre-model/index.ts';
+import { tyreModelCalculator } from '../../src/tyre-model/calculator.ts';
+import { lapsToLimitOf } from '../../src/shared/tyre-prior.ts';
 import { carState, realismHidden } from '../../../../test-support/builders/index.ts';
 import { guardedQuick, NONE, PRACTICE, QUALIFYING, situatedView } from '../situated.ts';
-import { liveSets, plainModelCar, tyreSet } from '../tyre-model/support.ts';
+import { carOf as carOfModel, liveSets, modelView, plainModelCar, tyreSet } from '../tyre-model/support.ts';
 
 /** The calculator through its guarded view (C41): every case fails on a read it does not declare. */
 const calc = guardedQuick(tyreLifeCalculator);
@@ -200,5 +202,52 @@ describe('tyre-life calculator (a reader of tyre-model)', () => {
   it('the deleted mechanisms are gone from the output: no basis, no age-loss limit, no fresh-set life (tyre-model`s lapsToLimit per compound)', () => {
     const out = run(viewOf([carWithWear(6)], { [carId(0)]: modelWith('soft', 2) })) as unknown as Record<string, unknown>;
     for (const key of ['basis', 'ageLossLimitMs', 'freshLifeLaps']) expect(out, key).not.toHaveProperty(key);
+  });
+});
+
+describe('fix round 2: the limit and the laps to it are tyre-model`s (C43, C47, C3)', () => {
+  it('without tyre-model`s car the laps to the limit are unknown(insufficientData): no limit of tyre-life`s own (no literal 70)', () => {
+    // 10 % and 76 % wear: with a literal 70 % limit the second would read 0 laps
+    for (const wear of [10, 76]) {
+      const out = run(viewOf([carWithWear(wear)], {}));
+      for (const corner of CORNERS) {
+        expect(out.corners[corner].lapsToLimit, `${wear} % ${corner}`).toEqual(unknown('insufficientData'));
+        // the wear stays the live state's
+        expect(out.corners[corner].wearPct, `${wear} % ${corner}`).toEqual({ known: true, value: wear, at: 0 });
+      }
+      expect(out.lapsToLimit, `${wear} %`).toEqual(unknown('insufficientData'));
+    }
+  });
+
+  it('tyre-life and tyre-model give equal laps to the limit, both lapsToLimitOf over tyre-model`s rates and limit', () => {
+    const modelCalc = guardedQuick(tyreModelCalculator);
+    const cases: { wear: Corners<number>; usableLifeLaps: number }[] = [
+      { wear: { fl: 10, fr: 12, rl: 6, rr: 20 }, usableLifeLaps: 28 },
+      { wear: { fl: 0, fr: 0, rl: 0, rr: 0 }, usableLifeLaps: 40 },
+      { wear: { fl: 64, fr: 71, rl: 30, rr: 69.5 }, usableLifeLaps: 22 },
+    ];
+    for (const { wear, usableLifeLaps } of cases) {
+      const worst = Math.max(wear.fl, wear.fr, wear.rl, wear.rr);
+      const base = modelView([{ id: 0, compound: 'medium', wearPct: wear, sets: liveSets([tyreSet('medium', { fitted: true, wearPct: worst, usableLifeLaps })]) }]);
+      const model = carOfModel(modelCalc.compute(base), 0);
+      const life = run({ ...base, outputs: upstream({ [carId(0)]: model }) });
+      expect(life.limitPct).toBe(model.limitPct);
+      const medium = model.compounds.medium;
+      for (const corner of CORNERS) {
+        const rate = medium.wearRatePct[corner].value;
+        const expected = lapsToLimitOf(known(wear[corner], 0), rate, model.limitPct);
+        expect(life.corners[corner].lapsToLimit, `${corner}`).toEqual(expected);
+      }
+      // the set's laps: the fewest corner's, tyre-model's and tyre-life's alike
+      const fewest = Math.min(...CORNERS.map((c) => (life.corners[c].lapsToLimit.known ? (life.corners[c].lapsToLimit as { value: number }).value : Infinity)));
+      expect(model.fittedLapsToLimit).toMatchObject({ known: true });
+      expect((model.fittedLapsToLimit as { value: number }).value).toBeCloseTo(fewest, 9);
+      expect(life.lapsToLimit).toEqual(model.fittedLapsToLimit);
+      // a fresh set's laps (the compound's): lapsToLimitOf from 0 % at the worst corner's rate
+      const worstRate = Math.max(...CORNERS.map((c) => (medium.wearRatePct[c].value as { value: number }).value));
+      const fresh = lapsToLimitOf(known(0, 0), known(worstRate, 0), model.limitPct);
+      expect(medium.lapsToLimit).toMatchObject({ known: true });
+      expect((medium.lapsToLimit as { value: number }).value).toBeCloseTo((fresh as { value: number }).value, 9);
+    }
   });
 });
