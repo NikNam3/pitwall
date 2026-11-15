@@ -65,6 +65,9 @@ const LITERAL_70 = /(?<![\w.])70(?![\w.])/;
  */
 const PACE_FROM_LAPS = /\blapTimeMs\s*-[^;\n]*\b(?:gammaMsPerKg|fuelMsPerKg|fieldMedian)\b/;
 
+/** A lap record of the leader taken by index: `<…>lap(s)[leader]` or `<…>lap(s)[order[0]]` (a stand-in lap of its own). */
+const LAP_OF_LEADER = /\b\w*[Ll]aps?\s*\[\s*(?:leader|order\s*\[\s*0\s*\])\s*\]/;
+
 /** `code` without its string and template literals (a note that quotes "70" is no literal of the limit). */
 const withoutStrings = (code: string): string => code.replace(/'(?:[^'\\\n]|\\.)*'|"(?:[^"\\\n]|\\.)*"|`(?:[^`\\]|\\.)*`/g, "''");
 
@@ -116,6 +119,9 @@ const OWNERS: OwnerRow[] = [
   // `degradation`'s; no other unit takes a pace from lap times less fuel or less a field median of the laps
   // (`forecast-field`'s raw-lap fallback and `race-interaction`'s own residuals are deleted).
   { judgement: "a car's pace", owner: 'degradation', source: (u) => codeMatches(u, PACE_FROM_LAPS), allowed: [] },
+  // SP4.3c Task 13 fix round 2 (R47, C43): which car's lap stands in for a car without a lap is `degradation`'s (its
+  // field `standIn`, `fromCarId`); no other unit takes the leader's lap record (`newestLap[leader]`, `laps[order[0]]`).
+  { judgement: "which car's lap stands in", owner: 'degradation', source: (u) => codeMatches(u, LAP_OF_LEADER), allowed: [] },
 ];
 
 /** A path as the guard shows it: repo-relative with forward slashes. */
@@ -262,6 +268,13 @@ describe('owners guard (spec §5.8)', () => {
       expect(PACE_FROM_LAPS.test(codeOf('const g = p.fuelMsPerKg * car.fuelKg;'))).toBe(false);
       const degradation = unit('degradation');
       expect(degradation !== undefined && codeMatches(degradation, PACE_FROM_LAPS)).toBe(true);
+    });
+
+    it("Task 13 fix round 2 pattern: the leader's lap record by index, in code only; a lap time array is no lap record", () => {
+      expect(LAP_OF_LEADER.test(codeOf('const standIn = newestLap[leader];'))).toBe(true);
+      expect(LAP_OF_LEADER.test(codeOf('const lap = laps[order[0]];'))).toBe(true);
+      expect(LAP_OF_LEADER.test(codeOf('const ms = lapMs[leader] ?? 0;'))).toBe(false);
+      expect(LAP_OF_LEADER.test(codeOf('// newestLap[leader]\nconst own = newestLap[k];'))).toBe(false);
     });
 
     it('fix round 2: degradation and tyre-model both call the shared fresh-set pick; tyre-model and tyre-life the shared laps-to-limit rule', () => {

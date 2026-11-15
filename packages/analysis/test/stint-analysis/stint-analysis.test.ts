@@ -8,7 +8,6 @@
 import {
   carId,
   unknown,
-  type CarId,
   type CompoundEstimate,
   type FitPoint,
   type Known,
@@ -19,7 +18,7 @@ import {
 import type { EngineView } from '@pitwall/engine/readers';
 import { describe, expect, it } from 'vitest';
 import { degradationCalculator } from '../../src/degradation/calculator.ts';
-import { DEGRADATION, DEGRADATION_CONFIG, fitStint, type FilterPrior, type StintDegradation } from '../../src/degradation/index.ts';
+import { DEGRADATION, DEGRADATION_CONFIG, fitStint, type DegradationOutput, type FilterPrior, type StintDegradation } from '../../src/degradation/index.ts';
 import { stintAnalysisCalculator } from '../../src/stint-analysis/calculator.ts';
 import { STINT_ANALYSIS, type StintAnalysisOutput } from '../../src/stint-analysis/index.ts';
 import { carState, realismHidden } from '../../../../test-support/builders/index.ts';
@@ -48,7 +47,7 @@ function view(o: ViewSpec): EngineView {
 
 /** `degradation`'s stints of car `car` in `v`. */
 const degradationOf = (v: EngineView, car = 0): StintDegradation[] => {
-  const out = (v.outputs.get(DEGRADATION) as Record<CarId, StintDegradation[]>)[carId(car)];
+  const out = (v.outputs.get(DEGRADATION) as DegradationOutput).stints[carId(car)];
   if (out === undefined) throw new Error(`degradation has no stints for car ${car}`);
   return out;
 };
@@ -353,6 +352,41 @@ describe('stint-analysis calculator', () => {
     const out = calc.compute(v);
     expect(valueOf(out, 3)).toEqual(unknown('notApplicable'));
     expect(valueOf(out, 0).known).toBe(true);
+  });
+
+  // SP4.3c Task 13 fix round 2 (R47, C3): a car's stint list holds only stints of laps the car drove; the field's
+  // stand-in for a car without a lap (degradation's `standIn`) is no stint of that car, so it is neither published nor
+  // pooled. The race's first strategy run (the lap-2 trigger): the leader, a rival on medium, has completed lap 1; our
+  // car (soft) and our teammate have no lap yet.
+  it('a car without a lap at the lap-2 trigger: no stint published and nothing pooled (the field stand-in is no stint)', () => {
+    const leader = stintLaps({ car: 3, from: 1, to: 1, actual: 'C2', visual: 'medium', hidden: true });
+    const v = view({
+      laps: leader,
+      cars: [carState(), carState({ id: carId(1) }), realismHidden(carState({ id: carId(3) }))],
+      teammate: 1,
+    });
+    // degradation stands in for the lap-less cars with the leader's lap, as its own part of the output
+    const deg = v.outputs.get(DEGRADATION) as DegradationOutput;
+    expect(deg.standIn.known).toBe(true);
+    expect(deg.stints[carId(0)] ?? []).toEqual([]);
+    expect(deg.stints[carId(1)] ?? []).toEqual([]);
+    const out = calc.compute(v);
+    for (const car of [0, 1]) {
+      const { stints, compounds } = analysisOf(out, car);
+      expect(stints, `car ${car}: no stint`).toEqual([]);
+      expect(compounds, `car ${car}: nothing pooled (no medium from the leader's lap)`).toEqual([]);
+    }
+  });
+
+  it('the teammate without a lap: the compounds table pools the player`s driven stint alone', () => {
+    // the player has completed lap 1 on soft; the teammate has none: only the soft stint is pooled, nothing of the stand-in
+    const v = view({ laps: stintLaps({ from: 1, to: 1 }), cars: [carState(), carState({ id: carId(1) })], teammate: 1 });
+    const out = calc.compute(v);
+    expect(analysisOf(out, 1).stints).toEqual([]);
+    for (const car of [0, 1]) {
+      const { compounds } = analysisOf(out, car);
+      expect(compounds.map((c) => [c.actual, c.visual, c.laps])).toEqual([['C3', 'soft', 0]]);
+    }
   });
 
   it('the topic value is JSON-safe', () => {

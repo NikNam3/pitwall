@@ -552,7 +552,7 @@ describe('fix round F1: ν and the loss per % from the stint`s own fit (spec §5
   };
 
   /** `degradation`'s output with car 0's `stints`. */
-  const degradation = (stints: StintDegradation[]): EngineView['outputs'] => new Map([[DEGRADATION, { [carId(0)]: stints } satisfies DegradationOutput]]);
+  const degradation = (stints: StintDegradation[]): EngineView['outputs'] => new Map([[DEGRADATION, { stints: { [carId(0)]: stints }, standIn: unknown('notApplicable') } satisfies DegradationOutput]]);
 
   /**
    * Car 0 on a medium C3 at 10 % after laps of 2 %/lap (`gains`, five by default: a measured rate of 2 on every corner),
@@ -639,7 +639,7 @@ describe('fix round F1: ν and the loss per % from the stint`s own fit (spec §5
     for (const n of [1, 2, 3, 4]) {
       const gains = Array.from({ length: n }, () => 2);
       const deg = degradationCalculator.compute(fitView(undefined, { gains }));
-      const stint = deg[carId(0)]?.at(-1);
+      const stint = deg.stints[carId(0)]?.at(-1);
       if (stint === undefined) throw new Error(`no degradation stint over ${n} laps`);
       const paceLaps = stint.laps.filter((l) => l.use === 'used').length;
       seen.add(paceLaps);

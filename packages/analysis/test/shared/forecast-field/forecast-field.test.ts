@@ -173,7 +173,7 @@ describe('forecast-field (Task 16)', () => {
     const degradation = outputs.get(DEGRADATION) as DegradationOutput;
     let stints = 0;
     for (let car = 0; car < PARAMS.cars; car++) {
-      const stint = degradation[carId(car)]?.at(-1);
+      const stint = degradation.stints[carId(car)]?.at(-1);
       if (stint === undefined || !stint.cov.known) continue;
       const [[aa]] = stint.cov.value;
       // paceSdMs² = cov[0][0]
@@ -365,7 +365,7 @@ describe('forecast-field (Task 16)', () => {
     });
 
     it('a compound without a stint takes the track file’s offset; fuel 30 ms per kg; the convex term tyre-model`s slick module`s (flagged)', () => {
-      const p = lapModelParams(view, new Map([[DEGRADATION, {} satisfies DegradationOutput]]));
+      const p = lapModelParams(view, new Map([[DEGRADATION, { stints: {}, standIn: unknown('notApplicable') } satisfies DegradationOutput]]));
       expect(p.compoundOffsetMs.soft - p.compoundOffsetMs.medium).toBeCloseTo(TRACK_OFFSETS.soft - TRACK_OFFSETS.medium, 9);
       expect(p.compoundOffsetMs.hard - p.compoundOffsetMs.medium).toBeCloseTo(TRACK_OFFSETS.hard - TRACK_OFFSETS.medium, 9);
       expect(p.fuelMsPerKg).toBe(30);
@@ -373,14 +373,14 @@ describe('forecast-field (Task 16)', () => {
       expect(p.convexMsPerPct2).toBe(SLICK_CONFIG.defaults.convexMsPerPct2);
       expect(p.convexFlagged).toBe(true);
       // the slick module's config is read through the view (C47)
-      const moved = lapModelParams({ ...view, config: { [SLICK_CONFIG.key]: { convexMsPerPct2: 4 } } }, new Map([[DEGRADATION, {} satisfies DegradationOutput]]));
+      const moved = lapModelParams({ ...view, config: { [SLICK_CONFIG.key]: { convexMsPerPct2: 4 } } }, new Map([[DEGRADATION, { stints: {}, standIn: unknown('notApplicable') } satisfies DegradationOutput]]));
       expect(moved.convexMsPerPct2).toBe(4);
     });
 
     it("the fitted compounds' offsets come from degradation's α, the track file a weak prior", () => {
       // ten cars, each a medium stint and then a hard stint 900 ms slower (the track file says 350 ms)
-      const degradation: DegradationOutput = {};
-      for (let car = 0; car < 10; car++) degradation[carId(car)] = [stint(1, 'medium', 90_000 + 100 * car), stint(2, 'hard', 90_900 + 100 * car)];
+      const degradation: DegradationOutput = { stints: {}, standIn: unknown('notApplicable') };
+      for (let car = 0; car < 10; car++) degradation.stints[carId(car)] = [stint(1, 'medium', 90_000 + 100 * car), stint(2, 'hard', 90_900 + 100 * car)];
       const p = lapModelParams(view, new Map([[DEGRADATION, degradation]]));
       const hard = p.compoundOffsetMs.hard - p.compoundOffsetMs.medium;
       expect(hard).toBeGreaterThanOrEqual(TRACK_OFFSETS.hard);

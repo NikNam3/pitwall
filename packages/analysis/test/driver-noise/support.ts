@@ -250,7 +250,7 @@ export function rowView(
   }
   const byMachine: Record<string, OpenSpan[]> = {};
   for (const span of open) (byMachine[span.machine] ??= []).push(span);
-  const degradation: DegradationOutput = Object.fromEntries(cars.map((c) => [carId(c.car), [stintOf(c)]]));
+  const degradation: DegradationOutput = { stints: Object.fromEntries(cars.map((c) => [carId(c.car), [stintOf(c)]])), standIn: unknown('notApplicable') };
   return engineView({
     cars: states,
     sessionTime: startOf(0, lastLap + 1) + 1_000,

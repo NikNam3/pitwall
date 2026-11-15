@@ -106,9 +106,9 @@ describe('degradation after a flashback (R3, C33)', () => {
     });
     const fresh = situatedView({ cars, history: { laps: kept } });
 
-    expect(calc.compute(before)[carId(0)]).toHaveLength(2);
+    expect(calc.compute(before).stints[carId(0)]).toHaveLength(2);
     const expected = calc.compute(fresh);
-    expect(expected[carId(0)]).toHaveLength(1);
+    expect(expected.stints[carId(0)]).toHaveLength(1);
     expect(calc.compute(after)).toEqual(expected);
     expect(degradationAsOf(asOfNow(after))).toEqual(expected);
     expect(degradationAsOf(asOfNow(fresh))).toEqual(expected);

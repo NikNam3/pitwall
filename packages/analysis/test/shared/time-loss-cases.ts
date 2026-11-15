@@ -4,7 +4,7 @@
 // events. The views are `incidents`' test races (`../incidents/race.ts`) with what `driver-noise` needs on top: car 7's
 // lap records (each describing its line crossing's frame), its car-driver span `human`, its car-status span
 // `competing`, and `degradation`'s and `track-wetness`'s outputs (every lap's residual 0, a dry track).
-import { carId, type CarId, type LapRecord, type MiniSectorCrossing } from '@pitwall/domain';
+import { carId, unknown, type CarId, type LapRecord, type MiniSectorCrossing } from '@pitwall/domain';
 import { asOfNow, type EngineView } from '@pitwall/engine/readers';
 import { lap, neutralisation } from '../../../../test-support/builders/index.ts';
 import { guardedView } from '../../../engine/test/support/scheduler.ts';
@@ -70,7 +70,7 @@ export function timeLossCase(kind: TimeLossCase): EngineView {
     spans: [...driver, ...status(7), ...(kind === 'pitVisit' ? visit : [])],
   });
   const outputs = new Map(view.outputs);
-  outputs.set(DEGRADATION, { [HUMAN]: [stintOf({ car: 7, to: LAPS })] });
+  outputs.set(DEGRADATION, { stints: { [HUMAN]: [stintOf({ car: 7, to: LAPS })] }, standIn: unknown('notApplicable') });
   outputs.set(TRACK_WETNESS, dryWetness(LAPS));
   return { ...view, outputs };
 }

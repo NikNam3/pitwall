@@ -39,7 +39,7 @@ function valueOf(sp: ReturnType<typeof buildStartingPoint>, what: string): Start
 
 /** `car`'s newest stint with a known base pace, as `degradation` gives it. */
 function pacedStint(outputs: ReadonlyMap<CalculatorId, unknown>, car: CarId): StintDegradation {
-  const stints = (outputs.get(DEGRADATION) as DegradationOutput)[car] ?? [];
+  const stints = (outputs.get(DEGRADATION) as DegradationOutput).stints[car] ?? [];
   const paced = [...stints].reverse().find((s) => s.basePaceMs.known);
   if (paced === undefined) throw new Error(`car ${car}: no paced stint`);
   return paced;
@@ -126,11 +126,14 @@ describe("a car's pace is degradation's (SP4.3c Task 13, O2)", () => {
     const outputs = new Map(upstreamOf(view, plainNoise(PARAMS.cars, HUMANS, view.at)));
     // car 4's stints as degradation gives them, each without a base pace (no pace lap fitted)
     const degradation = outputs.get(DEGRADATION) as DegradationOutput;
-    const unpaced: DegradationOutput = { ...degradation, [carId(4)]: (degradation[carId(4)] ?? []).map((s) => ({ ...s, basePaceMs: unknown('insufficientData'), cov: unknown('insufficientData') })) };
+    const unpaced: DegradationOutput = {
+      ...degradation,
+      stints: { ...degradation.stints, [carId(4)]: (degradation.stints[carId(4)] ?? []).map((s) => ({ ...s, basePaceMs: unknown('insufficientData'), cov: unknown('insufficientData') })) },
+    };
     outputs.set(DEGRADATION, unpaced);
     expect(buildStartingPoint(view, outputs)).toEqual(unknown('insufficientData'));
-    // without any stint at all the same
-    outputs.set(DEGRADATION, { ...degradation, [carId(4)]: [] });
+    // without any stint at all the same (past lap 1 degradation has no field stand-in)
+    outputs.set(DEGRADATION, { ...degradation, stints: { ...degradation.stints, [carId(4)]: [] } } satisfies DegradationOutput);
     expect(buildStartingPoint(view, outputs)).toEqual(unknown('insufficientData'));
   });
 
@@ -145,8 +148,8 @@ describe("a car's pace is degradation's (SP4.3c Task 13, O2)", () => {
     );
     const view = materialised(asOfNow(now), { situation: { ...now.situation, byMachine } });
     const outputs = new Map(upstreamOf(view, plainNoise(PARAMS.cars, HUMANS, view.at)));
-    const degradation = (outputs.get(DEGRADATION) as DegradationOutput | undefined) ?? {};
-    outputs.set(DEGRADATION, { ...degradation, [retiredCar]: [] });
+    const degradation = outputs.get(DEGRADATION) as DegradationOutput;
+    outputs.set(DEGRADATION, { ...degradation, stints: { ...degradation.stints, [retiredCar]: [] } } satisfies DegradationOutput);
     const sp = valueOf(buildStartingPoint(view, outputs), 'lap 7, car 4 retired');
     expect(sp.retired[retiredCar]).toBe(1);
   });

@@ -23,7 +23,7 @@ const view = (o: Parameters<typeof situatedView>[0] & { laps: LapRecord[] }): En
 
 /** The stints of car `car`, oldest first. */
 const stintsOf = (v: EngineView, car = 0): StintDegradation[] => {
-  const stints = calc.compute(v)[carId(car)];
+  const stints = calc.compute(v).stints[carId(car)];
   if (stints === undefined) throw new Error(`no stints for car ${car}`);
   return stints;
 };

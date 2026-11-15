@@ -24,7 +24,7 @@ const fallbackOf = (key: string): NonNullable<PriorDecl['fallback']> => {
 /** The start of car 0's one stint on `visual` without priors (laps 1..2: lap 2 its only pace lap). */
 const startOf = (visual: VisualCompound, track: EngineView['track'], config: EngineView['config']): StintDegradation['startPrior'] => {
   const laps: LapRecord[] = stintLaps({ from: 1, to: 2, visual, actual: visual === 'inter' ? 'inter' : 'C3' });
-  const stint = calc.compute(situatedView({ cars: [carState()], history: { laps }, track, config }))[carId(0)]?.[0];
+  const stint = calc.compute(situatedView({ cars: [carState()], history: { laps }, track, config })).stints[carId(0)]?.[0];
   if (stint === undefined) throw new Error('no stint for car 0');
   return stint.startPrior;
 };
@@ -84,7 +84,7 @@ describe('degradation start per key: the snapshot`s entry when known, else the k
   const stintWith = (priors: EngineView['priors']): { stint: StintDegradation; ctx: FallbackCtx } => {
     const laps = stintLaps({ from: 1, to: 2 });
     const v = situatedView({ cars: [carState()], history: { laps }, track: known(track, 0), priors });
-    const stint = calc.compute(v)[carId(0)]?.[0];
+    const stint = calc.compute(v).stints[carId(0)]?.[0];
     if (stint === undefined) throw new Error('no stint for car 0');
     return { stint, ctx: { config: v.config, track: v.track } };
   };
