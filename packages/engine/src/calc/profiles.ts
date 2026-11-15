@@ -37,8 +37,15 @@ export type ProfileEntryDecl = {
   aggregate(sessions: readonly StoredDriverSession[], ctx: ProfileCtx): { value: Known<number>; laps: number };
 };
 
-/** A unit's profile declaration: its entries by key. */
-export type ProfilesDecl = { unit: string; entries: Record<string, ProfileEntryDecl> };
+/**
+ * A unit's profile declaration: its entries by key and, optionally, its count of the samples (the human laps) one linked
+ * session gives the person's profile, the number the bridge shows as the session's laps (C43, C62c).
+ */
+export type ProfilesDecl = {
+  unit: string;
+  entries: Record<string, ProfileEntryDecl>;
+  samples?(session: StoredDriverSession, ctx: ProfileCtx): number;
+};
 
 /** Declares a unit's profile entries; a feature lists it in its `profiles` (C63), as it lists its priors. */
 export function defineProfiles(unit: string, decl: Omit<ProfilesDecl, 'unit'>): ProfilesDecl {
