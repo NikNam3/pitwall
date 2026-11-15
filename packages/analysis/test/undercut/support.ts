@@ -34,7 +34,6 @@ export function rejoinOf(car: CarId, at: number): Rejoin {
     lossSource: { kind: 'default', note: 'track file', sessionShare: 0, parts: 'default' },
     rejoinPosition: known(position, at),
     order: { known: false, reason: 'insufficientData' },
-    mapPoint: { known: false, reason: 'notApplicable' },
   });
   return { carId: car, position: 3, conditions: { green: row('green', green), sc: row('sc', green - 2), vsc: row('vsc', green - 1) } };
 }

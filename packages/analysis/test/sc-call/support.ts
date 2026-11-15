@@ -68,7 +68,6 @@ export function rejoinOf(car: CarId, positions: Record<PitCondition, Known<numbe
     lossSource: SOURCES[condition],
     rejoinPosition: positions[condition],
     order: unknown('insufficientData'),
-    mapPoint: unknown('notApplicable'),
   });
   return { carId: car, position: 8, conditions: { green: at('green'), sc: at('sc'), vsc: at('vsc') } };
 }
