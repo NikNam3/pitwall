@@ -20,7 +20,8 @@ export type StintDegradation = {
   /**
    * The car's pace on the stint at tyre age 0 (a car's pace is `degradation`'s, SP4.3c Task 13, O2): the filter's `α`;
    * for a car without any fitted stint, its newest stint takes the newest lap less its fuel term as its prior (`source`
-   * parts `newest lap`, `cov` unknown).
+   * parts `newest lap`, `cov` unknown); a car without any lap on the first lap has one stint with no laps whose base pace
+   * is the leader's newest lap less its fuel term plus `noLapStandInOffsetMs` (`source` parts `leader stand-in`).
    */
   basePaceMs: Known<Ms>;
   nuMsPerLap: Known<number>;

@@ -215,14 +215,15 @@ export function buildStartingPoint(view: AsOfView, outputs: ReadonlyMap<Calculat
     lapModel,
   };
 
-  // the declared stand-ins (C3, final review F4): an unknown compound's, a car without a lap's, an unknown driver's
+  // the declared stand-ins (C3, final review F4): an unknown compound's, an unknown driver's; a car without a lap's pace
+  // is degradation's (its stand-in, SP4.3c Task 13), its compound, tyre age and placement the leader's newest lap
   const unknownCompound: NoiseCompound = isNoiseCompound(config.unknownCompound) ? config.unknownCompound : (FORECAST_FIELD_CONFIG.defaults.unknownCompound as NoiseCompound);
-  const noLap: LapRecord = { ...standIn, lapTimeMs: standIn.lapTimeMs + config.noLapStandInOffsetMs };
+  const noLap: LapRecord = standIn;
 
   const lapMs = new Float64Array(cars);
   for (let k = 0; k < cars; k++) {
     const id = k as CarId;
-    // a car without a completed lap (lap 1 not yet done) takes the leader's newest lap as its stand-in (the config's)
+    // a car without a completed lap (lap 1 not yet done) runs on the leader's newest lap
     const own = newestLap[k];
     const lap = own ?? noLap;
     // just stopped (on its in lap, or a stint closed on its newest lap): a fresh set; the old compound stands in until
@@ -245,7 +246,8 @@ export function buildStartingPoint(view: AsOfView, outputs: ReadonlyMap<Calculat
     const w = lap.wearAtEndPct;
     sp.wearPct[k] = stopped ? 0 : own !== undefined && w.fl.known && w.fr.known && w.rl.known && w.rr.known ? Math.max(w.fl.value, w.fr.value, w.rl.value, w.rr.value) : tyreAge * rate;
     // pace on the reference compound (the lap model adds the compound's offset): `degradation`'s base pace alone (O2,
-    // SP4.3c Task 13); a running car without one makes the build unknown (C3), a retired car is not run
+    // SP4.3c Task 13: its fit, its newest lap, or on lap 1 its leader stand-in); a running car without one makes the
+    // build unknown (C3), a retired car is not run
     const stints = degradation[id] ?? [];
     const paced = [...stints].reverse().find((s) => s.basePaceMs.known);
     if (paced !== undefined && paced.basePaceMs.known) {
