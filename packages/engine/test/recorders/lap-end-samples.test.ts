@@ -98,6 +98,110 @@ describe('lap end samples', () => {
   });
 });
 
+// SP4.3c Task 9: the game's tyre sets at the lap end and the lap's carcass mean (C8, C10, C23).
+describe('lap end tyre sets and carcass mean', () => {
+  /** Tyre Sets data of one set (packet fields): wear, fitted flag and life differ per set so order and fields show. */
+  const setData = (actualTyreCompound: number, visualTyreCompound: number, wear: number, fitted: number, lifeSpan: number) =>
+    ({ actualTyreCompound, visualTyreCompound, wear, available: 1, fitted, recommendedSession: 15, lifeSpan, usableLife: lifeSpan + 2, lapDeltaTime: -150 });
+  const tyreSetsOf = (fittedIdx: number, data: Record<number, ReturnType<typeof setData>>) => ({ carIdx: 0, fittedIdx, tyreSetData: data });
+  const corners = <T>(v: T) => ({ fl: v, fr: v, rl: v, rr: v });
+
+  it('a lap end records every set as the live state has it at the lap end: the game order, every field, the fitted flag', () => {
+    const { st } = runScenario(new ScenarioBuilder({ cars: 1 }).frames(5, (d) => {
+      complete(d);
+      // an earlier packet during the lap; the completing frame's packet is the one the record carries
+      if (d.index === 1) d.add('tyreSets', tyreSetsOf(0, { 0: setData(18, 16, 1, 1, 20) }));
+      if (d.index === 3) d.add('tyreSets', tyreSetsOf(2, { 0: setData(18, 16, 40, 0, 20), 1: setData(17, 17, 0, 0, 30), 2: setData(16, 18, 12, 1, 40) }));
+    }));
+    const { tyreSets } = st.history.laps[0]!;
+    expect(tyreSets.known).toBe(true);
+    if (!tyreSets.known) return;
+    const live = st.cars[0]!.tyres.sets;
+    expect(live.known && tyreSets.value).toEqual(live.known && live.value.sets);
+    expect(tyreSets.value).toHaveLength(20);
+    expect(tyreSets.value.slice(0, 3)).toEqual([
+      { actualCompound: 'C3', visualCompound: 'soft', wearPct: 40, available: true, fitted: false, recommendedSession: 15, lifeSpanLaps: 20, usableLifeLaps: 22, lapDeltaMs: -150 },
+      { actualCompound: 'C2', visualCompound: 'medium', wearPct: 0, available: true, fitted: false, recommendedSession: 15, lifeSpanLaps: 30, usableLifeLaps: 32, lapDeltaMs: -150 },
+      { actualCompound: 'C1', visualCompound: 'hard', wearPct: 12, available: true, fitted: true, recommendedSession: 15, lifeSpanLaps: 40, usableLifeLaps: 42, lapDeltaMs: -150 },
+    ]);
+  });
+
+  it("a rival hidden by realism has unknown('realism') sets and carcass mean", () => {
+    const frames = new ScenarioBuilder({ cars: 6 }).frames(5, (d) => {
+      d.add('carDamage');
+      d.add('tyreSets', { carIdx: 3, fittedIdx: 0, tyreSetData: { 0: setData(18, 16, 5, 1, 20) } });
+      if (d.index >= 3) Object.assign(d.lapData.lapData[3]!, { currentLapNum: 2, lastLapTimeInMs: 90_000 });
+    }).build();
+    const st = initialState({ ...initFor(frames), realism: true });
+    for (const f of frames) step(st, f);
+    const lap = st.history.laps.find((l) => l.carId === 3)!;
+    expect(lap.tyreSets).toEqual(NO('realism'));
+    expect(lap.carcassMeanC).toEqual(corners(NO('realism')));
+  });
+
+  it("the carcass mean is the mean of the lap's carcass samples per corner; the completing frame belongs to the next lap", () => {
+    // Inner temperature per frame 0–4 (protocol order RL, RR, FL, FR): lap 1 is frames 0–2; frames 3–4 (200) are lap 2.
+    const inner = [[90, 80, 100, 70], [93, 80, 103, 72], [96, 80, 106, 74], [200, 200, 200, 200], [200, 200, 200, 200]];
+    const { st } = runScenario(new ScenarioBuilder({ cars: 1 }).frames(5, (d) => {
+      complete(d);
+      Object.assign(d.telemetry.carTelemetryData[0]!, { tyresInnerTemperature: inner[d.index]! });
+    }));
+    expect(st.history.laps[0]!.carcassMeanC).toEqual({ rl: val(93), rr: val(80), fl: val(103), fr: val(72) });
+  });
+
+  it("a lap the engine joined after its start has the carcass mean of the samples it saw, and the sets as at the lap end", () => {
+    // joined at 1200 m of lap 1: frames 0–2 are what the engine saw of it
+    const inner = [[90, 90, 90, 90], [100, 100, 100, 100], [110, 110, 110, 110], [200, 200, 200, 200]];
+    const { st } = runScenario(new ScenarioBuilder({ cars: 1 }).frames(4, (d) => {
+      complete(d);
+      if (d.index === 0) Object.assign(car0(d), { lapDistance: 1_200, currentLapTimeInMs: 20_000 });
+      Object.assign(d.telemetry.carTelemetryData[0]!, { tyresInnerTemperature: inner[d.index]! });
+      if (d.index === 3) d.add('tyreSets', tyreSetsOf(0, { 0: setData(18, 16, 30, 1, 20) }));
+    }));
+    const lap = st.history.laps.find((l) => l.lapNumber === 1)!;
+    expect(lap.carcassMeanC).toEqual(corners(val(100)));
+    expect(lap.tyreSets.known && lap.tyreSets.value[0]).toMatchObject({ wearPct: 30, fitted: true });
+  });
+
+  it("surface only (no carcass temperature from the game): the carcass mean is unknown('notApplicable')", () => {
+    const { st } = runScenario(new ScenarioBuilder({ cars: 1 }).session({ tyreTemperature: 0 }).frames(5, complete));
+    expect(st.history.laps[0]!.carcassMeanC).toEqual(corners(NO('notApplicable')));
+  });
+
+  it("a corner with no carcass sample in the lap is unknown('insufficientData'), even when the completing frame has one", () => {
+    const { st } = runScenario(new ScenarioBuilder({ cars: 1 }).frames(5, (d) => {
+      complete(d);
+      if (d.index < 3) d.drop('telemetry');
+      else Object.assign(d.telemetry.carTelemetryData[0]!, { tyresInnerTemperature: [100, 100, 100, 100] });
+    }));
+    expect(st.history.laps[0]!.carcassMeanC).toEqual(corners(NO('insufficientData')));
+  });
+
+  it('a car whose sets never arrived has its live reason: notReceived', () => {
+    const { st } = runScenario(new ScenarioBuilder({ cars: 1 }).frames(5, complete));
+    expect(st.history.laps[0]!.tyreSets).toEqual(NO('notReceived'));
+  });
+
+  it('the confirmed record keeps the provisional sets and carcass mean', () => {
+    const history = { carIdx: 0, numLaps: 2, lapHistoryData: [
+      { lapTimeInMs: 90_000, sector1TimeMs: 30_000, sector2TimeMs: 30_000, sector3TimeMs: 30_000, lapValidBitFlags: 0b1111 }, { lapValidBitFlags: 0b1111 }] };
+    const { st } = runScenario(new ScenarioBuilder({ cars: 1 }).frames(5, (d) => {
+      complete(d);
+      Object.assign(d.telemetry.carTelemetryData[0]!, { tyresInnerTemperature: d.index < 3 ? [90, 90, 100, 100] : [200, 200, 200, 200] });
+      if (d.index === 3) d.add('tyreSets', tyreSetsOf(0, { 0: setData(18, 16, 30, 1, 20) }));
+      if (d.index === 4) {
+        d.add('tyreSets', tyreSetsOf(0, { 0: setData(18, 16, 60, 1, 20) }));
+        d.add('sessionHistory', history);
+      }
+    }));
+    const [provisional, confirmed] = st.history.laps;
+    expect([provisional!.status, confirmed!.status]).toEqual(['provisional', 'confirmed']);
+    expect(provisional!.carcassMeanC.fl).toEqual(val(100));
+    expect(provisional!.tyreSets.known && provisional!.tyreSets.value[0]!.wearPct).toBe(30);
+    expect([confirmed!.tyreSets, confirmed!.carcassMeanC]).toEqual([provisional!.tyreSets, provisional!.carcassMeanC]);
+  });
+});
+
 describe('damageChange events', () => {
   const wing = (pct: number) => (d: FrameDraft) => { d.add('carDamage', { carDamageData: { 0: { frontLeftWingDamage: pct } } }); };
 
