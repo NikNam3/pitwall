@@ -11,7 +11,8 @@
 // - A lap's time is `lap-model`'s `lapTimeMs` with no scatter and no mistake: the wear and fuel at the lap's start,
 //   `lapOnSet` = laps already run on the set + 1, the lap's neutralisation, the lap's `wetnessByLap`. After the lap the
 //   set's wear grows by `wearRatePct[compound]` (× the neutralised `wearFactor` on a neutralised lap) and fuel falls by
-//   `fuelKg / (totalLaps − fromLap + 1)` (× `fuelFactor`); this burn runs the fuel to empty at the flag.
+//   `carParams.fuelBurnKgPerLap` (× `fuelFactor`), never below 0 (SP4.3c Task 15: the starting point's burn; by default
+//   here `fuelKg / (totalLaps − fromLap + 1)`, which runs the fuel to empty at the flag).
 // - A stop at the end of lap L costs `pitLossMs[c]` with c the condition of lap L (green, VSC, SC), less
 //   `HUMAN_STOP_SAVING_MS` for a human car, plus `trafficMsByLap` of lap L. The in-lap share only splits it in time.
 // - Neutralisations: a green lap n may start an SC with chance `byLap` of lap n, else a VSC with `vscByLap`'s (the two
@@ -85,7 +86,8 @@ export function dpInput(spec: DpSpec = {}): DpInput {
     fromLap,
     totalLaps,
     lap: spec.lap ?? LAP,
-    carParams: { compound: 'medium', tyreAge: 0, wearPct: 0, fuelKg: 0, paceMs: PACE_MS, degMsPerLap: 0, wearRatePct: { ...WEAR_RATES }, human: false, ...spec.car },
+    // the burn (SP4.3c Task 15, O15): the starting point's; by default the fuel over the laps left, as the DP computed it before
+    carParams: { compound: 'medium', tyreAge: 0, wearPct: 0, fuelKg: 0, paceMs: PACE_MS, degMsPerLap: 0, wearRatePct: { ...WEAR_RATES }, human: false, fuelBurnKgPerLap: (spec.car?.fuelKg ?? 0) / n, ...spec.car },
     sets: { ...NO_SETS, ...spec.sets },
     owesSecondCompound: spec.owesSecondCompound ?? false,
     pitLossMs: spec.pitLossMs ?? { green: 22_000, vsc: 15_000, sc: 11_000, inLapShare: 0.3 },
@@ -107,7 +109,8 @@ type Car = { compound: NoiseCompound; onSet: number; wearPct: number; fuelKg: nu
 
 const lapInput: LapInput = { paceMs: 0, degMsPerLap: 0, wearPct: 0, fuelKg: 0, compound: 'medium', lapOnSet: 1, neutralised: 'none', wetnessMs: 0, wet: false, scatterMs: 0, mistakeMs: 0 };
 
-const burnOf = (input: DpInput): number => input.carParams.fuelKg / (input.totalLaps - input.fromLap + 1);
+/** The burn per lap: the car's (`carParams.fuelBurnKgPerLap`, the starting point's, SP4.3c Task 15). */
+const burnOf = (input: DpInput): number => input.carParams.fuelBurnKgPerLap;
 
 /** Lap `lap` of `car` under `neutral`: its time, and the car after it. */
 function driveLap(input: DpInput, car: Car, lap: number, neutral: Neutral): { ms: number; after: Car } {

@@ -6,7 +6,7 @@ import { known, unknown, type LapRecord } from '@pitwall/domain';
 import { describe, expect, it } from 'vitest';
 import { LAP_CLASSES_CONFIG } from '../../src/lap-classes/index.ts';
 import { PER_LAP_RATE_CONFIG } from '../../src/per-lap-rate/index.ts';
-import { burnPerLapKg } from '../../src/shared/fuel-burn.ts';
+import { burnPerLapKg, planBurnKgPerLap } from '../../src/shared/fuel-burn.ts';
 import { lap } from '../../../../test-support/builders/index.ts';
 
 /** The default options: `lap-classes`' and `per-lap-rate`'s config defaults. */
@@ -87,5 +87,26 @@ describe('burnPerLapKg', () => {
     expect(valueOf(burnPerLapKg(burnLaps(1, 2, 1.5, 100), OPTS))).toBeCloseTo(1.5, 9);
     expect(burnPerLapKg(burnLaps(1, 2, 1.5, 100), { ...OPTS, rate: { window: 5, minSamples: 3 } })).toEqual(insufficient);
     expect(burnPerLapKg([], OPTS)).toEqual(insufficient);
+  });
+});
+
+// SP4.3c Task 15 (O15, C43, C50): the burn the simulators use is one, `StartingPoint.fuelBurnKgPerLap`, from here:
+// `planBurnKgPerLap(measured, fuelKg, lapsLeft)` is the car's measured burn (`burnPerLapKg`), else its fuel over the
+// laps left (0 with no lap left). `race-forecast/field.ts`, `strategy-dp/thresholds.ts` and `strategy-dp/state.ts`
+// read the starting point's burn and keep no `fuel ÷ laps left` of their own.
+describe('planBurnKgPerLap', () => {
+  it('the measured burn where one is known, whatever the fuel and the laps left', () => {
+    expect(planBurnKgPerLap(known(1.8, 0), 30, 20)).toBe(1.8);
+    expect(planBurnKgPerLap(known(1.8, 0), 0, 20)).toBe(1.8);
+  });
+
+  it('else the fuel over the laps left', () => {
+    expect(planBurnKgPerLap(insufficient, 30, 20)).toBeCloseTo(1.5, 12);
+    expect(planBurnKgPerLap(unknown('realism'), 45, 18)).toBeCloseTo(2.5, 12);
+  });
+
+  it('no lap left: no burn', () => {
+    expect(planBurnKgPerLap(insufficient, 30, 0)).toBe(0);
+    expect(planBurnKgPerLap(insufficient, 30, -1)).toBe(0);
   });
 });

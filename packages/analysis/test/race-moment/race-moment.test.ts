@@ -55,14 +55,13 @@ const incident = (over: Partial<IncidentEntry> = {}): IncidentEntry => ({
   ...over,
 });
 
-// battle's side as of the live polish (spec 3.1): `margin` from PACE Δ
+// battle's side as of SP4.3c Task 15 (O13): the pass chance from race-interaction's curve replaces the fixed margin
 const side = (over: Partial<BattleSide> = {}): BattleSide => ({
   carId: car1,
   gapMs: known(5000, NOW),
   lapsToDrs: known(20, NOW),
   paceDeltaMs: known(0, NOW),
-  margin: known({ kind: "pass" as const, ms: -1000 }, NOW),
-  passChance: na,
+  passChance: known(0, NOW),
   ours: { compound: "soft", age: 5 },
   theirs: { compound: "soft", age: 5 },
   theirErsStoreJ: na,
@@ -360,7 +359,7 @@ describe("race-moment calculator", () => {
           gapMs: known(gapMs, NOW),
           paceDeltaMs: unknown("insufficientData"),
           lapsToDrs: unknown("insufficientData"),
-          margin: unknown("insufficientData"),
+          passChance: unknown("insufficientData"),
         });
       const v = value(
         run({ battle: { [car0]: card(known(early(DRS), NOW)) } }),
