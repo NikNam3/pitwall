@@ -182,6 +182,7 @@ export function buildStartingPoint(view: AsOfView, outputs: ReadonlyMap<Calculat
     tyreAge: new Int16Array(cars),
     wearPct: f64(),
     fuelKg: f64(),
+    fuelBurnKgPerLap: f64(),
     paceMs: f64(),
     paceSdMs: f64(),
     sigmaMs: f64(),

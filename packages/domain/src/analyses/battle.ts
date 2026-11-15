@@ -23,6 +23,11 @@ export type BattleSide = {
    * (`overtakeThresholdMs` − their edge); positive = good for us.
    */
   margin: Known<{ kind: 'pass' | 'hold'; ms: Ms }>;
+  /**
+   * The pass chance (0–1) at the current gap from `race-interaction`'s pass curve (SP4.3c O13): ahead ours to pass, behind
+   * theirs to pass us. Replaces `margin`, which Task 15 deletes; unfilled until then.
+   */
+  passChance: Known<number>;
   ours: { compound: VisualCompound; age: number };
   theirs: { compound: VisualCompound; age: number };
   theirErsStoreJ: Known<Joules>;

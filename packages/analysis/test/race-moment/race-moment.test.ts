@@ -62,6 +62,7 @@ const side = (over: Partial<BattleSide> = {}): BattleSide => ({
   lapsToDrs: known(20, NOW),
   paceDeltaMs: known(0, NOW),
   margin: known({ kind: "pass" as const, ms: -1000 }, NOW),
+  passChance: na,
   ours: { compound: "soft", age: 5 },
   theirs: { compound: "soft", age: 5 },
   theirErsStoreJ: na,

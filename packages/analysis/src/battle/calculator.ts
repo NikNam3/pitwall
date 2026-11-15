@@ -59,6 +59,7 @@ function side(ctx: Context, ourId: CarId, theirId: CarId, isAhead: boolean): Kno
       lapsToDrs: lapsToDrs(drs, gapMs, pace, edge, drsRangeMs),
       paceDeltaMs: pace,
       margin,
+      passChance: unknown('insufficientData'), // SP4.3c Task 15 fills it (supervisor first)
       ours: tyre(ours),
       theirs: tyre(theirs),
       theirErsStoreJ: ers.known ? known(ers.value.storeJ, ers.at) : ers,

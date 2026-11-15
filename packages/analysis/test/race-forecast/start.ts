@@ -148,6 +148,7 @@ export function startingPoint(spec: StartSpec): StartingPoint {
     tyreAge: f((l) => new Int16Array(l), (c) => c.tyreAge ?? 0),
     wearPct: f((l) => new Float64Array(l), (c) => c.wearPct ?? 0),
     fuelKg: f((l) => new Float64Array(l), (c) => c.fuelKg ?? 0),
+    fuelBurnKgPerLap: f((l) => new Float64Array(l), () => 0),
     paceMs: f((l) => new Float64Array(l), (c) => c.paceMs),
     paceSdMs: f((l) => new Float64Array(l), (c) => c.paceSdMs ?? 0),
     sigmaMs: f((l) => new Float64Array(l), (c) => c.sigmaMs ?? 0),
