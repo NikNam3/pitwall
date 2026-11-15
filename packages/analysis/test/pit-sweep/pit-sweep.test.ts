@@ -10,7 +10,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as mc from '../../src/race-monte-carlo/index.ts';
 import type * as dp from '../../src/strategy-dp/index.ts';
 import { paired, ties } from '../../src/race-monte-carlo/index.ts';
-import { bestWith, dpResult } from '../../src/strategy-dp/index.ts';
+import { bestWith } from '../../src/strategy-dp/index.ts';
 import { PIT_SWEEP_CONFIG, PIT_SWEEP_JOB } from '../../src/pit-sweep/index.ts';
 import { run } from '../../src/pit-sweep/job.ts';
 import { placePmf } from '../../src/shared/distribution.ts';
@@ -25,8 +25,9 @@ vi.mock('../../src/strategy-dp/index.ts', async (importOriginal) => {
   const real = await importOriginal<typeof dp>();
   return {
     ...real,
-    solveDp: (...args: Parameters<typeof real.solveDp>) => {
-      const solution = real.solveDp(...args);
+    // SP4.3c Task 19: a call solves the first weather world (`solveWorld(input, 0)`) and queries it
+    solveWorld: (...args: Parameters<typeof real.solveWorld>) => {
+      const solution = real.solveWorld(...args);
       rec.dp.push({ input: args[0], solution });
       return solution;
     },
@@ -101,11 +102,11 @@ function callOf(car: CarId, compound: NoiseCompound) {
 /** The stop laps L from `first` (default now) to `last` whose `bestWith` gives a plan, and those plans' policies. */
 function expectedCandidates(car: CarId, compound: NoiseCompound, last: number, first?: number) {
   const { input, solution } = solveOf(car);
-  const thresholds = dpResult(solution).thresholds;
   const out: { lap: number; policy: ReturnType<typeof policyOf> }[] = [];
   for (let lap = first ?? input.fromLap; lap <= last; lap++) {
     const plan = bestWith(solution, { stopLap: lap, compound });
-    if (plan !== null) out.push({ lap, policy: policyOf(plan, thresholds) });
+    // SP4.3c Task 19: each row's plan with its own triggers (no shared thresholds)
+    if (plan !== null) out.push({ lap, policy: policyOf(plan) });
   }
   return out;
 }

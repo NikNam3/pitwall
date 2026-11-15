@@ -40,8 +40,13 @@ export type CarSpec = {
   bigEventRate?: number;
   retireRate?: number;
   wearRatePct?: number;
-  /** Per compound its own wear rate and degradation (SP4.3c Task 12: `StartingPoint.tyre` per car and compound); the car's above otherwise. */
-  tyre?: Partial<Record<NoiseCompound, { wearRatePct?: number; degMsPerLap?: number }>>;
+  /**
+   * Per compound its own wear rate, degradation and a fresh set's laps to the limit (SP4.3c Task 12: `StartingPoint.tyre`
+   * per car and compound); the car's above otherwise, no limit known (-1) by default.
+   */
+  tyre?: Partial<Record<NoiseCompound, { wearRatePct?: number; degMsPerLap?: number; lapsToLimit?: number }>>;
+  /** Laps the fitted set has left to the limit (`StartingPoint.fittedLapsToLimit`, SP4.3c Task 19); -1 (none known) by default. */
+  fittedLapsToLimit?: number;
   compound?: NoiseCompound;
   tyreAge?: number;
   wearPct?: number;
@@ -184,8 +189,9 @@ export function startingPoint(spec: StartSpec): StartingPoint {
       wearRatePct: perCompound((l) => new Float64Array(l), (c, compound) => c.tyre?.[compound]?.wearRatePct ?? c.wearRatePct ?? 2),
       degMsPerLap: perCompound((l) => new Float64Array(l), (c, compound) => c.tyre?.[compound]?.degMsPerLap ?? c.degMsPerLap ?? 0),
       degSdMs: perCompound((l) => new Float64Array(l), (c) => c.degSdMs ?? 0),
-      lapsToLimit: perCompound((l) => new Int16Array(l), () => -1),
+      lapsToLimit: perCompound((l) => new Int16Array(l), (c, compound) => c.tyre?.[compound]?.lapsToLimit ?? -1),
     },
+    fittedLapsToLimit: f((l) => new Int16Array(l), (c) => c.fittedLapsToLimit ?? -1),
     stopLow: f((l) => new Int16Array(l), () => lapsTotal),
     stopMid: f((l) => new Int16Array(l), () => lapsTotal),
     stopHigh: f((l) => new Int16Array(l), () => lapsTotal),

@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { GAPS } from '../../../src/gaps/index.ts';
 import { mcSettingsFrom, policyOf, STRATEGY_INPUT_READS, strategyInputFrom, toDpInput, toMcHazard } from '../../../src/shared/strategy-input/index.ts';
 import { gapsOf, withGaps } from '../../gaps/output.ts';
-import { strategyDp, type DpInput } from '../../../src/strategy-dp/index.ts';
+import { solveDp, type DpInput } from '../../../src/strategy-dp/index.ts';
 import { STRATEGY_CONFIG } from '../../../src/strategy/config.ts';
 import { RACE_INTERACTION_CONFIG } from '../../../src/race-interaction/config.ts';
 import { RACE, viewAt } from '../../strategy/support.ts';
@@ -29,8 +29,9 @@ describe('shared strategy input', () => {
     for (const { car, dpInput, policy } of former.cars) {
       const dp: DpInput = toDpInput(input, car);
       expect(plainValue(dp), `car ${car}: DP input`).toEqual(dpInput);
-      const result = strategyDp(dp);
-      expect(policyOf(result.plans[0] ?? result.stayOut, result.thresholds), `car ${car}: policy`).toEqual(policy);
+      const result = solveDp(dp);
+      // SP4.3c Task 19: the best plan with its own triggers (no shared thresholds); the snapshot is regenerated after it
+      expect(policyOf(result.plans[0] ?? result.continue), `car ${car}: policy`).toEqual(policy);
     }
     expect(plainValue(toMcHazard(input.hazard))).toEqual(former.hazard);
     expect(mcSettingsFrom(input.config)).toEqual(former.settings);

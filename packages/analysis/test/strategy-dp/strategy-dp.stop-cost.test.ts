@@ -1,13 +1,15 @@
 // SP4.3c Task 17 (O8; C43, C50): the DP prices a stop with the one stop model, `race-forecast`'s `stopCostMs`; it keeps
 // no loss arithmetic of its own. Its cost of a stop at the end of lap offset i under a condition is `stopCostMs` of the
-// starting point plus the lap's traffic; the traffic cost of a rejoin (`trafficOf`) measures from the rejoin time the
-// same model gives (the car's gap plus `stopCostMs`), so a human's shorter stop rejoins 500 ms earlier.
+// starting point plus the lap's traffic (the world's, SP4.3c Task 19); the traffic cost of a rejoin (`trafficOf`)
+// measures from the rejoin time the same model gives (the car's gap plus `stopCostMs`), so a human's shorter stop
+// rejoins 500 ms earlier.
 import { carId, unknown, type StartingPoint } from '@pitwall/domain';
 import { describe, expect, it } from 'vitest';
 import { startLapOf, stopCostMs } from '../../src/race-forecast/index.ts';
 import { dpInputOn, hazardOf, plannedField, type PlainRoad } from '../../src/shared/strategy-input/dp-input.ts';
 import { COND_SC, COND_VSC, stopCostMs as dpStopCostMs } from '../../src/strategy-dp/state.ts';
 import { startingPoint } from '../race-forecast/start.ts';
+import { oneWorld } from '../shared/strategy-input/worlds.ts';
 
 const CAR = carId(1);
 const LOSSES = { green: 21_000, vsc: 13_000, sc: 10_000, inLapShare: 0.4 };
@@ -26,7 +28,7 @@ function roadOf(start: StartingPoint, fromLap: number): PlainRoad {
   return road;
 }
 
-const inputOf = (start: StartingPoint, road: PlainRoad = new Map()) => dpInputOn(start, CAR, hazardOf(start, unknown('notReceived')), road, TRAFFIC_GAP_MS);
+const inputOf = (start: StartingPoint, road: PlainRoad = new Map()) => dpInputOn(start, CAR, hazardOf(start, unknown('notReceived')), oneWorld(start, road), TRAFFIC_GAP_MS);
 
 describe('strategy-dp: the stop cost is the one stop model (SP4.3c Task 17, O8)', () => {
   it("the DP's cost of a stop under each condition equals stopCostMs, plus the lap's traffic", () => {
@@ -35,7 +37,7 @@ describe('strategy-dp: the stop cost is the one stop model (SP4.3c Task 17, O8)'
       const input = inputOf(start);
       const n = input.totalLaps - input.fromLap + 1;
       for (let i = 0; i < n; i++) {
-        const traffic = input.trafficMsByLap[i] ?? 0;
+        const traffic = input.worlds[0]!.trafficMsByLap[i] ?? 0;
         expect(dpStopCostMs(input, 0, i), `human ${human}, green, offset ${i}`).toBe(stopCostMs(start, CAR, 'green') + traffic);
         expect(dpStopCostMs(input, COND_SC, i), `human ${human}, SC, offset ${i}`).toBe(stopCostMs(start, CAR, 'sc') + traffic);
         expect(dpStopCostMs(input, COND_VSC, i), `human ${human}, VSC, offset ${i}`).toBe(stopCostMs(start, CAR, 'vsc') + traffic);
@@ -53,7 +55,7 @@ describe('strategy-dp: the stop cost is the one stop model (SP4.3c Task 17, O8)'
       const start = fieldOf(human);
       const fromLap = startLapOf(start, CAR);
       const input = inputOf(start, roadOf(start, fromLap));
-      expect(input.trafficMsByLap[0], `human ${human}`).toBe(expected);
+      expect(input.worlds[0]!.trafficMsByLap[0], `human ${human}`).toBe(expected);
     }
   });
 });

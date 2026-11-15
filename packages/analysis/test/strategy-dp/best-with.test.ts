@@ -1,11 +1,12 @@
-// `bestWith` (SP4.3b2 Task 5, spec §6, §9): a query of one `solveDp` solve, never a new solve: the best plan to the flag
-// whose first stop is forced (at `stopLap` onto a compound, `'best'`: the DP picks; or no stop through `noStopThrough`),
-// optionally from the state "that neutralisation out at the start lap" (`under`). `support.ts` states how these tests read
+// `bestWith` (SP4.3b2 Task 5, spec §6, §9): a query of one world's solve (`solveWorld(input, w)`, SP4.3c Task 19), never
+// a new solve: the best plan to the flag whose first stop is forced (at `stopLap` onto a compound, `'best'`: the DP picks;
+// or no stop through `noStopThrough`), optionally from the state "that neutralisation out at the start lap" (`under`).
+// Its plan is tagged with its solve's world and carries its own triggers. `support.ts` states how these tests read
 // `DpInput` and `DpPlan`; the deterministic rows compare with an enumeration of every stop list (no hazard).
 import type { NoiseCompound } from '@pitwall/domain';
 import { describe, expect, it } from 'vitest';
-import { bestWith, dpResult, solveDp, strategyDp, type DpInput, type DpPlan, type DpUnder } from '../../src/strategy-dp/index.ts';
-import { dpInput, everyStopList, LAP, meetsRule, raceTimeMs } from './support.ts';
+import { bestWith, solveDp, solveWorld, type DpInput, type DpPlan, type DpUnder } from '../../src/strategy-dp/index.ts';
+import { dpInput, everyStopList, LAP, meetsRule, neutralBoxes, plansOf, raceTimeMs, worldOf } from './support.ts';
 
 const DIGITS = 3;
 
@@ -42,12 +43,11 @@ const expectSamePlan = (actual: DpPlan | null, expected: DpPlan | null): void =>
 
 describe('strategy-dp bestWith', () => {
   // row 1
-  it("bestWith(stopLap = the best plan's first stop, 'best') equals dpResult's best plan", () => {
+  it("bestWith(stopLap = the best plan's first stop, 'best') equals solveDp's best plan", () => {
     const input = deterministic();
-    const solution = solveDp(input);
-    const best = dpResult(solution).plans[0]!;
+    const best = solveDp(input).plans[0]!;
     expect(best.stops.length).toBeGreaterThan(0);
-    expectSamePlan(bestWith(solution, { stopLap: best.stops[0]!.lap, compound: 'best' }), best);
+    expectSamePlan(bestWith(solveWorld(input, 0), { stopLap: best.stops[0]!.lap, compound: 'best' }), best);
   });
 
   // row 2
@@ -55,7 +55,7 @@ describe('strategy-dp bestWith', () => {
     // on mediums, owing a second dry compound, with one hard set and two medium sets: hard is the only compound that
     // keeps the rule; a forced stop onto it uses its one set, so the continuation may stop only onto mediums
     const input = deterministic({ sets: { medium: 2, hard: 1 } });
-    const solution = solveDp(input);
+    const solution = solveWorld(input, 0);
     for (const stopLap of [2, 5, 8]) {
       const plan = bestWith(solution, { stopLap, compound: 'hard' });
       expect(plan).not.toBeNull();
@@ -75,7 +75,7 @@ describe('strategy-dp bestWith', () => {
 
   // row 3
   it('no set of the compound → null', () => {
-    const solution = solveDp(deterministic({ sets: { medium: 1, hard: 1 } }));
+    const solution = solveWorld(deterministic({ sets: { medium: 1, hard: 1 } }), 0);
     expect(bestWith(solution, { stopLap: 4, compound: 'soft' })).toBeNull();
     expect(bestWith(solution, { stopLap: 4, compound: 'inter' })).toBeNull();
   });
@@ -83,11 +83,10 @@ describe('strategy-dp bestWith', () => {
   // row 4
   it('noStopThrough the last lap with a second compound owed → null', () => {
     const input = deterministic();
-    const solution = solveDp(input);
-    expect(bestWith(solution, { noStopThrough: input.totalLaps })).toBeNull();
+    expect(bestWith(solveWorld(input, 0), { noStopThrough: input.totalLaps })).toBeNull();
     // the same query without the rule owed is the no-stop plan
     const free = deterministic({ owesSecondCompound: false });
-    const plan = bestWith(solveDp(free), { noStopThrough: free.totalLaps });
+    const plan = bestWith(solveWorld(free, 0), { noStopThrough: free.totalLaps });
     expect(plan).not.toBeNull();
     expect(plan!.stops).toEqual([]);
     expect(plan!.expectedMs).toBeCloseTo(raceTimeMs(free, []), DIGITS);
@@ -102,27 +101,48 @@ describe('strategy-dp bestWith', () => {
     const enumerated = bestEnumerated(input, boxNow, scAtStart)!;
     const green = bestEnumerated(input, boxNow)!;
 
-    const viaUnder = bestWith(solveDp(input), { stopLap: input.fromLap, compound: 'hard' }, sc);
-    const viaActive = bestWith(solveDp({ ...input, active: sc }), { stopLap: input.fromLap, compound: 'hard' });
+    const viaUnder = bestWith(solveWorld(input, 0), { stopLap: input.fromLap, compound: 'hard' }, sc);
+    const viaActive = bestWith(solveWorld({ ...input, active: sc }, 0), { stopLap: input.fromLap, compound: 'hard' });
     for (const plan of [viaUnder, viaActive]) {
       expect(plan).not.toBeNull();
       expect(plan!.stops).toEqual(enumerated.stops);
       expect(plan!.expectedMs).toBeCloseTo(enumerated.ms, DIGITS);
     }
     // the same stop under green pays the green loss
-    const greenPlan = bestWith(solveDp(input), { stopLap: input.fromLap, compound: 'hard' })!;
+    const greenPlan = bestWith(solveWorld(input, 0), { stopLap: input.fromLap, compound: 'hard' })!;
     expect(greenPlan.expectedMs).toBeCloseTo(green.ms, DIGITS);
   });
 
-  // row 6
-  it('strategyDp(input) equals dpResult(solveDp(input))', () => {
+  // row 6 (ported, SP4.3c Task 19): a world's solve answers as a solve of that world alone, tagged with its world
+  it("solveWorld(input, w) answers as the solve of world w alone; its plans are tagged w and carry their own triggers", () => {
     const input = deterministic({
       scByLap: [0, 0.1, 0.1, 0.2, 0.1],
       vscByLap: [0, 0.05, 0.1, 0.05],
       scDur: [0.5, 0.5],
       vscDur: [1],
+      lap: { ...LAP, compoundOffsetMs: { soft: -300, medium: 0, hard: 250, inter: 0, wet: 0 }, convexMsPerPct2: 2, wetnessMsPerMs: { slick: 0.2, inter: 0, wet: 0 } },
+      worlds: [{ u: 0.25, wetnessByLap: [0, 1_000, 2_000, 2_000, 2_000] }, { u: 0.75, trafficMsByLap: [0, 0, 1_500] }],
     });
-    expect(strategyDp(input)).toEqual(dpResult(solveDp(input)));
+    for (const w of [0, 1]) {
+      const solution = solveWorld(input, w);
+      const alone = solveWorld(worldOf(input, w), 0);
+      for (const first of [
+        { stopLap: 2, compound: 'hard' },
+        { stopLap: 4, compound: 'best' },
+        { noStopThrough: 3 },
+      ] satisfies Parameters<typeof bestWith>[1][]) {
+        const plan = bestWith(solution, first);
+        expectSamePlan(plan, bestWith(alone, first));
+        expect(plan!.world, `world ${w}: ${JSON.stringify(first)}`).toBe(w);
+        expect(Array.isArray(plan!.triggers)).toBe(true);
+        // its neutralised triggers box only onto compounds it fits itself
+        const own = new Set(plan!.stops.map((s) => s.compound));
+        for (const t of neutralBoxes(plan!)) expect(own.has((t.action as { box: NoiseCompound }).box), JSON.stringify(t)).toBe(true);
+      }
+      // the world's best plan by query equals solveDp's best plan of that world
+      const best = plansOf(solveDp(input).plans, w)[0]!;
+      expectSamePlan(bestWith(solution, { stopLap: best.stops[0]!.lap, compound: 'best' }), best);
+    }
   });
 
   // row 7
@@ -134,15 +154,16 @@ describe('strategy-dp bestWith', () => {
       scDur: [0.4, 0.6],
       vscDur: [0.7, 0.3],
     });
-    const solution = solveDp(input);
+    const solution = solveWorld(input, 0);
     for (const under of [
       { condition: 'sc', remaining: Float64Array.from([0.3, 0.5, 0.2]) },
       { condition: 'vsc', remaining: Float64Array.from([0.6, 0.4]) },
     ] satisfies DpUnder[]) {
-      const freshSolution = solveDp({ ...input, active: under });
-      const fresh = dpResult(freshSolution);
-      expectSamePlan(bestWith(solution, { stopLap: input.fromLap, compound: 'best' }, under), fresh.boxNow);
-      expectSamePlan(bestWith(solution, { noStopThrough: input.fromLap }, under), fresh.stayOut);
+      const freshInput = { ...input, active: under };
+      const fresh = solveDp(freshInput);
+      const freshSolution = solveWorld(freshInput, 0);
+      expectSamePlan(bestWith(solution, { stopLap: input.fromLap, compound: 'best' }, under), fresh.boxThisLap);
+      expectSamePlan(bestWith(solution, { noStopThrough: input.fromLap }, under), fresh.continue);
       for (const first of [
         { stopLap: input.fromLap, compound: 'hard' },
         { stopLap: 3, compound: 'soft' },

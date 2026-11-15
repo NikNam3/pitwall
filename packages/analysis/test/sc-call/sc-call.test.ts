@@ -63,8 +63,9 @@ vi.mock('../../src/strategy-dp/index.ts', async (importOriginal) => {
   calls.dp = real;
   return {
     ...real,
-    solveDp: (input: DpInput) => {
-      const solution = real.solveDp(input);
+    // SP4.3c Task 19: the call solves the first weather world (`solveWorld(input, 0)`) and queries it
+    solveWorld: (input: DpInput, world: number) => {
+      const solution = real.solveWorld(input, world);
       calls.solves.push({ input, solution });
       return solution;
     },
@@ -75,6 +76,18 @@ vi.mock('../../src/strategy-dp/index.ts', async (importOriginal) => {
     },
   };
 });
+
+/**
+ * Car `car`'s stay-out plan of the call under `condition` at `lap` (its recorded `bestWith` noStopThrough query): the
+ * DP's triggers a call carries are each plan's own (SP4.3c Task 19), so the stay-out row's are this plan's.
+ */
+function stayPlanOf(car: CarId, lap: number, condition: 'sc' | 'vsc'): DpPlan {
+  const { solution } = solveOf(car);
+  const found = calls.bests.filter((b) => b.solution === solution && 'noStopThrough' in b.first && b.first.noStopThrough === lap && b.under?.condition === condition);
+  expect(found, `car ${car}: the stay-out query under ${condition}`).toHaveLength(1);
+  expect(found[0]!.plan, `car ${car}: a stay-out plan under ${condition}`).not.toBeNull();
+  return found[0]!.plan!;
+}
 
 vi.mock('../../src/race-monte-carlo/index.ts', async (importOriginal) => {
   const real = await importOriginal<typeof mcModule>();
@@ -227,8 +240,9 @@ describe('sc-call: the job', () => {
     let some = false;
     for (const car of OURS) {
       const call = callOf(out, car);
-      const thresholds = calls.dp.dpResult(solveOf(car).solution).thresholds;
       for (const condition of ['sc', 'vsc'] as const) {
+        // SP4.3c Task 19: the stay-out plan's own triggers (the next stop after staying out)
+        const thresholds = stayPlanOf(car, call.lap, condition).triggers;
         const t = thresholds.find((x): x is Extract<Trigger, { kind: 'neutralised' }> => x.kind === 'neutralised' && x.condition === condition);
         const range = rowOf(call, condition).range;
         if (t === undefined) {
@@ -387,7 +401,6 @@ describe('sc-call: the job', () => {
     for (const car of OURS) {
       const call = callOf(out, car);
       const { solution } = solveOf(car);
-      const thresholds = calls.dp.dpResult(solution).thresholds;
       for (const condition of ['sc', 'vsc'] as const) {
         const remaining = Float64Array.from(hazard.durationLaps[condition]);
         // the query: box at the start lap, the DP picks the compound, from the state "that neutralisation out now"
@@ -400,7 +413,8 @@ describe('sc-call: the job', () => {
         const plan = calls.dp.bestWith(solution, { stopLap: call.lap, compound: 'best' }, { condition, remaining });
         expect(plan, `car ${car}: a box plan under ${condition}`).not.toBeNull();
         const { box } = pairOf(scoreUnder(car, condition), call.lap);
-        expect(box.policy).toEqual(policyOf(plan!, thresholds));
+        // SP4.3c Task 19: the plan with its own triggers
+        expect(box.policy).toEqual(policyOf(plan!));
         expect(box.policy.stops[0]?.lap).toBe(call.lap);
       }
     }
@@ -435,8 +449,9 @@ describe('sc-call: the job', () => {
     let some = false;
     for (const car of OURS) {
       const call = callOf(out, car);
-      const thresholds = calls.dp.dpResult(solveOf(car).solution).thresholds;
       for (const condition of ['sc', 'vsc'] as const) {
+        // SP4.3c Task 19: the stay-out plan's own triggers
+        const thresholds = stayPlanOf(car, call.lap, condition).triggers;
         const score = scoreUnder(car, condition);
         const { stay } = pairOf(score, call.lap);
         // the DP's thresholds kept, plus the one stay-out trigger covering only the forced neutralisation
