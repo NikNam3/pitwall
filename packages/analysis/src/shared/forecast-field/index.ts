@@ -206,6 +206,9 @@ export function buildStartingPoint(view: AsOfView, outputs: ReadonlyMap<Calculat
     stopMid: new Int16Array(cars),
     stopHigh: new Int16Array(cars),
     owesStop: new Uint8Array(cars),
+    // filled from rival-stops by Task 18's implement phase
+    nextOdds: Array.from({ length: cars }, () => null),
+    typeSwitch: Array.from({ length: cars }, () => null),
     sets: {},
     wetness: wetnessOf(wetness, config.priorWetnessSdMs),
     // filled once the cars are placed (`weatherOf`)

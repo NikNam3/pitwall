@@ -56,6 +56,10 @@ export type StartingPoint = {
   stopMid: Int16Array;
   stopHigh: Int16Array;
   owesStop: Uint8Array;
+  /** Per car `rival-stops`' next-compound odds; `null` while unknown (SP4.3c Task 18, O9). */
+  nextOdds: (Partial<Record<NoiseCompound, number>> | null)[];
+  /** Per car `rival-stops`' tyre-type switch from the game's delta; `null` while unknown (SP4.3c Task 18, O5). */
+  typeSwitch: ({ lap: number; to: TyreType } | null)[];
   /** Our cars only. */
   sets: Record<CarId, { compound: NoiseCompound; wearPct: number }[]>;
   /** `wet`: track-wetness's one wet rule at the starting point (SP4.3c O3). */
