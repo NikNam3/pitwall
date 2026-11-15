@@ -1,5 +1,8 @@
-import { createWriteStream, openSync } from 'node:fs';
-import { constants, createGzip } from 'node:zlib';
+import { createReadStream, createWriteStream, openSync, renameSync, rmSync } from 'node:fs';
+import { pipeline } from 'node:stream';
+import { constants, createGunzip, createGzip } from 'node:zlib';
+import { PwrecParser } from './parser.ts';
+import { PwrecFormatError } from './reader.ts';
 import {
   HEADER_FIXED_BYTES,
   MAX_PAYLOAD_BYTES,
@@ -13,6 +16,11 @@ import {
 export interface PwrecWriterOptions {
   /** Called once with the first file error, as it happens (the file is then abandoned). */
   readonly onError?: (error: unknown) => void;
+}
+
+export interface PwrecResumeOptions extends PwrecWriterOptions {
+  /** The restart's wall clock (ms since the epoch): the bridge's I/O shell reads it and passes it in. */
+  readonly wallClockMs: number;
 }
 
 /** The file opened for writing now, or undefined when that fails: the stream then opens it itself and reports the error. */
@@ -62,19 +70,83 @@ export class PwrecWriter {
   #failed = false;
   #firstError: unknown;
 
-  private constructor(path: string, meta: PwrecMeta, onError: ((error: unknown) => void) | undefined) {
+  private constructor(path: string, header: Uint8Array | undefined, onError: ((error: unknown) => void) | undefined) {
     this.#onError = onError;
     this.#file = createWriteStream(path, { fd: openNow(path) });
     this.#fileClosed = new Promise((resolve) => this.#file.once('close', () => resolve()));
     this.#file.on('error', (error) => this.#fail(error));
     this.#gzip.on('error', (error) => this.#fail(error));
     this.#gzip.pipe(this.#file);
-    this.#gzip.write(encodeHeader(meta));
-    this.#gzip.flush(constants.Z_SYNC_FLUSH);
+    if (header !== undefined) {
+      this.#gzip.write(header);
+      this.#gzip.flush(constants.Z_SYNC_FLUSH);
+    }
   }
 
   static create(path: string, meta: PwrecMeta, opts: PwrecWriterOptions = {}): PwrecWriter {
-    return new PwrecWriter(path, meta, opts.onError);
+    return new PwrecWriter(path, encodeHeader(meta), opts.onError);
+  }
+
+  /**
+   * Continues the recording at `path` after a bridge restart (C59): the file is recompressed, as one gzip stream, up to
+   * its last whole record (a crash or kill cuts it mid-record; an end record of a clean stop stays), then a resume
+   * record follows at `resumeT`: the last record's `t` or the wall-time gap since the file's `startedAt`, whichever is
+   * later, so record times stay non-decreasing; its payload is `wallClockMs` as an ISO 8601 time. The new file replaces
+   * the old one only once it holds all of that, flushed. `records`: the datagrams kept. Rejects with
+   * `PwrecFormatError` for a file whose header cannot be read, leaving the file as it was.
+   */
+  static async resume(path: string, opts: PwrecResumeOptions): Promise<{ writer: PwrecWriter; records: number; resumeT: number }> {
+    const parser = new PwrecParser();
+    const gunzip = createGunzip({ finishFlush: constants.Z_SYNC_FLUSH });
+    pipeline(createReadStream(path), gunzip, () => {});
+    const temporary = `${path}.resuming`;
+    let writer: PwrecWriter | undefined;
+    let records = 0;
+    let lastT = 0;
+    try {
+      for await (const chunk of gunzip as AsyncIterable<Uint8Array>) {
+        const read = parser.pushRaw(chunk);
+        if (parser.error !== undefined) throw new PwrecFormatError(parser.error);
+        if (read.header !== undefined) writer = new PwrecWriter(temporary, read.header, opts.onError);
+        for (const record of read.records) {
+          if (record.kind === RecordKind.datagram) records++;
+          lastT = record.t;
+          if (writer !== undefined) await writer.#copy(record.bytes);
+        }
+      }
+      parser.finish();
+      if (parser.error !== undefined || parser.meta === undefined || writer === undefined) throw new PwrecFormatError(parser.error ?? { kind: 'badMeta' });
+      const sinceStart = opts.wallClockMs - Date.parse(parser.meta.startedAt);
+      const resumeT = Number.isFinite(sinceStart) ? Math.max(lastT, sinceStart) : lastT;
+      await writer.#copy(encodeRecord(RecordKind.resume, resumeT, new TextEncoder().encode(new Date(opts.wallClockMs).toISOString())));
+      await writer.#flushed();
+      if (writer.#failed) throw writer.#firstError;
+      renameSync(temporary, path);
+      writer.#lastFlushedSecond = Math.floor(resumeT / 1000);
+      return { writer, records, resumeT };
+    } catch (error) {
+      gunzip.destroy();
+      if (writer !== undefined) {
+        writer.#fail(error, { report: false });
+        await writer.#fileClosed;
+      }
+      rmSync(temporary, { force: true });
+      throw error;
+    }
+  }
+
+  /** Writes `bytes` as they are, waiting while the gzip stream's buffer is full. */
+  async #copy(bytes: Uint8Array): Promise<void> {
+    if (this.#failed) return;
+    if (!this.#gzip.write(bytes)) await new Promise<void>((resolve) => { this.#gzip.once('drain', resolve); this.#gzip.once('error', () => resolve()); });
+  }
+
+  /** Sync-flushes the gzip stream and resolves once everything written so far is on disk (or the file failed). */
+  async #flushed(): Promise<void> {
+    if (this.#failed) return;
+    await new Promise<void>((resolve) => this.#gzip.flush(constants.Z_SYNC_FLUSH, () => resolve()));
+    if (this.#failed) return;
+    await new Promise<void>((resolve) => this.#file.write(new Uint8Array(0), () => resolve()));
   }
 
   /** Appends one datagram received `t` ms after the file was started. Dropped silently once the file has failed. */
@@ -104,12 +176,13 @@ export class PwrecWriter {
     if (this.#failed) throw this.#firstError;
   }
 
-  #fail(error: unknown): void {
+  /** The file is abandoned; `report: false` (a resume that failed, and so rejects) does not call `onError`. */
+  #fail(error: unknown, opts: { report: boolean } = { report: true }): void {
     if (this.#failed) return;
     this.#failed = true;
     this.#firstError = error;
     this.#gzip.destroy();
     this.#file.destroy();
-    this.#onError?.(error);
+    if (opts.report) this.#onError?.(error);
   }
 }

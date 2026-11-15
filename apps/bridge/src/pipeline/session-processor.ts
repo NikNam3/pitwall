@@ -79,6 +79,11 @@ export type SessionProcessorOptions = {
   track: Known<TrackFile>;
   storage?: SessionStorage;
   file?: SessionFile;
+  /**
+   * The run continues the session's stored recording after a bridge restart (C59): `file` is that recording, resumed,
+   * and its datagrams are replayed into the run first (`record` with `replayed`). Storage keeps the stored log.
+   */
+  continued?: boolean;
   dumpsDir?: string;
   /** Dev mode: times every calculator run (see `createCalcStats`). */
   calcStats?: CalcStats;
@@ -160,7 +165,7 @@ export class SessionProcessor {
       { attach: this.#scheduler, contextFor: (participants) => this.#contextFor(participants) },
     );
     const { storage } = opts;
-    if (storage !== undefined) this.#storeRow((row) => storage.start(row));
+    if (storage !== undefined) this.#storeRow((row) => storage.start(row, { continued: opts.continued === true }));
     this.#publishActive(this.#runner.state.history.decisions);
   }
 
@@ -220,13 +225,16 @@ export class SessionProcessor {
   /**
    * Keeps a datagram in the session file when it belongs here: the session's own uid, or uid 0 while it is open.
    * It runs after the datagram's frames, so a dump's position is approximate: the datagram before the one that
-   * closed the frame.
+   * closed the frame. `replayed`: a datagram of the continued recording (C59), already in the file: it counts toward the
+   * record index (C76) but is not written again.
    */
-  record(receivedAtMs: number, bytes: Uint8Array): void {
+  record(receivedAtMs: number, bytes: Uint8Array, opts: { replayed?: boolean } = {}): void {
     this.#lastReceivedAtMs = receivedAtMs;
     const file = this.#o.file;
     if (file === undefined) return;
-    this.#records.keep(peekHeader(bytes)?.sessionUid, () => file.write(receivedAtMs, bytes));
+    this.#records.keep(peekHeader(bytes)?.sessionUid, () => {
+      if (opts.replayed !== true) file.write(receivedAtMs, bytes);
+    });
   }
 
   /**

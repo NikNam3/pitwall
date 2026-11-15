@@ -1,14 +1,15 @@
 // One feed end to end (spec 4): PacketSource → decode → SessionTracker → SessionProcessor → TopicHub,
 // with the feed's health, its session files and its storage alongside.
+import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { ConfigEffectiveValue } from '@pitwall/contracts';
-import { toSessionTime, type CalibrationActiveValue, type FeedId, type Known, type LiveSeat, type PriorsSnapshot, type ProfileSnapshot, type RunPriors, type SessionRef, type SessionTime, type TeamId, type TrackFile } from '@pitwall/domain';
+import { carId, sessionUidString, toSessionTime, type CalibrationActiveValue, type FeedId, type Known, type LiveSeat, type PriorsSnapshot, type ProfileSnapshot, type RunPriors, type SessionRef, type SessionTime, type TeamId, type TrackFile } from '@pitwall/domain';
 import type { CalibrationStore } from '../calibration/store.ts';
 import type { ProfileStore, SlotIdentity } from '../drivers/store.ts';
-import { profilesSidecarPath } from './profile-sidecar.ts';
+import { profilesSidecarPath, recordingProfiles } from './profile-sidecar.ts';
 import { CalculatorRegistry, SessionTracker, type Frame, type FrameMetrics, type InsightChange, type TrackerEvent } from '@pitwall/engine';
-import { decode } from '@pitwall/protocol';
-import { effectiveConfig, overriddenFields, sessionConfigPath, sessionConfigSidecar, type FeatureConfig } from '../feature-config.ts';
+import { decode, PacketId, peekHeader } from '@pitwall/protocol';
+import { effectiveConfig, overriddenFields, recordingConfig, sessionConfigPath, sessionConfigSidecar, type FeatureConfig } from '../feature-config.ts';
 import type { Feature } from '../features/feature.ts';
 import { feedStatusOf } from '../features/feed-status/feed-status.ts';
 import type { TopicHub } from '../hub/topic-hub.ts';
@@ -17,10 +18,13 @@ import { FeedJobs } from '../jobs/feed-jobs.ts';
 import type { JobResult } from '../jobs/job-runner.ts';
 import type { WorkerLimit } from '../jobs/worker-limit.ts';
 import type { Logger } from '../log.ts';
-import type { Db, StoredSessionRow } from '../storage/db.ts';
+import { readPwrec, readPwrecMeta } from '../pwrec/reader.ts';
+import { PwrecWriter } from '../pwrec/writer.ts';
+import type { Db, SessionKey, StoredSessionRow } from '../storage/db.ts';
 import { SessionFile, sessionRecordingName } from '../storage/session-files.ts';
-import { loadTrackFile, TRACKS_DIR, trackSidecarPath } from '../track-files/load.ts';
-import { decisionsSidecarPath, noRunPriors, priorsSidecarPath, writeSidecar, type GivenDecision, type RecordedDecision, type RecordedRun } from './decision-sidecars.ts';
+import { WeekendRepository } from '../storage/weekend-repository.ts';
+import { loadTrackFile, recordingTrack, TRACKS_DIR, trackSidecarPath } from '../track-files/load.ts';
+import { decisionsSidecarPath, noRunPriors, priorsSidecarPath, readSidecar, recordingDecisions, writeSidecar, type GivenDecision, type RecordedDecision, type RecordedRun } from './decision-sidecars.ts';
 import { RecordedPlacement } from './decision-placement.ts';
 import { FeedAlerts, type WriteFailure } from './feed-alerts.ts';
 import { demandOf } from './demand.ts';
@@ -59,7 +63,8 @@ export type FeedPipelineOptions = {
    * is stored as the sessions' recording (`reprocess` reads them from there). `rulesVersion`: the rules version the logs
    * are stored with (C61). `mode`: `append` (default, live) appends each session's log as it grows; `replace` (a
    * rebuild of a recording) writes it once, at the session's end, replacing the stored one (C24). `rebuild`: rebuilds,
-   * in the background, an earlier session of the weekend whose stored log is not complete (C61).
+   * in the background, an earlier session of the weekend whose stored log is not complete (C61). Live, with
+   * `recordingsDir`, a session whose key is stored with a recording continues that recording after a restart (C59).
    */
   storage?: {
     db: Db;
@@ -141,6 +146,45 @@ type SessionDecisions = { trackId: number; file: string | undefined; decisions: 
 const NOT_APPLICABLE_SIDECAR = { known: false, reason: 'notApplicable' } as const;
 
 /**
+ * A session continued after a bridge restart (C59), as its first run left it: its recording (resumed), its start and
+ * its sidecars, which the continued run keeps as they are (C38, C47: fixed for the session). The session that the
+ * replay of the recording starts takes them.
+ */
+type Continuation = {
+  file: SessionFile;
+  startedAt: string;
+  config: FeatureConfig;
+  /** Per config key, the fields the first run's `config.json` set, as its sidecar recorded them (`config.effective`). */
+  overridden: Record<string, string[]>;
+  track: (trackId: number) => Known<TrackFile>;
+  priors: RunPriors;
+  decisions: RecordedDecision[];
+  profiles: ProfileSnapshot | null;
+};
+
+/**
+ * The continued run's config (C47, C59): the recorded one with `realism.enabled` as the first run's sidecar holds it.
+ * Live, realism is the setting's at session start, not a declared key, so `recordingConfig` alone does not keep it.
+ */
+function withRecordedRealism(config: FeatureConfig, recordingPath: string, log: Logger): FeatureConfig {
+  const enabled = readSidecar(sessionConfigPath(recordingPath), (json) => {
+    const realism = typeof json === 'object' && json !== null ? (json as Record<string, unknown>)['realism'] : undefined;
+    const value = typeof realism === 'object' && realism !== null ? (realism as Record<string, unknown>)['enabled'] : undefined;
+    return typeof value === 'boolean' ? value : null;
+  }, log);
+  return typeof enabled === 'boolean' ? { ...config, realism: { ...config.realism, enabled } } : config;
+}
+
+/** A restart's restore under way: the packets that arrive meanwhile wait in `buffer`, in arrival order. */
+type Restore = { buffer: RawPacket[]; done: Promise<void> };
+
+/**
+ * The answer to a decision while a restart's restore is under way: the session's record index is not the live one yet,
+ * so a decision committed now would not land where the replay of the recording puts it (C76).
+ */
+const RESTORING: DecisionResult = { ok: false, reason: 'notSupported', message: 'the session is being restored from its recording' };
+
+/**
  * Runs one feed: every datagram updates the feed's health, the tracker splits the stream into sessions and frames,
  * and each session runs in its own `SessionProcessor`. Nothing a datagram does throws out of the pipeline:
  * decode errors are counted, write failures become insights, bugs are logged.
@@ -182,6 +226,12 @@ export class FeedPipeline {
   #decisions: SessionDecisions | undefined;
   /** The newest session's seat as last reported to `teams`. */
   #seat: Seat | undefined;
+  /** Live: a stored session's recording being restored (C59); set from its first Session packet until it is live. */
+  #restore: Restore | undefined;
+  /** The continued session's first run, while its recording replays: the session the replay starts takes it. */
+  #continuation: Continuation | undefined;
+  /** The datagrams being processed are the replay of a continued recording (C59). */
+  #replaying = false;
 
   constructor(opts: FeedPipelineOptions) {
     this.#o = opts;
@@ -219,6 +269,7 @@ export class FeedPipeline {
   commitDecision(setId: string | null): DecisionResult {
     const calibration = this.#o.calibration;
     if (calibration === undefined) return { ok: false, reason: 'notSupported', message: 'this feed takes no calibration picks' };
+    if (this.#restore !== undefined) return RESTORING;
     const run = this.#decisions;
     const session = this.#session;
     if (run === undefined) {
@@ -252,7 +303,7 @@ export class FeedPipeline {
       const calibration = this.#o.calibration;
       const run = this.#decisions;
       const session = this.#session;
-      if (calibration === undefined || run === undefined || session === undefined) return;
+      if (calibration === undefined || run === undefined || session === undefined || this.#restore !== undefined) return;
       const active = session.activeChoice;
       if (active.setId !== setId) return;
       const snapshot = calibration.snapshotOf(run.trackId, setId);
@@ -286,6 +337,7 @@ export class FeedPipeline {
    * to the decisions sidecar. Without a running session it is not taken.
    */
   commitPlan(decision: PlanDecision): DecisionResult {
+    if (this.#restore !== undefined) return RESTORING;
     const run = this.#decisions;
     const session = this.#session;
     if (run === undefined || session === undefined) return { ok: false, reason: 'notSupported', message: 'this feed runs no session' };
@@ -302,7 +354,10 @@ export class FeedPipeline {
     if (testInsight !== undefined) this.#publishInsights(this.#alerts.raiseTestInsight(testInsight, this.#sessionTime()));
     source.start((packet) => this.#onPacket(packet));
     if (staleCheck !== undefined) {
-      this.#staleTimer = setInterval(() => this.#guarded('stale check', () => this.#checkFeed(staleCheck.clock())), staleCheck.everyMs);
+      // While a restart's restore replays a recording, the packets wait in its buffer: the feed is not silent.
+      this.#staleTimer = setInterval(() => this.#guarded('stale check', () => {
+        if (this.#restore === undefined) this.#checkFeed(staleCheck.clock());
+      }), staleCheck.everyMs);
     }
     this.#finish().then(this.#done.resolve, this.#done.reject);
   }
@@ -341,9 +396,16 @@ export class FeedPipeline {
       failure = { error };
       this.#log.error({ feedId: this.#feedId, err: error }, 'packet source failed');
     }
+    // A restore under way finishes first: its buffered packets are written and applied before the session ends.
+    while (this.#restore !== undefined) await this.#restore.done;
     clearInterval(this.#staleTimer);
     this.#guarded('stream end', () => {
-      for (const event of this.#tracker.end()) this.#handle(event, this.#lastReceivedAtMs);
+      for (const event of this.#tracker.end()) {
+        // A stop ends the session before its input did (C59): a frame still being assembled never closed, so it is not
+        // applied; the run that continues the recording applies it once its packets are all there.
+        if (event.type === 'frame' && this.#stopped) continue;
+        this.#handle(event, this.#lastReceivedAtMs);
+      }
     });
     // A feed that stopped runs no seat (C62c).
     this.#reportHumanSeats([]);
@@ -353,12 +415,121 @@ export class FeedPipeline {
   }
 
   #onPacket(packet: RawPacket): void {
+    // A restore under way (C59): the packet waits for the replay of the recording.
+    if (this.#restore !== undefined) {
+      this.#restore.buffer.push(packet);
+      return;
+    }
+    const stored = this.#storedRecordingOf(packet);
+    if (stored !== undefined) {
+      this.#startRestore(stored, packet);
+      return;
+    }
+    this.#deliver(packet);
+  }
+
+  #deliver(packet: RawPacket): void {
     // A replay's decisions go to the running session before the record they were committed at (C76): the frame they
     // land on is the one their live pick landed on. The placement module owns that order.
     this.#recorded.deliver(packet, {
       decide: (decision) => this.#guarded('recorded decision', () => this.#session?.decide(decision)),
       process: (record) => this.#process(record),
     });
+  }
+
+  /** A live run continues a session's recording (C59): it stores, records sessions itself and replays no recording. */
+  get #continuesRecordings(): boolean {
+    const storage = this.#o.storage;
+    return storage !== undefined && storage.recordingsDir !== undefined && storage.sourcePath === undefined && (storage.mode ?? 'append') === 'append' && this.#o.recorded === undefined;
+  }
+
+  /**
+   * Live: the stored session `packet` starts, when it is the Session packet of a session other than the running one
+   * whose key (session uid, weekend id, player car) is stored with a recording that is still there (C59); else none.
+   */
+  #storedRecordingOf(packet: RawPacket): { row: StoredSessionRow; path: string } | undefined {
+    if (!this.#continuesRecordings) return undefined;
+    const header = peekHeader(packet.bytes);
+    if (header === undefined || header.packetId !== PacketId.session || header.sessionUid === 0n || header.sessionUid === this.#session?.sessionUid) return undefined;
+    let found: { row: StoredSessionRow; path: string } | undefined;
+    this.#guarded('stored session lookup', () => {
+      const decoded = decode(packet.bytes);
+      const db = this.#o.storage?.db;
+      if (!decoded.ok || decoded.packet.packetId !== PacketId.session || db === undefined) return;
+      const key: SessionKey = {
+        sessionUid: sessionUidString(header.sessionUid),
+        weekendId: String(decoded.packet.weekendLinkIdentifier),
+        playerCar: carId(header.playerCarIndex),
+      };
+      const row = new WeekendRepository(db, { log: this.#log }).sessionOf(key);
+      if (row?.pwrecPath != null && existsSync(row.pwrecPath)) found = { row, path: row.pwrecPath };
+    });
+    return found;
+  }
+
+  /**
+   * A restart's restore (C59, spec §5.5): `first` and every packet after it wait in a buffer while the stored recording
+   * is resumed and replayed into a new run; then the buffer is written after the resume record and applied, in arrival
+   * order, and the run is live. A recording that cannot be resumed is left as it is: the buffered packets then start a
+   * session of their own, in a file of its own.
+   */
+  #startRestore(stored: { row: StoredSessionRow; path: string }, first: RawPacket): void {
+    const restore: Restore = { buffer: [first], done: Promise.resolve() };
+    this.#restore = restore;
+    restore.done = this.#replayStored(stored, first.receivedAtMs)
+      .catch((error: unknown) => {
+        this.#log.error({ feedId: this.#feedId, sessionUid: stored.row.sessionUid, pwrecPath: stored.path, err: error }, 'stored recording not continued');
+      })
+      .finally(() => {
+        this.#restore = undefined;
+        for (const packet of restore.buffer) this.#deliver(packet);
+      });
+  }
+
+  /**
+   * Resumes the stored recording at `path` and replays its datagrams into the run, on the receive clock of this process:
+   * `firstReceivedAtMs`, the first buffered packet's, lands on the resume record's time, so the run sees the gap the
+   * recording holds. Decisions go before the record they were committed at, as in a reprocess (C76); one committed
+   * after the last record goes to the run before the buffered packets.
+   */
+  async #replayStored({ path }: { row: StoredSessionRow; path: string }, firstReceivedAtMs: number): Promise<void> {
+    const log = this.#log;
+    const { writer, resumeT } = await PwrecWriter.resume(path, { wallClockMs: this.#wallClock(), onError: (error) => this.#writeFailed('pwrec', error) });
+    const originMs = firstReceivedAtMs - resumeT;
+    const recorded = recordingDecisions(path, log);
+    const config = recordingConfig(path, this.#o.features, this.#config, log);
+    this.#continuation = {
+      file: new SessionFile({ path, writer, originMs }),
+      startedAt: readPwrecMeta(path).startedAt,
+      config: withRecordedRealism(config, path, log),
+      overridden: overriddenFields(config),
+      // The track file the first run wrote; a recording without that sidecar resolves it as a live session does.
+      track: (trackId) => (existsSync(trackSidecarPath(path)) ? recordingTrack(path, trackId, TRACKS_DIR, log) : this.#tracks(trackId)),
+      priors: recorded.priors,
+      decisions: recorded.decisions,
+      profiles: recordingProfiles(path, log),
+    };
+    const placement = new RecordedPlacement(recorded.decisions);
+    let records = 0;
+    this.#replaying = true;
+    try {
+      for await (const record of readPwrec(path)) {
+        placement.deliver(record, {
+          decide: (decision) => this.#guarded('recorded decision', () => this.#session?.decide(decision)),
+          process: (r) => this.#process({ feedId: this.#feedId, receivedAtMs: r.t + originMs, bytes: r.payload }),
+        });
+        records++;
+      }
+    } finally {
+      this.#replaying = false;
+      // A recording whose replay started no session (no Session packet in it) is closed again as it was resumed.
+      const untaken = this.#continuation;
+      this.#continuation = undefined;
+      if (untaken !== undefined) await untaken.file.close(firstReceivedAtMs);
+    }
+    for (const { recordIndex, decision } of recorded.decisions) {
+      if (recordIndex >= records) this.#guarded('recorded decision', () => this.#session?.decide(decision));
+    }
   }
 
   /** One datagram: decoded, pushed through the tracker, recorded in the session file, and the feed's health checked. */
@@ -373,7 +544,7 @@ export class FeedPipeline {
         this.#monitor.onDecodeError(decoded.error, receivedAtMs);
         this.#log.debug({ feedId: this.#feedId, error: decoded.error }, 'datagram not decoded');
       }
-      this.#session?.record(receivedAtMs, bytes);
+      this.#session?.record(receivedAtMs, bytes, { replayed: this.#replaying });
       const metrics = this.#tracker.metrics;
       this.#monitor.sample(metrics, receivedAtMs);
       this.#checkFeed(receivedAtMs, metrics);
@@ -412,7 +583,8 @@ export class FeedPipeline {
     const team = frame.participants?.participants[frame.playerCarIndex]?.teamId;
     if (seat === undefined || team === undefined || team === seat.team) return;
     this.#reportSeat({ sessionUid: seat.sessionUid, team });
-    if (seat.team !== null || this.#o.recorded !== undefined || this.#o.teams === undefined) return;
+    // A continued recording's replay (C59) has them in its decisions sidecar, like a replay.
+    if (seat.team !== null || this.#o.recorded !== undefined || this.#replaying || this.#o.teams === undefined) return;
     for (const decision of this.#o.teams.plansOf(this.#feedId)) this.commitPlan(decision);
   }
 
@@ -430,14 +602,17 @@ export class FeedPipeline {
     hub.resetFeed(feedId);
     this.#publisher.sessionStarted();
     this.#publishInsights(this.#alerts.active.map((insight) => ({ type: 'raised', insight })));
-    const startedAt = this.#sessionClock(event.receivedAtMs);
+    // A session continued after a restart (C59) runs on its first run's start, recording and sidecars, unchanged.
+    const continued = this.#continuation;
+    this.#continuation = undefined;
+    const startedAt = continued?.startedAt ?? this.#sessionClock(event.receivedAtMs);
     const storage = this.#sessionStorage();
-    const config = this.#sessionConfig();
-    this.#publishEffectiveConfig(config);
-    const track = this.#tracks(event.session.trackId);
-    const priors = this.#startPriors(event.session.trackId);
-    const file = this.#openSessionFile(event, startedAt, config, track, priors);
-    this.#decisions = { trackId: event.session.trackId, file: file?.path, decisions: [] };
+    const config = continued?.config ?? this.#sessionConfig();
+    this.#publishEffectiveConfig(config, continued?.overridden ?? this.#overridden);
+    const track = continued?.track(event.session.trackId) ?? this.#tracks(event.session.trackId);
+    const priors = continued?.priors ?? this.#startPriors(event.session.trackId);
+    const file = continued?.file ?? this.#openSessionFile(event, startedAt, config, track, priors);
+    this.#decisions = { trackId: event.session.trackId, file: file?.path, decisions: [...(continued?.decisions ?? [])] };
     // A session processed from a recording points at that recording (so `reprocess` finds it), a live one at its own file.
     const sourcePath = this.#o.storage?.sourcePath;
     const pwrecPath = sourcePath !== undefined ? resolve(sourcePath) : (file?.path ?? null);
@@ -456,7 +631,8 @@ export class FeedPipeline {
       track,
       priors,
       onActive: (value: CalibrationActiveValue) => hub.publishState(feedId, 'calibration.active', () => value),
-      profilesFor: (slots, session) => this.#profilesFor(slots, session, file?.path),
+      profilesFor: continued === undefined ? (slots, session) => this.#profilesFor(slots, session, file?.path) : () => continued.profiles,
+      ...(continued && { continued: true }),
       ...(this.#o.profiles && { onSeats: (seats: Omit<LiveSeat, 'feedId'>[]) => this.#reportHumanSeats(seats) }),
       feedView: () => this.#monitor.view(this.#tracker.metrics, this.#lastReceivedAtMs),
       ...(storage && { storage }),
@@ -528,10 +704,10 @@ export class FeedPipeline {
    * `config.effective` (C47, C54, C55): the session's config, every declared key with its value, and per key the fields
    * `config.json` set; published by the pipeline itself, typed by its topic file, once per session start.
    */
-  #publishEffectiveConfig(config: FeatureConfig): void {
+  #publishEffectiveConfig(config: FeatureConfig, overridden: Record<string, string[]>): void {
     const value: ConfigEffectiveValue = {
       values: config,
-      overridden: Object.fromEntries(Object.keys(config).map((key) => [key, this.#overridden[key] ?? []])),
+      overridden: Object.fromEntries(Object.keys(config).map((key) => [key, overridden[key] ?? []])),
     };
     this.#o.hub.publishState(this.#feedId, 'config.effective', () => value);
   }

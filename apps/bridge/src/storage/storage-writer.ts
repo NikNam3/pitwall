@@ -53,6 +53,8 @@ export class StorageWriter {
       ),
       deleteFacts: db.prepare(`DELETE FROM facts WHERE ${OF_SESSION}`),
       complete: db.prepare(`UPDATE sessions SET complete = 1 WHERE ${OF_SESSION}`),
+      rulesVersionOf: db.prepare(`SELECT rules_version FROM sessions WHERE ${OF_SESSION}`),
+      listLengths: db.prepare(`SELECT list, COUNT(*) AS length FROM facts WHERE ${OF_SESSION} GROUP BY list`),
     };
   }
 
@@ -65,18 +67,24 @@ export class StorageWriter {
   }
 
   /**
-   * A live session starts under `row`'s key: in one transaction the log stored under that key, if any (the bridge
-   * restarted mid-session), is replaced by an empty one, and the row (not complete, pointing at the new recording) and
-   * its cars are written. The newest run wins; its log is then appended from position 0.
+   * A live session starts under `row`'s key, in one transaction with its row (not complete) and cars. `continued`: the
+   * run continues the session's stored recording (C59), replaying it first. With the stored log's rules version this
+   * writer's, the log is kept and only positions beyond each stored list's length are appended, so a replayed fact is
+   * never written twice (C24); otherwise (another rules version, or a run that does not continue the recording) the
+   * stored log, if any, is replaced whole by the one the run appends from position 0 (C61).
    */
-  startSession(row: SessionRow): void {
+  startSession(row: SessionRow, opts: { continued: boolean }): void {
     const key = keyParams(row);
     this.#guarded(() => {
-      this.#db.transaction(() => {
-        this.#statements.deleteFacts.run(key);
+      const written = this.#db.transaction(() => {
+        const stored = this.#statements.rulesVersionOf.get(key) as { rules_version: string } | undefined;
+        const keep = opts.continued && stored?.rules_version === this.#rulesVersion;
+        if (!keep) this.#statements.deleteFacts.run(key);
         this.#writeRow(row, this.#rulesVersion, false);
+        const lengths = keep ? (this.#statements.listLengths.all(key) as Array<{ list: string; length: number }>) : [];
+        return new Map(lengths.map(({ list, length }) => [list, length]));
       })();
-      this.#written.set(keyString(row), new Map());
+      this.#written.set(keyString(row), written);
     });
   }
 

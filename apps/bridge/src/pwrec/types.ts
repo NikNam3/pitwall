@@ -8,7 +8,11 @@ export const HEADER_FIXED_BYTES = 10;
 export const RECORD_HEADER_BYTES = 11;
 export const MAX_PAYLOAD_BYTES = 0xffff;
 
-export const RecordKind = { datagram: 0, end: 255 } as const;
+/**
+ * `resume`: a bridge restart continued the file (C59); `t` keeps record times non-decreasing, the payload is the
+ * restart's ISO 8601 wall time (UTF-8). Readers read past it, and past an end record it follows.
+ */
+export const RecordKind = { datagram: 0, resume: 1, end: 255 } as const;
 
 /** Recorder metadata. Unknown fields are kept so a rewritten file loses nothing. */
 export interface PwrecMeta {
