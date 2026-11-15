@@ -37,7 +37,7 @@ type PaceLap = { lap: number; tyreAge: number; ms: number; at: Ms; free: boolean
 type Stint = { car: CarId; type: TyreType; laps: PaceLap[]; fit: StintDegradation };
 
 /** Every stint with a tyre type and a `ν`, with its pace laps. */
-function stintsOf(degradation: DegradationOutput, free: FreeAirLaps): Stint[] {
+function stintsOf(degradation: DegradationOutput['stints'], free: FreeAirLaps): Stint[] {
   const out: Stint[] = [];
   for (const [key, stints] of Object.entries(degradation)) {
     const car = Number(key);
@@ -223,7 +223,7 @@ export function trackWetnessAsOf(view: AsOfView): TrackWetness {
   let leaderLap = 0;
   for (const l of view.history.laps) if (l.lapNumber > leaderLap) leaderLap = l.lapNumber;
 
-  const stints = stintsOf(degradation, free);
+  const stints = stintsOf(degradation.stints, free);
   const first = commonModes(stints, (s) => (s.fit.nuMsPerLap.known ? s.fit.nuMsPerLap.value : s.fit.startPrior.nuMsPerLap), leaderLap, config);
   const wet = wetLaps(first, config, config.wetSigmas);
   const degradationConfig = DEGRADATION_CONFIG.read(view);

@@ -140,12 +140,10 @@ export function buildStartingPoint(view: AsOfView, outputs: ReadonlyMap<Calculat
 
   const laps = view.history.laps as readonly LapRecord[];
   const newestLap = newestLaps(laps, cars);
-  const standIn = newestLap[leader];
-  if (standIn === undefined) return unknown('insufficientData');
   const stintsByCar: StintRecord[][] = Array.from({ length: cars }, () => []);
   for (const s of view.history.stints as readonly StintRecord[]) if (s.carId >= 0 && s.carId < cars) stintsByCar[s.carId]?.push(s);
 
-  const degradation = (outputs.get(DEGRADATION) as DeepReadonly<DegradationOutput> | undefined) ?? {};
+  const degradation = outputs.get(DEGRADATION) as DeepReadonly<DegradationOutput> | undefined;
   const noise = outputs.get(DRIVER_NOISE) as DeepReadonly<DriverNoise> | undefined;
   const stops = (outputs.get(RIVAL_STOPS) as DeepReadonly<RivalStops> | undefined) ?? {};
   const wetness = outputs.get(TRACK_WETNESS) as DeepReadonly<TrackWetness> | undefined;
@@ -215,17 +213,26 @@ export function buildStartingPoint(view: AsOfView, outputs: ReadonlyMap<Calculat
     lapModel,
   };
 
-  // the declared stand-ins (C3, final review F4): an unknown compound's, an unknown driver's; a car without a lap's pace
-  // is degradation's (its stand-in, SP4.3c Task 13), its compound, tyre age and placement the leader's newest lap
+  // the declared stand-ins (C3, final review F4): an unknown compound's, an unknown driver's; a car without a lap takes
+  // degradation's field stand-in (SP4.3c Task 13, R47, C43: which car's lap stands in is degradation's): its pace, and
+  // the compound, tyre age and lap record of the car it names (`fromCarId`)
   const unknownCompound: NoiseCompound = isNoiseCompound(config.unknownCompound) ? config.unknownCompound : (FORECAST_FIELD_CONFIG.defaults.unknownCompound as NoiseCompound);
-  const noLap: LapRecord = standIn;
+  const stintsBy = degradation?.stints ?? {};
+  const standIn = degradation?.standIn.known === true ? degradation.standIn.value : undefined;
+  const standInLap: LapRecord | undefined = standIn === undefined ? undefined : newestLap[standIn.fromCarId];
 
   const lapMs = new Float64Array(cars);
   for (let k = 0; k < cars; k++) {
     const id = k as CarId;
-    // a car without a completed lap (lap 1 not yet done) runs on the leader's newest lap
+    // a car without a completed lap (lap 1 not yet done) runs on the stand-in car's newest lap; without a stand-in a
+    // running car makes the build unknown (C3), a retired car is not run
     const own = newestLap[k];
-    const lap = own ?? noLap;
+    const lap = own ?? standInLap;
+    if (lap === undefined) {
+      if (retired[k] === 0) need.of(unknown('insufficientData'));
+      sp.compound[k] = NOISE_COMPOUNDS.indexOf(unknownCompound);
+      continue;
+    }
     // just stopped (on its in lap, or a stint closed on its newest lap): a fresh set; the old compound stands in until
     // its out lap is recorded
     const stopped = own !== undefined && (own.inLap || (stintsByCar[k] ?? []).some((s) => s.lastLap >= own.lapNumber));
@@ -246,17 +253,23 @@ export function buildStartingPoint(view: AsOfView, outputs: ReadonlyMap<Calculat
     const w = lap.wearAtEndPct;
     sp.wearPct[k] = stopped ? 0 : own !== undefined && w.fl.known && w.fr.known && w.rl.known && w.rr.known ? Math.max(w.fl.value, w.fr.value, w.rl.value, w.rr.value) : tyreAge * rate;
     // pace on the reference compound (the lap model adds the compound's offset): `degradation`'s base pace alone (O2,
-    // SP4.3c Task 13: its fit, its newest lap, or on lap 1 its leader stand-in); a running car without one makes the
-    // build unknown (C3), a retired car is not run
-    const stints = degradation[id] ?? [];
+    // SP4.3c Task 13: its fit or its newest lap; for a car without a lap the field's stand-in); a running car without
+    // one makes the build unknown (C3), a retired car is not run
+    const stints = stintsBy[id] ?? [];
     const paced = [...stints].reverse().find((s) => s.basePaceMs.known);
+    let fuelIncluded = false;
     if (paced !== undefined && paced.basePaceMs.known) {
       sp.paceMs[k] = paced.basePaceMs.value - offsetOf(lapModel.compoundOffsetMs, paced.visual);
       sp.paceSdMs[k] = paced.cov.known ? Math.sqrt(Math.max(0, paced.cov.value[0][0])) : config.fallbackPaceSdMs;
+      fuelIncluded = paced.fuelIncluded;
+    } else if (own === undefined && standIn !== undefined) {
+      sp.paceMs[k] = standIn.basePaceMs - offsetOf(lapModel.compoundOffsetMs, standIn.compound);
+      sp.paceSdMs[k] = config.fallbackPaceSdMs;
+      fuelIncluded = standIn.fuelIncluded;
     } else if (retired[k] === 0) need.of(unknown('insufficientData'));
     // fuel at the end of the lap: as the fuel at the start of the next (degradation's rule for a hidden load); a base
     // pace that holds the car's fuel (`fuelIncluded`, B9) gets no fuel term on top: the lap model's fuel is 0
-    if (paced?.fuelIncluded === true) sp.fuelKg[k] = 0;
+    if (fuelIncluded) sp.fuelKg[k] = 0;
     else sp.fuelKg[k] = own === undefined ? need.of(fuelOf(lap)) : need.of(fuelOf({ ...own, lapNumber: own.lapNumber + 1, fuelAtStartKg: own.fuelAtEndKg }));
     // ν's sd per lap is degradation's (its current stint's posterior, else its default), per % of wear on each compound
     const current = stints.at(-1);
