@@ -100,6 +100,7 @@ const openPhase = (kind: "SC" | "VSC" | "red", start: number, confirmed = true) 
 const rain = (offsetMin: number, rainPct: number, withinHorizon = true): RainOutlook => ({
   firstRain: known({ index: 0, offsetMin, rainPct }, NOW),
   withinHorizon,
+  samplesAhead: [],
 });
 
 /** The `pit-window` output (C43): our car's window state, the window's compound medium (SP4.2 spec 3.4). */

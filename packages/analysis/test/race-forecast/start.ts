@@ -168,7 +168,7 @@ export function startingPoint(spec: StartSpec): StartingPoint {
     stopHigh: f((l) => new Int16Array(l), () => lapsTotal),
     owesStop: f((l) => new Uint8Array(l), () => 0),
     sets,
-    wetness: { wetnessMs: 0, sdMs: 0 },
+    wetness: { wetnessMs: 0, sdMs: 0, wet: false },
     weather: unknown('notReceived'),
     track: {
       brakingZones: Float64Array.from(spec.brakingZones ?? BRAKING_ZONES),

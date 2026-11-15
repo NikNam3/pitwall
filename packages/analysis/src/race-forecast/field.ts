@@ -2,6 +2,7 @@
 // (wear, fuel, a stop's new set) and its next lap starts (its lap time from `lap-model`, its draws for that lap).
 import { NOISE_COMPOUNDS, tyreIndex, type LapInput, type NoiseCompound, type Policy, type Scenario, type StartingPoint } from '@pitwall/domain';
 import { lapTimeMs } from '../lap-model/index.ts';
+import { isWet } from '../track-wetness/wet.ts';
 import { BIG_EVENT_MAX_MS, BIG_EVENT_MIN_MS } from './constants.ts';
 import { drawsInto, normal, normalOf, PURPOSE, streamKey, streamOf, uniformOf, type Draws } from './draws.ts';
 
@@ -99,7 +100,7 @@ export type Field = {
 };
 
 /** One reused lap-model input: the forecast calls the lap model once per car and lap. */
-const input: LapInput = { paceMs: 0, degMsPerLap: 0, wearPct: 0, fuelKg: 0, compound: 'medium', lapOnSet: 1, neutralised: 'none', wetnessMs: 0, scatterMs: 0, mistakeMs: 0 };
+const input: LapInput = { paceMs: 0, degMsPerLap: 0, wearPct: 0, fuelKg: 0, compound: 'medium', lapOnSet: 1, neutralised: 'none', wetnessMs: 0, wet: false, scatterMs: 0, mistakeMs: 0 };
 
 /** A field's typed arrays, by size: per car, per car and lap, per lap. */
 type Arrays = Pick<Field, 'neutralByLap' | 'vscLapMs' | 'stopCompound' | 'car' | 'order' | 'carKeys' | 'lap' | 'lineT' | 'running' | 'paceMs' | 'degMs' | 'scatterMs' | 'innovationMs' | 'compound' | 'wearPct' | 'fuelKg' | 'burnKg' | 'lapOnSet'>;
@@ -210,6 +211,18 @@ export function wetnessOn(f: Field, lap: number): number {
   return w[Math.min(i, w.length - 1)] ?? f.start.wetness.wetnessMs;
 }
 
+/**
+ * Whether the track is wet on lap `lap` by `track-wetness`'s one rule (O3): a scenario's path lap is one world, so the
+ * rule with sd 0; the starting point's verdict where the scenario has none.
+ */
+export function wetOn(f: Field, lap: number): boolean {
+  const w = f.wetnessByLap;
+  const i = lap - f.start.lap;
+  if (w === undefined || w.length === 0 || i < 0) return f.start.wetness.wet;
+  const ms = w[Math.min(i, w.length - 1)];
+  return ms === undefined ? f.start.wetness.wet : isWet(ms, 0, 0);
+}
+
 export const lineIndex = (f: Field, car: number, lap: number): number => car * (f.start.lapsTotal + 2) + lap;
 
 /**
@@ -246,6 +259,7 @@ export function startLap(f: Field, c: number, lap: number, fromFraction: number,
   input.compound = compounds[f.compound[c] ?? 0] ?? 'medium';
   input.lapOnSet = f.lapOnSet[c] ?? 1;
   input.wetnessMs = wetnessOn(f, lap);
+  input.wet = wetOn(f, lap);
   input.neutralised = 'none';
   const green = lapTime(s.lapModel, input);
   car[b + GREEN_MS] = green;

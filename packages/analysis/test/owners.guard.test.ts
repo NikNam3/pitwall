@@ -68,6 +68,21 @@ const PACE_FROM_LAPS = /\blapTimeMs\s*-[^;\n]*\b(?:gammaMsPerKg|fuelMsPerKg|fiel
 /** A lap record of the leader taken by index: `<…>lap(s)[leader]` or `<…>lap(s)[order[0]]` (a stand-in lap of its own). */
 const LAP_OF_LEADER = /\b\w*[Ll]aps?\s*\[\s*(?:leader|order\s*\[\s*0\s*\])\s*\]/;
 
+/**
+ * A dry pace from the slick medians: a field median of slick laps read (`medianMs.slick`, crossover's medians per type)
+ * as a reference, or crossover's `dryRefOf` (SP4.3c Task 14, O3, B3).
+ */
+const DRY_PACE_FROM_MEDIANS = /\bmedianMs\.slick\b|\bdryRefOf\b/;
+
+/**
+ * Reading "rain coming" from the forecast samples: the samples ahead filtered by their offset (`offsetMin >= 0`) or a
+ * rain chance held against a threshold (`rainPct >= …`) (SP4.3c Task 14, O3a).
+ */
+const RAIN_FROM_SAMPLES = /\boffsetMin\s*>=?\s*0(?![\d.])|\brainPct\s*>=/;
+
+/** The weather path's dynamics: the wetness a rain lap adds, a dry lap takes and the ceiling (SP4.3c Task 14, O3b). */
+const WETNESS_DYNAMICS = ['WETNESS_RISE_MS_PER_LAP', 'WETNESS_FALL_MS_PER_LAP', 'WETNESS_MAX_MS'];
+
 /** `code` without its string and template literals (a note that quotes "70" is no literal of the limit). */
 const withoutStrings = (code: string): string => code.replace(/'(?:[^'\\\n]|\\.)*'|"(?:[^"\\\n]|\\.)*"|`(?:[^`\\]|\\.)*`/g, "''");
 
@@ -122,6 +137,16 @@ const OWNERS: OwnerRow[] = [
   // SP4.3c Task 13 fix round 2 (R47, C43): which car's lap stands in for a car without a lap is `degradation`'s (its
   // field `standIn`, `fromCarId`); no other unit takes the leader's lap record (`newestLap[leader]`, `laps[order[0]]`).
   { judgement: "which car's lap stands in", owner: 'degradation', source: (u) => codeMatches(u, LAP_OF_LEADER), allowed: [] },
+  // SP4.3c Task 14 (O3, B3): the dry pace (the dry reference) is `track-wetness`'s; no other unit takes one from the slick
+  // medians (`crossover`'s `dryRefOf` is deleted: it reads `track-wetness`'s reference and 110 % line).
+  { judgement: 'dry pace', owner: 'track-wetness', source: (u) => codeMatches(u, DRY_PACE_FROM_MEDIANS), allowed: [] },
+  // SP4.3c Task 14 (O3a): "rain coming" (one threshold), the highest chance per lap and the samples ahead are
+  // `rain-outlook`'s; no other unit filters the forecast samples or holds a rain chance against a threshold (`weather`'s
+  // filter and `strategy`'s `rainCandidatePct` are deleted).
+  { judgement: 'rain coming', owner: 'rain-outlook', source: (u) => codeMatches(u, RAIN_FROM_SAMPLES), allowed: [] },
+  // SP4.3c Task 14 (O3b, spec §5.4a): the weather path (rain chance → wetness per lap) is `weather-paths`'; no other unit
+  // holds the wetness dynamics (`race-monte-carlo`'s own timeline is moved, the MC calls `weatherPath`).
+  { judgement: 'weather path', owner: 'weather-paths', source: (u) => codeNames(u, WETNESS_DYNAMICS), allowed: [] },
 ];
 
 /** A path as the guard shows it: repo-relative with forward slashes. */
@@ -275,6 +300,23 @@ describe('owners guard (spec §5.8)', () => {
       expect(LAP_OF_LEADER.test(codeOf('const lap = laps[order[0]];'))).toBe(true);
       expect(LAP_OF_LEADER.test(codeOf('const ms = lapMs[leader] ?? 0;'))).toBe(false);
       expect(LAP_OF_LEADER.test(codeOf('// newestLap[leader]\nconst own = newestLap[k];'))).toBe(false);
+    });
+
+    it('Task 14 patterns: a dry pace from slick medians, rain read from the samples, the wetness dynamics (in code only)', () => {
+      expect(DRY_PACE_FROM_MEDIANS.test(codeOf('const m = row.medianMs.slick;'))).toBe(true);
+      expect(DRY_PACE_FROM_MEDIANS.test(codeOf('const dryRefMs = dryRefOf(byLap);'))).toBe(true);
+      expect(DRY_PACE_FROM_MEDIANS.test(codeOf('// row.medianMs.slick\nconst m = row.medianMs[type];'))).toBe(false);
+      expect(RAIN_FROM_SAMPLES.test(codeOf('const ahead = forecast.filter((s) => s.offsetMin >= 0);'))).toBe(true);
+      expect(RAIN_FROM_SAMPLES.test(codeOf('return byLap.some((l) => l.rainPct >= config.rainCandidatePct);'))).toBe(true);
+      expect(RAIN_FROM_SAMPLES.test(codeOf('const rain = u < rainPctAt(byLap, lap + shift);'))).toBe(false);
+      expect(RAIN_FROM_SAMPLES.test(codeOf('// s.offsetMin >= 0\nconst d = Math.abs(s.offsetMin);'))).toBe(false);
+      expect(RAIN_FROM_SAMPLES.test(codeOf('const later = s.offsetMin >= 0.5;'))).toBe(false);
+      const mc = unit('race-monte-carlo');
+      const wp = unit('weather-paths');
+      expect(wp?.folder).toBe('packages/analysis/src/weather-paths');
+      expect(wp !== undefined && codeNames(wp, WETNESS_DYNAMICS), 'weather-paths holds the dynamics').toBe(true);
+      expect(mc !== undefined && codeNames(mc, ['weatherPath']), 'race-monte-carlo calls weatherPath').toBe(true);
+      expect(mc?.imports).toContain('packages/analysis/src/weather-paths/index.ts');
     });
 
     it('fix round 2: degradation and tyre-model both call the shared fresh-set pick; tyre-model and tyre-life the shared laps-to-limit rule', () => {

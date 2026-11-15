@@ -56,7 +56,8 @@ export type StartingPoint = {
   owesStop: Uint8Array;
   /** Our cars only. */
   sets: Record<CarId, { compound: NoiseCompound; wearPct: number }[]>;
-  wetness: { wetnessMs: number; sdMs: number };
+  /** `wet`: track-wetness's one wet rule at the starting point (SP4.3c O3). */
+  wetness: { wetnessMs: number; sdMs: number; wet: boolean };
   /**
    * The weather forecast's samples mapped onto race laps by the leader's lap time: per lap its rain chance (0–100) and
    * the forecast's accuracy (SP4.3b spec §7.1, S12); unknown where no forecast reached the view (C3).
@@ -97,6 +98,8 @@ export type LapInput = {
   lapOnSet: number;
   neutralised: 'none' | 'vsc' | 'sc';
   wetnessMs: number;
+  /** The one wet rule's verdict for this lap (SP4.3c O3). */
+  wet: boolean;
   scatterMs: number;
   mistakeMs: number;
 };

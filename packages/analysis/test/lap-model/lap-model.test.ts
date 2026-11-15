@@ -46,6 +46,7 @@ const BASE: LapInput = {
   lapOnSet: 5,
   neutralised: 'none',
   wetnessMs: 0,
+  wet: false,
   scatterMs: 0,
   mistakeMs: 0,
 };
@@ -96,14 +97,24 @@ describe('lap-model: each additive term alone', () => {
     expect(lap({ lapOnSet: 10 }, p)).toBe(80_000);
   });
 
-  it('cold tyres: larger with wetnessMs > 0', () => {
+  // SP4.3c Task 14 (O3, row 4): ported from "larger with wetnessMs > 0"; the lap model reads `wet`, the one wet rule
+  // (`track-wetness`'s, carried on the input as `LapInput.wet`), never its own `wetnessMs > 0` test
+  it('cold tyres: larger on a wet track (`wet`)', () => {
     const p = { ...ZERO, coldTyreMs: [1_200, 400] as [number, number], coldTyreWetFactor: 1.5 };
+    const onWet = (over: Partial<LapInput>): number => lap({ ...over, wet: true } as Partial<LapInput>, p);
     for (const lapOnSet of [1, 2]) {
       const dry = lap({ lapOnSet }, p) - lap({ lapOnSet: 5 }, p);
-      const wet = lap({ lapOnSet, wetnessMs: 1_500 }, p) - lap({ lapOnSet: 5, wetnessMs: 1_500 }, p);
+      const wet = onWet({ lapOnSet, wetnessMs: 1_500 }) - onWet({ lapOnSet: 5, wetnessMs: 1_500 });
       expect(dry).toBeGreaterThan(0);
-      expect(wet).toBeGreaterThan(dry);
+      expect(wet).toBe(dry * 1.5);
     }
+  });
+
+  it('cold tyres (row 4): a wetness of +200 ms that is not `wet` (200 ± 400) keeps the dry cold term', () => {
+    const p = { ...ZERO, coldTyreMs: [1_200, 400] as [number, number], coldTyreWetFactor: 1.5 };
+    const notWet = (over: Partial<LapInput>): number => lap({ ...over, wetnessMs: 200, wet: false } as Partial<LapInput>, p);
+    expect(notWet({ lapOnSet: 1 }) - notWet({ lapOnSet: 5 })).toBe(1_200);
+    expect(notWet({ lapOnSet: 2 }) - notWet({ lapOnSet: 5 })).toBe(400);
   });
 
   it('neutralised: SC slower than VSC slower than green', () => {
@@ -169,7 +180,7 @@ const carArb: fc.Arbitrary<LapInput> = fc.record({
   wetnessMs: fc.double({ min: 0, max: 5_000, noNaN: true }),
   scatterMs: fc.double({ min: -1_000, max: 1_000, noNaN: true }),
   mistakeMs: fc.double({ min: 0, max: 10_000, noNaN: true }),
-});
+}).map((c) => ({ ...c, wet: c.wetnessMs > 0 }));
 
 describe('lap-model: properties', () => {
   it('a fresh set is never slower than the same set worn', () => {

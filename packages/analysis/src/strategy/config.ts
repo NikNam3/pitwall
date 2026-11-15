@@ -11,8 +11,6 @@ export const STRATEGY_CONFIG = defineConfig('strategy', {
   maxStops: 3,
   /** The most DP plans a car's candidates keep, the best by expected time (box-now and stay-out besides). Source: SP4.3b Task 23: 98–136 candidates left 8–15 scenarios each at the cap; 8 keeps ~50–60. */
   dpPlansMax: 8,
-  /** Inter and wet plans are candidates once the forecast's highest rain chance over the remaining laps reaches this (%), or the track's wetness the DP's rain threshold. Source: research 19 wetness: the game shows light rain from about 25 % rain chance. */
-  rainCandidatePct: 25,
   /**
    * The one traffic gap (C43): the DP's traffic term (spec §6), a rejoin within this of a car ahead (on the plain
    * forecast's road at that lap's line) costs the shortfall; `pit-sweep`'s and `sc-call`'s traffic, a car within this of
