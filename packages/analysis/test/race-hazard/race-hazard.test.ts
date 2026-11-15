@@ -175,6 +175,21 @@ describe('race-hazard', () => {
     expectTable(endedBefore, 8, 44, 1, 'ended in lap 6');
   });
 
+  // SP4.3c Task 4 (B7, C18): a span closed with `confirmed: false` never was a neutralisation, so it blocks no start;
+  // the block follows the last confirmed one (`lastNeutralisation`, shared/neutralised.ts).
+  it('B7: after an SC closed `confirmed: false`, the next laps are the table, not blocked', () => {
+    // an SC that never was, opened and closed in the leader's lap 7 (frames 620 to 650), the leader still on lap 7
+    const NEVER = neutralisation({ kind: 'SC', start: 560_000, end: 563_000, startFrame: 620, endFrame: 650, confirmed: false });
+    const out = hazardOf(view({ done: 6, closed: [NEVER], open: openPhase('racing', 650) }));
+    expect(valueOf(out).active).toBeNull();
+    expectTable(out, 7, 44, 1, 'after an unconfirmed SC');
+
+    // a confirmed SC that closed in lap 4 (frame 350), then the one that never was in lap 7: lap 7 on is the table
+    const CONFIRMED = neutralisation({ kind: 'SC', start: 135_000, end: 315_000, startFrame: 150, endFrame: 350 });
+    const after = hazardOf(view({ done: 6, closed: [CONFIRMED, NEVER], open: openPhase('racing', 650) }));
+    expectTable(after, 7, 44, 1, 'after a confirmed SC in lap 4 and an unconfirmed one in lap 7');
+  });
+
   it('Reduced ×0.5, Increased ×1.5, Off → every chance 0', () => {
     expect(RACE_HAZARD_CONFIG.defaults).toEqual({ reducedFactor: 0.5, increasedFactor: 1.5 });
     const reduced = hazardOf(view({ level: 'reduced' }));

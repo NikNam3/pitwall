@@ -15,10 +15,18 @@ export type DriverNoiseEffect = {
   inSession?: boolean;
   /** A car-status span that is a retirement (plan review P5: apart from big slow laps). */
   retirement?: boolean;
+  /**
+   * A session-phase or car-location span during which a mini-sector is no human time loss: a neutralisation, a pit
+   * visit, a garage spell. The rule is the shared one (`timeLossExcludedOf`, `shared/neutralised.ts`); these rows say
+   * what it gives for each kind the unit reads.
+   */
+  noTimeLoss?: boolean;
 };
 
 const RACE: DriverNoiseEffect = { isRace: true };
 const NOT_RACE: DriverNoiseEffect = { isRace: false };
+const COUNTS: DriverNoiseEffect = { noTimeLoss: false };
+const NO_TIME_LOSS: DriverNoiseEffect = { noTimeLoss: true };
 
 export const DRIVER_NOISE_BEHAVIOUR: BehaviourTable<DriverNoiseEffect> = {
   'weekend-phase': { practice: NOT_RACE, qualifying: NOT_RACE, race: RACE, none: NOT_RACE },
@@ -28,6 +36,17 @@ export const DRIVER_NOISE_BEHAVIOUR: BehaviourTable<DriverNoiseEffect> = {
     retired: { inSession: true, retirement: true },
     disqualified: { inSession: true, retirement: false },
     absent: { inSession: false, retirement: false },
+  },
+  'car-location': { track: COUNTS, pitLane: NO_TIME_LOSS, garage: NO_TIME_LOSS },
+  'session-phase-race': {
+    grid: COUNTS,
+    formation: COUNTS,
+    startLights: COUNTS,
+    racing: COUNTS,
+    neutralised: NO_TIME_LOSS,
+    suspended: NO_TIME_LOSS,
+    finished: COUNTS,
+    postSession: COUNTS,
   },
 };
 

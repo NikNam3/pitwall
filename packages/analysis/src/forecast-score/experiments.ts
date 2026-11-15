@@ -3,7 +3,7 @@
 // inter or wet tyres, or around a weather crossover (a stop from slicks to inter or wet tyres, or back), is no case.
 import { currentCrossings, known, unknown, type CarId, type FrameNumber, type Known, type LapRecord, type PitStopRecord, type Policy, type SessionTime } from '@pitwall/domain';
 import type { DeepReadonly, Projection, Situation } from '@pitwall/engine/readers';
-import { isClosed, neutralisedSpans, type Neutralisation } from '../shared/neutralised.ts';
+import { isClosed, neutralisationKind, neutralisedSpans, type Neutralisation } from '../shared/neutralised.ts';
 import type { FORECAST_SCORE_CONFIG } from './config.ts';
 import { raceLaps, type RaceLaps } from './laps.ts';
 
@@ -129,7 +129,7 @@ export function naturalExperiments(history: Projection, config: ExperimentsConfi
     if (stop.flag === 'green' || !usable(stop)) continue;
     const x = stop.carId;
     const s = stop.lap;
-    const span = neutralisations.find((n) => n.kind === 'neutralised' && overlaps(n, race.inLapFrame(stop), stop.frame));
+    const span = neutralisations.find((n) => neutralisationKind(n) !== 'red' && overlaps(n, race.inLapFrame(stop), stop.frame));
     const before = race.lap(x, s - 1);
     if (span === undefined || !isClosed(span) || before === undefined) continue;
     const n = race.lapsOf(x).find((l) => l.frame >= span.endFrame)?.lapNumber;

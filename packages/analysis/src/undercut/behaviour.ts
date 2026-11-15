@@ -35,6 +35,7 @@ export const UNDERCUT_BEHAVIOUR: BehaviourTable<UndercutEffect> = {
   },
   // the driver changes the stop's length (the starting point's `human`), never a case
   'car-driver': { ai: 'compute', human: 'compute' },
+  'car-location': { track: 'compute', pitLane: 'compute', garage: 'compute' },
   // the rule is the DP's (`owesStop`) and the rivals' next compound (`rivalNextCompound`, C43), never a case
   'compound-rule': { required: 'compute', waived: 'compute' },
 };
