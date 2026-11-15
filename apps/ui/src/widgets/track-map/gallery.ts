@@ -1,9 +1,10 @@
 // Gallery declaration of the track-map display (spec 7.2). Test-phase file: the implementer does not edit it.
 // Zandvoort (the outline copied into fixtures.ts, C69) with a synthetic field. The first case is the screenshot baseline
 // at each size (the mockup's scene without the ghost: a car in the pit lane, a yellow zone, a car shown blue, an
-// incident); the others show one thing each. No recorded moment: the captured moments hold no track file.
+// incident; in the full size every car's code, SP4.3c §5.7, so that baseline is re-taken); the others show one thing
+// each. No recorded moment: the captured moments hold no track file.
 import type { GalleryEntry } from '../../kit/gallery-types.ts';
-import { geometry, markers, noFile, rejoin, trackCars, zones } from './fixtures.ts';
+import { geometry, ghost, markers, noFile, trackCars, zones } from './fixtures.ts';
 import type { widget } from './widget.ts';
 
 const quiet = { geometry: geometry(), cars: trackCars(), markers: markers() };
@@ -27,13 +28,14 @@ const gallery: GalleryEntry<typeof widget> = {
     blueFlag: { ...quiet, cars: trackCars({ BOR: { blueFlag: true }, KUH: { blueFlag: true } }) },
     // two major incidents of the last laps, each an amber triangle with its kind
     incident: { ...quiet, markers: markers(['collision', 0.08], ['retirement', 0.53]) },
-    // the rejoin ghost of KUH (2-map-views.html): per condition a faint hollow ring where KUH was its pit loss ago,
-    // lettered G, VSC, SC in the full size, no letters in the compact one; the race scene around it
+    // the rejoin ghost of KUH (2-map-views.html; `rejoinGhost.car`, SP4.3c §5.7): per condition a faint hollow ring where
+    // KUH was its stop cost ago, lettered G, VSC, SC in the full size, no letters in the compact one; the race scene
+    // around it
     ghosts: {
       geometry: geometry(),
       cars: trackCars({ DOO: { inPit: true }, BOR: { blueFlag: true } }, zones({ 7: 'yellow' })),
       markers: markers(['collision', 0.74]),
-      rejoin: rejoin(),
+      ghost: ghost(),
     },
   },
 };

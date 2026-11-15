@@ -3,7 +3,7 @@
 // the widget imports nothing from `data/` or `test-support/` (C69). The field is synthetic.
 import { carId, known, unknown } from '@pitwall/domain';
 import type {
-  EstimateSource, IncidentKind, Known, LapFraction, MapCar, MapIncident, MapPoint, MapZone, PitCondition, Rejoin, RejoinAt, TrackCars, TrackGeometry,
+  IncidentKind, Known, LapFraction, MapCar, MapIncident, MapPoint, MapZone, PitCondition, RejoinGhost, TrackCars, TrackGeometry,
 } from '@pitwall/domain';
 
 /** The Zandvoort outline of `data/tracks/26.json`, as the file holds it (unit square, y down). */
@@ -199,27 +199,16 @@ export const noFile = { geometry: unknown('notApplicable'), cars: unknown('notAp
 
 export const geometry = (withTurns = true): Known<TrackGeometry> => k(zandvoortGeometry(withTurns));
 
-/** The ghost's losses of the mockups (G 20.3, VSC 13.1, SC 9.8 s) and the lap fractions behind KUH (0.515) they put it at. */
-const GHOST: Readonly<Record<PitCondition, { lossMs: number; fraction: LapFraction }>> = {
-  green: { lossMs: 20_300, fraction: 0.235 },
-  vsc: { lossMs: 13_100, fraction: 0.335 },
-  sc: { lossMs: 9_800, fraction: 0.38 },
-};
-
-const SOURCE: EstimateSource = { kind: 'session', sessionShare: 1, parts: 'stops' };
+/** The lap fractions behind KUH (0.515) the mockups' stop costs (G 20.3, VSC 13.1, SC 9.8 s) put the ghost at. */
+const GHOST: Readonly<Record<PitCondition, LapFraction>> = { green: 0.235, vsc: 0.335, sc: 0.38 };
 
 /**
- * `rejoin.car` for KUH (P6): per condition the ghost at its lap fraction on the outline, or, for a condition named in
- * `unknownPoints`, with its map point `notApplicable`. The crossing order is not read by the map.
+ * `rejoinGhost.car` for KUH (SP4.3c §5.7, O18): per condition the ghost at its lap fraction on the outline, or, for a
+ * condition named in `unknownPoints`, with its map point `notApplicable`.
  */
-export function rejoin(unknownPoints: readonly PitCondition[] = []): Rejoin {
-  const at = (c: PitCondition): RejoinAt => ({
-    condition: c,
-    lossMs: k(GHOST[c].lossMs),
-    lossSource: SOURCE,
-    rejoinPosition: k(c === 'green' ? 12 : c === 'vsc' ? 10 : 9),
-    order: unknown('notApplicable'),
-    mapPoint: unknownPoints.includes(c) ? unknown('notApplicable') : k(onOutline(GHOST[c].fraction)),
+export function ghost(unknownPoints: readonly PitCondition[] = []): RejoinGhost {
+  const at = (c: PitCondition): RejoinGhost['conditions'][PitCondition] => ({
+    mapPoint: unknownPoints.includes(c) ? unknown('notApplicable') : k(onOutline(GHOST[c])),
   });
-  return { carId: carId(0), position: 6, conditions: { green: at('green'), vsc: at('vsc'), sc: at('sc') } };
+  return { carId: carId(0), conditions: { green: at('green'), vsc: at('vsc'), sc: at('sc') } };
 }

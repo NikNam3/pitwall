@@ -2,9 +2,9 @@
 // other car X, `t_X = gapMs_X − loss[c]` (its gap to us at the same point of the road, from `gapsToCar`, minus the
 // loss); the physical order sorts by `t`, the ghost at 0; the rejoin position is our position plus the cars on our lap
 // behind us within the loss; each row's interval is its `t` minus the row ahead's (the first row against the car ahead
-// of it in the full order); the map point is where we were `loss` ms ago, on the track file's outline (C62b). Built
-// races (`field.ts`); every case runs through the guarded view (C41); race only (C14); our cars only.
-import { carId, known, pointAt, unknown, type CarId, type CrossingRow, type Known, type PitCondition, type TrackData } from '@pitwall/domain';
+// of it in the full order). The map point is `rejoin-ghost`'s (SP4.3c §5.7, O18; the map-point cases moved to its
+// tests). Built races (`field.ts`); every case runs through the guarded view (C41); race only (C14); our cars only.
+import { carId, known, unknown, type CarId, type CrossingRow, type Known, type PitCondition } from '@pitwall/domain';
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 import { GAPS } from '../../src/gaps/index.ts';
@@ -14,7 +14,7 @@ import { rejoinCalculator } from '../../src/rejoin/calculator.ts';
 import { REJOIN, REJOIN_CONFIG, type Rejoin, type RejoinAt, type RejoinOutput } from '../../src/rejoin/index.ts';
 import { guardedQuick } from '../situated.ts';
 import { loadUnitFolders } from '../units.ts';
-import { INSUFFICIENT, NOT_APPLICABLE, rejoinCase, SOURCES, US, ZANDVOORT, type Field, type RejoinCase } from './field.ts';
+import { INSUFFICIENT, NOT_APPLICABLE, rejoinCase, SOURCES, US, type Field, type RejoinCase } from './field.ts';
 
 const calc = guardedQuick(rejoinCalculator);
 
@@ -166,36 +166,24 @@ describe('rejoin calculator', () => {
   });
 
   // 6
-  it('the map point: where we were `loss` ms ago, on the outline; without a track file `notApplicable`', () => {
-    // our newest crossing: progress 125 at 230 000; 18 000 ms (10 crossings) ago progress 115, 9 000 ago 120, 5 400 ago 122
-    const r = rejoinOf(outputOf({ losses: { green: 18_000, vsc: 9_000, sc: 5_400 } }));
-    const outline = valueOf(ZANDVOORT.outline);
-    const expected: Record<PitCondition, number> = { green: 15 / 50, vsc: 20 / 50, sc: 22 / 50 };
-    for (const c of CONDITIONS) {
-      const point = valueOf(r.conditions[c].mapPoint);
-      const want = pointAt(outline, expected[c]);
-      expect(point.x, c).toBeCloseTo(want.x, 3);
-      expect(point.y, c).toBeCloseTo(want.y, 3);
-    }
+  it("`rejoin.car` has no map point (the map's ghost is `rejoin-ghost`'s, SP4.3c §5.7, O18): each condition is its loss, source, rejoin position and order", () => {
+    const r = rejoinOf(outputOf());
+    for (const c of CONDITIONS) expect(Object.keys(r.conditions[c]).sort(), c).toEqual(['condition', 'lossMs', 'lossSource', 'order', 'rejoinPosition']);
+    // without a track file the same: the track file is no input of `rejoin`'s order or position
     const none = rejoinOf(outputOf({ track: unknown('notApplicable') }));
-    for (const c of CONDITIONS) expect(none.conditions[c].mapPoint, c).toEqual(NOT_APPLICABLE);
-    // a track file without an outline is as none
-    const noOutline: TrackData = { ...ZANDVOORT, outline: unknown('notReceived') };
-    expect(at({ track: known(noOutline, 0) }).mapPoint).toMatchObject({ known: false });
+    for (const c of CONDITIONS) expect(none.conditions[c], c).toEqual(r.conditions[c]);
   });
 
   // 7
-  it('our crossings span less than the loss: the map point is `insufficientData`, the order still known; no crossing of ours: all `insufficientData`', () => {
+  it('our crossings span less than the loss: the order still known; no crossing of ours: all `insufficientData`', () => {
     // first lap: our crossings from 5 000 to 19 400, 14 400 ms, under the green loss of 20 300
     const early = at({ now: 20_000 });
-    expect(early.mapPoint).toEqual(INSUFFICIENT);
     expect(early.order.known).toBe(true);
     expect(early.rejoinPosition.known).toBe(true);
     const r = rejoinOf(outputOf({ without: [US] }));
     for (const c of CONDITIONS) {
       expect(r.conditions[c].rejoinPosition, c).toEqual(INSUFFICIENT);
       expect(r.conditions[c].order, c).toEqual(INSUFFICIENT);
-      expect(r.conditions[c].mapPoint, c).toEqual(INSUFFICIENT);
     }
   });
 

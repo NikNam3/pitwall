@@ -170,6 +170,14 @@ describe('TrackCanvas', () => {
     expect(arcOf(ROLES.ownCar)).toContain(6);
   });
 
+  // SP4.3c §5.7: the track map's car codes are labels like the turns', so they are drawn in textFaint too
+  it('draws every placed label in textFaint', async () => {
+    await drawn({ ...scene, labels: [{ text: 'T1', at: outline[0]! }, { text: 'KUH', at: outline[80]! }, { text: 'LEC', at: outline[60]! }] });
+    const texts = ops.filter((o) => o.op === 'fillText' && ['T1', 'KUH', 'LEC'].includes(o.args[0] as string));
+    expect(texts.map((o) => o.args[0]).sort()).toEqual(['KUH', 'LEC', 'T1']);
+    expect(texts.map((o) => o.fillStyle)).toEqual([ROLES.textFaint, ROLES.textFaint, ROLES.textFaint]);
+  });
+
   it('draws in theme roles and team colours only', async () => {
     await drawn();
     const allowed = new Set([...Object.values(ROLES), MERCEDES]);

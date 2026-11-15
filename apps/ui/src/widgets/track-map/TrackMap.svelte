@@ -1,6 +1,7 @@
 <script lang="ts">
   // The track map (spec 7.2, mockup 2-map-views.html): the outline with every car at its lap distance, the flagged
-  // zones, the incident markers and the rejoin ghost of the link's primary car (SP4.2 spec §5), drawn by the kit's track canvas from `sceneOf`. Without a
+  // zones, the incident markers, the cars' codes in the full size and the per-frame rejoin ghost of the link's primary car
+  // (SP4.2 spec §5, `rejoinGhost.car` since SP4.3c §5.7), drawn by the kit's track canvas from `sceneOf`. Without a
   // track file the panel says "no track data"; before the geometry is in, the kit's "no data yet".
   import { noDataYet } from '../../kit/text.ts';
   import TrackCanvas from '../../kit/track/TrackCanvas.svelte';
@@ -13,7 +14,7 @@
   let { data, size }: WidgetProps<typeof widget> = $props();
 
   const geometry = $derived(data.geometry);
-  const scene = $derived(geometry.known ? sceneOf(geometry.value, data.cars, data.markers, size, data.rejoin) : undefined);
+  const scene = $derived(geometry.known ? sceneOf(geometry.value, data.cars, data.markers, size, data.ghost) : undefined);
   const note = $derived(geometry.known ? undefined : geometry.reason === 'notApplicable' ? text.noTrackData : noDataYet);
 </script>
 

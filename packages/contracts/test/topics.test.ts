@@ -96,6 +96,7 @@ describe('TOPICS', () => {
       ['raisingAverage.field', 'raising-average', 'feed', 'state', 1],
       ['rejoin.car', 'rejoin', 'feed', 'state', 4],
       ['rejoin.ghostLines', 'rejoin', 'feed', 'state', 4],
+      ['rejoinGhost.car', 'rejoin-ghost', 'feed', 'state', 10],
       ['scCall.car', 'sc-call', 'feed', 'state', 1],
       ['stintAnalysis.car', 'stint-analysis', 'feed', 'state', 1],
       ['strategy.car', 'strategy', 'feed', 'state', 1],
@@ -162,7 +163,7 @@ describe('topic types', () => {
       | 'trackPositions.geometry' | 'trackPositions.cars' | 'talkWindow.car'
       | 'stintAnalysis.car' | 'pitLosses.track'
       | 'raisingAverage.field' | 'lapOverview.car' | 'weather.forecast' | 'crossover.car'
-      | 'rejoin.car' | 'rejoin.ghostLines' | 'scCall.car' | 'pitWindow.car'
+      | 'rejoin.car' | 'rejoin.ghostLines' | 'rejoinGhost.car' | 'scCall.car' | 'pitWindow.car'
       | 'calibration.sets' | 'calibration.values' | 'calibration.candidates' | 'calibration.active'
       | 'drivers.profiles' | 'drivers.links' | 'forecastScore.report' | 'config.effective' | 'strategy.plans'
       | 'strategy.car' | 'undercut.car' | 'pitSweep.car'

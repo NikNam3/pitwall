@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
-// The track map draws its rejoin ghosts with the kit's `drawGhostRing` (SP4.2 spec §5, B1): one call per condition whose
+// The track map draws its rejoin ghosts (`data.ghost`, `rejoinGhost.car`, SP4.3c §5.7) with the kit's `drawGhostRing`
+// (SP4.2 spec §5, B1): one call per condition whose
 // map point is known, at that point placed in the canvas box, with the condition's letter in the full size and none in
 // the compact one; an unknown point draws no ring, and no rejoin value draws none.
 import { cleanup, render } from '@testing-library/svelte';
@@ -10,7 +11,7 @@ import InPanel from '../../../test/kit/InPanel.svelte';
 import { cellBox } from '../../kit/size/size.ts';
 import { layoutTrack } from '../../kit/track/layout.ts';
 import { DEFAULT_THEME } from '../../theme/index.ts';
-import { geometry, markers, onOutline, rejoin, trackCars, zandvoortGeometry } from './fixtures.ts';
+import { geometry, ghost, markers, onOutline, trackCars, zandvoortGeometry } from './fixtures.ts';
 import TrackMap from './TrackMap.svelte';
 
 const ring = vi.hoisted(() => ({ calls: [] as { point: { x: number; y: number }; letter: string | undefined }[] }));
@@ -60,7 +61,7 @@ function toPx(point: MapPoint): { x: number; y: number } {
   return layoutTrack({ ...outlineOnly, stretches: [], labels: [], dots: [], markers: [], ghosts: [] }, BOX, (s) => s.length * 8, line).toPx(point);
 }
 
-const data = (over: Record<string, unknown> = {}) => ({ geometry: geometry(), cars: trackCars(), markers: markers(['collision', 0.74]), rejoin: rejoin(), ...over });
+const data = (over: Record<string, unknown> = {}) => ({ geometry: geometry(), cars: trackCars(), markers: markers(['collision', 0.74]), ghost: ghost(), ...over });
 
 /** The mockup's ghost points (fixtures: green 0.235, VSC 0.335, SC 0.38 of the lap). */
 const POINTS = { green: onOutline(0.235), vsc: onOutline(0.335), sc: onOutline(0.38) };
@@ -86,13 +87,13 @@ describe('TrackMap: the ghost rings', () => {
   });
 
   it('draws no ring for a condition whose map point is unknown', () => {
-    show(data({ rejoin: rejoin(['vsc']) }));
+    show(data({ ghost: ghost(['vsc']) }));
     expect(ring.calls.map((c) => c.letter)).toEqual(['G', 'SC']);
     near(ring.calls[1]!.point, toPx(POINTS.sc));
   });
 
-  it('draws no ring without a rejoin value', () => {
-    show(data({ rejoin: undefined }));
+  it('draws no ring without a ghost value', () => {
+    show(data({ ghost: undefined }));
     expect(ring.calls).toEqual([]);
   });
 });

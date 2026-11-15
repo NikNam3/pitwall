@@ -24,7 +24,6 @@ const rejoinAt = (condition: PitCondition, lossMs: RejoinAt['lossMs']): RejoinAt
   lossSource: LOSS_SOURCE[condition],
   rejoinPosition: known(12, 0),
   order: unknown('insufficientData'),
-  mapPoint: unknown('notApplicable'),
 });
 
 /** `rejoin.car` of `car`, every loss known unless `losses` overrides one. */

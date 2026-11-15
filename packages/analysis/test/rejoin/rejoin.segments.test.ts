@@ -5,8 +5,9 @@
 // defaults for every condition. Behaviour only, never the recording's values (C84):
 //  - race-zandvoort-full-lap at its end: for our car every condition has a known rejoin position no better than its
 //    position, the order holds exactly one ghost and at most `orderAround` rows either side of it (fewer where the field
-//    ends: no wrap around the lap), in `t` order, and the map point lies on the outline;
-//  - race-mexico-vsc-full-lap while the VSC is out: the VSC row is known.
+//    ends: no wrap around the lap), in `t` order, and `rejoin-ghost`'s map point (SP4.3c §5.7, O18), needed on every
+//    frame beside `rejoin`, lies on the outline;
+//  - race-mexico-vsc-full-lap while the VSC is out: the VSC row is known, and so is the ghost's VSC map point.
 // The runner changes its state in place on every frame, so a kept frame records what the test reads at that frame.
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -18,6 +19,8 @@ import { IDLE_FEED, NO_DRIVERS, NO_PRIORS } from '../../../../test-support/build
 import { segmentPackets } from '../../../../test-support/segments.ts';
 import { rejoinCalculator } from '../../src/rejoin/calculator.ts';
 import { REJOIN, REJOIN_CONFIG, type RejoinOutput } from '../../src/rejoin/index.ts';
+import { rejoinGhostCalculator } from '../../src/rejoin-ghost/calculator.ts';
+import { REJOIN_GHOST, type RejoinGhostOutput } from '../../src/rejoin-ghost/index.ts';
 import { CALCULATORS } from '../units.ts';
 
 const ZANDVOORT_LAP = 'race-zandvoort-full-lap.pwrec.gz';
@@ -30,10 +33,10 @@ function trackOf(trackId: number): DeepReadonly<TrackData> {
 }
 
 /** A run's output on one frame, with what the test reads of that frame's state, recorded at that frame. */
-type Seen = { out: RejoinOutput; playerCar: EngineState['playerCar']; trackId: EngineState['session']['trackId']; vsc: boolean };
+type Seen = { out: RejoinOutput; ghost: RejoinGhostOutput; playerCar: EngineState['playerCar']; trackId: EngineState['session']['trackId']; vsc: boolean };
 
 /**
- * Runs segment `file` frame by frame with a scheduler that needs `rejoin` (guarded) on every frame; `keep` picks the
+ * Runs segment `file` frame by frame with a scheduler that needs `rejoin` and `rejoin-ghost` (both guarded) on every frame; `keep` picks the
  * frames whose output is kept (the newest kept one is returned).
  */
 async function runSegment(file: string, keep: (state: DeepReadonly<EngineState>) => boolean): Promise<Seen> {
@@ -43,9 +46,13 @@ async function runSegment(file: string, keep: (state: DeepReadonly<EngineState>)
   const first = frames.find((f) => f.session !== undefined);
   if (first?.session === undefined) throw new Error(`${file}: no frame carried a session`);
   const runner = new SessionRunner({ feedId: feedId(file), sessionUid: first.sessionUid, session: first.session });
-  const units = CALCULATORS.map((c) => (c.id === REJOIN ? (guarded(rejoinCalculator as Calculator) as Calculator) : c));
+  const units = [
+    ...CALCULATORS.filter((c) => c.id !== REJOIN && c.id !== REJOIN_GHOST),
+    guarded(rejoinCalculator as Calculator) as Calculator,
+    guarded(rejoinGhostCalculator as Calculator) as Calculator,
+  ];
   const scheduler = new Scheduler(CalculatorRegistry.build(units), { freezeOutputs: true });
-  scheduler.setNeeded([REJOIN]);
+  scheduler.setNeeded([REJOIN, REJOIN_GHOST]);
   let track: DeepReadonly<TrackData> | undefined;
   let seen: Seen | undefined;
   const onResult = ({ state, changed, delta }: StepResult): void => {
@@ -64,7 +71,8 @@ async function runSegment(file: string, keep: (state: DeepReadonly<EngineState>)
     });
     expect(result.errors).toEqual([]);
     const out = result.outputs.get(REJOIN) as RejoinOutput | undefined;
-    if (out !== undefined && keep(state)) seen = { out, playerCar: state.playerCar, trackId: state.session.trackId, vsc: vscOut(state) };
+    const ghost = result.outputs.get(REJOIN_GHOST) as RejoinGhostOutput | undefined;
+    if (out !== undefined && ghost !== undefined && keep(state)) seen = { out, ghost, playerCar: state.playerCar, trackId: state.session.trackId, vsc: vscOut(state) };
   };
   for (const f of frames.slice(frames.indexOf(first))) runner.apply(f, onResult);
   runner.end(onResult);
@@ -86,7 +94,7 @@ describe('rejoin on real data', () => {
   }, 120_000);
 
   it('race-zandvoort-full-lap at its end: every condition known, no better than our position, one ghost with at most orderAround rows either side in t order, the map point on the outline', () => {
-    const { out, playerCar, trackId } = zandvoort;
+    const { out, ghost, playerCar, trackId } = zandvoort;
     const r = out.cars[playerCar];
     expect(r, `car ${playerCar}`).toBeDefined();
     if (r === undefined) return;
@@ -111,13 +119,14 @@ describe('rejoin on real data', () => {
           expect(row.intervalMs.value, `${c}: row ${i} in t order`).toBeGreaterThanOrEqual(0);
         });
       }
-      expect(at.mapPoint.known, c).toBe(true);
-      if (at.mapPoint.known) expect(onOutline(outline.value, at.mapPoint.value), c).toBe(true);
+      const point = ghost.cars[playerCar]?.conditions[c].mapPoint;
+      expect(point?.known, c).toBe(true);
+      if (point?.known === true) expect(onOutline(outline.value, point.value), c).toBe(true);
     }
   });
 
   it('race-mexico-vsc-full-lap with the VSC out: the VSC row is known', () => {
-    const { out, playerCar, vsc: vscWasOut } = mexico;
+    const { out, ghost, playerCar, vsc: vscWasOut } = mexico;
     expect(vscWasOut).toBe(true);
     const r = out.cars[playerCar];
     expect(r, `car ${playerCar}`).toBeDefined();
@@ -126,7 +135,7 @@ describe('rejoin on real data', () => {
     expect(vsc.lossMs.known).toBe(true);
     expect(vsc.rejoinPosition.known).toBe(true);
     expect(vsc.order.known).toBe(true);
-    expect(vsc.mapPoint).not.toEqual(unknown('notApplicable'));
+    expect(ghost.cars[playerCar]?.conditions.vsc.mapPoint).not.toEqual(unknown('notApplicable'));
   });
 });
 

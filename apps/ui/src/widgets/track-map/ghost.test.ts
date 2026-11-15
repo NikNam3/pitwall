@@ -1,11 +1,11 @@
-// The track map's rejoin ghost (SP4.2 spec §5, B1; mockup 2-map-views.html): `sceneOf` adds, per condition in the order
-// green, VSC, SC whose `mapPoint` is known, one ghost at that point, lettered with the kit's `ghostLetter` in the full
-// size and unlettered in the compact one; a condition whose point is unknown gets no ghost, and no rejoin value (not
-// arrived) none at all. The kit's layout keeps the map's labels (turns, sectors, incident labels) clear of every ring and
+// The track map's rejoin ghost (SP4.2 spec §5, B1; mockup 2-map-views.html; from `rejoinGhost.car` since SP4.3c §5.7,
+// O18): `sceneOf` adds, per condition in the order green, VSC, SC whose `mapPoint` is known, one ghost at that point,
+// lettered with the kit's `ghostLetter` in the full size and unlettered in the compact one; a condition whose point is
+// unknown gets no ghost, and no ghost value (not arrived) none at all. The kit's layout keeps the map's labels (turns, sectors, incident labels) clear of every ring and
 // its letter (the map's existing label rules), so a ring never covers a label.
 import { describe, expect, it } from 'vitest';
 import { carId, known, unknown } from '@pitwall/domain';
-import type { Known, MapCar, MapIncident, MapPoint, PitCondition, Rejoin, RejoinAt, TrackCars, TrackGeometry } from '@pitwall/domain';
+import type { Known, MapCar, MapIncident, MapPoint, PitCondition, RejoinGhost, TrackCars, TrackGeometry } from '@pitwall/domain';
 import { ghostLetter } from '../../kit/text.ts';
 import { TRACK_PX, layoutTrack } from '../../kit/track/layout.ts';
 import type { TrackScene } from '../../kit/track/types.ts';
@@ -31,24 +31,17 @@ const GREEN = p(0.1, 0.5);
 const VSC = p(0.1, 0.7);
 const SC = p(0.1, 0.8);
 
-/** `rejoin.car` of our car with a map point per condition; `undefined` makes that condition's point unknown. */
-function rejoin(points: Readonly<Record<PitCondition, MapPoint | undefined>> = { green: GREEN, vsc: VSC, sc: SC }): Rejoin {
-  const at = (c: PitCondition): RejoinAt => {
+/** `rejoinGhost.car` of our car with a map point per condition; `undefined` makes that condition's point unknown. */
+function rejoin(points: Readonly<Record<PitCondition, MapPoint | undefined>> = { green: GREEN, vsc: VSC, sc: SC }): RejoinGhost {
+  const at = (c: PitCondition): RejoinGhost['conditions'][PitCondition] => {
     const point = points[c];
-    return {
-      condition: c,
-      lossMs: k(20_000),
-      lossSource: { kind: 'session', sessionShare: 1, parts: 'stops' },
-      rejoinPosition: k(8),
-      order: unknown('notApplicable'),
-      mapPoint: point === undefined ? unknown('notApplicable') : k(point),
-    };
+    return { mapPoint: point === undefined ? unknown('notApplicable') : k(point) };
   };
-  return { carId: carId(0), position: 6, conditions: { green: at('green'), vsc: at('vsc'), sc: at('sc') } };
+  return { carId: carId(0), conditions: { green: at('green'), vsc: at('vsc'), sc: at('sc') } };
 }
 
 const scene = (
-  over: { rejoin?: Rejoin | undefined; size?: typeof FULL | typeof COMPACT; geometry?: TrackGeometry; markers?: Known<MapIncident[]> } = {},
+  over: { rejoin?: RejoinGhost | undefined; size?: typeof FULL | typeof COMPACT; geometry?: TrackGeometry; markers?: Known<MapIncident[]> } = {},
 ): TrackScene => sceneOf(over.geometry ?? geometry(), cars(), over.markers, over.size ?? FULL, 'rejoin' in over ? over.rejoin : rejoin());
 
 describe('sceneOf: the ghost', () => {
