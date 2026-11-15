@@ -6,8 +6,8 @@
 // The generator's laps carry no tyre sets (the builders leave them `notReceived`), so each lap here gets the sets its car
 // had at the lap end: the fitted set (its compound, the lap's end wear), a fresh medium, a fresh hard and a used soft,
 // each car its own usable life. The live view at frame N is the generator's with each car's tyres taken from its newest
-// lap in the projection. The as-of view holds no live sets (fix round F2: its fixed inputs
-// have none): the form must read the projection. A car whose newest lap is an in lap, or whose stint record ends on it (a set no recorded lap ran on yet),
+// lap in the projection. The as-of view has no live sets (`setsNow` null, as a stored session's): the form must read the
+// projection. A car whose newest lap is an in lap, or whose stint record ends on it (a set no recorded lap ran on yet),
 // is left out: its live tyres are not its newest lap's.
 import { carId, known, unknown, type Celsius, type CarId, type CarState, type FrameNumber, type LapRecord, type NoiseCompound, type StintRecord, type TyreSet } from '@pitwall/domain';
 import { asOfNow, type AsOfView, type EngineView, type Projection } from '@pitwall/engine/readers';
@@ -122,7 +122,7 @@ describe('tyre-model as of frame N (row 8)', () => {
             track: view.track,
             weekend: view.weekend,
             outputs,
-            fixed: { ...now.fixed, weatherNow: null },
+            fixed: { ...now.fixed, setsNow: null, weatherNow: null },
           };
           const asOf = tyreModelAsOf(asOfView);
           for (const car of comparable(history)) {
@@ -154,7 +154,7 @@ describe('tyre-model as of frame N (row 8)', () => {
       track: base.track,
       weekend: base.weekend,
       outputs: new Map(),
-      fixed: { ...now.fixed, weatherNow: null },
+      fixed: { ...now.fixed, setsNow: null, weatherNow: null },
     });
     expect(out[carId(1)]?.freshSets.medium).toEqual(unknown('realism'));
     // a car whose sets the lap records hold: its fresh mediums and hards (the used soft is none)

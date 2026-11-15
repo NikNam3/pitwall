@@ -591,14 +591,14 @@ describe('fix round F1: ν and the loss per % from the stint`s own fit (spec §5
     expect(m.lossMsPerPct.source).toBe('game');
   });
 
-  it('a fit whose stint has no measured rate yet: ν the fit`s (measured), the loss per % the game`s (not ν ÷ a prior rate)', () => {
-    // two gain laps: the rate is the game prior 0.86 × 70 / 28
+  it('a fit whose stint has no measured rate yet: ν the fit`s (measured), the loss per % not ν ÷ a prior rate (here the default: 4 % wear is below minWearForLossPct)', () => {
+    // two gain laps: the rate is the game prior 0.86 × 70 / 28; at 4 % wear the game's loss is noise (minWearForLossPct 8)
     const m = fittedOf(fitView(degradation([degStint({ firstLap: 1, lastLap: 2, nu: 90 })]), { gains: [2, 2] }));
     expect(m.wearRatePct.fl.source).toBe('game');
     expect(valueOf(m.nuMsPerLap)).toBeCloseTo(90, 9);
     expect(m.nuMsPerLap.source).toBe('measured');
-    expect(valueOf(m.lossMsPerPct)).toBeCloseTo(150, 9);
-    expect(m.lossMsPerPct.source).toBe('game');
+    expect(valueOf(m.lossMsPerPct)).toBeCloseTo(57, 9);
+    expect(m.lossMsPerPct.source).toBe('default');
   });
 
   it('without a fit and without the game`s loss (no fresh set of the compound): the default loss 57, ν = 57 × the rate, source default', () => {

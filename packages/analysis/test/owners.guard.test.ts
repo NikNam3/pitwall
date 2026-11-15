@@ -67,7 +67,8 @@ const OWNERS: OwnerRow[] = [
     judgement: 'tyre rates, offsets and availability',
     owner: 'tyre-model',
     source: (u) => codeNames(u, ['tyreSets', 'fittedIdx', 'usableLifeLaps', 'lapDeltaMs', 'lifeSpanLaps', 'tyres\\.sets', 'setsNow']),
-    allowed: ['track-wetness', 'degradation'],
+    // `forecast-score` only writes `setsNow: null` into the past views it builds (a past frame has no sets now).
+    allowed: ['track-wetness', 'degradation', 'forecast-score'],
   },
 ];
 
