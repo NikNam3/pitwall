@@ -108,6 +108,14 @@ const STOP_COST_FROM_LOSS = /(?<!defaults\.)\bpitLossMs\s*(?:\.\s*(?:green|vsc|s
 /** The stop model's terms: the human saving, the double stack, and `rejoin`'s private rule (SP4.3c Task 17, O8). */
 const STOP_MODEL_TERMS = ['HUMAN_STOP_SAVING_MS', 'DOUBLE_STACK_MS', 'passedBy'];
 
+/**
+ * A rival's plan read raw (SP4.3c Task 18, O9): the starting point's window and plan fields (`stopLow`, `stopMid`,
+ * `stopHigh`, and the proposed `nextOdds`, `typeSwitch`), or rival-stops' window, odds and switch read from its output
+ * (`midLap`, `nextCompound.value`, `switchLap`).
+ */
+const RIVAL_PLAN_NAMES = ['stopLow', 'stopMid', 'stopHigh', 'nextOdds', 'typeSwitch', 'midLap', 'switchLap'];
+const RIVAL_ODDS_READ = /\bnextCompound\s*\.\s*value\b/;
+
 /** `code` without its string and template literals (a note that quotes "70" is no literal of the limit). */
 const withoutStrings = (code: string): string => code.replace(/'(?:[^'\\\n]|\\.)*'|"(?:[^"\\\n]|\\.)*"|`(?:[^`\\]|\\.)*`/g, "''");
 
@@ -186,6 +194,18 @@ const OWNERS: OwnerRow[] = [
   // pit-exit yield) are `race-forecast`'s (`stopperRejoin`, `stopCostMs`); no other unit prices a stop from the raw loss
   // or holds the model's terms (`rejoin`'s private rule, the DP's inline costs and `trafficOf`'s rejoin are deleted).
   { judgement: 'rejoin of a stopper', owner: 'race-forecast', source: (u) => codeMatches(u, STOP_COST_FROM_LOSS) || codeNames(u, STOP_MODEL_TERMS), allowed: [] },
+  // SP4.3c Task 18 (O9, O5): a rival's plain policy (next stop lap, compound, tyre-type switch) is
+  // `race-monte-carlo/rivals`' (`rivalPlainPolicy`, from rival-stops through the starting point); no other unit builds
+  // one from the window, the odds or the switch (`dp-input.ts`' `plainRoad` policies and forecast-score's
+  // `forecastPolicies` call it). `rival-stops` writes them, `shared/forecast-field` maps them onto the starting point.
+  // `strategy` reads only the window's mid lap for its mirror candidates (`candidates.ts`; an open question in the
+  // Task 18 test report: the mirror is our plan, not a rival's).
+  {
+    judgement: 'rival policy',
+    owner: 'race-monte-carlo',
+    source: (u) => codeNames(u, RIVAL_PLAN_NAMES) || codeMatches(u, RIVAL_ODDS_READ),
+    allowed: ['rival-stops', 'shared/forecast-field', 'strategy'],
+  },
 ];
 
 /** A path as the guard shows it: repo-relative with forward slashes. */

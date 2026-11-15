@@ -4,7 +4,7 @@
 import { NOISE_COMPOUNDS, tyreIndex, type CarId, type NoiseCompound, type Policy, type RaceHazard, type StartingPoint } from '@pitwall/domain';
 import { createRng, type Rng } from '@pitwall/engine/readers';
 import { raceForecast, rejoinOnRoad, startLapOf, stopCostMs } from '../../race-forecast/index.ts';
-import { rivalNextCompound, type McInput } from '../../race-monte-carlo/index.ts';
+import { rivalPlainPolicy, type McInput } from '../../race-monte-carlo/index.ts';
 import type { DpInput } from '../../strategy-dp/index.ts';
 import type { StrategyInput } from './input.ts';
 import { strategyConfigOf } from './settings.ts';
@@ -48,12 +48,9 @@ export type PlainRoad = Map<number, { gapMs: Float64Array; position: Int8Array }
 /** The plain forecast's road; it draws one seed from `rng`, which a plain scenario's noise never reads. */
 export function plainRoad(start: StartingPoint, rng: Rng): PlainRoad {
   const ours = new Set(Object.keys(start.sets).map(Number));
-  // the rivals at their likeliest stop (rival-stops' window, its next compound); our cars without a stop
-  const policies: Policy[] = Array.from({ length: start.cars }, (_, k): Policy => {
-    const compound = ours.has(k) ? null : rivalNextCompound(start, k);
-    const lap = start.stopMid[k] ?? start.lapsTotal;
-    return compound === null || lap < start.lap || lap >= start.lapsTotal ? { stops: [], triggers: [] } : { stops: [{ lap, compound }], triggers: [] };
-  });
+  // the rivals on their plain policy (race-monte-carlo's one rival policy, O9; no world: the DP's wetness is constant);
+  // our cars without a stop
+  const policies: Policy[] = Array.from({ length: start.cars }, (_, k): Policy => (ours.has(k) ? { stops: [], triggers: [] } : rivalPlainPolicy(start, k, null)));
   const result = raceForecast(start, policies, { id: 0, plain: true, neutralisations: [] }, rng, { trace: true });
   return new Map((result.trace ?? []).map((t) => [t.lap, { gapMs: t.gapMs, position: t.position }]));
 }

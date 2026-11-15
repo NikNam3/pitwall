@@ -5,6 +5,8 @@ import { describe, expect, it } from 'vitest';
 import { naturalExperiments } from '../../src/forecast-score/experiments.ts';
 import { forecastCases, forecastPolicies, type Horizon } from '../../src/forecast-score/forecasts.ts';
 import { CONFIG, generated, plannedRace, SMALL, spacedField, withAppendFrames } from './support.ts';
+import { startingPoint } from '../race-forecast/start.ts';
+import { startOfStops } from '../race-monte-carlo/rival-plan.ts';
 
 const HORIZONS: readonly Horizon[] = [1, 3, 5, 10];
 
@@ -68,13 +70,18 @@ describe('forecast-score policies', () => {
     owesStop: known(true, 0),
     window: known({ lowLap: 10, midLap: 12, highLap: 14, toFlag: false }, 0),
     nextCompound: known({ hard: 0.7, medium: 0.3 }, 0),
+    switchLap: unknown('insufficientData'),
+    switchTo: unknown('insufficientData'),
     basis: 'peers',
     ...over,
   });
 
   it("a forecast table's rivals follow rival-stops", () => {
-    // Car 0: its window's middle lap onto its likeliest compound; car 1 to the flag; car 2 without a window; car 3
-    // without known odds; car 4 the likeliest of three.
+    // Ported in SP4.3c Task 18 (O9): the policies are every car's plain policy (`rivalPlainPolicy`) on the starting
+    // point forecast-field builds from these stops (`startOfStops`: forecast-field's mapping), leader on lap 5 of 30.
+    // Car 0: its window's middle lap onto its likeliest compound; car 1 to the flag; car 2 without a window: the
+    // uninformative one every planner reads (laps 6 to 30, mid 18); car 3 without known odds: the compound rule's other
+    // dry compound (on mediums, owing a stop: the hard); car 4 the likeliest of three.
     const stops: RivalStops = {
       [carId(0)]: stop({}),
       [carId(1)]: stop({ window: known({ lowLap: 30, midLap: 30, highLap: 30, toFlag: true }, 0), basis: 'noStop' }),
@@ -82,11 +89,12 @@ describe('forecast-score policies', () => {
       [carId(3)]: stop({ nextCompound: unknown('insufficientData') }),
       [carId(4)]: stop({ window: known({ lowLap: 18, midLap: 20, highLap: 22, toFlag: false }, 0), nextCompound: known({ soft: 0.2, medium: 0.5, hard: 0.3 }, 0) }),
     };
-    expect(forecastPolicies(stops, 6)).toEqual([
+    const start = startOfStops(startingPoint({ lap: 5, lapsTotal: 30, cars: Array.from({ length: 6 }, () => ({})) }), stops);
+    expect(forecastPolicies(start)).toEqual([
       { stops: [{ lap: 12, compound: 'hard' }], triggers: [] },
       { stops: [], triggers: [] },
-      { stops: [], triggers: [] },
-      { stops: [], triggers: [] },
+      { stops: [{ lap: 18, compound: 'hard' }], triggers: [] },
+      { stops: [{ lap: 12, compound: 'hard' }], triggers: [] },
       { stops: [{ lap: 20, compound: 'medium' }], triggers: [] },
       // Car 5 has no entry: no stop.
       { stops: [], triggers: [] },

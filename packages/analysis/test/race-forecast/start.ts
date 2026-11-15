@@ -190,6 +190,8 @@ export function startingPoint(spec: StartSpec): StartingPoint {
     stopMid: f((l) => new Int16Array(l), () => lapsTotal),
     stopHigh: f((l) => new Int16Array(l), () => lapsTotal),
     owesStop: f((l) => new Uint8Array(l), () => 0),
+    nextOdds: Array.from({ length: n }, () => null),
+    typeSwitch: Array.from({ length: n }, () => null),
     sets,
     wetness: { wetnessMs: 0, sdMs: 0, wet: false },
     weather: unknown('notReceived'),

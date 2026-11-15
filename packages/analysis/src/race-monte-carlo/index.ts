@@ -7,7 +7,7 @@ export type * from './types.ts';
 export { scoreCalls } from './calls.ts';
 export { fieldPositions } from './field.ts';
 export { paired, ties } from './rank.ts';
-export { hasStopAhead, rivalNextCompound } from './rivals.ts';
+export { hasStopAhead, rivalNextCompound, rivalPlainPolicy } from './rivals.ts';
 export { raceMonteCarlo, scoreAll } from './search.ts';
 export { drawnScenario } from './scenarios.ts';
 export type { WeatherLap } from './weather.ts';

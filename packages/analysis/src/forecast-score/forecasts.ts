@@ -1,7 +1,8 @@
 // `forecast-score`'s forecast cases (SP4.3a spec 7.1; plan Task 19): per leader lap L and horizon h, per car, what the
 // plain forecast from the leader's crossing of lap L is scored against at lap L + h, beside the "gaps stay" baseline.
-import { NOISE_COMPOUNDS, type CarId, type FrameNumber, type LapRecord, type Ms, type NoiseCompound, type Policy, type RivalStops, type SessionTime } from '@pitwall/domain';
+import type { CarId, FrameNumber, LapRecord, Ms, Policy, SessionTime, StartingPoint } from '@pitwall/domain';
 import type { DeepReadonly, Projection } from '@pitwall/engine/readers';
+import { rivalPlainPolicy } from '../race-monte-carlo/rivals.ts';
 import { FORECAST_SCORE_CONFIG } from './config.ts';
 import { raceLaps } from './laps.ts';
 
@@ -86,27 +87,10 @@ export function forecastCases(
   return cases;
 }
 
-/** The likeliest compound of `odds` (the first in `NOISE_COMPOUNDS` order on a tie); none without odds. */
-function likeliest(odds: DeepReadonly<Partial<Record<NoiseCompound, number>>>): NoiseCompound | undefined {
-  let best: NoiseCompound | undefined;
-  for (const c of NOISE_COMPOUNDS) {
-    const p = odds[c];
-    if (p !== undefined && (best === undefined || p > (odds[best] as number))) best = c;
-  }
-  return best;
-}
-
 /**
- * The policies of a scored forecast (plan review P7): every car of `cars` slots follows `rival-stops`' window as the
- * model would have: one stop on `window.midLap` onto its likeliest next compound; no stop when its window is not known,
- * reaches the flag (`toFlag`), or its next compound's odds are not known. An overdue car's window lies past the lap it
- * is on (rival-stops, SP4.3b F3).
+ * The policies of a scored forecast from the starting point `start` (plan review P7; SP4.3c O9): every car slot follows
+ * its plain policy, `race-monte-carlo`'s one rival policy (`rivalPlainPolicy`), under no world: the scored cases are dry.
  */
-export function forecastPolicies(stops: DeepReadonly<RivalStops>, cars: number): Policy[] {
-  return Array.from({ length: cars }, (_, k): Policy => {
-    const stop = stops[k as CarId];
-    if (stop === undefined || !stop.window.known || stop.window.value.toFlag || !stop.nextCompound.known) return { stops: [], triggers: [] };
-    const compound = likeliest(stop.nextCompound.value);
-    return compound === undefined ? { stops: [], triggers: [] } : { stops: [{ lap: stop.window.value.midLap, compound }], triggers: [] };
-  });
+export function forecastPolicies(start: StartingPoint): Policy[] {
+  return Array.from({ length: start.cars }, (_, k): Policy => rivalPlainPolicy(start, k, null));
 }

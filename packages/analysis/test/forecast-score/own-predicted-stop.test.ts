@@ -4,14 +4,13 @@
 // baseline never predicts a stop, and stop timing is scored by the experiments. A predicted stop on the last lap, and
 // another car's predicted stop, leave the case in. The natural experiments are unchanged, and after a flashback the
 // report equals a run without the undone frames (C33).
-import type { Policy, RivalStops } from '@pitwall/domain';
-import { createRng, projectionAsOf, runAsOf, type AsOfView, type DeepReadonly } from '@pitwall/engine/readers';
+import type { Policy } from '@pitwall/domain';
+import { createRng, projectionAsOf, runAsOf, type AsOfView } from '@pitwall/engine/readers';
 import { describe, expect, it } from 'vitest';
 import { actualStops, naturalExperiments } from '../../src/forecast-score/experiments.ts';
 import { forecastCases, forecastPolicies, type ForecastCase, type Horizon } from '../../src/forecast-score/forecasts.ts';
 import { prepareScore, run, type ScoreInput } from '../../src/forecast-score/job.ts';
 import { raceLaps } from '../../src/forecast-score/laps.ts';
-import { RIVAL_STOPS } from '../../src/rival-stops/index.ts';
 import { buildStartingPoint, FORECAST_UNITS } from '../../src/shared/forecast-field/index.ts';
 import { CONFIG, generated, inputAt, SMALL, viewOf } from './support.ts';
 
@@ -48,7 +47,8 @@ function predictedStops(input: ScoreInput): Map<number, number[][]> {
     const start = buildStartingPoint(asOf, outputs);
     if (!start.known) continue;
     const cars = start.value.cars;
-    const policies: Policy[] = forecastPolicies((outputs.get(RIVAL_STOPS) as DeepReadonly<RivalStops> | undefined) ?? {}, cars);
+    // ported in SP4.3c Task 18 (O9): the policies are the plain policies on the starting point built from rival-stops
+    const policies: Policy[] = forecastPolicies(start.value);
     const player = input.fixed.playerCar.known ? input.fixed.playerCar.value : undefined;
     if (player !== undefined && player < cars) policies[player] = actualStops(history, race, c.predictFrame, cars)[player] as Policy;
     out.set(c.lap, policies.map((p) => p.stops.map((s) => s.lap)));
