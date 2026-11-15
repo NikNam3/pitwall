@@ -10,9 +10,14 @@ import { zandvoortTrack } from '../../../../test-support/track.ts';
 import { guardedView } from '../../../engine/test/support/scheduler.ts';
 import { RACE_HAZARD, raceHazardAsOf, type RaceHazardOutput } from '../../src/race-hazard/index.ts';
 import { CALCULATORS } from '../units.ts';
+import { GAPS } from '../../src/gaps/index.ts';
+import { withGaps } from '../gaps/output.ts';
 
-/** What the unit declares it reads (the brief's interfaces, C41): the session (totalLaps, the lobby setting), the race's session phase, the weekend phase, the laps. */
-export const READS: readonly Dependency[] = ['session', 'spans:session-phase-race', 'spans:weekend-phase', 'laps'];
+/**
+ * What the unit declares it reads (the brief's interfaces, C41): the session (totalLaps, the lobby setting), the race's
+ * session phase, the weekend phase, the laps, and `gaps` (SP4.3c Task 6, O10: the leader's progress is `gaps`').
+ */
+export const READS: readonly Dependency[] = ['session', 'spans:session-phase-race', 'spans:weekend-phase', 'laps', { calculator: GAPS }];
 
 /** A hazard table whose bins and pmfs are easy to tell apart. */
 export const HAZARD: TrackHazard = {
@@ -69,9 +74,11 @@ export function raceHazardCalculator(): Calculator & { kind: 'quick'; compute(vi
 
 /**
  * The unit's output on `view`: its as-of form over the current view (`asOfNow`) and its scheduled run (`compute`), both
- * through the guarded view of what it declares (C41), and both the same.
+ * through the guarded view of what it declares (C41), and both the same. A view without `gaps`' output gets the
+ * calculator's own over its crossings (`withGaps`), as the scheduler runs `gaps` before it.
  */
-export function hazardOf(view: EngineView): RaceHazardOutput {
+export function hazardOf(given: EngineView): RaceHazardOutput {
+  const view = given.outputs.has(GAPS) ? given : withGaps(given);
   const g = guardedView(view, READS, { unit: RACE_HAZARD });
   const asOf = raceHazardAsOf(asOfNow(g));
   const calc = raceHazardCalculator();

@@ -25,6 +25,8 @@ import { RIVAL_STOPS, RIVAL_STOPS_CONFIG, rivalStopsAsOf, type RivalStopsOutput 
 import { rivalStopsCalculator as unguarded } from '../../src/rival-stops/calculator.ts';
 import { SESSION_REMAINING, type SessionRemaining } from '../../src/session-remaining/index.ts';
 import { sessionRemainingCalculator } from '../../src/session-remaining/calculator.ts';
+import { GAPS } from '../../src/gaps/index.ts';
+import { gapsOf } from '../gaps/output.ts';
 import { TYRE_LIFE, type TyreLife, type TyreLifeOutput } from '../../src/tyre-life/index.ts';
 import { tyreLifeCalculator } from '../../src/tyre-life/calculator.ts';
 import { carState, lap } from '../../../../test-support/builders/index.ts';
@@ -65,9 +67,10 @@ const PARAMS: GeneratorParams = {
   ],
 };
 
-/** The upstream units' outputs at frame `frame`, as the scheduled run has them then: `degradation`, `tyre-life`, `session-remaining`. */
+/** The upstream units' outputs at frame `frame`, as the scheduled run has them then: `gaps` (for `session-remaining`, SP4.3c Task 6), `degradation`, `tyre-life`, `session-remaining`. */
 function upstreamAt(race: BuilderRace, frame: number): Map<string, unknown> {
   const outputs = new Map<string, unknown>();
+  outputs.set(GAPS, gapsOf(race.viewAt(frame, { outputs })));
   outputs.set(DEGRADATION, degradationCalculator.compute(race.viewAt(frame, { outputs })));
   outputs.set(TYRE_LIFE, tyreLifeCalculator.compute(race.viewAt(frame, { outputs })));
   outputs.set(SESSION_REMAINING, sessionRemainingCalculator.compute(race.viewAt(frame, { outputs })));
