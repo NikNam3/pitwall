@@ -68,6 +68,8 @@ describe('forecast-score policies', () => {
     owesStop: known(true, 0),
     window: known({ lowLap: 10, midLap: 12, highLap: 14, toFlag: false }, 0),
     nextCompound: known({ hard: 0.7, medium: 0.3 }, 0),
+    switchLap: unknown('insufficientData'),
+    switchTo: unknown('insufficientData'),
     basis: 'peers',
     ...over,
   });

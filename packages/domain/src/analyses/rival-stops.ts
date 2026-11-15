@@ -1,6 +1,7 @@
 // Value type of the `rival-stops` calculator (SP4.3a spec 5.3): per rival the next stop's window, the next compound's odds and whether it owes a stop.
 import type { CarId } from '../ids.ts';
 import type { Known } from '../known.ts';
+import type { TyreType } from './crossover.ts';
 import type { NoiseCompound } from './driver-noise.ts';
 
 export type RivalStop = {
@@ -10,6 +11,10 @@ export type RivalStop = {
   /** Odds, sum 1. */
   nextCompound: Known<Partial<Record<NoiseCompound, number>>>;
   basis: 'peers' | 'tyreLife' | 'noStop';
+  /** The first lap `tyre-model`'s `typeDeltaMs` of another tyre type is below 0 (research 22 §1.7, SP4.3c O5); unfilled until Task 18's implement phase. */
+  switchLap: Known<number>;
+  /** The tyre type it switches to on `switchLap`. */
+  switchTo: Known<TyreType>;
 };
 
 export type RivalStops = Record<CarId, RivalStop>;

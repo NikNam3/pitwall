@@ -39,7 +39,10 @@ const DRY = ['soft', 'medium', 'hard'] as const satisfies readonly NoiseCompound
 const COMPOUNDS: readonly VisualCompound[] = ['soft', 'medium', 'hard', 'inter', 'wet'];
 const isCompound = (c: VisualCompound): c is NoiseCompound => COMPOUNDS.includes(c);
 
-const NOT_APPLICABLE: Omit<RivalStop, 'basis'> = { owesStop: unknown('notApplicable'), window: unknown('notApplicable'), nextCompound: unknown('notApplicable') };
+// SP4.3c Task 18 (supervisor first): the switch fields unfilled until the task's implement phase
+const NO_SWITCH = { switchLap: unknown('insufficientData'), switchTo: unknown('insufficientData') } as const satisfies Pick<RivalStop, 'switchLap' | 'switchTo'>;
+
+const NOT_APPLICABLE: Omit<RivalStop, 'basis'> = { owesStop: unknown('notApplicable'), window: unknown('notApplicable'), nextCompound: unknown('notApplicable'), ...NO_SWITCH };
 
 /** The car-scoped machines the unit reads, each read once (C41) and grouped by car. */
 const CAR_MACHINES = [carStatusSpans.machine, compoundRuleSpans.machine, carDriverSpans.machine] as const;
@@ -206,7 +209,7 @@ export function rivalStopsAsOf(view: AsOfView): RivalStops {
     const owes = effect.rule === undefined ? undefined : owesSecondDryCompound(effect.rule, { stints: h?.stints ?? [] }, id, set?.compound);
     const owesStop: Known<boolean> = owes === undefined ? unknown('notReceived') : known(owes, at);
     if (set === undefined) {
-      out[id] = { owesStop, window: unknown('insufficientData'), nextCompound: unknown('insufficientData'), basis: 'tyreLife' };
+      out[id] = { owesStop, window: unknown('insufficientData'), nextCompound: unknown('insufficientData'), basis: 'tyreLife', ...NO_SWITCH };
       continue;
     }
     const peers = (peerStops.get(set.compound) ?? []).filter((p) => p.car !== id);
@@ -216,8 +219,8 @@ export function rivalStopsAsOf(view: AsOfView): RivalStops {
 
     const toFlag = (basis: RivalStop['basis']): RivalStop =>
       total.known
-        ? { owesStop, window: known({ lowLap: totalLaps, midLap: totalLaps, highLap: totalLaps, toFlag: true }, at), nextCompound, basis }
-        : { owesStop, window: unknown('insufficientData'), nextCompound, basis };
+        ? { owesStop, window: known({ lowLap: totalLaps, midLap: totalLaps, highLap: totalLaps, toFlag: true }, at), nextCompound, basis, ...NO_SWITCH }
+        : { owesStop, window: unknown('insufficientData'), nextCompound, basis, ...NO_SWITCH };
     if (outOfSets(model)) {
       out[id] = toFlag('noStop');
       continue;
@@ -243,7 +246,7 @@ export function rivalStopsAsOf(view: AsOfView): RivalStops {
       }
     }
     if (ages === undefined) {
-      out[id] = { owesStop, window: unknown('insufficientData'), nextCompound, basis };
+      out[id] = { owesStop, window: unknown('insufficientData'), nextCompound, basis, ...NO_SWITCH };
       continue;
     }
     const unclamped = (age: number): number => Math.round(set.lastLap + age - set.age);
@@ -260,7 +263,7 @@ export function rivalStopsAsOf(view: AsOfView): RivalStops {
             toFlag: false,
           }
         : { lowLap: lapOf(ages.low), midLap: lapOf(ages.mid), highLap: lapOf(ages.high), toFlag: false };
-    out[id] = { owesStop, window: known(window, at), nextCompound, basis };
+    out[id] = { owesStop, window: known(window, at), nextCompound, basis, ...NO_SWITCH };
   }
   return out;
 }
