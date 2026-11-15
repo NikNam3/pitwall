@@ -1,5 +1,5 @@
 // `pitwall strategy <recording> --at-lap n --runs n` (SP4.3c Task 22a, T19; C47 as changed by the user, C38, C58):
-// `--runs n` overrides the `strategy` config's Monte Carlo run counts, `n0` and `maxScenarioPolicies`, for this call
+// `--runs n` sets the `strategy` config's `n0` to n and lifts `maxScenarioPolicies` for this call (R40)
 // only, on top of the recording's config sidecar. Without `--runs` the sidecar's values reach the job. The call stores
 // nothing, publishes nothing and writes no sidecar: the recording's folder (the recording and its sidecars) and the data
 // dir are byte-identical afterwards. `--runs` must be a whole number from 1, else a usage error, as `--at-lap` and
@@ -85,7 +85,8 @@ describe('pitwall strategy --runs', { timeout: 180_000 }, () => {
     const meta = metaLine(stdout(), PLAYER);
     expect(meta, stdout()).toBeDefined();
     expect(meta).toContain('scenarios 4000');
-    expect(meta).toContain('candidates 4000');
+    // the cap is lifted for the call (supervisor ruling R40): n scenarios per candidate, never cut by the cap
+    expect(meta).toContain(`candidates ${Number.MAX_SAFE_INTEGER}`);
   });
 
   it('without --runs the job sees the sidecar\'s counts', async () => {
