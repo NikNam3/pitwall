@@ -7,7 +7,7 @@ import { openSpansOf, type DeepReadonly, type EngineView, type IncrementalCalcul
 import type { GapsOutput } from '../gaps/index.ts';
 import { behaviourFor } from '../shared/behaviour.ts';
 import { NEUTRALISATION_READS } from '../shared/neutralised.ts';
-import { emptyBattleAcc, foldBattle, openNeutralised, paceDelta, type BattleAcc } from './battle.ts';
+import { emptyBattleAcc, foldBattle, paceDelta, type BattleAcc } from './battle.ts';
 import { RACE_INTERACTION_CONFIG } from '../race-interaction/config.ts';
 import { BATTLE, BATTLE_BEHAVIOUR, BATTLE_CONFIG, type BattleOutput } from './index.ts';
 
@@ -32,11 +32,11 @@ function lapsToDrs(drs: DrsStatus, gapMs: Known<Ms>, pace: Known<Ms>, edge: numb
   return known((gapMs.value - drsRangeMs) / edge, Math.max(gapMs.at, pace.at));
 }
 
-/** What one side needs besides the cars: the fold, the gaps, DRS, the neutralisations and the config. */
-type Context = { acc: BattleAcc; view: EngineView; gaps: GapsOutput; drs: DrsStatus; neutralised: ReturnType<typeof openNeutralised>; config: Config };
+/** What one side needs besides the cars: the fold, the gaps, DRS and the config. */
+type Context = { acc: BattleAcc; view: EngineView; gaps: GapsOutput; drs: DrsStatus; config: Config };
 
 function side(ctx: Context, ourId: CarId, theirId: CarId, isAhead: boolean): Known<BattleSide> {
-  const { acc, view, gaps, drs, neutralised, config } = ctx;
+  const { acc, view, gaps, drs, config } = ctx;
   const ours = view.live.cars[ourId];
   const theirs = view.live.cars[theirId];
   if (ours === undefined || theirs === undefined) return NOT_APPLICABLE;
@@ -44,7 +44,7 @@ function side(ctx: Context, ourId: CarId, theirId: CarId, isAhead: boolean): Kno
   const gapMs = (isAhead ? interval?.toAheadMs : interval?.toBehindMs) ?? unknown('notReceived');
 
   const { overtakeThresholdMs, drsRangeMs, minPaceSegments } = config;
-  const pace = paceDelta(acc, view, [...acc.neutralised, ...neutralised], ourId, theirId, minPaceSegments);
+  const pace = paceDelta(acc, view, ourId, theirId, minPaceSegments);
   // the closing car's edge per lap: ours on the car ahead, theirs (−PACE Δ) on the car behind
   const edge = pace.known ? (isAhead ? pace.value : -pace.value) : 0;
   const margin: Known<{ kind: 'pass' | 'hold'; ms: Ms }> = !pace.known
@@ -102,7 +102,7 @@ function output(acc: BattleAcc, view: EngineView): BattleOutput {
   // a pending weekend phase (no span yet) reads as a race grid (C14): the cards are computed, DRS is not enabled yet
   const computed = phase === undefined || phase.cards === 'computed';
   const drs = drsOf(view, phase?.cards !== 'notApplicable');
-  const ctx = { acc, view, gaps, drs, neutralised: computed && gaps !== undefined ? openNeutralised(view) : [], config: { ...BATTLE_CONFIG.read(view), drsRangeMs: RACE_INTERACTION_CONFIG.read(view).drsRangeMs } };
+  const ctx = { acc, view, gaps, drs, config: { ...BATTLE_CONFIG.read(view), drsRangeMs: RACE_INTERACTION_CONFIG.read(view).drsRangeMs } };
   const out: BattleOutput = {};
   for (const id of ourCars(view.live)) out[id] = cardOf(ctx, computed, id);
   return out;

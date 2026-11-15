@@ -3,8 +3,8 @@
 // `neutralised` (SC, VSC) and `suspended` (red flag) spans, and the `suspended` spans of qualifying and practice. The
 // owner of the neutralisation kind (SP4.3c O6): the open one, the last one (confirmed only), whether it is ending, and
 // the time-loss exclusion every caller of `timeLossEvents` passes; no unit matches these span kinds itself.
-import type { CarId, FrameNumber, MachineId, NeutralisedDetail, OpenSpan, Span } from '@pitwall/domain';
-import { membershipOf, type DeepReadonly, type EngineView, type MembershipSource } from '@pitwall/engine/readers';
+import type { MachineId, NeutralisedDetail, OpenSpan, Span } from '@pitwall/domain';
+import { spansOverlapping, type DeepReadonly, type EngineView } from '@pitwall/engine/readers';
 import type { TimeLossExcluded } from './time-loss/index.ts';
 
 /** The span kinds that are a neutralisation, by session-phase sub-machine; the readers declare each `spans:<machine>` (C41). */
@@ -46,6 +46,19 @@ export function neutralisedSpans(projection: Pick<EngineView['history'], 'spans'
     for (const span of situation.byMachine[machine] ?? []) if (isNeutralisation(machine, span)) open.push(span);
   }
   return [...closed, ...open];
+}
+
+/**
+ * The neutralisations (as `neutralisedSpans` counts them) covering at least one frame of `[fromFrame, toFrame)`, closed
+ * of the projection and open of the situation, by the projection module's span-range query (C26), per session-phase
+ * sub-machine in `NEUTRALISATION_MACHINES`' order, the closed ones before the open one.
+ */
+export function neutralisationsOverlapping(
+  source: { history: Pick<EngineView['history'], 'spans'>; situation?: Pick<EngineView['situation'], 'byMachine'> },
+  fromFrame: number,
+  toFrame: number,
+): ReadonlyArray<Neutralisation> {
+  return NEUTRALISATION_MACHINES.flatMap((machine) => spansOverlapping(source, fromFrame, toFrame, machine).filter((s) => isNeutralisation(machine, s)));
 }
 
 /**
@@ -122,29 +135,19 @@ type ExclusionSource = { history: Pick<EngineView['history'], 'spans'>; situatio
 /**
  * The one time-loss exclusion (C26, C43) every caller of `timeLossEvents` passes: a car's mini-sector from frame `from`
  * to frame `to` is excluded when a neutralisation (`isNeutralisation`: a closed one confirmed, an open one also pending
- * its confirmation) or the car's pit visit or garage spell covers its first or its last frame (`to - 1`), by the
- * projection module's membership (`membershipOf`) over those spans, closed and open. With a situation, the
- * neutralisations are those of the session-phase sub-machine of its weekend phase (C14; none while it is pending);
- * without one (a fold over closed spans alone, C31.2), those of every session-phase sub-machine of the source.
+ * its confirmation) or the car's pit visit or garage spell covers any of its frames `[from, to)` (frame `from` for an
+ * empty one), by the projection module's span-range query (`spansOverlapping`) over those spans, closed and open. With
+ * a situation, the neutralisations are those of the session-phase sub-machine of its weekend phase (C14; none while it
+ * is pending); without one (a fold over closed spans alone, C31.2), those of every session-phase sub-machine of the
+ * source.
  */
 export function timeLossExcludedOf(view: ExclusionSource): TimeLossExcluded {
-  const spans: Record<MachineId, DeepReadonly<Span>[]> = {};
-  const byMachine: Record<MachineId, DeepReadonly<OpenSpan>[]> = {};
-  const keep = (machine: MachineId, span: Neutralisation): boolean =>
-    machine === CAR_LOCATION ? NO_TIME_LOSS_LOCATIONS.includes(span.kind) : isNeutralisation(machine, span);
   const phase = view.situation === undefined ? NEUTRALISATION_MACHINES : [phaseMachineOf(view.situation)].filter((m) => m !== undefined);
-  for (const machine of [...phase, CAR_LOCATION]) {
-    const closed = (view.history.spans[machine] ?? []).filter((s) => keep(machine, s));
-    const open = (view.situation?.byMachine[machine] ?? []).filter((s) => keep(machine, s));
-    if (closed.length > 0) spans[machine] = closed;
-    if (open.length > 0) byMachine[machine] = open;
-  }
-  const source = {
-    history: { spans } as unknown as MembershipSource['history'],
-    situation: { weekendPhase: view.situation?.weekendPhase ?? { kind: 'pending' }, byMachine } as EngineView['situation'],
-  } satisfies MembershipSource;
-  const coveredAt = (carId: CarId, frame: FrameNumber): boolean => Object.keys(membershipOf(source, { frame, carId })).length > 0;
-  return (carId, from, to) => coveredAt(carId, from) || coveredAt(carId, Math.max(from, to - 1) as FrameNumber);
+  return (carId, from, to) => {
+    const end = Math.max(to, from + 1);
+    if (phase.some((machine) => spansOverlapping(view, from, end, machine).some((s) => isNeutralisation(machine, s)))) return true;
+    return spansOverlapping(view, from, end, CAR_LOCATION, carId).some((s) => NO_TIME_LOSS_LOCATIONS.includes(s.kind));
+  };
 }
 
 // `leaderLapAt` moved to its owner, `gaps` (SP4.3c Task 6, O10); re-exported only for the tests that import it from here.
