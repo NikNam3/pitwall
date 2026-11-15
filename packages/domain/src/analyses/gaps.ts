@@ -37,6 +37,8 @@ export type GapperReferenceKind = GapperReference['kind'];
  */
 export type GapperLines = {
   reference: { kind: GapperReferenceKind; carId: Known<CarId> };
+  /** Where the gapper starts: lights out when seen, else the leader's first line crossing after the join (`lap`). */
+  origin: Known<{ kind: 'lightsOut' } | { kind: 'join'; lap: number }>;
   referenceLapMs: Known<Ms>;
   /** Only the cars in the window: our cars and every car within ±`windowMs` of one of them (leaving beyond ±(`windowMs` + `windowExitMs`)). */
   cars: {
