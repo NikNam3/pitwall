@@ -193,7 +193,7 @@ function pushTo<K, V>(map: Map<K, V[]>, key: K, value: V): void {
 
 /** Every car's models as of `view`'s frame. The cars: those car-status has in the session, else (a stored session) those with laps. */
 export function carModelsOf(view: AsOfView, config: ResidualConfig): Map<CarId, CarModels> {
-  const degradation = (view.outputs.get('degradation') as DegradationOutput | undefined) ?? {};
+  const degradation = (view.outputs.get('degradation') as DegradationOutput | undefined)?.stints ?? {};
   const wetness = view.outputs.get('track-wetness') as TrackWetness | undefined;
   const free = freeAirLaps(view.history, config.freeAirGapMs);
 

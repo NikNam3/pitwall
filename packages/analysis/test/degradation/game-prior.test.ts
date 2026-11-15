@@ -35,7 +35,7 @@ function viewWith(sets: TyreSet[]): EngineView {
 
 /** The start prior's ν of car 0's first stint. */
 const startNu = (view: EngineView): number => {
-  const stint = Object.values(calc.compute(view))[0]?.[0];
+  const stint = Object.values(calc.compute(view).stints)[0]?.[0];
   if (stint === undefined) throw new Error('no stint');
   return stint.startPrior.nuMsPerLap;
 };

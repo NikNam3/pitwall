@@ -191,6 +191,7 @@ export function stintOf(c: CarLaps): StintDegradation {
     nuSdMs: known(5, at),
     basis: c.wear === 'hidden' ? 'age' : 'wear',
     fuelCorrected: true,
+    fuelIncluded: false,
     source: { kind: 'session', sessionShare: 1, parts: `${laps.length} laps` },
     cov: known([[100, 0], [0, 1]], at),
     startPrior: { nuMsPerLap: 0, nuSdMs: 30, alphaOffsetMs: known(0, 0), source: { kind: 'default', note: 'test', sessionShare: 0, parts: 'default' } },
@@ -249,7 +250,7 @@ export function rowView(
   }
   const byMachine: Record<string, OpenSpan[]> = {};
   for (const span of open) (byMachine[span.machine] ??= []).push(span);
-  const degradation: DegradationOutput = Object.fromEntries(cars.map((c) => [carId(c.car), [stintOf(c)]]));
+  const degradation: DegradationOutput = { stints: Object.fromEntries(cars.map((c) => [carId(c.car), [stintOf(c)]])), standIn: unknown('notApplicable') };
   return engineView({
     cars: states,
     sessionTime: startOf(0, lastLap + 1) + 1_000,

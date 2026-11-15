@@ -6,6 +6,7 @@
 //    car's filter leaves out gives no zone: a pass caused by a stop or made on lap 1 never counts.
 //  - Its pace advantage is the leader's pace minus its own, each the median of the car's free-air laps' residuals
 //    against the field's median lap (its usable laps' when it never had free air), so the race's fuel and tyre trend cancel.
+//    The residuals are `degradation`'s (`fieldResiduals`, SP4.3c Task 13, O2: a car's pace has one owner).
 //    Which laps are free air is the shared judgement (`freeAirLaps` with `driver-noise`'s `freeAirGapMs`, C43).
 //  - DRS is relative (spec 5.4): the follower is within `drsRangeMs` of the car ahead at the detection point of the DRS
 //    zone that leads into the braking zone, and that car is not itself within range of its own car ahead.
@@ -27,6 +28,7 @@ import {
   type TrackData,
 } from '@pitwall/domain';
 import { membershipOf, type DeepReadonly, type MembershipSource, type Projection } from '@pitwall/engine/readers';
+import { fieldResiduals } from '../degradation/residuals.ts';
 import { DRIVER_NOISE_CONFIG } from '../driver-noise/config.ts';
 import { touchesNeutralisation } from '../lap-classes/index.ts';
 import { freeAirLaps } from '../shared/free-air.ts';
@@ -320,27 +322,15 @@ export function episodesOf(
     return order;
   };
 
-  // each car's pace: the median residual of its free-air laps (the shared rule) against the field's median lap, else of
-  // its usable laps
-  const fieldMedian = new Float64Array(laps).fill(Number.NaN);
-  for (let lap = 1; lap <= lastLap; lap++) {
-    const lapTimes: number[] = [];
-    for (const car of cars) {
-      const record = lapOf(car, lap);
-      if (record !== undefined && isUsable(car, lap)) lapTimes.push(record.lapTimeMs);
-    }
-    const lapMedian = median(lapTimes);
-    if (lapMedian !== undefined) fieldMedian[lap] = lapMedian;
-  }
+  // each car's pace: the median of `degradation`'s residuals against the field (O2, C43) over its free-air laps (the
+  // shared rule), else over its usable laps
+  const residuals = fieldResiduals(current, isUsable);
   const pace = new Float64Array(carSlots).fill(Number.NaN);
   const free = freeAirLaps(history, freeAirGapMs);
   for (const car of cars) {
     const freeAir: number[] = [];
     const all: number[] = [];
-    for (let lap = 1; lap <= lastLap; lap++) {
-      const record = lapOf(car, lap);
-      if (record === undefined || !isUsable(car, lap)) continue;
-      const residual = record.lapTimeMs - nth(fieldMedian, lap);
+    for (const [lap, residual] of residuals.get(car) ?? []) {
       all.push(residual);
       if (free.isFree(car, lap)) freeAir.push(residual);
     }

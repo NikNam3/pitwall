@@ -84,7 +84,7 @@ describe('degradation priors', () => {
         cars: [carState({ tyres: { actualCompound: 'C2', visualCompound: 'medium', age: 7 } })],
         history: { laps: [...first, ...second], stints: [stintRecord({ firstLap: 1, lastLap: 8 })], pitStops: [stop] },
       }),
-    )[carId(0)]!;
+    ).stints[carId(0)]!;
     const usesOf = (laps: readonly { lapNumber: number; use: LapUse }[]) => Object.fromEntries(laps.map((l) => [l.lapNumber, l.use]));
     const lapUse = DEGRADATION_PRIORS.lapUse!;
 

@@ -28,7 +28,7 @@ export function priorOffsets(view: Pick<AsOfView, 'track' | 'config'>): Record<F
  * car's pace profiled out, the offsets are the Gaussian posterior under the prior (the track file's offsets, sd
  * `compoundOffsetPriorSdMs`): a compound no car ran against another keeps the prior.
  */
-function fittedOffsets(degradation: DeepReadonly<DegradationOutput>, prior: Record<Fitted, number>, priorSdMs: number): Record<Fitted, number> {
+function fittedOffsets(degradation: DeepReadonly<DegradationOutput['stints']>,prior: Record<Fitted, number>, priorSdMs: number): Record<Fitted, number> {
   const n = FITTED.length;
   const precision = 1 / (priorSdMs * priorSdMs);
   // the normal equations A·o = b over the fitted offsets
@@ -98,7 +98,7 @@ function solve(a: number[][], b: number[]): number[] {
 export function lapModelParams(view: AsOfView, outputs: ReadonlyMap<CalculatorId, unknown>): LapModelParams {
   const c = configOf(FORECAST_FIELD_CONFIG, view);
   const slick = configOf(SLICK_CONFIG, view);
-  const degradation = (outputs.get(DEGRADATION) as DeepReadonly<DegradationOutput> | undefined) ?? {};
+  const degradation = (outputs.get(DEGRADATION) as DeepReadonly<DegradationOutput> | undefined)?.stints ?? {};
   const offsets = fittedOffsets(degradation, priorOffsets(view), c.compoundOffsetPriorSdMs);
   return {
     compoundOffsetMs: { soft: offsets.soft, medium: 0, hard: offsets.hard, inter: c.interOffsetMs, wet: c.wetOffsetMs },

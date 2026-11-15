@@ -438,7 +438,7 @@ export function tyreModelOf(view: AsOfView, cars: readonly CarId[], tyresOf: (ca
     const tyres = tyresOfCar(id);
     const laps = lapsOf.get(id) ?? [];
     const own = onFittedSet(currentStintLaps(view.history, id, laps), tyres.set);
-    const fitNuMsPerLap = stintFitOf(degradation?.[id], tyres.set, own);
+    const fitNuMsPerLap = stintFitOf(degradation?.stints[id],tyres.set, own);
     const car: CarCtx = { id, human: effect.human === true, tyres, priorSets: usable(tyres.sets) ?? ourSets, own, fitNuMsPerLap };
     const compounds = Object.fromEntries(NOISE_COMPOUNDS.map((compound) => [compound, compoundOf(v, car, compound)])) as Record<NoiseCompound, TyreModelCompound>;
     const fitted = tyres.set !== undefined && isNoise(tyres.set.visualCompound) ? compounds[tyres.set.visualCompound].wearRatePct : undefined;

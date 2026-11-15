@@ -23,7 +23,7 @@ import { lapsByCar } from '../shared/stint-laps.ts';
 import { bestFreshSet, gameSetNuMsPerLap } from '../shared/tyre-prior.ts';
 import { TYRE_MODEL_CONFIG } from '../tyre-model/config.ts';
 import { DEGRADATION_BEHAVIOUR, phaseRow, type DegradationEffect } from './behaviour.ts';
-import { DEGRADATION, DEGRADATION_CONFIG, type DegradationOutput, type StartPrior, type StintDegradation } from './index.ts';
+import { DEGRADATION, DEGRADATION_CONFIG, type DegradationOutput, type LeaderStandIn, type StartPrior, type StintDegradation } from './index.ts';
 import type { FilterPrior } from './kalman.ts';
 import { DEGRADATION_COMPOUNDS, defaultStart, priorKey } from './priors.ts';
 import { fitLaps, fuelResolver } from './stint-fit.ts';
@@ -35,9 +35,12 @@ type Stint = DeepReadonly<StintRecord>;
  * Where a stint's `ν` starts: the prior, the start the stint carries (`StartPrior`) and how to name the estimate's
  * source once the session's share is known.
  */
-type Start = { prior: FilterPrior; startPrior: StartPrior; source: (sessionShare: number, paceLaps: number) => EstimateSource };
+type Start = { prior: FilterPrior; startPrior: StartPrior; source: (sessionShare: number, paceLaps: number | typeof NEWEST_LAP) => EstimateSource };
 
-const lapsWord = (n: number): string => `${n} ${n === 1 ? 'lap' : 'laps'}`;
+/** The parts word of a base pace taken from the car's newest lap (no fitted stint). */
+const NEWEST_LAP = 'newest lap';
+
+const lapsWord = (n: number | typeof NEWEST_LAP): string => (n === NEWEST_LAP ? n : `${n} ${n === 1 ? 'lap' : 'laps'}`);
 
 /** The source of a start from the game's tyre prior. */
 const GAME_PRIOR_SOURCE: EstimateSource = { kind: 'default', note: "the game's tyre sets: loss per % × k · 70 / usableLife (research 22)", sessionShare: 0, parts: 'game prior' };
@@ -223,11 +226,11 @@ export function degradationAsOf(view: AsOfView): DegradationOutput {
       : // without our car a rival's fuel hidden by realism stays unknown: no laps to fill it from
         { isRace: false, ourCar: -1 as CarId, ourLaps: () => [], classes, rate, fallbackBurnKgPerLap: config.fallbackBurnKgPerLap },
   );
-  const out: DegradationOutput = {};
+  const out: DegradationOutput['stints'] = {};
   for (const carId of rows.cars) {
     const effect: DegradationEffect = Object.assign({}, session, ...rows.car(carId));
     if (effect.inSession !== true) continue;
-    out[carId] = stintsOf(lapsBy.get(carId) ?? [], recordsBy.get(carId) ?? []).map((s, i): StintDegradation => {
+    const stints = stintsOf(lapsBy.get(carId) ?? [], recordsBy.get(carId) ?? []).map((s, i): StintDegradation & { start: Start } => {
       const start = startOf(view, s.visual, gameNuOf(view, s.laps));
       const fit = fitLaps(s.laps, fuelOf, start.prior, config, classes, rate);
       const pnn = fit.state.cov[1][1];
@@ -245,15 +248,86 @@ export function degradationAsOf(view: AsOfView): DegradationOutput {
         nuSdMs: known(Math.sqrt(Math.max(0, pnn)), now),
         basis: fit.basis,
         fuelCorrected: fit.fuelCorrected,
+        // a fit on lap times without their fuel holds the fuel in its α (B9)
+        fuelIncluded: !fit.fuelCorrected,
         source: start.source(sessionShare, fit.paceLaps.length),
         // the same run's posterior: `fitStint`'s, which needs two laps
         cov: fit.paceLaps.length < 2 ? unknown('insufficientData') : known(fit.state.cov, now),
         startPrior: start.startPrior,
         laps: fit.laps,
+        start,
       };
     });
+    out[carId] = withNewestLapPrior(stints, now).map(({ start: _start, ...stint }) => stint);
   }
-  return out;
+  // a competing car without any lap (still on lap 1): the field's stand-in (the third link of its base pace), no stint
+  const needed = rows.cars.some((carId) => out[carId] !== undefined && (lapsBy.get(carId) ?? []).length === 0);
+  return { stints: out, standIn: needed ? leaderStandIn(out, lapsBy, fuelOf, config, now) : unknown('notApplicable') };
+}
+
+/** The parts word of a base pace stood in by the leader's newest lap (a car without any lap). */
+const LEADER_STAND_IN = 'leader stand-in';
+
+/**
+ * The field's stand-in for a car without any completed lap (SP4.3c Task 13, O2, R47; moved from `forecast-field`): the
+ * leader's newest lap (the car in the session with the most laps, the first to complete its newest, C43: this unit's
+ * judgement alone) less that lap's fuel term, plus `noLapStandInOffsetMs`; the lap time itself where its fuel is
+ * unknown (`fuelIncluded`). It runs on the leader's compound, from the default `ν` and its sd; its source names the
+ * stand-in. Only while the leader's newest lap is lap 1 (the cars without a lap are still on it); `notApplicable`
+ * before any car has a lap.
+ */
+function leaderStandIn(
+  out: DegradationOutput['stints'],
+  lapsBy: ReadonlyMap<CarId, readonly Lap[]>,
+  fuelOf: (lap: Lap) => Known<number>,
+  config: (typeof DEGRADATION_CONFIG)['defaults'],
+  now: Ms,
+): Known<LeaderStandIn> {
+  let lap: Lap | undefined;
+  for (const carId of Object.keys(out).map(Number) as CarId[]) {
+    const newest = lapsBy.get(carId)?.at(-1);
+    if (newest === undefined) continue;
+    if (lap === undefined || newest.lapNumber > lap.lapNumber || (newest.lapNumber === lap.lapNumber && newest.completedAt < lap.completedAt)) lap = newest;
+  }
+  // only on the first lap: past it a car without a lap is missing data, not a car still on lap 1 (C3)
+  if (lap === undefined || lap.lapNumber !== 1) return unknown('notApplicable');
+  const fuel = fuelOf(lap);
+  const ms = (fuel.known ? lap.lapTimeMs - config.gammaMsPerKg * fuel.value : lap.lapTimeMs) + config.noLapStandInOffsetMs;
+  const standIn: LeaderStandIn = {
+    fromCarId: lap.carId,
+    lapNumber: lap.lapNumber,
+    basePaceMs: ms,
+    fuelIncluded: !fuel.known,
+    nuMsPerLap: config.defaultNuMsPerLap,
+    nuSdMs: config.defaultNuSdMs,
+    compound: lap.visualCompound,
+    source: {
+      kind: 'default',
+      note: "the leader's newest lap less its fuel term, plus noLapStandInOffsetMs (degradation's config)",
+      sessionShare: 0,
+      parts: LEADER_STAND_IN,
+    },
+  };
+  return known(standIn, now);
+}
+
+/**
+ * A car's pace before any of its stints is fitted (SP4.3c Task 13, O2; moved from `forecast-field`): its newest stint's
+ * base pace is its newest lap's time less its fuel term (the lap's corrected time), or the lap time itself where the
+ * lap's fuel is unknown (`fuelIncluded`); its source names the newest lap. A car with a fitted stint keeps every stint
+ * as fitted; a car without a lap has no pace (C3).
+ */
+function withNewestLapPrior<S extends StintDegradation & { start: Start }>(stints: S[], now: Ms): S[] {
+  const newest = stints.at(-1);
+  const lap = newest?.laps.at(-1);
+  if (newest === undefined || lap === undefined || stints.some((s) => s.basePaceMs.known)) return stints;
+  const prior: S = {
+    ...newest,
+    basePaceMs: known(lap.correctedMs.known ? lap.correctedMs.value : lap.lapTimeMs, now),
+    fuelIncluded: !lap.correctedMs.known,
+    source: newest.start.source(0, NEWEST_LAP),
+  };
+  return [...stints.slice(0, -1), prior];
 }
 
 /** Per car in the session (its rows, `DEGRADATION_BEHAVIOUR`): its stints, oldest first; the form at the current frame. */

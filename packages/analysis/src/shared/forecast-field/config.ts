@@ -51,11 +51,6 @@ export const FORECAST_FIELD_CONFIG = defineConfig('forecast-field', {
    * model's zero offset; final review F4).
    */
   unknownCompound: 'medium' as string,
-  /**
-   * A competing car without a completed lap (still on lap 1) takes the leader's newest lap as its stand-in, its lap time
-   * plus this (ms). Source: pitwall estimate (a car on lap 1 runs at about the leader's pace; final review F4).
-   */
-  noLapStandInOffsetMs: 0,
   /** Whether a car whose driver is unknown (no car-driver span yet) is modelled as a human. Source: pitwall estimate (the AI, the field's majority; final review F4). */
   unknownDriverIsHuman: false as boolean,
 });
