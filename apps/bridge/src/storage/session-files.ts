@@ -31,6 +31,12 @@ export type SessionFileOptions = {
   onError: (error: unknown) => void;
 };
 
+/**
+ * A session's recording continued after a bridge restart (C59): the writer `PwrecWriter.resume` returned, and the
+ * origin that puts the new run's receive times on the file's record times.
+ */
+export type ResumedSessionFileOptions = { path: string; writer: PwrecWriter; originMs: number };
+
 /** One session's datagrams, byte for byte. Never throws: every file error goes to `onError`. */
 export class SessionFile {
   readonly path: string;
@@ -38,10 +44,15 @@ export class SessionFile {
   readonly #originMs: number;
   #lastT = 0;
 
-  constructor(opts: SessionFileOptions) {
-    this.path = join(opts.dir, opts.name);
+  constructor(opts: SessionFileOptions | ResumedSessionFileOptions) {
     this.#originMs = opts.originMs;
-    this.#writer = openWriter(this.path, opts);
+    if ('writer' in opts) {
+      this.path = opts.path;
+      this.#writer = opts.writer;
+    } else {
+      this.path = join(opts.dir, opts.name);
+      this.#writer = openWriter(this.path, opts);
+    }
   }
 
   get position(): SessionFilePosition {

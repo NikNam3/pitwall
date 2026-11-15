@@ -170,6 +170,11 @@ export class WeekendRepository {
     return (this.#statements.newestTrack.get() as number | undefined) ?? null;
   }
 
+  /** The row stored under `key`, with its cars, rules version and completeness; `undefined` when none is. */
+  sessionOf(key: SessionKey): StoredSessionRow | undefined {
+    return this.#row(key);
+  }
+
   /** The weekend's stale sessions (`isStale`) in start order. */
   staleSessionsOf(weekendId: string): StoredSessionRow[] {
     return this.sessionsOf(weekendId).filter((row) => isStale(row, this.#rulesVersion));

@@ -86,9 +86,13 @@ export class SessionStorage {
     }
   }
 
-  /** The session starts: live, its row and cars are written and a log stored under its key is replaced (the newest run wins). */
-  start(row: SessionRow): void {
-    if (this.#o.mode === 'append') this.#access?.writer.startSession(row);
+  /**
+   * The session starts: live, its row and cars are written. `continued`: the run continues the session's stored
+   * recording (C59), so a log stored under its key with this rules version is kept and only appended to; any other
+   * stored log under its key is replaced whole (C24, C61).
+   */
+  start(row: SessionRow, opts: { continued: boolean }): void {
+    if (this.#o.mode === 'append') this.#access?.writer.startSession(row, opts);
   }
 
   /** The session's row and cars whenever its identity or its teammate changed (the newest wins); live only. */
@@ -103,18 +107,19 @@ export class SessionStorage {
 
   /**
    * The session ended with `log` complete (its closing spans in it): live, the rest is appended and the session marked
-   * complete; a rebuild replaces the stored log whole. `interrupted`: a rebuild that was stopped before the recording's
-   * end writes nothing, so the stored log stays as it was (C24).
+   * complete; a rebuild replaces the stored log whole. `interrupted`: the input was stopped before the session ended
+   * (a bridge stop, a stopped rebuild), so its closing spans never happened: nothing is written and the stored log
+   * stays as it was, a live one incomplete, to be continued by the next run (C24, C38, C59).
    */
   finish(row: SessionRow, log: DeepReadonly<EngineState['log']>, opts: { interrupted: boolean }): void {
     const writer = this.#access?.writer;
-    if (writer === undefined) return;
+    if (writer === undefined || opts.interrupted) return;
     if (this.#o.mode === 'append') {
       writer.writeLog(keyOf(row), log);
       if (this.#access !== undefined) writer.complete(keyOf(row));
       // Stored complete, unless the write failed (storage then is off).
       if (this.#access !== undefined) this.#o.onStored?.();
-    } else if (!opts.interrupted) {
+    } else {
       writer.replaceLog(row, log, this.#o.rulesVersion);
     }
   }

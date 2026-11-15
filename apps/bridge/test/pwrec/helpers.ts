@@ -1,4 +1,6 @@
 // apps/bridge/test/pwrec/helpers.ts — builds .pwrec byte streams and drains readPwrec in tests
+import { readFileSync } from 'node:fs';
+import { constants, gunzipSync } from 'node:zlib';
 import { readPwrec } from '../../src/pwrec/reader.ts';
 
 const enc = new TextEncoder();
@@ -24,6 +26,22 @@ export const concat = (...parts: Uint8Array[]): Uint8Array => {
   parts.reduce((at, p) => (out.set(p, at), at + p.length), 0);
   return out;
 };
+/** Every record of a `.pwrec.gz` file, of every kind, as its decompressed stream holds it (leniently, like the readers). */
+export function rawRecords(path: string): Array<{ kind: number; t: number; payload: Uint8Array }> {
+  const bytes = gunzipSync(readFileSync(path), { finishFlush: constants.Z_SYNC_FLUSH });
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  let at = 10 + view.getUint32(6, true);
+  const out = [];
+  while (bytes.length - at >= 11) {
+    const len = view.getUint16(at + 9, true);
+    if (at + 11 + len > bytes.length) break;
+    out.push({ kind: view.getUint8(at), t: view.getFloat64(at + 1, true), payload: new Uint8Array(bytes.subarray(at + 11, at + 11 + len)) });
+    at += 11 + len;
+  }
+  return out;
+}
+/** The resume record (kind 1) of a restart at `wallClockMs`: its payload is the restart's ISO 8601 wall time, UTF-8. */
+export const resumeRecord = (t: number, wallClockMs: number): Uint8Array => pwrecRecord(1, t, enc.encode(new Date(wallClockMs).toISOString()));
 export async function drain(path: string) {
   const it = readPwrec(path);
   const records = [];
