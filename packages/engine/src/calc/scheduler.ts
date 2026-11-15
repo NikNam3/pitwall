@@ -158,8 +158,9 @@ const isDue = (cadence: Cadence, lastRunAt: SessionTime, slot: Slot, pending: Pe
   if (cadence === 'frame') return true;
   const { before, after, rewound } = pending.delta;
   if (typeof cadence === 'object') {
-    if ('hz' in cadence) return now < lastRunAt || now - lastRunAt >= 1000 / cadence.hz;
-    return rewound !== undefined || cadence.onChange.some((trigger) => hasChange(trigger, slot, pending, input));
+    const rateDue = (hz: number | undefined): boolean => hz !== undefined && (now < lastRunAt || now - lastRunAt >= 1000 / hz);
+    if (!('onChange' in cadence)) return rateDue(cadence.hz);
+    return rewound !== undefined || cadence.onChange.some((trigger) => hasChange(trigger, slot, pending, input)) || rateDue(cadence.hz);
   }
   // A rewind discards history, so event calculators run again to catch up with it.
   switch (cadence) {
