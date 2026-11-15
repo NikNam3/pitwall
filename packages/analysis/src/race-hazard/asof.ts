@@ -3,8 +3,9 @@
 // `byFraction` bin whose `upTo` is at or above (n − 0.5) / totalLaps (ruling R22), times the lobby factor. No start while
 // a neutralisation is out and on the lap after it ends: under an open one the current lap and the next are 0 and a later
 // lap's chance is the table's times the chance it has ended at least one lap before (its laps-left pmf).
-import { known, unknown, type MachineId, type NeutralisedDetail, type RaceHazard, type TrackHazard } from '@pitwall/domain';
+import { known, unknown, type MachineId, type RaceHazard, type TrackHazard } from '@pitwall/domain';
 import type { AsOfView, DeepReadonly } from '@pitwall/engine/readers';
+import { isEnding, lastNeutralisation, openNeutralisation } from '../shared/neutralised.ts';
 import { rowOf, type RaceHazardEffect } from './behaviour.ts';
 import { RACE_HAZARD_CONFIG } from './config.ts';
 
@@ -83,13 +84,13 @@ export function raceHazardAsOf(view: AsOfView): RaceHazard {
   const config = RACE_HAZARD_CONFIG.read(view);
   const lobbyFactor = { off: 0, reduced: config.reducedFactor, standard: 1, increased: config.increasedFactor }[lobby.value];
 
-  // the last closed neutralisation (C20: closed spans in the projection)
-  const closed = view.history.spans[PHASES] ?? [];
-  const lastNeutralised = closed.findLast((s) => s.kind === 'neutralised');
+  // the last closed SC or VSC, confirmed only (C18, C20: closed spans in the projection)
+  const lastNeutralised = lastNeutralisation(view.history, view.situation, ['SC', 'VSC']);
 
-  const activeSpan = effect === 'active' ? open : undefined;
-  const activeDetail = activeSpan?.detail as DeepReadonly<NeutralisedDetail> | undefined;
-  const activeCondition = activeDetail === undefined ? undefined : activeDetail.car === 'SC' ? 'sc' : 'vsc';
+  // the SC or VSC out now (a row `active`), from the one owner of the neutralisation kind
+  const now = effect === 'active' ? openNeutralisation(view) : null;
+  const activeSpan = now !== null && now.kind !== 'red' ? now.span : undefined;
+  const activeCondition = now?.kind === 'SC' ? 'sc' : now?.kind === 'VSC' ? 'vsc' : undefined;
   const { done, doneAtStart, doneBeforeEnd } = leaderLaps(
     view.history.laps,
     activeSpan?.startFrame,
@@ -98,12 +99,11 @@ export function raceHazardAsOf(view: AsOfView): RaceHazard {
   );
   const current = effect === 'fromLapOne' ? 1 : done + 1;
   // the last closed one ended in lap `doneBeforeEnd + 1`: no start then or on the lap after
-  const blockedThrough = lastNeutralised === undefined ? 0 : doneBeforeEnd + 2;
+  const blockedThrough = lastNeutralised === null ? 0 : doneBeforeEnd + 2;
 
   let active: Value['active'] = null;
-  if (activeDetail !== undefined && activeCondition !== undefined) {
-    const returning = activeDetail.stages.some((s) => s.stage !== 'deployed');
-    active = { condition: activeCondition, remainingLaps: lapsLeft(hazard.durationLaps[activeCondition], done - doneAtStart, returning) };
+  if (activeSpan !== undefined && activeCondition !== undefined) {
+    active = { condition: activeCondition, remainingLaps: lapsLeft(hazard.durationLaps[activeCondition], done - doneAtStart, isEnding(activeSpan)) };
   }
 
   const byLap: Value['byLap'] = [];

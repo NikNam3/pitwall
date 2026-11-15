@@ -2,7 +2,6 @@
 // Band advisories are `car-bands`' judgement of the car's judged lap (see `bandChannels`), so they change at a lap's end only.
 import {
   ourCars,
-  sessionPhaseRaceSpans,
   type PendingPenaltyDetail,
   type TimePenaltyDetail,
   type WarnedDetail,
@@ -15,7 +14,6 @@ import {
   type InsightCategory,
   type Known,
   type LapRecord,
-  type NeutralisedDetail,
   type Range,
   type TyreWear,
 } from '@pitwall/domain';
@@ -26,6 +24,7 @@ import { CAR_BANDS, CAR_BANDS_CONFIG } from '../car-bands/index.ts';
 import { DAMAGE } from '../damage/index.ts';
 import { FUEL } from '../fuel/index.ts';
 import { behaviourFor } from '../shared/behaviour.ts';
+import { isEnding, openNeutralisation } from '../shared/neutralised.ts';
 import { warningInCycle } from '../shared/penalties.ts';
 import { TYRE_WEAR } from '../tyre-wear/index.ts';
 import { ALARMS, ALARMS_BEHAVIOUR, ALARMS_CONFIG, type AlarmsEffect, type AlarmsOutput } from './index.ts';
@@ -170,14 +169,14 @@ const penaltyAlarms = (view: EngineView, id: CarId, effect: AlarmsEffect, make: 
 };
 
 /**
- * Whether the band alarms are hidden now: a row asks for it (`neutralised`) and the neutralisation has not reached its
- * `returning` stage yet.
+ * Whether the band alarms are hidden now: a row asks for it (`neutralised`) and the open neutralisation is not ending
+ * yet (`isEnding`, the one owner's).
  */
-const bandsHidden = (view: EngineView, effect: AlarmsEffect): boolean =>
-  effect.bandsHidden === true &&
-  !openSpansOf(view, sessionPhaseRaceSpans.machine).some(
-    (span) => span.kind === 'neutralised' && (span.detail as NeutralisedDetail).stages.some((s) => s.stage === 'returning'),
-  );
+const bandsHidden = (view: EngineView, effect: AlarmsEffect): boolean => {
+  if (effect.bandsHidden !== true) return false;
+  const now = openNeutralisation(view);
+  return now === null || !isEnding(now.span);
+};
 
 const alarmsOf = (view: EngineView, id: CarId, judged: Lap | undefined, config: Config): Insight[] => {
   const make: Make = (kind, severity, category, channel, params) => ({

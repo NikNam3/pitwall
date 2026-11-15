@@ -31,8 +31,9 @@ export const scenarioDraws = (start: StartingPoint, base: number, id: number): D
 
 /**
  * The neutralisations of one scenario. `hazard.byLap[i]` and `vscByLap[i]` are the start chances on lap `start.lap + i`;
- * one lasting d laps from lap n is out on n … n + d − 1 (`scDur[d − 1]`). None starts while one is out or on the lap
- * after it ends (`race-hazard`). One out now (`active`) runs from `start.lap` for its drawn laps left.
+ * one lasting d laps from lap n is out on n … n + d − 1 (`scDur[d − 1]`). None of the drawn ones starts while one drawn
+ * before it is out or on the lap after it ends. One out now (`active`) runs from `start.lap` for its drawn laps left;
+ * when a new one may start after it is `race-hazard`'s `allowed`, already in its chances, so no lap is blocked here.
  */
 export function drawNeutralisations(start: StartingPoint, hazard: McInput['hazard'], draws: Draws): Neutralisation[] {
   const key = streamKey(draws, start.cars, 0);
@@ -42,7 +43,6 @@ export function drawNeutralisations(start: StartingPoint, hazard: McInput['hazar
     const left = pick(hazard.active.remaining, uniform(key, MC_PURPOSE.activeLength, 0));
     const toLap = Math.min(start.lap + left, start.lapsTotal);
     out.push({ kind: hazard.active.condition, fromLap: start.lap, toLap });
-    free = toLap + 2;
   }
   for (let i = 0; i < hazard.byLap.length; i++) {
     const lap = start.lap + i;

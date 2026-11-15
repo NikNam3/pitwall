@@ -153,7 +153,7 @@ export function run(input: ScoreInput, rng: Rng): ForecastScoreReport {
   };
 
   // the actual SC and VSC periods (an experiment's scenario: it isolates the stop, every other event as it happened)
-  const periods = neutralisedSpans(history, situation).filter((s) => s.kind === 'neutralised');
+  const periods = neutralisedSpans(history, situation).filter((s) => neutralisationKind(s) !== 'red');
   const scenarioFrom = (frame: FrameNumber, lapsTotal: number): Scenario => ({
     id: 0,
     plain: true,

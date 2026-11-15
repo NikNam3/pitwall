@@ -7,11 +7,12 @@ import type { AsOfView, DeepReadonly, MembershipSource, Projection } from '@pitw
 import { tyreTypeOf } from '@pitwall/domain';
 import type { DegradationOutput, StintDegradation } from '../degradation/index.ts';
 import { freeAirLaps } from '../shared/free-air.ts';
+import { timeLossExcludedOf } from '../shared/neutralised.ts';
 import { lapsByCar } from '../shared/stint-laps.ts';
 import { madSigma, median } from '../shared/stats.ts';
 import { membershipByStretch } from '../shared/stretch-membership.ts';
 import { timeLossEvents } from '../shared/time-loss/index.ts';
-import { rowOf } from './behaviour.ts';
+import { isRaceAt, rowOf } from './behaviour.ts';
 import type { SessionEstimate } from './shrink.ts';
 
 /** The thresholds the estimates read (`DRIVER_NOISE_CONFIG`, and the time-loss detection's `incidents`/`damage` config). */
@@ -240,12 +241,15 @@ export function carModelsOf(view: AsOfView, config: ResidualConfig): Map<CarId, 
     for (const s of statusOpen) if (s.carId !== undefined && rowOf('car-status', s.kind).inSession === true) cars.add(s.carId);
   } else for (const id of lapsBy.keys()) cars.add(id);
 
-  // the human time-loss events, only where a human model has laps (C45: the shared pure function over the projection)
+  // the human time-loss events, only where a human model has laps (C45: the shared pure function over the projection),
+  // with the one exclusion (`timeLossExcludedOf`: neutralisations, the car's pit visits and garage spells, C26); in the
+  // race only, where the models give values (`isRaceAt`): outside it every value is `notApplicable`
   let events: Map<string, number[]> | undefined;
   const eventsOf = (): Map<string, number[]> => {
     if (events !== undefined) return events;
     events = new Map();
-    for (const e of timeLossEvents(view.history, config.timeLoss, () => false)) pushTo(events, `${e.carId}:${e.lap}`, e.lossMs);
+    if (!isRaceAt(view)) return events;
+    for (const e of timeLossEvents(view.history, config.timeLoss, timeLossExcludedOf(view))) pushTo(events, `${e.carId}:${e.lap}`, e.lossMs);
     return events;
   };
 

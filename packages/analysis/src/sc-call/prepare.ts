@@ -2,8 +2,9 @@
 // and, per our car, `rejoin`'s rejoin position, loss and loss source per condition (as the 4.2 calculator took them),
 // whether the car already boxed under the neutralisation out now, and its behaviour row (C44). Structured-cloneable
 // (C51).
-import { unknown, type CarId, type EstimateSource, type Known, type Ms, type NeutralisedDetail, type Rejoin } from '@pitwall/domain';
+import { unknown, type CarId, type EstimateSource, type Known, type Ms, type Rejoin } from '@pitwall/domain';
 import type { CalculatorId, EngineView } from '@pitwall/engine/readers';
+import { openNeutralisation } from '../shared/neutralised.ts';
 import { RACE_HAZARD } from '../race-hazard/id.ts';
 import { REJOIN, type RejoinOutput } from '../rejoin/index.ts';
 import { behaviourFor } from '../shared/behaviour.ts';
@@ -49,8 +50,10 @@ export function prepareScCall(view: EngineView): ScCallInput {
   const outputs = new Map<CalculatorId, unknown>();
   for (const id of [RACE_HAZARD, REJOIN]) if (view.outputs.has(id)) outputs.set(id, view.outputs.get(id));
   const strategy = strategyInputFrom(new Proxy(view, { get: (target, key) => (key === 'outputs' ? outputs : Reflect.get(target, key)) }));
-  const open = view.situation.byMachine['session-phase-race']?.find((s) => s.kind === 'neutralised');
-  const neutralised: ScCondition | null = open === undefined ? null : (open.detail as NeutralisedDetail).car === 'VSC' ? 'vsc' : 'sc';
+  // the SC or VSC out now, from the one owner of the neutralisation kind; a suspension is none
+  const now = openNeutralisation(view);
+  const open = now !== null && now.kind !== 'red' ? now.span : undefined;
+  const neutralised: ScCondition | null = now?.kind === 'SC' ? 'sc' : now?.kind === 'VSC' ? 'vsc' : null;
   const rejoin = view.outputs.get(REJOIN) as RejoinOutput | undefined;
   const boxStops = view.history.spans['car-activity-race'] ?? [];
   const cars: Record<CarId, ScCallCar> = {};

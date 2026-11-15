@@ -3,6 +3,7 @@
 // frame (spec 6.1).
 import { asOfNow, type EngineView, type QuickCalculator } from '@pitwall/engine/readers';
 import { CAR_STATUS_READS } from '../shared/car-status.ts';
+import { TIME_LOSS_EXCLUSION_READS } from '../shared/neutralised.ts';
 import { driverNoiseAsOf } from './asof.ts';
 import { DRIVER_NOISE, type DriverNoiseOutput } from './index.ts';
 
@@ -11,7 +12,21 @@ export const driverNoiseCalculator: QuickCalculator<DriverNoiseOutput> = {
   kind: 'quick',
   // `miniSectors`: the change tag of the crossings list (the brief's `crossings`)
   // `identity`: our car (`fixed.playerCar`), whose rate a hidden rival's wear falls back to
-  reads: ['laps', 'stints', 'miniSectors', 'events', 'drivers', 'identity', 'spans:car-driver', CAR_STATUS_READS, 'spans:weekend-phase', { calculator: 'degradation' }, { calculator: 'track-wetness' }],
+  // `TIME_LOSS_EXCLUSION_READS`: the race's session-phase spans and car-location, for the human time-loss exclusion
+  reads: [
+    'laps',
+    'stints',
+    'miniSectors',
+    'events',
+    'drivers',
+    'identity',
+    'spans:car-driver',
+    CAR_STATUS_READS,
+    'spans:weekend-phase',
+    ...TIME_LOSS_EXCLUSION_READS,
+    { calculator: 'degradation' },
+    { calculator: 'track-wetness' },
+  ],
   cadence: 'lapCompleted',
   compute: (view: EngineView): DriverNoiseOutput => driverNoiseAsOf(asOfNow(view)),
 };
