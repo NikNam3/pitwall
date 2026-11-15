@@ -25,7 +25,15 @@ import { runWetnessFilter, type WetnessFilterConfig } from './kalman.ts';
 
 const TYPES: readonly TyreType[] = ['slick', 'inter', 'wet'];
 
-const NOT_APPLICABLE: TrackWetness = { byLap: [], state: unknown('notApplicable') };
+// SP4.3c Task 14 (supervisor first): the new fields unfilled until the task's implement phase fills them
+const UNFILLED = {
+  wet: unknown('insufficientData'),
+  dryRefMs: unknown('insufficientData'),
+  dryRefSource: { kind: 'default', note: 'not yet filled', sessionShare: 0, parts: '' },
+  slickScale: unknown('insufficientData'),
+} as const satisfies Omit<TrackWetness, 'byLap' | 'state'>;
+
+const NOT_APPLICABLE: TrackWetness = { byLap: [], state: unknown('notApplicable'), ...UNFILLED };
 
 type Config = (typeof TRACK_WETNESS_CONFIG)['defaults'];
 type DegradationConfig = (typeof DEGRADATION_CONFIG)['defaults'];
@@ -216,7 +224,7 @@ export function trackWetnessAsOf(view: AsOfView): TrackWetness {
   const effect = sessionEffect(view);
   if (effect.isRace !== true) return NOT_APPLICABLE;
   const degradation = view.outputs.get(DEGRADATION) as DegradationOutput | undefined;
-  if (effect.started !== true || degradation === undefined) return { byLap: [], state: unknown('insufficientData') };
+  if (effect.started !== true || degradation === undefined) return { byLap: [], state: unknown('insufficientData'), ...UNFILLED };
   const config = TRACK_WETNESS_CONFIG.read(view);
   const free = freeAirLaps(view.history, DRIVER_NOISE_CONFIG.read(view).freeAirGapMs);
 
@@ -235,6 +243,7 @@ export function trackWetnessAsOf(view: AsOfView): TrackWetness {
   // the forecast enters the prediction step only (ruling R19): the wet-lap pass and the common modes never read it
   const state = runWetnessFilter(measured.map((z) => z?.value), config, rainNowPct(view));
   return {
+    ...UNFILLED,
     byLap,
     state: state === undefined || newestAt === undefined ? unknown('insufficientData') : known({ wetnessMs: Math.round(state.wetnessMs), sdMs: Math.round(state.sdMs) }, newestAt),
   };

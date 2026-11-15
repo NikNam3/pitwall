@@ -213,7 +213,7 @@ describe('track-wetness (spec 5.1)', () => {
       return { ...view, situation: { weekendPhase: phase, byMachine: { ...view.situation.byMachine, 'weekend-phase': spans.map((s) => ({ ...s, kind, detail })) } } };
     };
     for (const phase of [PRACTICE, QUALIFYING, NONE]) {
-      expect(calc.compute(inPhase(phase)), phase.kind).toEqual({ byLap: [], state: unknown('notApplicable') });
+      expect(calc.compute(inPhase(phase)), phase.kind).toMatchObject({ byLap: [], state: unknown('notApplicable') });
     }
   });
 });

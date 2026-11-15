@@ -213,6 +213,10 @@ export function dryWetness(laps: number): TrackWetness {
       commonModeMs: { slick: known(0, 0), inter: unknown('insufficientData'), wet: unknown('insufficientData') },
     })),
     state: known({ wetnessMs: 0, sdMs: 100 }, 0),
+    wet: known(false, 0),
+    dryRefMs: unknown('insufficientData'),
+    dryRefSource: { kind: 'default', note: 'test', sessionShare: 0, parts: '' },
+    slickScale: unknown('insufficientData'),
   };
 }
 
