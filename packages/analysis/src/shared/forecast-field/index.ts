@@ -32,6 +32,7 @@ import { degradationAsOf, degradationCalculator } from '../../degradation/calcul
 import { DEGRADATION, DEGRADATION_CONFIG, type DegradationOutput } from '../../degradation/index.ts';
 import { fuelResolver } from '../../degradation/stint-fit.ts';
 import { driverNoiseCalculator } from '../../driver-noise/calculator.ts';
+import { GAPS, type GapsOutput } from '../../gaps/index.ts';
 import { DRIVER_NOISE, driverNoiseAsOf } from '../../driver-noise/index.ts';
 import { LAP_CLASSES_CONFIG } from '../../lap-classes/index.ts';
 import { PER_LAP_RATE_CONFIG } from '../../per-lap-rate/index.ts';
@@ -108,15 +109,12 @@ class Needs {
 }
 
 /**
- * The starting point at `view`'s frame from the units' `outputs`; `progress` is the live frame's lap progress, else
- * each car is placed by its newest crossing and the time since at its current pace. `notApplicable` before lap 1 is
- * complete or outside the race.
+ * The starting point at `view`'s frame from the units' `outputs`. Each car is placed by its newest crossing and the
+ * time since at its current pace. A live build (`gaps`' output among `outputs`, SP4.3c Task 13, O10) takes the order
+ * and the gaps at the last common crossing from `gaps` and carries each gap forward to the view's time; an as-of build
+ * extrapolates both from the crossings. `notApplicable` before lap 1 is complete or outside the race.
  */
-export function buildStartingPoint(
-  view: AsOfView,
-  outputs: ReadonlyMap<CalculatorId, unknown>,
-  progress?: { lapFraction: number[]; gapMs: number[] },
-): Known<StartingPoint> {
+export function buildStartingPoint(view: AsOfView, outputs: ReadonlyMap<CalculatorId, unknown>): Known<StartingPoint> {
   if (view.situation.weekendPhase.kind !== 'race') return unknown('notApplicable');
   const fixed = view.fixed;
   if (!fixed.totalLaps.known) return unknown(fixed.totalLaps.reason);
@@ -133,7 +131,8 @@ export function buildStartingPoint(
 
   const crossings = view.history.crossings as readonly MiniSectorCrossing[];
   const newest = newestCrossings(crossings, cars);
-  const order = orderOf(newest, retired);
+  const gaps = outputs.get(GAPS) as DeepReadonly<GapsOutput> | undefined;
+  const order = gaps === undefined ? orderOf(newest, retired) : orderByGaps(gaps, orderOf(newest, retired), retired);
   const leader = order[0] as number;
   const leaderNewest = newest[leader];
   // before the leader has completed lap 1 there is no lap to start from
@@ -245,20 +244,18 @@ export function buildStartingPoint(
     // wear: the worst corner where every corner is visible, else tyre age × the car's wear rate (realism, C8)
     const w = lap.wearAtEndPct;
     sp.wearPct[k] = stopped ? 0 : own !== undefined && w.fl.known && w.fr.known && w.rl.known && w.rr.known ? Math.max(w.fl.value, w.fr.value, w.rl.value, w.rr.value) : tyreAge * rate;
-    // fuel at the end of the lap: as the fuel at the start of the next (degradation's rule for a hidden load)
-    sp.fuelKg[k] = own === undefined ? need.of(fuelOf(lap)) : need.of(fuelOf({ ...own, lapNumber: own.lapNumber + 1, fuelAtStartKg: own.fuelAtEndKg }));
-
-    // pace on the reference compound (the lap model adds the compound's offset) and degradation per % wear (ruling R18)
+    // pace on the reference compound (the lap model adds the compound's offset): `degradation`'s base pace alone (O2,
+    // SP4.3c Task 13); a running car without one makes the build unknown (C3), a retired car is not run
     const stints = degradation[id] ?? [];
     const paced = [...stints].reverse().find((s) => s.basePaceMs.known);
     if (paced !== undefined && paced.basePaceMs.known) {
       sp.paceMs[k] = paced.basePaceMs.value - offsetOf(lapModel.compoundOffsetMs, paced.visual);
       sp.paceSdMs[k] = paced.cov.known ? Math.sqrt(Math.max(0, paced.cov.value[0][0])) : config.fallbackPaceSdMs;
-    } else {
-      const fuel = fuelOf(lap);
-      sp.paceMs[k] = lap.lapTimeMs - (fuel.known ? lapModel.fuelMsPerKg * fuel.value : 0) - lapModel.compoundOffsetMs[compound];
-      sp.paceSdMs[k] = config.fallbackPaceSdMs;
-    }
+    } else if (retired[k] === 0) need.of(unknown('insufficientData'));
+    // fuel at the end of the lap: as the fuel at the start of the next (degradation's rule for a hidden load); a base
+    // pace that holds the car's fuel (`fuelIncluded`, B9) gets no fuel term on top: the lap model's fuel is 0
+    if (paced?.fuelIncluded === true) sp.fuelKg[k] = 0;
+    else sp.fuelKg[k] = own === undefined ? need.of(fuelOf(lap)) : need.of(fuelOf({ ...own, lapNumber: own.lapNumber + 1, fuelAtStartKg: own.fuelAtEndKg }));
     // ν's sd per lap is degradation's (its current stint's posterior, else its default), per % of wear on each compound
     const current = stints.at(-1);
     const nuSd = current === undefined ? degConfig.defaultNuSdMs : current.cov.known ? Math.sqrt(Math.max(0, current.cov.value[1][1])) : need.of(current.nuSdMs);
@@ -310,23 +307,24 @@ export function buildStartingPoint(
   }
   if (need.reason !== undefined) return unknown(need.reason);
 
-  // where the cars are: the live frame's lap progress, else "as of" the frame from the crossings
-  if (progress !== undefined) {
-    for (let k = 0; k < cars; k++) {
-      sp.lapFraction[k] = progress.lapFraction[k] ?? 0;
-      sp.gapMs[k] = progress.gapMs[k] ?? 0;
-    }
-  } else {
-    const distances = newest.map((c, k) => distanceAsOf(c, at, lapMs[k] as number, retired[k] === 1));
-    // the leader's times back to the rearmost running car (a retired car's gap is measured from the nearest time kept)
-    const rearmost = Math.min(...distances.filter((_, k) => retired[k] === 0));
-    const times = leaderTimes(crossings, leader as CarId, Math.floor(rearmost), distanceOf(leaderNewest));
-    for (let k = 0; k < cars; k++) {
-      const d = distances[k] as number;
-      sp.lapFraction[k] = (d % MINI_SECTORS) / MINI_SECTORS;
-      const t = leaderTimeAt(times, d);
-      sp.gapMs[k] = t === undefined ? 0 : Math.max(0, at - t);
-    }
+  // where the cars are "as of" the frame: each car moved on from its newest crossing at its newest lap's pace
+  const distances = newest.map((c, k) => distanceAsOf(c, at, lapMs[k] as number, retired[k] === 1));
+  // the leader's times back to the rearmost running car (a retired car's gap is measured from the nearest time kept)
+  const rearmost = Math.min(...distances.filter((_, k) => retired[k] === 0));
+  const times = leaderTimes(crossings, leader as CarId, Math.floor(rearmost), distanceOf(leaderNewest));
+  const present = gaps === undefined ? undefined : gapsAtCrossing(gaps, lapMs[leader] as number);
+  for (let k = 0; k < cars; k++) {
+    const d = distances[k] as number;
+    sp.lapFraction[k] = (d % MINI_SECTORS) / MINI_SECTORS;
+    const t = leaderTimeAt(times, d);
+    const own = retired[k] === 0 ? present?.get(k as CarId) : undefined;
+    const c = newest[k];
+    const tc = c === undefined ? undefined : leaderTimeAt(times, distanceOf(c));
+    if (own !== undefined && c !== undefined) {
+      // a live build: gaps' gap at the last common crossing, carried forward to the view's time (a forecast step): the
+      // gap now as the crossings extrapolate it less the gap at the car's newest crossing
+      sp.gapMs[k] = own + (t === undefined || tc === undefined ? 0 : at - t - (c.at - tc));
+    } else sp.gapMs[k] = t === undefined ? 0 : Math.max(0, at - t);
   }
 
   sp.sets = setsOf(view, tyreModel, cars);
@@ -366,6 +364,26 @@ function weatherOf(view: AsOfView, lap: number, lapsTotal: number, leaderFractio
     byLap.push({ lap: l, rainPct: rainPctAt(samples, inMin) });
   }
   return known({ byLap, accuracy: weather.forecastAccuracy }, view.at);
+}
+
+/**
+ * A live build's order (SP4.3c Task 13, O10): the running cars `gaps` lists, in its order; then the running cars it does
+ * not list and the retired cars last, each as `crossings` (the crossings' order) has them.
+ */
+function orderByGaps(gaps: DeepReadonly<GapsOutput>, crossings: Int8Array, retired: Uint8Array): Int8Array {
+  const listed: number[] = [];
+  for (const i of gaps.intervals) if (i.carId >= 0 && i.carId < retired.length && retired[i.carId] === 0 && !listed.includes(i.carId)) listed.push(i.carId);
+  return Int8Array.from([...listed, ...Array.from(crossings).filter((k) => !listed.includes(k))]);
+}
+
+/**
+ * Per car `gaps` lists with a known gap, its gap to the leader at the last crossing both passed; a lapped car's
+ * (`lapsDown`) adds a lap of the leader's newest lap time per lap down (a forecast step, R34).
+ */
+function gapsAtCrossing(gaps: DeepReadonly<GapsOutput>, leaderLapMs: number): Map<CarId, number> {
+  const out = new Map<CarId, number>();
+  for (const i of gaps.intervals) if (i.toLeaderMs.known) out.set(i.carId, i.toLeaderMs.value + i.lapsDown * leaderLapMs);
+  return out;
 }
 
 /** An offset of the lap model for a stint's visual compound (0 for one it does not tell apart). */

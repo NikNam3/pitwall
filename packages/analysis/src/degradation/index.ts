@@ -5,6 +5,7 @@ export * from './behaviour.ts';
 export * from './config.ts';
 export { fitStint, type FilterLap, type FilterPrior, type StintFitResult } from './kalman.ts';
 export { DEGRADATION_PRIORS } from './priors.ts';
+export { fieldResiduals, type FieldResiduals } from './residuals.ts';
 export type { DegradationLap, DegradationOutput, StartPrior, StintDegradation } from './types.ts';
 
 /** The calculator id. */

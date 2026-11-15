@@ -35,9 +35,12 @@ type Stint = DeepReadonly<StintRecord>;
  * Where a stint's `ν` starts: the prior, the start the stint carries (`StartPrior`) and how to name the estimate's
  * source once the session's share is known.
  */
-type Start = { prior: FilterPrior; startPrior: StartPrior; source: (sessionShare: number, paceLaps: number) => EstimateSource };
+type Start = { prior: FilterPrior; startPrior: StartPrior; source: (sessionShare: number, paceLaps: number | typeof NEWEST_LAP) => EstimateSource };
 
-const lapsWord = (n: number): string => `${n} ${n === 1 ? 'lap' : 'laps'}`;
+/** The parts word of a base pace taken from the car's newest lap (no fitted stint). */
+const NEWEST_LAP = 'newest lap';
+
+const lapsWord = (n: number | typeof NEWEST_LAP): string => (n === NEWEST_LAP ? n : `${n} ${n === 1 ? 'lap' : 'laps'}`);
 
 /** The source of a start from the game's tyre prior. */
 const GAME_PRIOR_SOURCE: EstimateSource = { kind: 'default', note: "the game's tyre sets: loss per % × k · 70 / usableLife (research 22)", sessionShare: 0, parts: 'game prior' };
@@ -227,7 +230,7 @@ export function degradationAsOf(view: AsOfView): DegradationOutput {
   for (const carId of rows.cars) {
     const effect: DegradationEffect = Object.assign({}, session, ...rows.car(carId));
     if (effect.inSession !== true) continue;
-    out[carId] = stintsOf(lapsBy.get(carId) ?? [], recordsBy.get(carId) ?? []).map((s, i): StintDegradation => {
+    const stints = stintsOf(lapsBy.get(carId) ?? [], recordsBy.get(carId) ?? []).map((s, i): StintDegradation & { start: Start } => {
       const start = startOf(view, s.visual, gameNuOf(view, s.laps));
       const fit = fitLaps(s.laps, fuelOf, start.prior, config, classes, rate);
       const pnn = fit.state.cov[1][1];
@@ -245,15 +248,38 @@ export function degradationAsOf(view: AsOfView): DegradationOutput {
         nuSdMs: known(Math.sqrt(Math.max(0, pnn)), now),
         basis: fit.basis,
         fuelCorrected: fit.fuelCorrected,
+        // a fit on lap times without their fuel holds the fuel in its α (B9)
+        fuelIncluded: !fit.fuelCorrected,
         source: start.source(sessionShare, fit.paceLaps.length),
         // the same run's posterior: `fitStint`'s, which needs two laps
         cov: fit.paceLaps.length < 2 ? unknown('insufficientData') : known(fit.state.cov, now),
         startPrior: start.startPrior,
         laps: fit.laps,
+        start,
       };
     });
+    out[carId] = withNewestLapPrior(stints, now).map(({ start: _start, ...stint }) => stint);
   }
   return out;
+}
+
+/**
+ * A car's pace before any of its stints is fitted (SP4.3c Task 13, O2; moved from `forecast-field`): its newest stint's
+ * base pace is its newest lap's time less its fuel term (the lap's corrected time), or the lap time itself where the
+ * lap's fuel is unknown (`fuelIncluded`); its source names the newest lap. A car with a fitted stint keeps every stint
+ * as fitted; a car without a lap has no pace (C3).
+ */
+function withNewestLapPrior<S extends StintDegradation & { start: Start }>(stints: S[], now: Ms): S[] {
+  const newest = stints.at(-1);
+  const lap = newest?.laps.at(-1);
+  if (newest === undefined || lap === undefined || stints.some((s) => s.basePaceMs.known)) return stints;
+  const prior: S = {
+    ...newest,
+    basePaceMs: known(lap.correctedMs.known ? lap.correctedMs.value : lap.lapTimeMs, now),
+    fuelIncluded: !lap.correctedMs.known,
+    source: newest.start.source(0, NEWEST_LAP),
+  };
+  return [...stints.slice(0, -1), prior];
 }
 
 /** Per car in the session (its rows, `DEGRADATION_BEHAVIOUR`): its stints, oldest first; the form at the current frame. */

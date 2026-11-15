@@ -17,11 +17,21 @@ export type StintDegradation = {
   lastLap: number;
   actual: ActualCompound;
   visual: VisualCompound;
+  /**
+   * The car's pace on the stint at tyre age 0 (a car's pace is `degradation`'s, SP4.3c Task 13, O2): the filter's `α`;
+   * for a car without any fitted stint, its newest stint takes the newest lap less its fuel term as its prior (`source`
+   * parts `newest lap`, `cov` unknown).
+   */
   basePaceMs: Known<Ms>;
   nuMsPerLap: Known<number>;
   nuSdMs: Known<number>;
   basis: 'wear' | 'age';
   fuelCorrected: boolean;
+  /**
+   * Whether `basePaceMs` holds the car's fuel (B9): it was taken from lap times without a fuel correction (fuel unknown).
+   * A forecast then adds no fuel term on top of it.
+   */
+  fuelIncluded: boolean;
   source: EstimateSource;
   /** The filter's posterior covariance of `(α, ν)` after the stint's fitted laps; `insufficientData` below two (`fitStint`). */
   cov: Known<[[number, number], [number, number]]>;
