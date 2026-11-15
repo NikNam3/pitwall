@@ -2,7 +2,6 @@
 // laps later (for a car behind, the mirror), scored on common scenarios until both have stopped plus one lap. Topic
 // `undercut.car`.
 import type { Job } from '@pitwall/engine/readers';
-import { REJOIN } from '../rejoin/index.ts';
 import { STRATEGY_INPUT_READS } from '../shared/strategy-input/index.ts';
 import { STRATEGY_TRIGGER } from '../strategy/index.ts';
 import type { UndercutOutput } from './job.ts';
@@ -16,11 +15,11 @@ export { prepareUndercut, rivalsOf, type UndercutCarInput, type UndercutInput, t
 /** The analysis id (its job's id). */
 export const UNDERCUT = 'undercut';
 
-/** The job (C51): `strategy`'s trigger and input reads, plus `rejoin`; on demand of `undercut.car` (C49). */
+/** The job (C51): `strategy`'s trigger and input reads; on demand of `undercut.car` (C49). */
 export const UNDERCUT_JOB: Job<UndercutInput, UndercutOutput> = {
   kind: 'job',
   id: UNDERCUT,
-  reads: [...STRATEGY_INPUT_READS, { calculator: REJOIN }],
+  reads: [...STRATEGY_INPUT_READS],
   trigger: { onChange: [...STRATEGY_TRIGGER.onChange] },
   prepare: (view) => prepareUndercut(view),
   module: new URL('./job.ts', import.meta.url),

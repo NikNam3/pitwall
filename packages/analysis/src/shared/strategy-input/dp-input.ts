@@ -3,7 +3,7 @@
 // and the traffic cost of a rejoin per lap. Pure (C2).
 import { NOISE_COMPOUNDS, tyreIndex, type CarId, type NoiseCompound, type Policy, type RaceHazard, type StartingPoint } from '@pitwall/domain';
 import { createRng, type Rng } from '@pitwall/engine/readers';
-import { raceForecast, startLapOf } from '../../race-forecast/index.ts';
+import { raceForecast, rejoinOnRoad, startLapOf, stopCostMs } from '../../race-forecast/index.ts';
 import { rivalNextCompound, type McInput } from '../../race-monte-carlo/index.ts';
 import type { DpInput } from '../../strategy-dp/index.ts';
 import type { StrategyInput } from './input.ts';
@@ -58,13 +58,18 @@ export function plainRoad(start: StartingPoint, rng: Rng): PlainRoad {
   return new Map((result.trace ?? []).map((t) => [t.lap, { gapMs: t.gapMs, position: t.position }]));
 }
 
-/** Per lap from `fromLap` the traffic cost of a rejoin at its end: the shortfall to `trafficGapMs` of each car ahead within it. */
+/**
+ * Per lap from `fromLap` the traffic cost of a rejoin at its end: the shortfall to `trafficGapMs` of each car ahead
+ * within it. The rejoin time is the stop model's (`race-forecast`'s `rejoinOnRoad` with `stopCostMs`, green).
+ */
 function trafficOf(start: StartingPoint, road: PlainRoad, car: CarId, fromLap: number, trafficGapMs: number): Float64Array {
   const out = new Float64Array(start.lapsTotal - fromLap + 1);
+  const costMs = stopCostMs(start, car, 'green');
   for (let i = 0; i < out.length; i++) {
     const line = road.get(fromLap + i);
     if (line === undefined || (line.position[car] ?? 0) === 0) continue;
-    const rejoin = (line.gapMs[car] ?? 0) + start.track.pitLossMs.green;
+    const retired = Uint8Array.from(line.position, (p) => (p === 0 ? 1 : 0));
+    const { rejoinMs: rejoin } = rejoinOnRoad({ timeMs: line.gapMs, retired }, car, costMs, start.interaction.minGapMs);
     let cost = 0;
     for (let k = 0; k < start.cars; k++) {
       if (k === car || (line.position[k] ?? 0) === 0) continue;

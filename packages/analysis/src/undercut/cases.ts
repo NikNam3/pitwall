@@ -56,10 +56,10 @@ export function casesOf(start: StartingPoint, sol: DpSolution, thresholds: reado
 
 /**
  * A case's value from its outcomes (spec §9.1): the mean gap change in our favour, the share ending ahead and the gain
- * bins over the scenarios where both cars ran at the gap lap; the rejoin position `rejoin`'s green one when we box now
- * (C43), else the simulated rejoin's median. Without a scenario: `unknown('insufficientData')` (C3).
+ * bins over the scenarios where both cars ran at the gap lap; the rejoin position the simulated rejoin's median, a
+ * box-now case's too (one model, B8). Without a scenario: `unknown('insufficientData')` (C3).
  */
-export function caseValue(call: CaseCall, outcome: CallOutcome | undefined, greenRejoin: Known<number>, at: Ms): UndercutCase {
+export function caseValue(call: CaseCall, outcome: CallOutcome | undefined, at: Ms): UndercutCase {
   const none = unknown('insufficientData');
   const gains: number[] = [];
   let ahead = 0;
@@ -68,10 +68,10 @@ export function caseValue(call: CaseCall, outcome: CallOutcome | undefined, gree
     gains.push(g - call.rival.signedGapMs);
     if (g > 0) ahead++;
   }
-  const boxNow = call.rival.side === 'ahead';
+  // every case, box now too: the simulated rejoin, the one stop-and-rejoin model's (SP4.3c Task 17, B8)
   const rejoins = Array.from(outcome?.rejoin ?? []).filter((p) => p > 0);
   const rejoinMedian = lowerMedian(rejoins);
-  const rejoinPosition: Known<number> = boxNow ? greenRejoin : rejoinMedian === undefined ? none : known(rejoinMedian, at);
+  const rejoinPosition: Known<number> = rejoinMedian === undefined ? none : known(rejoinMedian, at);
   if (gains.length === 0) return { n: call.n, gainMs: none, pAhead: none, gainBins: none, rejoinPosition };
   const bins = { from: UNDERCUT_GAIN_BINS.fromMs, step: UNDERCUT_GAIN_BINS.stepMs, count: UNDERCUT_GAIN_BINS.count };
   return {

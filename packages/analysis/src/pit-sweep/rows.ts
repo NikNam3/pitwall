@@ -8,16 +8,12 @@ import { lowerMedian } from '../shared/stats.ts';
 
 /** What every row of one car's table reads besides its outcomes. */
 export type RowContext = {
-  /** The DP's first lap (now): the stop lap whose rejoin is `rejoin`'s. */
-  now: number;
   /** The car's race position at the trigger: a row's gain is a finish ahead of it. */
   position: number;
   /** The field's car count (the pmf's places). */
   cars: number;
   /** `pit-window`'s `stint.latest`: a stop after it runs past the set's life. */
   latest: Known<number>;
-  /** `rejoin`'s green rejoin position (a stop now, C43). */
-  greenRejoin: Known<number>;
   zTie: number;
   tieBand: number;
   /** When the values are known (the starting point's time). */
@@ -53,7 +49,8 @@ export function rowsOf(stopLaps: readonly number[], outcomes: readonly CallOutco
     const { latest } = ctx;
     return {
       stopLap,
-      rejoinPosition: stopLap === ctx.now ? ctx.greenRejoin : simulatedRejoin(o, ctx.at),
+      // every stop lap, now too: the simulated rejoin, the one stop-and-rejoin model's (SP4.3c Task 17, B8)
+      rejoinPosition: simulatedRejoin(o, ctx.at),
       traffic: traffic === undefined ? unknown('insufficientData') : known(traffic, ctx.at),
       ePos: ePos[i] as number,
       positionPmf: placePmf(o.finish, ctx.cars),
