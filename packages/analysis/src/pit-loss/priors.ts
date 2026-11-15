@@ -4,6 +4,8 @@
 import { currentLaps, known, unknown, type EstimateSource, type Known, type PitCondition } from '@pitwall/domain';
 import { definePriors, type FallbackCtx, type PriorDecl, type PriorsCtx, type StoredSource } from '@pitwall/engine/readers';
 import { LAP_CLASSES_CONFIG } from '../lap-classes/index.ts';
+import { PACE_DELTA_CONFIG } from '../pace-delta/config.ts';
+import { configOf } from '../shared/config-of.ts';
 import { phaseRow } from './behaviour.ts';
 import { PIT_LOSS_CONFIG } from './config.ts';
 import { median } from '../shared/stats.ts';
@@ -48,6 +50,7 @@ export const inLapSharePrior = (track: FallbackCtx['track'], configShare: number
 const optionsOf = (source: StoredSource, ctx: PriorsCtx): PitLossOptions => ({
   ...PIT_LOSS_CONFIG.defaults,
   ...ctx.config[PIT_LOSS_CONFIG.key],
+  window: configOf(PACE_DELTA_CONFIG, ctx).windowLaps,
   classes: { isRace: phaseRow(source.phase.kind).isRace === true, ...LAP_CLASSES_CONFIG.defaults, ...ctx.config[LAP_CLASSES_CONFIG.key] },
 });
 
