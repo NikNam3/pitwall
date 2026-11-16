@@ -6,7 +6,7 @@ import { known, unknown, type CarId, type Known, type Policy, type StartingPoint
 import type { Rng } from '@pitwall/engine/readers';
 import { startLapOf } from '../race-forecast/index.ts';
 import { scoreCalls, type CallInput } from '../race-monte-carlo/index.ts';
-import { committedField, mcSettingsFrom, notPlannedWhy, toDpInput, toMcHazard } from '../shared/strategy-input/index.ts';
+import { committedField, mcSettingsFrom, notPlannedWhy, reactionsOf, toDpInput, toMcHazard } from '../shared/strategy-input/index.ts';
 import { solveWorld, type DpSolution } from '../strategy-dp/index.ts';
 import { caseValue, casesOf, ownStopsOf, rivalStopsOf, type CaseCall, type RivalStopsAt } from './cases.ts';
 import type { UndercutCarInput, UndercutInput } from './prepare.ts';
@@ -68,6 +68,8 @@ function carValue(input: UndercutInput, start: StartingPoint, at: number, car: C
       rivalRules: mcSettingsFrom(input.strategy.config).rivalRules,
       scenarios,
       traffic: { gapMs: 0, laps: TRAFFIC_LAPS },
+      // our cars' SC/VSC reaction from the solves the cases share (spec §5.2)
+      reactions: reactionsOf(input.strategy, start, Object.keys(sets).map((k) => Number(k) as CarId), solutions),
     };
     return scoreCalls(call, rng).outcomes;
   })();

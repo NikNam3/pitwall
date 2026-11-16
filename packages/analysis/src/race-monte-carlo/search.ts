@@ -190,7 +190,7 @@ function setup(input: McInput, rng: Rng): { run: Run; cars: number[] } {
     const c = Number(key);
     fixed[c] = input.committed[c as CarId] ?? input.candidates[c as CarId]?.[0]?.policy ?? null;
   }
-  const run = createRun(input.start, input.hazard, input.rivalRules, fixed, rng);
+  const run = createRun(input.start, input.hazard, input.rivalRules, fixed, rng, input.reactions);
   const cars = Object.keys(input.candidates)
     .map(Number)
     .filter((c) => (input.candidates[c as CarId]?.length ?? 0) > 0);

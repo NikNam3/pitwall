@@ -17,7 +17,7 @@ import { scoreCalls, type CallInput, type McInput } from '../race-monte-carlo/in
 import { configOf } from '../shared/config-of.ts';
 import { binShares } from '../shared/distribution.ts';
 import { lowerMedian } from '../shared/stats.ts';
-import { committedField, mcSettingsFrom, notPlannedWhy, plannedCars, plannedField, policyOf, strategyConfigOf, toDpInput, toMcHazard } from '../shared/strategy-input/index.ts';
+import { committedField, mcSettingsFrom, notPlannedWhy, plannedCars, plannedField, policyOf, reactionsOf, strategyConfigOf, toDpInput, toMcHazard } from '../shared/strategy-input/index.ts';
 import { bestWith, solveWorld, type DpSolution, type DpUnder } from '../strategy-dp/index.ts';
 import { SC_CALL_CONFIG } from './config.ts';
 import type { ScCallCar, ScCallInput, ScCondition } from './prepare.ts';
@@ -126,7 +126,9 @@ function callFor(input: ScCallInput, start: StartingPoint, at: number, carId: Ca
   const callStart: StartingPoint = { ...field, sets };
   const { rivalRules } = mcSettingsFrom(strategy.config);
   // the call reads no traffic outcome: the strategy config's gap, no traffic laps
-  const base = { start: callStart, car: carId, committed, rivalRules, traffic: { gapMs: strategyConfigOf(strategy.config).trafficGapMs, laps: 0 } };
+  // our cars' SC/VSC reaction to a later neutralisation (spec §5.2): the car's from its solve, a committed teammate's from its own
+  const reactions = reactionsOf(strategy, start, Object.keys(sets).map((k) => Number(k) as CarId), (k) => (k === carId ? sol : null));
+  const base = { start: callStart, car: carId, committed, rivalRules, traffic: { gapMs: strategyConfigOf(strategy.config).trafficGapMs, laps: 0 }, reactions };
   const mcHazard = toMcHazard(hazard, callStart);
   const forced = (condition: ScCondition): Under => {
     const remaining = Float64Array.from(hazard.value.durationLaps[condition]);

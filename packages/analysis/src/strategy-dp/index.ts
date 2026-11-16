@@ -18,11 +18,15 @@
 //   neutralisation comes: the expected remaining race time from that lap's start if an SC starts on it (its length by
 //   the SC duration pmf), boxing at its end onto the best compound (`boxUnderMs`, `Infinity` where no stop can be made)
 //   and staying out (`stayMs`); `sc-call` reads it (4.3b2).
+// - `reactionTable` (`reaction.ts`, SP4.3d spec §5.2): one world's solve as structured-cloneable typed arrays, the
+//   heaviest world's for `race-monte-carlo`'s SC/VSC reaction: `reactAt` the averaged move at a state, `nodeAlong` a
+//   plan's node at a lap, `continueFrom` the best play from a state where no neutralisation comes.
 import { defineSimulator } from '@pitwall/engine/readers';
 
 export type * from './types.ts';
 export { bestWith } from './best-with.ts';
 export { STRATEGY_DP_CONFIG } from './config.ts';
-export { solveDp, solveWorld, type DpSolution } from './solve.ts';
+export { continueFrom, nodeAlong, reactAt, reactionTable, type ReactionTable } from './reaction.ts';
+export { heaviest, solveDp, solveWorld, type DpSolution } from './solve.ts';
 
 export const SIMULATOR = defineSimulator('strategy-dp');

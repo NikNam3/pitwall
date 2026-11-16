@@ -6,7 +6,7 @@ import type { Policy, RaceHazard, StartingPoint } from '@pitwall/domain';
 import { hazardOf } from './dp-input.ts';
 
 export { committedField, followable } from './committed-field.ts';
-export { dpInputOn, hazardOf, notPlannedWhy, plainRoad, plannedCars, plannedField, roadWorlds, toDpInput, worldsOf, type PlainRoad, type RoadWorld } from './dp-input.ts';
+export { dpInputOn, hazardOf, notPlannedWhy, plainRoad, plannedCars, plannedField, reactionOf, reactionsOf, roadWorlds, toDpInput, worldsOf, type PlainRoad, type RoadWorld } from './dp-input.ts';
 export { STRATEGY_INPUT_READS, strategyInputFrom, type StrategyInput } from './input.ts';
 export { mcSettingsFrom, pointsOf, strategyConfigOf } from './settings.ts';
 
