@@ -9,7 +9,9 @@ import { copyFileSync, existsSync, mkdtempSync, readdirSync, readFileSync, write
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { latestPlan, sessionPhaseRaceSpans, type CarId, type DecisionRecord, type FeedId, type Policy } from '@pitwall/domain';
+import {
+  activeSlot, latestPlan, planSlots, sessionPhaseRaceSpans, type CarId, type DecisionRecord, type FeedId, type Policy, type Slot,
+} from '@pitwall/domain';
 import type { QuickCalculator } from '@pitwall/engine';
 import { defineFeature, type Feature } from '../../src/features/feature.ts';
 import { TopicHub } from '../../src/hub/topic-hub.ts';
@@ -243,6 +245,32 @@ describe('a flashback and a plan (C27a)', () => {
     // the commit took effect before the rewind, and after it the decision never happened
     expect(live.seen.some((s) => s.plan !== null)).toBe(true);
     expect(last(live.seen)).toMatchObject({ plan: null, decisions: [] });
+  }, 60_000);
+
+  // SP4.3d1 Task 10: activate reads the slot from the feed's projection, never from the bridge's memory (C27a, C76)
+  it('a planSaved B voided by a flashback: activate B is rejected, activate A (saved before the target) commits A', async () => {
+    const saveOf = (slot: Slot, lap: number) => (seen: readonly Seen[]): PlanAction =>
+      ({ kind: 'plan.save', feedId: F, carId: last(seen).player, slot, policy: policyAt(Math.min(lap, last(seen).totalLaps)) });
+    const activateOf = (slot: Slot) => (seen: readonly Seen[]): PlanAction => ({ kind: 'plan.activate', feedId: F, carId: last(seen).player, slot });
+    /** True once the race clock has gone back: the rewind is applied. */
+    const rewound = (_index: number, seen: readonly Seen[]): boolean => seen.length > 1 && seen.some((s) => s.at > last(seen).at);
+    // as above: the first pass runs 741.5 to 744.5 s, the flashback goes back to 742.045 s; A is saved on the first
+    // frame (before the target), B 2 s into the first pass (after it)
+    const live = await run(FLASHBACK, {
+      commits: [
+        { when: (_index, seen) => seen.length > 0, action: saveOf('A', 1) },
+        { when: (_index, seen) => seen.length > 0 && last(seen).at >= seen[0]!.at + 2_000, action: saveOf('B', 2) },
+        { when: rewound, action: activateOf('B') },
+        { when: rewound, action: activateOf('A') },
+      ],
+    });
+    expect(live.answers).toEqual([{ ok: true }, { ok: true }, { ok: false, reason: 'invalid', message: expect.stringMatching(/\S/) }, { ok: true }]);
+    // B was saved before the rewind
+    expect(live.seen.some((s) => s.decisions.some((d) => d.kind === 'planSaved' && d.slot === 'B'))).toBe(true);
+    const end = last(live.seen);
+    expect(end.decisions.map((d) => [d.kind, 'slot' in d ? d.slot : undefined])).toEqual([['planSaved', 'A'], ['planCommitted', 'A']]);
+    expect(planSlots({ decisions: end.decisions }, end.player)).toEqual({ A: policyAt(1) });
+    expect(activeSlot({ decisions: end.decisions }, end.player)).toBe('A');
   }, 60_000);
 });
 
