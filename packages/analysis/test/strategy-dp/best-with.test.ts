@@ -139,9 +139,12 @@ describe('strategy-dp bestWith', () => {
         const own = new Set(plan!.stops.map((s) => s.compound));
         for (const t of neutralBoxes(plan!)) expect(own.has((t.action as { box: NoiseCompound }).box), JSON.stringify(t)).toBe(true);
       }
-      // the world's best plan by query equals solveDp's best plan of that world
+      // the world's best plan by query has solveDp's best stops of that world; its value may differ under hazards (the
+      // plan's value is the closed-loop play over its sequence, bestWith pins the first stop through a neutralisation)
       const best = plansOf(solveDp(input).plans, w)[0]!;
-      expectSamePlan(bestWith(solution, { stopLap: best.stops[0]!.lap, compound: 'best' }), best);
+      const queried = bestWith(solution, { stopLap: best.stops[0]!.lap, compound: 'best' });
+      expect(queried!.stops).toEqual(best.stops);
+      expect(best.world).toBe(w);
     }
   });
 
