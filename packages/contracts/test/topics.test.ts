@@ -119,7 +119,7 @@ describe('TOPICS', () => {
     expect(TOPICS[name]).toMatchObject({ name, owner: 'core', scope: 'global', mode: 'state' });
   });
   // M7-R: cars.overview lost `stops`, pitStopCount.byCar is new
-  it('exports the contract version', () => { expect(CONTRACT_VERSION).toBe(12); });
+  it('exports the contract version', () => { expect(CONTRACT_VERSION).toBe(13); });
 });
 
 describe('defineTopic', () => {
