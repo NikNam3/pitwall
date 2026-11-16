@@ -9,16 +9,16 @@
 // - Row 8: "the car's position at the trigger" is the car's race position in the live state of the view `prepare`
 //   reads (`timing.position`); the view here gives our player car a race position (7) that is not its place in the
 //   starting point's order (3), so the value must come from the trigger's view, not from the order.
-// - Row 9: on the hand-built field of `candidates.test.ts`, the four rule candidates carry `mirrorAhead`,
+// - Row 9 (ported in SP4.3c Task 20): on the hand-built field and DP solves of `candidates-support.ts`, the four rule
+//   candidates carry `mirrorAhead`,
 //   `mirrorBehind`, `cover`, `extend`; every other candidate `null`; on the job's output every `rule` row carries one of
 //   the four, every other row `null`.
-import { carId, type CarId, type StartingPoint, type StrategyOutput, type Trigger } from '@pitwall/domain';
+import type { CarId, StrategyOutput } from '@pitwall/domain';
 import { createRng, type EngineView } from '@pitwall/engine/readers';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as mc from '../../src/race-monte-carlo/index.ts';
-import type { DpPlan, DpResult } from '../../src/strategy-dp/index.ts';
-import { candidatesOf, policyOf, prepareStrategy, runStrategy, STRATEGY_CONFIG } from '../../src/strategy/index.ts';
-import { startingPoint } from '../race-forecast/start.ts';
+import { prepareStrategy, runStrategy } from '../../src/strategy/index.ts';
+import { AHEAD, AHEAD_STOP, BEHIND, BEHIND_STOP, CAR, candidatesOf, CONFIG, field, input, solved } from './candidates-support.ts';
 import { json, PLAYER, RACE, stopIn, TEAMMATE, viewAt, type ViewSpec } from './support.ts';
 
 /** When set, the tie flags `race-monte-carlo`'s rows get, best first (the rest `false`). */
@@ -105,32 +105,16 @@ describe('strategy: the table fields', () => {
 
   // row 9
   it("a rule candidate's row carries its rule (mirrorAhead, mirrorBehind, cover, extend); every other row null", () => {
-    // the hand-built field of candidates.test.ts: car 2, the rival ahead (1) likeliest to stop on lap 12, behind (3) on 22
-    const CAR = carId(2);
-    const start: StartingPoint = startingPoint({ lap: 5, lapsTotal: 30, cars: Array.from({ length: 8 }, () => ({})), ours: [2, 5] });
-    start.stopLow[1] = 10;
-    start.stopMid[1] = 12;
-    start.stopHigh[1] = 14;
-    start.stopLow[3] = 19;
-    start.stopMid[3] = 22;
-    start.stopHigh[3] = 25;
-    const thresholds: Trigger[] = [{ kind: 'neutralised', condition: 'sc', fromLap: 6, toLap: 15, action: { box: 'hard' } }];
-    // SP4.3c Task 19: each plan its own triggers and world; a rule candidate carries the best plan's neutralised triggers
-    const best: DpPlan = { stops: [{ lap: 16, compound: 'hard' }], expectedMs: 1_000, triggers: thresholds, world: 0 };
-    const dp: DpResult = {
-      plans: [best],
-      boxThisLap: { stops: [{ lap: 5, compound: 'hard' }], expectedMs: 3_000, triggers: [], world: 0 },
-      continue: { stops: [{ lap: 26, compound: 'hard' }], expectedMs: 4_000, triggers: [], world: 0 },
-      table: { boxUnderMs: new Float64Array(26), stayMs: new Float64Array(26) },
-    };
-    const config = { ...STRATEGY_CONFIG.defaults, closeGapMs: 2_500 };
-    const cands = candidatesOf(start, CAR, dp, config);
-    const ruleOf = (policy: ReturnType<typeof policyOf>) => cands.find((c) => json(c.policy) === json(policy))?.rule;
-    const at = (lap: number) => policyOf({ stops: [{ lap, compound: 'hard' }], triggers: thresholds });
-    expect(ruleOf(at(12))).toBe('mirrorAhead');
-    expect(ruleOf(at(22))).toBe('mirrorBehind');
-    expect(ruleOf(policyOf(best, [{ kind: 'rivalPits', carId: carId(3), withinMs: 2_500, action: 'cover' }]))).toBe('cover');
-    expect(ruleOf(policyOf(best, [{ kind: 'rivalPits', carId: carId(1), withinMs: 2_500, action: 'extend' }]))).toBe('extend');
+    // SP4.3c Task 20: the hand-built field and real DP solves of candidates.test.ts (`candidates-support.ts`): car 2, the
+    // rival ahead (1) plainly stops on lap 33 for inters, the one behind (3) on lap 27 for softs
+    const s = solved(input());
+    const cands = candidatesOf(field(), CAR, s.dp, s.solutions, CONFIG);
+    const ruled = (rule: string) => cands.filter((c) => c.rule === rule);
+    expect(ruled('mirrorAhead').map((c) => c.policy.stops[0])).toEqual([AHEAD_STOP]);
+    expect(ruled('mirrorBehind').map((c) => c.policy.stops[0])).toEqual([BEHIND_STOP]);
+    const rivalPits = (rule: string) => ruled(rule).flatMap((c) => c.policy.triggers.filter((t) => t.kind === 'rivalPits'));
+    expect(rivalPits('cover')).toEqual([{ kind: 'rivalPits', carId: BEHIND, withinMs: CONFIG.closeGapMs, action: 'cover' }]);
+    expect(rivalPits('extend')).toEqual([{ kind: 'rivalPits', carId: AHEAD, withinMs: CONFIG.closeGapMs, action: 'extend' }]);
     for (const c of cands) {
       if (c.source === 'rule') expect(c.rule, json(c.policy)).not.toBeNull();
       else expect(c.rule, json(c.policy)).toBeNull();
