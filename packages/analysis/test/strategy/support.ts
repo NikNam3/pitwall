@@ -98,6 +98,15 @@ const set = (visualCompound: 'soft' | 'medium' | 'hard', wearPct: number, fitted
 /** Our cars' default sets: the fitted medium, then a new soft, medium and hard each. */
 export const SETS: readonly TyreSet[] = [set('medium', 10, true), set('soft', 0, false), set('medium', 0, false), set('hard', 0, false)];
 
+/**
+ * Our cars' sets for the 70-lap long race (`test-support/builders`): `SETS` with a usable life of 30 laps, so four stints
+ * cover the race within the 70 % limit (SP4.3c Task 19: no plan holds a stint past `lapsToLimit`; 18-lap sets leave no
+ * stop at lap 2 feasible).
+ */
+export const LONG_RACE_SETS: readonly TyreSet[] = SETS.map((s) => ({ ...s, usableLifeLaps: 30 }));
+/** `LONG_RACE_SETS` for both our cars, as a `ViewSpec`'s `sets`. */
+export const LONG_RACE_OURS_SETS = Object.fromEntries(OURS.map((c) => [c, LONG_RACE_SETS])) as Partial<Record<CarId, readonly TyreSet[]>>;
+
 /** Only the fitted set: no set left to stop onto. */
 export const NO_SETS_LEFT: readonly TyreSet[] = [set('medium', 10, true)];
 

@@ -9,6 +9,7 @@ import { longRace } from '../../../../test-support/builders/long-race.ts';
 import { SC_CALL_CONFIG, SC_CALL_JOB } from '../../src/sc-call/index.ts';
 import { run } from '../../src/sc-call/job.ts';
 import { callOf, OURS, rowOf, scViewAt } from './support.ts';
+import { LONG_RACE_OURS_SETS } from '../strategy/support.ts';
 
 const PER_CAR_MS = 2_500;
 
@@ -17,7 +18,7 @@ describe('sc-call budget', () => {
   it('budget: maxScenarioPolicies 1400 under 2.5 s per car at lap 1, one DP solve per car included', () => {
     const cap = SC_CALL_CONFIG.defaults.maxScenarioPolicies;
     expect(cap).toBe(1_400);
-    const view = scViewAt(longRace(), 2, { frameOfLap: 0, scConfig: { maxScenarioPolicies: cap } });
+    const view = scViewAt(longRace(), 2, { frameOfLap: 0, sets: LONG_RACE_OURS_SETS, scConfig: { maxScenarioPolicies: cap } });
     const input = structuredClone(SC_CALL_JOB.prepare(view));
 
     let best = Infinity;
