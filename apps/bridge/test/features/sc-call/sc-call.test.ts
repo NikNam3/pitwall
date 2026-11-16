@@ -163,7 +163,13 @@ describe('sc-call feature', () => {
     expect(input).toBeDefined();
     // the job's module, as the worker loads it
     const { run: runScCall } = (await import(SC_CALL_JOB.module.href)) as { run: (input: ScCallInput, rng: ReturnType<typeof createRng>) => Record<CarId, ScCall> };
-    const inProcess = () => runScCall(structuredClone(input!), createRng(jobSeed(0, SC_CALL_JOB.id, { lap: 0, frameId: at })));
+    // ported in SP4.3d1 Task 6: the job runs in one part per car, part i seeded with jobSeed(…, `${id}/${i}`, …)
+    const parts = SC_CALL_JOB.parts;
+    if (parts === undefined) throw new Error('sc-call runs in parts');
+    const inProcess = () =>
+      parts.merge(
+        parts.split(structuredClone(input!)).map((part, i) => runScCall(part, createRng(jobSeed(0, `${SC_CALL_JOB.id}/${i}`, { lap: 0, frameId: at })))),
+      );
     const once = inProcess();
     expect(inProcess()).toStrictEqual(once);
     expect(once).toEqual(liveOut);
