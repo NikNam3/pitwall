@@ -1,11 +1,12 @@
 // The shell's own commands and their default keys (spec 7.7). Widgets cannot register commands in the MVP.
-import { ackToken, type LinkGroup, type PanelSpec, type ReplayControl, type UiAction, type UiSettings } from '@pitwall/contracts';
+import { ackToken, type ActionOutcome, type LinkGroup, type PanelSpec, type ReplayControl, type UiAction, type UiSettings } from '@pitwall/contracts';
 import { PLAN_SLOTS, type CarId, type FeedId, type Insight, type Policy, type Slot } from '@pitwall/domain';
+import type { WidgetCommandArgs, WidgetCommandId } from '../../kit/command-types.ts';
 import * as text from '../../kit/text.ts';
 import type { Inspection } from '../inspector/inspection.svelte.ts';
 import { THEMES, type ThemeVariant } from '../../theme/index.ts';
 import { defaultPanel } from '../workbooks/default-panel.ts';
-import type { Command } from './registry.ts';
+import type { ArgCommand, Command } from './registry.ts';
 
 /** The overlays the shell can show. */
 export type ShellOverlay =
@@ -241,6 +242,65 @@ export function planSlotCommands(
       { id: planSlotId('activate', carId, slot), title: t.planActivate(carId, slot), group: g, run: () => ctx.send({ kind: 'plan.activate', feedId, carId, slot }) },
       { id: planSlotId('remove', carId, slot), title: t.planRemove(carId, slot), group: g, run: () => ctx.send({ kind: 'plan.remove', feedId, carId, slot }) },
       { id: planSlotId('edit', carId, slot), title: t.planEdit(carId, slot), group: g, run: () => edit(carId, slot) },
+    ]),
+  );
+}
+
+/**
+ * The planning round's commands (SP4.3d2 call 10, C72): `plans.prepare.laps`, `.save`, `.accept`, `.remove`,
+ * `.activate` and `plan.accept`, each taking its uiAction's fields (the feed included) as arguments and sending that
+ * uiAction; each resolves with its outcome (C73). The window keeps no copy: a plan takes effect when the bridge publishes it.
+ */
+export function planningCommands(send: (action: UiAction) => Promise<ActionOutcome>): ArgCommand[] {
+  const g = text.commandGroups.planning;
+  const t = text.commandTitles;
+  const make = <K extends WidgetCommandId>(id: K, title: string): ArgCommand<K> => ({
+    id,
+    title,
+    group: g,
+    run: (args: WidgetCommandArgs<K>) => send({ kind: id, ...args } as Extract<UiAction, { kind: K }>),
+  });
+  const all: { [K in WidgetCommandId]: ArgCommand<K> } = {
+    'plans.prepare.laps': make('plans.prepare.laps', t.plansPrepareLaps),
+    'plans.prepare.save': make('plans.prepare.save', t.plansPrepareSave),
+    'plans.prepare.accept': make('plans.prepare.accept', t.plansPrepareAccept),
+    'plans.prepare.remove': make('plans.prepare.remove', t.plansPrepareRemove),
+    'plans.prepare.activate': make('plans.prepare.activate', t.plansPrepareActivate),
+    'plan.accept': make('plan.accept', t.planAccept),
+  };
+  return Object.values(all) as ArgCommand[];
+}
+
+/** `plans.prepare.<verb>.<carId>.<slot>`: the ids of the prepared-slot commands the palette and keys run (C72). */
+export const plansPrepareSlotId = (verb: 'activate' | 'remove', carId: CarId, slot: Slot): string => `plans.prepare.${verb}.${carId}.${slot}`;
+
+/**
+ * The prepared-slot commands the shell can supply the arguments of (C72, as R34's plan slot commands): per car and slot
+ * of `PLAN_SLOTS`, `plans.prepare.activate.<carId>.<slot>` and `plans.prepare.remove.<carId>.<slot>`, which invoke
+ * `plans.prepare.activate` and `plans.prepare.remove` for the window's feed. The laps, save and accept commands need a
+ * value from the widget (the laps, a policy): no zero-argument form.
+ */
+export function planningSlotCommands(
+  cars: readonly CarId[],
+  ctx: { feedId: FeedId; invoke: <K extends WidgetCommandId>(id: K, args: WidgetCommandArgs<K>) => Promise<ActionOutcome> },
+): Command[] {
+  const g = text.commandGroups.planning;
+  const t = text.commandTitles;
+  const feedId = ctx.feedId;
+  return cars.flatMap((carId) =>
+    PLAN_SLOTS.flatMap((slot): Command[] => [
+      {
+        id: plansPrepareSlotId('activate', carId, slot),
+        title: t.plansPrepareActivateSlot(carId, slot),
+        group: g,
+        run: () => void ctx.invoke('plans.prepare.activate', { feedId, carId, slot }),
+      },
+      {
+        id: plansPrepareSlotId('remove', carId, slot),
+        title: t.plansPrepareRemoveSlot(carId, slot),
+        group: g,
+        run: () => void ctx.invoke('plans.prepare.remove', { feedId, carId, slot }),
+      },
     ]),
   );
 }

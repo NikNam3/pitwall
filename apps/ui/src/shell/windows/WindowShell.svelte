@@ -21,6 +21,8 @@
     panelCommands,
     panelRemoveCommands,
     planCommands,
+    planningCommands,
+    planningSlotCommands,
     planSlotCommands,
     sessionEndCommand,
     windowCommands,
@@ -284,8 +286,15 @@
     if (defaultFeed === undefined || sessionInfo === undefined) return [];
     const cars = ourCars(sessionInfo).map((carId) => ({ carId, policy: null }));
     const ctx = { send, feedId: defaultFeed };
-    return [...planCommands(cars, ctx), ...planSlotCommands(cars, ctx, () => {}).filter((c) => !c.id.startsWith('plan.edit.'))];
+    return [
+      ...planCommands(cars, ctx),
+      ...planSlotCommands(cars, ctx, () => {}).filter((c) => !c.id.startsWith('plan.edit.')),
+      ...planningSlotCommands(ourCars(sessionInfo), { feedId: defaultFeed, invoke: (id, args) => registry.invoke(id, args) }),
+    ];
   });
+  // The planning round's commands (SP4.3d2 call 10, C72): widgets invoke them by id with arguments through their panel.
+  const offPlanning = planningCommands(send).map((c) => registry.registerWithArgs(c));
+  onDestroy(() => offPlanning.forEach((off) => off()));
   const commands = $derived([
     ...baseCommands,
     ...alertCommands(shownAlerts, commandContext),
@@ -366,6 +375,7 @@
           headerTarget: tab,
           defaultFeed,
           send,
+          invoke: (id, args) => registry.invoke(id, args),
           inspection,
           onInspect: (target: InspectTarget) => (inspected = target),
           onOptions: (options: Record<string, unknown>) => updatePanel(panelId, { options }),
