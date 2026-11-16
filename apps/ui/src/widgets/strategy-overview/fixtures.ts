@@ -62,7 +62,7 @@ export function session(totalLaps = FLAG): SessionInfo {
 }
 
 /** A policy from its stops (lap the stop is made at the end of, the compound fitted). */
-export const policy = (...stops: [number, NoiseCompound][]): Policy => ({ stops: stops.map(([lap, compound]) => ({ lap, compound })), triggers: [] });
+export const policy = (...stops: [number, NoiseCompound][]): Policy => ({ stops: stops.map(([lap, compound]) => ({ lap, compound })) });
 
 type RowSpec = {
   carId: CarId;
