@@ -49,6 +49,7 @@ import { tyreLifeCalculator } from '../../tyre-life/calculator.ts';
 import { TYRE_LIFE, tyreLifeAsOf } from '../../tyre-life/index.ts';
 import { tyreModelAsOf, tyreModelCalculator } from '../../tyre-model/calculator.ts';
 import { TYRE_MODEL } from '../../tyre-model/id.ts';
+import { worstWearRate } from '../../tyre-model/index.ts';
 import { ourCars } from '@pitwall/domain';
 import { startLapOf } from '../../race-forecast/index.ts';
 import { configOf } from '../config-of.ts';
@@ -256,7 +257,7 @@ export function buildStartingPoint(view: AsOfView, outputs: ReadonlyMap<Calculat
     // the tyre terms are `tyre-model`'s, per compound (SP4.3c Task 12): the rate at the worst corner
     const model = tyreModel[id];
     const termsOf = (c: NoiseCompound) => model?.compounds[c];
-    const rateOf = (c: NoiseCompound): number => need.of(worstRateOf(termsOf(c)));
+    const rateOf = (c: NoiseCompound): number => need.of(worstOrUndefined(termsOf(c)));
     const rate = rateOf(compound);
     // wear: the worst corner where every corner is visible, else tyre age × the car's wear rate (realism, C8)
     const w = lap.wearAtEndPct;
@@ -428,14 +429,8 @@ function gapsAtCrossing(gaps: DeepReadonly<GapsOutput>, leaderLapMs: number): Ma
 /** An offset of the lap model for a stint's visual compound (0 for one it does not tell apart). */
 const offsetOf = (offsets: Record<NoiseCompound, number>, visual: string): number => (isNoiseCompound(visual) ? offsets[visual] : 0);
 
-/** A compound's wear rate at its worst corner (`tyre-model`'s), where every corner's is known; else the first unknown (C3). */
-function worstRateOf(terms: DeepReadonly<TyreModelCompound> | undefined): DeepReadonly<Known<number>> | undefined {
-  if (terms === undefined) return undefined;
-  const { fl, fr, rl, rr } = terms.wearRatePct;
-  for (const t of [fl, fr, rl, rr]) if (!t.value.known) return t.value;
-  const v = (t: typeof fl): number => (t.value.known ? t.value.value : 0);
-  return known(Math.max(v(fl), v(fr), v(rl), v(rr)), Math.max(...[fl, fr, rl, rr].map((t) => (t.value.known ? t.value.at : 0))));
-}
+/** A compound's wear rate at its worst corner: `tyre-model`'s pick (R64); `undefined` without the compound's terms. */
+const worstOrUndefined = (terms: DeepReadonly<TyreModelCompound> | undefined): Known<number> | undefined => (terms === undefined ? undefined : worstWearRate(terms));
 
 /** The track's wetness (track-wetness's state); without a known state, the declared prior: dry with `priorSdMs` (C3, ruling R40). */
 function wetnessOf(wetness: DeepReadonly<TrackWetness> | undefined, priorSdMs: number): StartingPoint['wetness'] {

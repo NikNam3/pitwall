@@ -156,6 +156,3 @@ export function timeLossExcludedOf(view: ExclusionSource): TimeLossExcluded {
     return away.get(carId)?.(from, end) ?? false;
   };
 }
-
-// `leaderLapAt` moved to its owner, `gaps` (SP4.3c Task 6, O10); re-exported only for the tests that import it from here.
-export { leaderLapAt } from '../gaps/leader.ts';
