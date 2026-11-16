@@ -48,8 +48,7 @@ export function casesOf(start: StartingPoint, sol: DpSolution, lap: number, riva
     out.push({
       rival,
       n: n as UndercutCase['n'],
-      // our plan with its own triggers (SP4.3c Task 19)
-      candidate: { policy: policyOf(plan), rival: { carId: rival.carId, policy: { stops, triggers: [] }, gapAtLap }, untilLap: gapAtLap },
+      candidate: { policy: policyOf(plan), rival: { carId: rival.carId, policy: { stops }, gapAtLap }, untilLap: gapAtLap },
     });
   }
   return out;

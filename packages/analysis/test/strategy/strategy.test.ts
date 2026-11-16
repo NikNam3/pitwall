@@ -230,7 +230,7 @@ describe('strategy: the job', () => {
       });
 
     // a passed stop: it boxes this lap, the later stop as committed
-    const passed: Policy = { stops: [{ lap: lap - 2, compound: 'hard' }, { lap: lap + 8, compound: 'medium' }], triggers: [] };
+    const passed: Policy = { stops: [{ lap: lap - 2, compound: 'hard' }, { lap: lap + 8, compound: 'medium' }] };
     const a = rowsOf(planned({ decisions: [{ kind: 'planCommitted', carId: PLAYER, policy: passed }] }), PLAYER);
     expect(a.rows.filter((r) => r.committed).map((r) => r.infeasible)).toEqual(['stopLapPassed']);
     expect(followed().length).toBeGreaterThan(0);
@@ -239,7 +239,7 @@ describe('strategy: the job', () => {
     // a compound without a set left: no stop onto it, the car keeps its tyres
     calls.list = [];
     const noHard = SETS.filter((s) => s.visualCompound !== 'hard');
-    const onHard: Policy = { stops: [{ lap: lap + 4, compound: 'hard' }], triggers: [] };
+    const onHard: Policy = { stops: [{ lap: lap + 4, compound: 'hard' }] };
     const b = rowsOf(planned({ sets: { [PLAYER]: noHard }, decisions: [{ kind: 'planCommitted', carId: PLAYER, policy: onHard }] }), PLAYER);
     expect(b.rows.filter((r) => r.committed).map((r) => r.infeasible)).toEqual(['noSetLeft']);
     expect(followed().length).toBeGreaterThan(0);

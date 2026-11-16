@@ -7,18 +7,9 @@ import { activeSlot, carId, latestPlan, planSlots, type DecisionRecord, type Pol
 const CAR = carId(0);
 const MATE = carId(1);
 
-/** A policy with every trigger kind, thresholds included: the decision carries it whole (spec §8.2). */
-const POLICY: Policy = {
-  stops: [{ lap: 18, compound: 'hard' }],
-  triggers: [
-    { kind: 'neutralised', condition: 'sc', fromLap: 8, toLap: 30, action: { box: 'medium' } },
-    { kind: 'rain', wetnessMs: 4_000, action: { box: 'inter' } },
-    { kind: 'rivalPits', carId: carId(5), withinMs: 1_500, action: 'cover' },
-    { kind: 'degradationOff', wearRateDeltaPct: 20, action: { switchTo: [{ lap: 24, compound: 'medium' }] } },
-    { kind: 'damage', lossMsPerLap: 800, action: { box: 'hard' } },
-  ],
-};
-const TWO_STOP: Policy = { stops: [{ lap: 12, compound: 'medium' }, { lap: 30, compound: 'soft' }], triggers: [] };
+/** A policy with every field (a stop list, SP4.3d spec §5.1): the decision carries it whole (spec §8.2). */
+const POLICY: Policy = { startCompound: 'soft', stops: [{ lap: 18, compound: 'hard' }] };
+const TWO_STOP: Policy = { stops: [{ lap: 12, compound: 'medium' }, { lap: 30, compound: 'soft' }] };
 
 const committed = (car: typeof CAR, policy: Policy, frame: number): DecisionRecord => ({ kind: 'planCommitted', carId: car, policy, frame });
 const cleared = (car: typeof CAR, frame: number): DecisionRecord => ({ kind: 'planCleared', carId: car, frame });

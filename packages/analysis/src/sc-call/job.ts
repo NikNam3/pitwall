@@ -7,11 +7,10 @@
 // - A neutralisation out: one run on it as it is (the DP's and the hazard's `active`), `floor(maxScenarioPolicies / 2)`
 //   scenarios; the other condition's row `notApplicable`.
 // - Box: the DP's best plan boxing at the car's start lap onto the best compound. Stay out: its best plan without a stop
-//   through that lap, its own triggers kept, the stay-out trigger last (it covers only the neutralisation out at the
-//   start lap; a later one follows the plan's triggers, precondition 6, N3). Each plan its own triggers (SP4.3c Task 19).
+//   through that lap. Each a stop list (SP4.3d spec §5.1).
 // - Per row: the mean places gained by boxing (stay − box finish), the share with box ahead, the places-gained bins;
-//   `rejoin`'s position, loss and source (C43); the stay-out plan's trigger range of that condition for the next stop.
-import { known, SC_CALL_GAIN_BINS, unknown, type CarId, type Known, type Policy, type ScCall, type ScCallRow, type StartingPoint, type Trigger } from '@pitwall/domain';
+//   `rejoin`'s position, loss and source (C43); `range` `notApplicable` (no trigger ranges since §5.1).
+import { known, SC_CALL_GAIN_BINS, unknown, type CarId, type Known, type Policy, type ScCall, type ScCallRow, type StartingPoint } from '@pitwall/domain';
 import type { Rng } from '@pitwall/engine/readers';
 import { startLapOf } from '../race-forecast/index.ts';
 import { scoreCalls, type CallInput, type McInput } from '../race-monte-carlo/index.ts';
@@ -45,12 +44,6 @@ const callUnknown = (carId: CarId, lap: number, car: ScCallCar, reason: Reason):
   rows: [rowUnknown(car, 'sc', reason), rowUnknown(car, 'vsc', reason)],
 });
 
-/** The first `neutralised` trigger of `condition` among a plan's triggers: its lap range. */
-function rangeOf(thresholds: readonly Trigger[], condition: ScCondition, at: number): ScCallRow['range'] {
-  const t = thresholds.find((x): x is Extract<Trigger, { kind: 'neutralised' }> => x.kind === 'neutralised' && x.condition === condition);
-  return t === undefined ? unknown('insufficientData') : known({ fromLap: t.fromLap, toLap: t.toLap }, at);
-}
-
 /** What one condition's run needs: the DP query's `under` (absent: the input's `active`) and the Monte Carlo hazard. */
 type Under = { under: DpUnder | undefined; hazard: McInput['hazard'] };
 
@@ -65,11 +58,9 @@ function rowOn(
   const box = bestWith(sol, { stopLap: lap, compound: 'best' }, on.under);
   const stay = bestWith(sol, { noStopThrough: lap }, on.under);
   if (box === null || stay === null || scenarios <= 0) return rowUnknown(car, condition, 'notApplicable');
-  const stayOut: Trigger = { kind: 'neutralised', condition, fromLap: lap, toLap: lap, action: 'stayOut' };
-  // each plan with its own triggers (SP4.3c Task 19)
   const boxPolicy: Policy = policyOf(box);
-  // the stay-out trigger last: the plan's own triggers act first, then it holds the car out under the forced one
-  const stayPolicy: Policy = policyOf(stay, [stayOut]);
+  // every stop of the stay-out plan lies after the start lap (`noStopThrough`)
+  const stayPolicy: Policy = policyOf(stay);
   const { outcomes } = scoreCalls(
     {
       ...base,
@@ -107,8 +98,8 @@ function rowOn(
     rejoinPosition: rejoinMedian === undefined ? unknown('insufficientData') : known(rejoinMedian, at),
     lossMs: r.lossMs,
     lossSource: r.lossSource,
-    // the next stop after staying out: the stay-out plan's own range
-    range: rangeOf(stay.triggers, condition, at),
+    // no trigger range since plans are stop lists (SP4.3d spec §5.1); Task 6 replaces the type
+    range: unknown('notApplicable'),
   };
 }
 

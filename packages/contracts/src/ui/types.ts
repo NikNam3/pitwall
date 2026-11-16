@@ -57,7 +57,7 @@ export type UiAction =
   | { kind: 'drivers.override.clear'; person: PersonId; key: string }
   // Plans (C76, SP4.3b spec §8.2): a plan decision for one of our cars, for every feed of the team; the bridge checks
   // shape and range only (C73), whether the plan can still be followed is the `strategy` job's judgement (C43).
-  /** Commits `policy` for `carId`, its triggers with their thresholds as the user saw them. */
+  /** Commits `policy` (a stop list) for `carId`. */
   | { kind: 'plan.commit'; feedId: FeedId; carId: CarId; policy: Policy }
   | { kind: 'plan.clear'; feedId: FeedId; carId: CarId }
   /** Saves `policy` in `slot` of `carId`'s plans (a decision, C76). */

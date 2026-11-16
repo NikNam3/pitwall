@@ -1,9 +1,9 @@
-// One scenario (SP4.3b spec §7.1): its neutralisations drawn from `race-hazard`'s tables, and our cars' policies as
-// they play out in it (their triggers fired). Every draw is keyed by (scenario, car, lap, purpose) under the run's base
-// seed (C2, S25), so a scenario is the same for every candidate (common random numbers).
-import { tyreIndex, type ForecastResult, type NoiseCompound, type Policy, type Scenario, type StartingPoint } from '@pitwall/domain';
+// One scenario (SP4.3b spec §7.1): its neutralisations drawn from `race-hazard`'s tables, and every car's policy in it
+// (our cars' stop lists as planned, SP4.3d spec §5.1). Every draw is keyed by (scenario, car, lap, purpose) under the
+// run's base seed (C2, S25), so a scenario is the same for every candidate (common random numbers).
+import type { ForecastResult, Policy, Scenario, StartingPoint } from '@pitwall/domain';
 import type { Rng } from '@pitwall/engine/readers';
-import { drawsInto, normal, PURPOSE, streamKey, uniform, type Draws } from '../race-forecast/draws.ts';
+import { drawsInto, streamKey, uniform, type Draws } from '../race-forecast/draws.ts';
 import { raceForecast } from '../race-forecast/index.ts';
 import { MC_PURPOSE } from './constants.ts';
 import { hasStopAhead, rivalPlan, rivalStops } from './rivals.ts';
@@ -65,85 +65,11 @@ export function drawNeutralisations(start: StartingPoint, hazard: McInput['hazar
   return out;
 }
 
-type Stop = { lap: number; compound: NoiseCompound };
-
-/** Boxes at the end of `lap` for `compound`: in place of the next planned stop after it, else as one more (none if one is planned there). */
-function boxAt(stops: Stop[], lap: number, compound: NoiseCompound): void {
-  if (stops.some((s) => s.lap === lap)) return;
-  const next = stops.findIndex((s) => s.lap > lap);
-  if (next === -1) stops.push({ lap, compound });
-  else stops[next] = { lap, compound };
-}
-
-/**
- * Boxes at the end of `lap` for `compound` and keeps every later planned stop, so the car returns to slicks as planned
- * (Task 23b); a stop planned on that lap takes `compound`.
- */
-function rainBox(stops: Stop[], lap: number, compound: NoiseCompound): void {
-  const there = stops.find((s) => s.lap === lap);
-  if (there !== undefined) there.compound = compound;
-  else stops.push({ lap, compound });
-}
-
-/** What a scenario holds for one of our cars' triggers: its neutralisations, its rain timeline, the car's wear rate in it. */
-export type PlayContext = {
-  neutralisations: readonly Neutralisation[];
-  lapsTotal: number;
-  weather: readonly WeatherLap[] | null;
-  /** The scenario's wear rate less the car's estimate (% a lap; spec §7.1's pace uncertainty). */
-  wearRateOffPct: number;
-};
-
-/**
- * Our car's policy as it plays out in one scenario: per trigger (in order) whether its condition held and the car acted
- * (`fired`).
- * - `neutralised` holds on the first lap of its range a neutralisation of its condition is out: `box` boxes at the end
- *   of that lap (in place of the next planned stop, else as one more), `stayOut` moves every planned stop inside that
- *   neutralisation to the first lap after it.
- * - `rain` holds on the first lap before the flag whose wetness is at least its `wetnessMs`: it boxes at the end of it
- *   for its compound, the later planned stops kept.
- * - `degradationOff` holds when the scenario's wear rate is above the car's estimate by at least `wearRateDeltaPct`:
- *   the car follows `switchTo` instead of its stops.
- * - `rivalPits` needs the field's gaps (`rivalPits`, after this); `damage` never fires: driver-noise's mistakes carry
- *   no damage size (Task 19b).
- */
-export function playOut(policy: Policy, ctx: PlayContext, fired: Uint8Array): Policy {
-  const { neutralisations, lapsTotal } = ctx;
-  let stops: Stop[] = policy.stops.map((s) => ({ lap: s.lap, compound: s.compound }));
-  policy.triggers.forEach((t, i) => {
-    fired[i] = 0;
-    if (t.kind === 'rain') {
-      const at = ctx.weather?.find((w) => w.wetnessMs >= t.wetnessMs);
-      if (at === undefined || at.lap >= lapsTotal) return;
-      fired[i] = 1;
-      rainBox(stops, at.lap, t.action.box);
-      return;
-    }
-    if (t.kind === 'degradationOff') {
-      if (!(ctx.wearRateOffPct >= t.wearRateDeltaPct)) return;
-      fired[i] = 1;
-      stops = t.action.switchTo.map((s) => ({ lap: s.lap, compound: s.compound }));
-      return;
-    }
-    if (t.kind !== 'neutralised') return;
-    const n = neutralisations.find((x) => x.kind === t.condition && Math.max(x.fromLap, t.fromLap) <= Math.min(x.toLap, t.toLap));
-    if (n === undefined) return;
-    fired[i] = 1;
-    if (t.action === 'stayOut') {
-      stops = stops.map((s) => (s.lap >= n.fromLap && s.lap <= n.toLap ? { lap: n.toLap + 1, compound: s.compound } : s)).filter((s) => s.lap < lapsTotal);
-      return;
-    }
-    boxAt(stops, Math.max(n.fromLap, t.fromLap), t.action.box);
-  });
-  stops.sort((a, b) => a.lap - b.lap);
-  return { stops, triggers: [] };
-}
-
 /**
  * One scenario as every candidate shares it: its neutralisations and wetness path, the rivals' policies (and their dry
- * stop laps, -1 none), its rain timeline (`null` without a forecast), per car slot the wear rate's offset (our cars).
+ * stop laps, -1 none), its rain timeline (`null` without a forecast).
  */
-export type ScenarioEntry = { scenario: Scenario; rivals: Policy[]; rivalLaps: Int16Array; weather: WeatherLap[] | null; wearRateOffPct: Float64Array };
+export type ScenarioEntry = { scenario: Scenario; rivals: Policy[]; rivalLaps: Int16Array; weather: WeatherLap[] | null };
 
 /** A run's fixed parts: the starting point, our cars, the two base seeds, the scenarios drawn so far, the calls made. */
 export type Run = {
@@ -161,11 +87,11 @@ export type Run = {
   scenarios: Map<number, ScenarioEntry>;
   /** `raceForecast` calls made: each counts against the cap (spec §7.3). */
   calls: number;
-  /** The `raceForecast` calls one evaluation may take: 2 with the cover rule (a traced run to our stop first). */
+  /** The `raceForecast` calls one evaluation may take: 2 with the rivals' cover rule (a traced run to our stop first). */
   cost: number;
 };
 
-const NONE: Policy = { stops: [], triggers: [] };
+const NONE: Policy = { stops: [] };
 
 export function createRun(start: StartingPoint, hazard: McInput['hazard'], rules: RivalRules, fixed: Record<number, Policy | null>, rng: Rng): Run {
   const forecastBase = rng.int(0, 2_147_483_647);
@@ -186,25 +112,6 @@ export function createRun(start: StartingPoint, hazard: McInput['hazard'], rules
   };
 }
 
-/**
- * Our cars' wear rate in scenario `id` less its estimate: `wearRatePct` scaled by the scenario's degradation slope (the
- * draw `race-forecast` makes under the run's forecast seed) over its estimate (spec §7.1's pace uncertainty).
- */
-function wearRateOff(run: Run, id: number): Float64Array {
-  const { start } = run;
-  const out = new Float64Array(start.cars);
-  const draws = drawsInto(run.forecastBase, id, new Int32Array(start.cars));
-  for (const c of run.ours) {
-    const t = tyreIndex(c, start.compound[c] ?? 0);
-    const deg = start.tyre.degMsPerLap[t] ?? 0;
-    const sd = start.tyre.degSdMs[t] ?? 0;
-    if (!(deg > 0) || sd === 0) continue;
-    const drawn = deg + sd * normal(streamKey(draws, c, 0), PURPOSE.deg, 0);
-    out[c] = (start.tyre.wearRatePct[t] ?? 0) * (drawn / deg - 1);
-  }
-  return out;
-}
-
 /** Scenario `id` (drawn once, then reused by every candidate): its neutralisations, its weather and the rivals' stops. */
 export function scenarioOf(run: Run, id: number): ScenarioEntry {
   const cached = run.scenarios.get(id);
@@ -217,7 +124,7 @@ export function scenarioOf(run: Run, id: number): ScenarioEntry {
   const rivalLaps = new Int16Array(start.cars);
   rivalStops(start, run.ours, scenario, run.rules, draws, rivalLaps);
   const rivals = Array.from({ length: start.cars }, (_, k) => (run.ours.has(k) ? NONE : rivalPlan(start, k, rivalLaps[k] ?? -1, weather, scenario.neutralisations, run.rules.reactionLaps)));
-  const entry: ScenarioEntry = { scenario, rivals, rivalLaps, weather, wearRateOffPct: wearRateOff(run, id) };
+  const entry: ScenarioEntry = { scenario, rivals, rivalLaps, weather };
   run.scenarios.set(id, entry);
   return entry;
 }
@@ -238,98 +145,18 @@ export function forecast(run: Run, policies: readonly Policy[], scenario: Scenar
 }
 
 /**
- * Every car's policy in scenario `id`, our car `car` following `policy` (its triggers' firing into `fired`) and our
- * other cars their fixed plans played out (`car` -1: all of them), the rivals their drawn stops (and covers).
+ * Every car's policy in scenario `id`: our car `car` following `policy` and our other cars their fixed plans (`car` -1:
+ * all of them), each a stop list played as planned; the rivals their drawn stops (and covers).
  */
-export function policiesIn(run: Run, id: number, car: number, policy: Policy | null, fired: Uint8Array): Policy[] {
+export function policiesIn(run: Run, id: number, car: number, policy: Policy | null): Policy[] {
   const entry = scenarioOf(run, id);
-  const { scenario, rivals } = entry;
-  const policies = rivals.slice();
-  const owns: { c: number; own: Policy; fired: Uint8Array }[] = [];
+  const policies = entry.rivals.slice();
   for (const c of run.ours) {
     const own = c === car && policy !== null ? policy : (run.fixed[c] ?? NONE);
-    const firedOf = c === car ? fired : new Uint8Array(own.triggers.length);
-    const ctx: PlayContext = { neutralisations: scenario.neutralisations, lapsTotal: run.start.lapsTotal, weather: entry.weather, wearRateOffPct: entry.wearRateOffPct[c] ?? 0 };
-    policies[c] = playOut(own, ctx, firedOf);
-    owns.push({ c, own, fired: firedOf });
+    policies[c] = { stops: own.stops.map((s) => ({ lap: s.lap, compound: s.compound })) };
   }
-  if (owns.some((o) => o.own.triggers.some((t) => t.kind === 'rivalPits'))) rivalPits(run, policies, scenario, owns);
   if (run.rules.coverRule) cover(run, policies, entry);
   return policies;
-}
-
-/** Car `k`'s first stop from the starting lap on, before the last lap (none: undefined). */
-const firstStop = (run: Run, policy: Policy | undefined): Stop | undefined => policy?.stops.find((s) => s.lap >= run.start.lap && s.lap < run.start.lapsTotal);
-
-/** The field at the line ending a lap: per car slot its position (0: not running) and its gap to the leader. */
-type Line = { position: ArrayLike<number>; gapMs: ArrayLike<number> };
-
-/** The starting point's field as a line: the running cars in its order, at its gaps. */
-function startLine(start: StartingPoint): Line {
-  const position = new Int8Array(start.cars);
-  let p = 0;
-  for (const c of start.order) if (start.retired[c] !== 1) position[c] = ++p;
-  return { position, gapMs: start.gapMs };
-}
-
-/** Car `c`'s gap to car `k` at `line` (positive: `k` ahead); undefined where either is not running. */
-function gapTo(line: Line | undefined, c: number, k: number): number | undefined {
-  if (line === undefined || (line.position[c] ?? 0) === 0 || (line.position[k] ?? 0) === 0) return undefined;
-  return (line.gapMs[c] ?? 0) - (line.gapMs[k] ?? 0);
-}
-
-/**
- * Our cars' `rivalPits` triggers (spec §7.4, S13), on one traced forecast of the policies played out so far. A gap is
- * read at the line before the in-lap in question (the line ending lap r − 1 for a stop at the end of lap r; the starting
- * point's before its first line), so no in-lap's share of a pit loss is in it.
- * - `cover`: the named rival boxes at the end of lap r while within `withinMs` of our car (ahead or behind): our car
- *   boxes at the end of lap r + 1 for its next planned stop's compound in place of that stop (the rival's new compound
- *   without one).
- * - `extend` (high-level spec §3.4): before our next planned stop's in-lap (lap s) the named rival is ahead within
- *   `withinMs` and boxes at the end of lap r ≥ s: our car stays out until it has boxed and rejoined, boxing at the end
- *   of lap r + 1 instead.
- */
-function rivalPits(run: Run, policies: Policy[], scenario: Scenario, owns: readonly { c: number; own: Policy; fired: Uint8Array }[]): void {
-  const { start } = run;
-  let toLap = -1;
-  for (const { c, own } of owns) {
-    for (const t of own.triggers) {
-      if (t.kind !== 'rivalPits') continue;
-      const r = firstStop(run, policies[t.carId]);
-      if (r !== undefined) toLap = Math.max(toLap, r.lap - 1);
-      const s = firstStop(run, policies[c]);
-      if (t.action === 'extend' && s !== undefined) toLap = Math.max(toLap, s.lap - 1);
-    }
-  }
-  if (toLap === -1) return;
-  const trace = toLap >= start.lap ? (forecast(run, policies, scenario, { trace: true, toLap }).trace ?? []) : [];
-  const before = startLine(start);
-  const lineBefore = (lap: number): Line | undefined => (lap - 1 < start.lap ? before : trace.find((e) => e.lap === lap - 1));
-  for (const { c, own, fired } of owns) {
-    own.triggers.forEach((t, i) => {
-      if (t.kind !== 'rivalPits') return;
-      const k = t.carId as number;
-      const r = firstStop(run, policies[k]);
-      if (r === undefined || r.lap + 1 >= start.lapsTotal) return;
-      const stops = (policies[c]?.stops ?? []).map((s) => ({ lap: s.lap, compound: s.compound }));
-      if (t.action === 'cover') {
-        const gap = gapTo(lineBefore(r.lap), c, k);
-        if (gap === undefined || Math.abs(gap) > t.withinMs) return;
-        fired[i] = 1;
-        const next = stops.find((s) => s.lap >= r.lap + 1);
-        boxAt(stops, r.lap + 1, next?.compound ?? r.compound);
-      } else {
-        const s = firstStop(run, { stops, triggers: [] });
-        if (s === undefined || r.lap < s.lap) return;
-        const gap = gapTo(lineBefore(s.lap), c, k);
-        if (gap === undefined || gap <= 0 || gap > t.withinMs) return;
-        fired[i] = 1;
-        s.lap = r.lap + 1;
-      }
-      stops.sort((a, b) => a.lap - b.lap);
-      policies[c] = { stops, triggers: [] };
-    });
-  }
 }
 
 /**

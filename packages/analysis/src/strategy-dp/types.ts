@@ -2,7 +2,7 @@
 // compounds to the flag, expected over the SC/VSC chances, per weather world. Structured-cloneable; typed arrays are
 // indexed by lap (index 0 = `fromLap`). Not in `domain`, whose types are JSON-safe; the plans are JSON-safe, the table
 // is not.
-import type { CarId, LapModelParams, NoiseCompound, StartingPoint, Trigger } from '@pitwall/domain';
+import type { CarId, LapModelParams, NoiseCompound, StartingPoint } from '@pitwall/domain';
 
 /** The car's own lap-model inputs at `fromLap` (spec §6 Input), its tyre terms per compound (SP4.3c Task 12, B5). */
 export type DpCarParams = {
@@ -56,8 +56,8 @@ export type DpInput = {
   worlds: DpWorld[];
 };
 
-/** One plan: its stops, its expected remaining race time, its own trigger thresholds and the world it was solved in. */
-export type DpPlan = { stops: { lap: number; compound: NoiseCompound }[]; expectedMs: number; triggers: Trigger[]; world: number };
+/** One plan: its stops, its expected remaining race time and the world it was solved in. */
+export type DpPlan = { stops: { lap: number; compound: NoiseCompound }[]; expectedMs: number; world: number };
 
 /** Per lap the expected remaining race time boxing under a neutralisation and staying out: for `sc-call` (4.3b2). */
 export type DpTable = { boxUnderMs: Float64Array; stayMs: Float64Array };

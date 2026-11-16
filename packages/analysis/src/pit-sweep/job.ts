@@ -5,7 +5,7 @@
 // `scoreCalls` plays our stops from) to `min(flag − 1, window.to + rowsAfter)`, the window being the compound's
 // `pit-window` `windowLaps` (every stop lap from now to `flag − 1` while it is unknown, Task 18q B), the candidate "box
 // at L onto the compound, then the DP's best continuation"
-// (`policyOf(bestWith(...))`, with the plan's own triggers, to the flag); one `scoreCalls` per compound on common scenarios,
+// (`policyOf(bestWith(...))`, a stop list to the flag); one `scoreCalls` per compound on common scenarios,
 // `floor(maxScenarioPolicies / rows)` each (a count, C2). A stop lap whose `bestWith` is `null` has no row; a compound
 // without a row is absent. The car is the call's only car of ours, with a committed teammate as certain input (as far
 // as it can follow its plan) and an uncommitted one modelled like a rival, as `strategy`'s final call does.

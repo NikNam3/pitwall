@@ -1,7 +1,7 @@
 // The snapshot of 4.3b1's job values (SP4.3b2 Task 6 row 2): `former-values.json` holds, on the strategy tests' generator
 // race (`../../strategy/support.ts`, `RACE`) at the leader's lap `SNAPSHOT_LAP`, with the plain forecast drawn from
 // `createRng(SNAPSHOT_SEED)`, what `strategy`'s job computed before the move to `shared/strategy-input/`: per our car
-// the DP input it handed `strategyDp` and `policyOf(best plan, the DP's thresholds)`; the `race-monte-carlo` hazard;
+// the DP input it handed `strategyDp` and `policyOf(best plan)` (its triggers dropped in SP4.3d1 Task 3); the `race-monte-carlo` hazard;
 // the rival rules, points, zTie and tieBand from the config. Written once from `candidatesForRun` before the move.
 
 export const SNAPSHOT_LAP = 3;

@@ -1,6 +1,6 @@
 // `strategy-dp` (SP4.3b spec §6, plan 4.3b1 Task 18; SP4.3c spec §5.4, plan Task 19): one car's stops and compounds to
-// the flag by dynamic programming, expected over the SC/VSC chances of each lap, per weather world, each plan with its
-// own trigger thresholds (C50); pure and without randomness (C2). `support.ts` states how these tests read the input
+// the flag by dynamic programming, expected over the SC/VSC chances of each lap, per weather world; a plan is a stop
+// list (SP4.3d spec §5.1) (C50); pure and without randomness (C2). `support.ts` states how these tests read the input
 // and the result, and holds the brute force and the deterministic enumeration the rows compare with.
 import type { LapModelParams, NoiseCompound } from '@pitwall/domain';
 import fc from 'fast-check';
@@ -18,7 +18,6 @@ import {
   LAP,
   meetsLimit,
   meetsRule,
-  neutralBoxes,
   NO_LIMITS,
   NO_SETS,
   PACE_MS,
@@ -177,8 +176,6 @@ const close = (actual: number, expected: number, label: string): void => {
 /** Every plan of a result: its plans, `boxThisLap` (where not `null`) and `continue`. */
 const everyPlan = (r: DpResult): DpPlan[] => [...r.plans, ...(r.boxThisLap === null ? [] : [r.boxThisLap]), r.continue];
 
-const hasBoxAction = (r: DpResult): boolean => everyPlan(r).some((p) => p.triggers.some((t) => 'action' in t && typeof t.action === 'object' && 'box' in t.action));
-
 describe('strategy-dp: exactness', () => {
   // Task 19 row 3 (ported from 4.3b1 Task 18 row 1): per world
   it('equals brute force on races of ≤ 10 laps and ≤ 2 stops, per weather world', () => {
@@ -282,7 +279,7 @@ describe('strategy-dp: exactness', () => {
 
 describe('strategy-dp: base plans per stop count (SP4.3c Task 19, B5)', () => {
   // row 1
-  it('the result holds a 0-, 1-, 2- and 3-stop plan whenever feasible, each with its own triggers', () => {
+  it('the result holds a 0-, 1-, 2- and 3-stop plan whenever feasible', () => {
     const input = dpInput({
       totalLaps: 40,
       lap: { ...LAP, compoundOffsetMs: { soft: -300, medium: 0, hard: 300, inter: 0, wet: 0 } },
@@ -297,21 +294,23 @@ describe('strategy-dp: base plans per stop count (SP4.3c Task 19, B5)', () => {
     // every sequence within the sets is feasible (no rule, no limit): each is a plan, so every stop count 0–3 is there
     expect(r.plans.map((p) => sequenceOf(p.stops)).sort()).toEqual(everySequence(input).map((s) => s.join('-')).sort());
     expect(new Set(r.plans.map((p) => p.stops.length))).toEqual(new Set([0, 1, 2, 3]));
-    for (const plan of everyPlan(r)) expect(Array.isArray(plan.triggers), sequenceOf(plan.stops)).toBe(true);
+  });
 
-    for (const plan of r.plans) {
-      const own = new Set(plan.stops.map((s) => s.compound));
-      // a plan's neutralised triggers box only onto its own sequence's compounds; a no-stop plan never boxes under one
-      for (const t of neutralBoxes(plan)) expect(own.has((t.action as { box: NoiseCompound }).box), `${sequenceOf(plan.stops)}: ${JSON.stringify(t)}`).toBe(true);
-      if (plan.stops.length === 0) expect(neutralBoxes(plan), 'the no-stop plan').toEqual([]);
-    }
-    // the triggers are each plan's, not one list for all: the one-stops onto softs and onto hards box onto their own
-    const bySequence = plansBySequence(r.plans);
-    for (const c of ['soft', 'hard'] as const) {
-      const boxes = neutralBoxes(bySequence.get(c)!);
-      expect(boxes.length, `the one-stop onto ${c}: a neutralised trigger`).toBeGreaterThan(0);
-      for (const t of boxes) expect(t.action).toEqual({ box: c });
-    }
+  // SP4.3d1 Task 3 row 1 (spec §5.1): a plan is a stop list
+  it('DP plans: solveDp\'s plans, boxThisLap and continue carry no triggers key', () => {
+    const input = dpInput({
+      totalLaps: 40,
+      lap: { ...LAP, compoundOffsetMs: { soft: -300, medium: 0, hard: 300, inter: 0, wet: 0 } },
+      car: { compound: 'medium', degMsPerLap: 40, wearRatePct: { ...WEAR_RATES, soft: 3, medium: 2, hard: 1.2 } },
+      sets: { soft: 1, medium: 1, hard: 1 },
+      scByLap: Array.from({ length: 40 }, () => 0.04),
+      vscByLap: Array.from({ length: 40 }, () => 0.02),
+      scDur: [0.3, 0.4, 0.3],
+      vscDur: [0.6, 0.4],
+    });
+    const r = solveDp(input);
+    expect(r.boxThisLap, 'the case: box this lap is feasible').not.toBeNull();
+    for (const plan of everyPlan(r)) expect(Object.keys(plan), sequenceOf(plan.stops)).not.toContain('triggers');
   });
 
   // row 4
@@ -454,142 +453,6 @@ describe('strategy-dp: the hazard', () => {
     expect(stop).toBeGreaterThan(greenStop);
     expect(stop).toBeLessThanOrEqual(22);
   });
-
-  // 4.3b1 Task 18 row 8, ported (SP4.3c Task 19): the thresholds are each plan's own
-  it("SC triggers are each plan's own: the one-stop's lap ranges where boxing under an SC beats keeping its stop for later; the no-stop has none", () => {
-    // one new medium set, no rule, steep wear; an SC lasts one lap and none is expected, so the answer is the race time
-    // by enumeration with the SC on lap L, within the plan's own sequence (one stop onto mediums)
-    const totalLaps = 30;
-    const input = dpInput({
-      totalLaps,
-      car: { compound: 'medium', degMsPerLap: 50, wearRatePct: { ...WEAR_RATES, medium: 3 } },
-      sets: { medium: 1 },
-      scDur: [1],
-      vscDur: [1],
-    });
-    const scOn = (at: number) => (lap: number) => (lap === at ? ('sc' as const) : ('none' as const));
-    const boxUnderSc = (at: number): number => raceTimeMs(input, [{ lap: at, compound: 'medium' }], scOn(at));
-    const keepForLater = (at: number): number => {
-      let best = Infinity;
-      for (let later = at + 1; later < totalLaps; later++) best = Math.min(best, raceTimeMs(input, [{ lap: later, compound: 'medium' }], scOn(at)));
-      return best;
-    };
-    const boxLaps = Array.from({ length: totalLaps - 1 }, (_, i) => i + 1).filter((at) => boxUnderSc(at) < keepForLater(at));
-    expect(boxLaps.length, 'the case: some lap where boxing under an SC pays').toBeGreaterThan(0);
-    // the expected triggers: one per run of consecutive laps
-    const expected: { kind: 'neutralised'; condition: 'sc'; fromLap: number; toLap: number; action: { box: NoiseCompound } }[] = [];
-    for (const at of boxLaps) {
-      const last = expected.at(-1);
-      if (last !== undefined && last.toLap === at - 1) last.toLap = at;
-      else expected.push({ kind: 'neutralised', condition: 'sc', fromLap: at, toLap: at, action: { box: 'medium' } });
-    }
-
-    const r = solveDp(input);
-    const plans = plansBySequence(r.plans);
-    expect(r.plans[0]!.stops).toHaveLength(1);
-    expect(neutralBoxes(plans.get('medium')!).filter((t) => t.condition === 'sc')).toEqual(expected);
-    expect(neutralBoxes(plans.get('')!), 'the no-stop plan boxes under no neutralisation').toEqual([]);
-  });
-});
-
-// The rain threshold (Task 23c, supervisor rulings 2026-11-13). How these rows read it: the threshold is the constant
-// track wetness w (ms, on every lap) above which a switch of the slick-shod car to its first wet-weather set (inter,
-// else wet) at the end of `fromLap`, run to the flag, beats the best dry plan (stops onto dry compounds only) at that
-// same wetness, pit loss included; no hazard, so both are deterministic race times. The current wetness is the
-// world's `wetnessByLap[0]` (the world's wetness on `fromLap`); no rain trigger is emitted when the threshold is at or
-// below it. SP4.3c Task 19: a trigger of the world's best plan (its own triggers).
-describe('strategy-dp: the rain threshold', () => {
-  const rainOf = (r: DpResult) => (plansOf(r.plans, 0)[0]?.triggers ?? []).filter((t) => t.kind === 'rain');
-  const withWetness = (input: DpInput, w: number): DpInput => ({ ...input, worlds: [{ ...input.worlds[0]!, wetnessByLap: new Float64Array(input.worlds[0]!.wetnessByLap.length).fill(w) }] });
-  const bestDryMs = (input: DpInput): number =>
-    Math.min(
-      ...everyStopList(input)
-        .filter((stops) => stops.every((s) => DRY.includes(s.compound)) && meetsRule(input, stops))
-        .map((stops) => raceTimeMs(input, stops)),
-    );
-  /** The wetness where `switched(w) = against(w)`; both are linear in w (support.ts's lap model, no cold tyre term). */
-  const crossing = (input: DpInput, against: (i: DpInput) => number): number => {
-    const d = (w: number): number => raceTimeMs(withWetness(input, w), [{ lap: input.fromLap, compound: 'inter' }]) - against(withWetness(input, w));
-    const [d0, d1] = [d(0), d(1_000)];
-    return (d0 * 1_000) / (d0 - d1);
-  };
-  const wetLap: LapModelParams = { ...LAP, compoundOffsetMs: { soft: -300, medium: 0, hard: 300, inter: 1_500, wet: 3_000 }, wetnessMsPerMs: { slick: 0.1, inter: 0, wet: 0 } };
-
-  // Task 23c row 1
-  it('the rain threshold compares a switch to inter/wet against the best dry plan\'s remaining time, not against staying out on the current slick to the flag', () => {
-    // steep wear: staying out on the mediums to the flag is far slower than the best dry plan (one stop onto hards)
-    const input = dpInput({
-      totalLaps: 30,
-      lap: wetLap,
-      car: { compound: 'medium', degMsPerLap: 40, wearRatePct: { ...WEAR_RATES, medium: 3, hard: 1.5, inter: 2 } },
-      sets: { medium: 1, hard: 1, inter: 1 },
-    });
-    const expected = crossing(input, bestDryMs);
-    const stayingOut = crossing(input, (i) => raceTimeMs(i, []));
-    // the case: the two readings differ by far more than the tolerance, and the right one lies above the dry track
-    expect(expected - stayingOut).toBeGreaterThan(1_000);
-    expect(expected).toBeGreaterThan(0);
-    const rain = rainOf(solveDp(input));
-    expect(rain).toHaveLength(1);
-    expect(rain[0]!.action).toEqual({ box: 'inter' });
-    expect(Math.abs(rain[0]!.wetnessMs - expected), `${rain[0]!.wetnessMs} against ${expected}`).toBeLessThanOrEqual(1);
-  });
-
-  // Task 23c row 2
-  it('no rain trigger is emitted when its threshold is at or below the current wetness (never 0 on a dry start)', () => {
-    // a dry start where the inters beat every dry plan even on a dry track: the threshold is at or below 0
-    const dry = dpInput({
-      totalLaps: 30,
-      lap: { ...wetLap, compoundOffsetMs: { ...wetLap.compoundOffsetMs, inter: -1_500 } },
-      car: { compound: 'medium', degMsPerLap: 40, wearRatePct: { ...WEAR_RATES, medium: 3, hard: 1.5, inter: 2 } },
-      sets: { medium: 1, hard: 1, inter: 1 },
-    });
-    expect(crossing(dry, bestDryMs), 'the case: the threshold is at or below the dry track').toBeLessThanOrEqual(0);
-    for (const p of solveDp(dry).plans) expect(p.triggers.filter((t) => t.kind === 'rain'), `a dry start: ${sequenceOf(p.stops)}`).toEqual([]);
-
-    // a wet track already past the threshold
-    const base = dpInput({ totalLaps: 30, lap: wetLap, car: { compound: 'medium', degMsPerLap: 40, wearRatePct: { ...WEAR_RATES, medium: 3, hard: 1.5, inter: 2 } }, sets: { medium: 1, hard: 1, inter: 1 } });
-    const threshold = crossing(base, bestDryMs);
-    const current = Math.ceil(threshold) + 2_000;
-    expect(threshold, 'the case: a threshold above the dry track').toBeGreaterThan(0);
-    for (const p of solveDp(withWetness(base, current)).plans) expect(p.triggers.filter((t) => t.kind === 'rain'), `wetness ${current} above the threshold ${threshold}`).toEqual([]);
-  });
-
-  // Task 23c row 3
-  it('a dry start with no rain forecast gives a rain threshold above the current wetness or none', () => {
-    const dryStartArb = fc
-      .record({
-        laps: fc.integer({ min: 2, max: 30 }),
-        compound: dryArb,
-        tyreAge: fc.integer({ min: 0, max: 25 }),
-        degMsPerLap: fc.integer({ min: 0, max: 120 }),
-        rates: fc.tuple(scaled(0, 60, 10), scaled(0, 60, 10), scaled(0, 60, 10)),
-        sets: fc.tuple(fc.integer({ min: 0, max: 2 }), fc.integer({ min: 0, max: 2 }), fc.integer({ min: 0, max: 2 }), fc.integer({ min: 0, max: 2 }), fc.integer({ min: 0, max: 2 })),
-        owes: fc.boolean(),
-        interOffset: fc.integer({ min: 0, max: 4_000 }),
-        slick: scaled(1, 100, 100),
-        green: fc.integer({ min: 15_000, max: 30_000 }),
-      })
-      .map((r) => {
-        const rates = { ...WEAR_RATES, soft: r.rates[0], medium: r.rates[1], hard: r.rates[2] };
-        return dpInput({
-          totalLaps: r.laps,
-          lap: { ...LAP, compoundOffsetMs: { soft: -300, medium: 0, hard: 300, inter: r.interOffset, wet: r.interOffset + 1_500 }, wetnessMsPerMs: { slick: r.slick, inter: 0, wet: 0 } },
-          car: { compound: r.compound, tyreAge: r.tyreAge, wearPct: r.tyreAge * rates[r.compound], degMsPerLap: r.degMsPerLap, wearRatePct: rates },
-          sets: { soft: r.sets[0], medium: r.sets[1], hard: r.sets[2], inter: r.sets[3], wet: r.sets[4] },
-          owesSecondCompound: r.owes,
-          pitLossMs: { green: r.green, vsc: 0.7 * r.green, sc: 0.5 * r.green, inLapShare: 0.3 },
-        });
-      });
-    fc.assert(
-      fc.property(dryStartArb, (input) => {
-        for (const p of solveDp(input).plans) {
-          for (const t of p.triggers) if (t.kind === 'rain') expect(t.wetnessMs, 'a rain threshold on a dry start').toBeGreaterThan(input.worlds[0]!.wetnessByLap[0]!);
-        }
-      }),
-      { numRuns: 60, seed: 23 },
-    );
-  });
 });
 
 describe('strategy-dp: edges', () => {
@@ -602,7 +465,6 @@ describe('strategy-dp: edges', () => {
     expect(r.boxThisLap).toBeNull();
     expect(r.continue.stops).toEqual([]);
     close(r.continue.expectedMs, r.plans[0]!.expectedMs, 'continue against the only plan');
-    expect(hasBoxAction(r)).toBe(false);
   });
 
   // 4.3b1 Task 18 row 7
@@ -660,7 +522,7 @@ describe('strategy-dp: edges', () => {
 });
 
 // SP4.3c Task 15 (O15, C43): the DP burns the starting point's burn (`carParams.fuelBurnKgPerLap`, from
-// `shared/fuel-burn.ts`), not its own `fuel ÷ laps left` (`state.ts`'s fuel by lap, `thresholds.ts`' green race time).
+// `shared/fuel-burn.ts`), not its own `fuel ÷ laps left` (`state.ts`'s fuel by lap).
 describe('strategy-dp: the fuel burn (SP4.3c Task 15, O15)', () => {
   const MS_PER_KG = 100;
   const fuelled = (fuelBurnKgPerLap: number) =>

@@ -24,8 +24,8 @@ const MIN_GAP_MS = 500;
 
 const run = (start: StartingPoint, policies: readonly Policy[], scenario = PLAIN) => raceForecast(start, policies, scenario, createRng(42), { trace: true });
 
-const stops: Policy = { stops: [{ lap: STOP_LAP, compound: 'hard' }], triggers: [] };
-const staysOut: Policy = { stops: [], triggers: [] };
+const stops: Policy = { stops: [{ lap: STOP_LAP, compound: 'hard' }] };
+const staysOut: Policy = { stops: [] };
 
 /** The stopper (car 0) at gap 0 and the cars `22 s + d` behind it for each `d` of `behindRejoinMs`. */
 function field(behindRejoinMs: number[], minGapMs = MIN_GAP_MS): StartingPoint {
@@ -123,7 +123,7 @@ describe('race-forecast: the pit-exit yield, rewind (SP4.3b Task 11h R1)', () =>
     const fresh = build(g.viewAt(target));
     expect(rewound).toEqual(fresh);
     // every other car stops at the end of lap 8, so stoppers rejoin among cars that stayed out
-    const policies: Policy[] = Array.from({ length: rewound.cars }, (_, c) => (c % 2 === 0 ? { stops: [{ lap: 8, compound: 'hard' as const }], triggers: [] } : staysOut));
+    const policies: Policy[] = Array.from({ length: rewound.cars }, (_, c) => (c % 2 === 0 ? { stops: [{ lap: 8, compound: 'hard' as const }] } : staysOut));
     for (const scenario of [PLAIN, drawn(1)]) expect(run(rewound, policies, scenario)).toEqual(run(fresh, policies, scenario));
   });
 });

@@ -4,7 +4,7 @@
 // `<file>.decisions.json`. A replay or reprocess feeds both back (`recordingDecisions`); a recording without them runs
 // on no priors (`notApplicable`) and no decisions. A sidecar that cannot be read is treated as absent, with one warning.
 import { readFileSync, writeFileSync } from 'node:fs';
-import { decodeUiAction } from '@pitwall/contracts';
+import { decodeUiAction } from '@pitwall/contracts/ui/decode';
 import type { GivenDecision, PriorsSnapshot, RunPriors } from '@pitwall/domain';
 import type { Logger } from '../log.ts';
 

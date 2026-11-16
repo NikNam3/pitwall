@@ -30,21 +30,13 @@ function wholeNumber(flag: string, text: string, min: number): number {
 
 const percent = (p: number): number => Math.round(p * 100);
 
-/** One ranked row: rank, source, stops, triggers, E[pos], E[points], mean time, the position pmf, tie, committed. */
+/** One ranked row: rank, source, stops, E[pos], E[points], mean time, the position pmf, tie, committed. */
 function rowLine(rank: number, row: McRow): string {
   const stops = row.policy.stops.length === 0 ? 'no stop' : row.policy.stops.map((s) => `L${s.lap} ${s.compound}`).join(', ');
-  // per trigger kind: how many the policy holds and the highest share of scenarios one of them fired in
-  const byKind = new Map<string, { n: number; fired: number }>();
-  row.policy.triggers.forEach((t, i) => {
-    const kind = byKind.get(t.kind) ?? { n: 0, fired: 0 };
-    byKind.set(t.kind, { n: kind.n + 1, fired: Math.max(kind.fired, row.triggers[i]?.fired ?? 0) });
-  });
-  const triggers = [...byKind].map(([kind, { n, fired }]) => `${kind}${n > 1 ? ` x${n}` : ''} fired ${percent(fired)}%`);
   const parts = [
     `${rank}`,
     row.source,
     stops,
-    ...(triggers.length === 0 ? [] : [`if ${triggers.join(', ')}`]),
     `E[pos] ${row.ePos.toFixed(2)}`,
     `E[points] ${row.ePoints.toFixed(2)}`,
     `mean ${(row.meanMs / 1000).toFixed(3)} s`,

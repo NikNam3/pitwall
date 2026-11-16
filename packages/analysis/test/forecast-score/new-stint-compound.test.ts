@@ -57,7 +57,7 @@ describe('forecast-score: the compound after a stop is the new stint\'s (Task 11
     // Car 1 stops on lap 6 onto mediums, car 3 on lap 8 onto hards; both out-lap records still say soft.
     const { planned, history } = race(14, { 1: { stops: [{ lap: 6, compound: 'medium' }] }, 3: { stops: [{ lap: 8, compound: 'hard' }] } });
     const first = naturalExperiments(history, CONFIG).rejoin.find((c) => c.carId === 1)!;
-    const expected: Policy[] = [{ stops: [], triggers: [] }, { stops: [{ lap: 6, compound: 'medium' }], triggers: [] }, { stops: [], triggers: [] }, { stops: [{ lap: 8, compound: 'hard' }], triggers: [] }];
+    const expected: Policy[] = [{ stops: [] }, { stops: [{ lap: 6, compound: 'medium' }] }, { stops: [] }, { stops: [{ lap: 8, compound: 'hard' }] }];
     expect(first.policy).toEqual(expected);
     // The same policy as on the race whose out-lap records carry the new compound.
     expect(naturalExperiments(planned.history, CONFIG).rejoin.find((c) => c.carId === 1)!.policy).toEqual(expected);

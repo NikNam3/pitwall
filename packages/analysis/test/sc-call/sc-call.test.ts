@@ -8,12 +8,15 @@
 // Ported from the 4.2 calculator's tests (C82: the calculator goes, the behaviour that stays is ported): the rejoin
 // position, the stop's loss and its source per condition (row 5), our cars only, and `notApplicable` in the pit lane
 // (row 4; the 4.2 value was absent there, the job's is present with every `Known` unknown).
-import { SC_CALL_GAIN_BINS, unknown, type CarId, type Policy, type RaceHazard, type ScCall, type Trigger } from '@pitwall/domain';
+//
+// SP4.3d1 Task 3 (spec §5.1, C82): plans are stop lists. Deleted with the triggers: row 14 (the stay-out candidate
+// follows the DP's threshold for a later neutralisation) and row 10's per-scenario stay-out play; row 10 is ported to
+// the stay-out candidate's stop list, row 2's range is `unknown('notApplicable')` until Task 6 replaces its type.
+import { SC_CALL_GAIN_BINS, unknown, type CarId, type RaceHazard, type ScCall } from '@pitwall/domain';
 import { createRng, type EngineView } from '@pitwall/engine/readers';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as mcModule from '../../src/race-monte-carlo/index.ts';
 import type { CallCandidate, CallInput, CallOutcome, CallResult } from '../../src/race-monte-carlo/index.ts';
-import { createRun, playOut, scenarioOf } from '../../src/race-monte-carlo/scenarios.ts';
 import { SC_CALL, SC_CALL_JOB } from '../../src/sc-call/index.ts';
 import { run, type ScCallInput, type ScCallOutput } from '../../src/sc-call/job.ts';
 import { binShares } from '../../src/shared/distribution.ts';
@@ -77,10 +80,7 @@ vi.mock('../../src/strategy-dp/index.ts', async (importOriginal) => {
   };
 });
 
-/**
- * Car `car`'s stay-out plan of the call under `condition` at `lap` (its recorded `bestWith` noStopThrough query): the
- * DP's triggers a call carries are each plan's own (SP4.3c Task 19), so the stay-out row's are this plan's.
- */
+/** Car `car`'s stay-out plan of the call under `condition` at `lap` (its recorded `bestWith` noStopThrough query). */
 function stayPlanOf(car: CarId, lap: number, condition: 'sc' | 'vsc'): DpPlan {
   const { solution } = solveOf(car);
   const found = calls.bests.filter((b) => b.solution === solution && 'noStopThrough' in b.first && b.first.noStopThrough === lap && b.under?.condition === condition);
@@ -151,11 +151,11 @@ function scoreUnder(car: CarId, condition: 'sc' | 'vsc') {
 function pairOf(score: { input: CallInput; result: CallResult }, lap: number): { box: CallCandidate; stay: CallCandidate; boxOut: CallOutcome; stayOut: CallOutcome } {
   const { candidates } = score.input;
   expect(candidates).toHaveLength(2);
-  const boxAt = candidates.findIndex((c) => c.policy.stops[0]?.lap === lap);
+  const boxIdx = candidates.findIndex((c) => c.policy.stops[0]?.lap === lap);
   const stayAt = candidates.findIndex((c) => (c.policy.stops[0]?.lap ?? Infinity) > lap);
-  expect(boxAt, 'a box candidate').toBeGreaterThanOrEqual(0);
+  expect(boxIdx, 'a box candidate').toBeGreaterThanOrEqual(0);
   expect(stayAt, 'a stay-out candidate').toBeGreaterThanOrEqual(0);
-  return { box: candidates[boxAt]!, stay: candidates[stayAt]!, boxOut: score.result.outcomes[boxAt]!, stayOut: score.result.outcomes[stayAt]! };
+  return { box: candidates[boxIdx]!, stay: candidates[stayAt]!, boxOut: score.result.outcomes[boxIdx]!, stayOut: score.result.outcomes[stayAt]! };
 }
 
 /** Per scenario stay − box finish (places gained by boxing), its mean, the share with box ahead, its bins. */
@@ -178,9 +178,6 @@ const valueOf = <T>(k: { known: boolean; value?: T }, what: string): T => {
 
 /** The view at the leader's lap `lap` of the green race. */
 const green = (lap = LAP, spec: ScViewSpec = {}) => scViewAt(GREEN(), lap, spec);
-
-/** The stay-out trigger of a forced `condition` at `lap`: it covers only the neutralisation out at `lap`. */
-const stayOutTrigger = (condition: 'sc' | 'vsc', lap: number): Trigger => ({ kind: 'neutralised', condition, fromLap: lap, toLap: lap, action: 'stayOut' });
 
 describe('sc-call: the job', () => {
   it('is a C51 job: id sc-call, strategy\'s trigger and input reads plus rejoin, a module exporting run', async () => {
@@ -234,26 +231,12 @@ describe('sc-call: the job', () => {
     }
   });
 
-  // row 2
-  it("range is the DP's SC (VSC) trigger range for the next stop", () => {
+  // row 2 (SP4.3d1 Task 3): the DP's trigger range is deleted with the triggers; Task 6 replaces the type
+  it("range is unknown('notApplicable') on every row", () => {
     const out = runOn(green());
-    let some = false;
     for (const car of OURS) {
-      const call = callOf(out, car);
-      for (const condition of ['sc', 'vsc'] as const) {
-        // SP4.3c Task 19: the stay-out plan's own triggers (the next stop after staying out)
-        const thresholds = stayPlanOf(car, call.lap, condition).triggers;
-        const t = thresholds.find((x): x is Extract<Trigger, { kind: 'neutralised' }> => x.kind === 'neutralised' && x.condition === condition);
-        const range = rowOf(call, condition).range;
-        if (t === undefined) {
-          expect(range.known, `car ${car} ${condition}: no trigger, no range`).toBe(false);
-          continue;
-        }
-        some = true;
-        expect(valueOf(range, `car ${car} ${condition} range`)).toEqual({ fromLap: t.fromLap, toLap: t.toLap });
-      }
+      for (const row of callOf(out, car).rows) expect(row.range, `car ${car} ${row.condition}`).toEqual(unknown('notApplicable'));
     }
-    expect(some, 'the DP gives a neutralised trigger on the test race').toBe(true);
   });
 
   // row 3
@@ -362,35 +345,18 @@ describe('sc-call: the job', () => {
     expect(rowOf(sc, 'sc').lossSource).toEqual(DEFAULT_SOURCE);
   });
 
-  // row 10
-  it('stay out: in every scenario our car does not box while the forced neutralisation lasts; its next stop comes after it ends', () => {
+  // row 10 (ported, SP4.3d1 Task 3): the stay-out candidate is the DP's stay-out plan as a stop list
+  it("stay out: the stay-out candidate is the DP's noStopThrough plan under the forced neutralisation, a stop list with no stop on the call lap", () => {
     const out = runOn(green(7));
-    let checked = 0;
     for (const car of OURS) {
       const call = callOf(out, car);
       for (const condition of ['sc', 'vsc'] as const) {
-        const score = scoreUnder(car, condition);
-        const { stay } = pairOf(score, call.lap);
-        const { input } = score;
-        const fixed: Record<number, Policy | null> = {};
-        for (const key of Object.keys(input.start.sets)) fixed[Number(key)] = input.committed[Number(key) as CarId] ?? null;
-        // the scenarios as scoreCalls draws them (any seed: the property holds in every scenario)
-        const mcRun = createRun(input.start, input.hazard, input.rivalRules, fixed, createRng(SEED));
-        for (let id = 1; id <= input.scenarios; id++) {
-          const entry = scenarioOf(mcRun, id);
-          const forced = entry.scenario.neutralisations[0];
-          expect(forced?.kind, `scenario ${id}: the forced ${condition}`).toBe(condition);
-          expect(forced?.fromLap).toBe(input.start.lap);
-          const played = playOut(stay.policy, { neutralisations: entry.scenario.neutralisations, lapsTotal: input.start.lapsTotal, weather: entry.weather, wearRateOffPct: entry.wearRateOffPct[car] ?? 0 }, new Uint8Array(stay.policy.triggers.length));
-          const inside = played.stops.filter((s) => s.lap >= forced!.fromLap && s.lap <= forced!.toLap);
-          expect(inside, `car ${car}, ${condition}, scenario ${id}: no stop under the forced ${condition} (laps ${forced!.fromLap}–${forced!.toLap})`).toEqual([]);
-          const next = played.stops.find((s) => s.lap >= call.lap);
-          if (next !== undefined) expect(next.lap, `car ${car}, ${condition}, scenario ${id}: the next stop after it ends`).toBeGreaterThan(forced!.toLap);
-          checked++;
-        }
+        const { stay } = pairOf(scoreUnder(car, condition), call.lap);
+        expect(stay.policy, `car ${car} ${condition}`).toEqual(policyOf(stayPlanOf(car, call.lap, condition)));
+        expect(Object.keys(stay.policy), `car ${car} ${condition}`).not.toContain('triggers');
+        expect(stay.policy.stops.every((s) => s.lap > call.lap), `car ${car} ${condition}: ${json(stay.policy.stops)}`).toBe(true);
       }
     }
-    expect(checked).toBe(OURS.length * 2 * Math.floor(CAP / 4));
   });
 
   // row 11
@@ -409,11 +375,10 @@ describe('sc-call: the job', () => {
         );
         expect(query, `car ${car}: the box query under ${condition}`).toHaveLength(1);
         expect(query[0]!.under?.remaining).toEqual(remaining);
-        // the candidate is that plan with the DP's thresholds
+        // the candidate is that plan, a stop list
         const plan = calls.dp.bestWith(solution, { stopLap: call.lap, compound: 'best' }, { condition, remaining });
         expect(plan, `car ${car}: a box plan under ${condition}`).not.toBeNull();
         const { box } = pairOf(scoreUnder(car, condition), call.lap);
-        // SP4.3c Task 19: the plan with its own triggers
         expect(box.policy).toEqual(policyOf(plan!));
         expect(box.policy.stops[0]?.lap).toBe(call.lap);
       }
@@ -441,41 +406,6 @@ describe('sc-call: the job', () => {
     }
     // the binning of the tails itself: −6 and +5 land in the end bins
     expect(binShares(Float64Array.of(-6, 0, 5, 5), SC_CALL_GAIN_BINS)).toEqual([0.25, 0, 0, 0, 0.25, 0, 0, 0, 0.5]);
-  });
-
-  // row 14
-  it("a second neutralisation later in a scenario: the stay-out candidate follows the DP's threshold for it", () => {
-    const out = runOn(green());
-    let some = false;
-    for (const car of OURS) {
-      const call = callOf(out, car);
-      for (const condition of ['sc', 'vsc'] as const) {
-        // SP4.3c Task 19: the stay-out plan's own triggers
-        const thresholds = stayPlanOf(car, call.lap, condition).triggers;
-        const score = scoreUnder(car, condition);
-        const { stay } = pairOf(score, call.lap);
-        // the DP's thresholds kept, plus the one stay-out trigger covering only the forced neutralisation
-        expect(stay.policy.triggers).toHaveLength(thresholds.length + 1);
-        for (const t of thresholds) expect(stay.policy.triggers).toContainEqual(t);
-        expect(stay.policy.triggers).toContainEqual(stayOutTrigger(condition, call.lap));
-
-        // a later neutralisation inside a DP box threshold that starts after the forced one: the car boxes as the DP says
-        const later = thresholds.find(
-          (t): t is Extract<Trigger, { kind: 'neutralised' }> & { action: { box: Policy['stops'][number]['compound'] } } =>
-            t.kind === 'neutralised' && typeof t.action === 'object' && t.fromLap > call.lap + 1 && Math.max(t.fromLap, call.lap + 2) <= t.toLap,
-        );
-        if (later === undefined) continue;
-        some = true;
-        const at = Math.max(later.fromLap, call.lap + 2);
-        const neutralisations = [
-          { kind: condition, fromLap: call.lap, toLap: call.lap },
-          { kind: later.condition, fromLap: at, toLap: at },
-        ];
-        const played = playOut(stay.policy, { neutralisations, lapsTotal: score.input.start.lapsTotal, weather: null, wearRateOffPct: 0 }, new Uint8Array(stay.policy.triggers.length));
-        expect(played.stops, `car ${car}, forced ${condition}: boxes under the later ${later.condition} on lap ${at}`).toContainEqual({ lap: at, compound: later.action.box });
-      }
-    }
-    expect(some, 'the DP gives a box threshold after the forced neutralisation on the test race').toBe(true);
   });
 });
 

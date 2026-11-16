@@ -241,7 +241,7 @@ const OWNERS: OwnerRow[] = [
   // evaluates the curve (`race-forecast`'s copy is deleted; `battle`'s fixed margin gives way to the chance).
   { judgement: 'the pass curve', owner: 'race-interaction', source: (u) => codeMatches(u, PASS_CURVE), allowed: [] },
   // SP4.3c Task 15 (O15): the burn the simulators use is `shared/fuel-burn.ts`' through the starting point; no other
-  // unit computes a burn from a fuel load (`race-forecast/field.ts`, `strategy-dp/thresholds.ts`, `strategy-dp/state.ts`).
+  // unit computes a burn from a fuel load (`race-forecast/field.ts`, `strategy-dp/state.ts`).
   { judgement: 'the fuel burn', owner: 'shared/fuel-burn.ts', source: (u) => codeMatches(u, BURN_FROM_FUEL), allowed: [] },
   // SP4.3c Task 17 (O8, B8): the rejoin of a stopper and the stop's cost (in-lap share, human saving, double stack,
   // pit-exit yield) are `race-forecast`'s (`stopperRejoin`, `stopCostMs`); no other unit prices a stop from the raw loss

@@ -105,7 +105,7 @@ function expectedCandidates(car: CarId, compound: NoiseCompound, last: number, f
   const out: { lap: number; policy: ReturnType<typeof policyOf> }[] = [];
   for (let lap = first ?? input.fromLap; lap <= last; lap++) {
     const plan = bestWith(solution, { stopLap: lap, compound });
-    // SP4.3c Task 19: each row's plan with its own triggers (no shared thresholds)
+    // each row's plan, a stop list (SP4.3d spec §5.1)
     if (plan !== null) out.push({ lap, policy: policyOf(plan) });
   }
   return out;

@@ -1,6 +1,6 @@
 // Value types of the `strategy` analysis (SP4.3b spec §7.4, §8.1): per our car the candidate policies `race-monte-carlo`
 // ranked, and the run's metadata. JSON-safe: the topic `strategy.plans` publishes it as a job's result (C51).
-import type { Policy, Trigger } from '../forecast.ts';
+import type { Policy } from '../forecast.ts';
 import type { CarId } from '../ids.ts';
 import type { Known } from '../known.ts';
 
@@ -9,8 +9,7 @@ export type McSource = 'dp' | 'neighbour' | 'rule' | 'committed';
 
 /**
  * One ranked policy (spec §7.4): the finishing-position pmf (P1 … Pn), E[position], E[points], the mean race time,
- * position quantiles, the chance to gain a place at the finish; per trigger how often it fired and what it was worth in
- * places; its paired difference and SE against the leader and whether it ties; whether it is the committed plan and, if
+ * position quantiles, the chance to gain a place at the finish; its paired difference and SE against the leader and whether it ties; whether it is the committed plan and, if
  * so, why it can no longer be followed as committed.
  */
 export type McRow = {
@@ -22,7 +21,6 @@ export type McRow = {
   meanMs: number;
   quantiles: { p10: number; p50: number; p90: number };
   pGain: number;
-  triggers: { kind: Trigger['kind']; fired: number; worthPos: number }[];
   diff: number;
   se: number;
   tie: boolean;
@@ -35,7 +33,7 @@ export type McRow = {
   /** Mean race time against the committed row (ms); `null` without a commit. */
   deltaPlanMs: number | null;
   /** The rule candidate's rule (the SRC hover); `null` unless `source` is `'rule'`. */
-  rule: 'mirrorAhead' | 'mirrorBehind' | 'cover' | 'extend' | null;
+  rule: 'mirrorAhead' | 'mirrorBehind' | null;
 };
 
 /**

@@ -19,9 +19,6 @@ type Cand = {
   points: Float64Array;
   /** Race time; NaN where the car retired. */
   time: Float64Array;
-  /** Per trigger: the scenarios it fired in, and the positions summed over them. */
-  fired: Float64Array;
-  firedPos: Float64Array;
 };
 
 /** The first scenario id of the re-scoring (spec §7.3 step 5): fresh scenarios, none of the search's. */
@@ -37,8 +34,6 @@ const newCand = (c: McCandidate, capacity: number, from = 0): Cand => ({
   pos: new Float64Array(Math.min(capacity, FIRST_CAPACITY)),
   points: new Float64Array(Math.min(capacity, FIRST_CAPACITY)),
   time: new Float64Array(Math.min(capacity, FIRST_CAPACITY)),
-  fired: new Float64Array(c.policy.triggers.length),
-  firedPos: new Float64Array(c.policy.triggers.length),
 });
 
 const grown = (a: Float64Array, size: number): Float64Array => {
@@ -55,22 +50,14 @@ function extend(run: Run, config: McConfig, car: number, x: Cand, to: number): v
     x.points = grown(x.points, size);
     x.time = grown(x.time, size);
   }
-  const fired = new Uint8Array(x.c.policy.triggers.length);
   const cars = run.start.cars;
   for (let i = x.n; i < to; i++) {
     const id = x.from + i + 1;
-    const policies = policiesIn(run, id, car, x.c.policy, fired);
-    const r = forecast(run, policies, scenarioOf(run, id).scenario);
+    const r = forecast(run, policiesIn(run, id, car, x.c.policy), scenarioOf(run, id).scenario);
     const p = r.position[car] ?? 0;
-    const pos = p === 0 ? cars : p;
-    x.pos[i] = pos;
+    x.pos[i] = p === 0 ? cars : p;
     x.points[i] = p === 0 ? 0 : (config.points[p - 1] ?? 0);
     x.time[i] = p === 0 ? Number.NaN : (r.raceTimeMs[car] ?? 0);
-    for (let t = 0; t < fired.length; t++) {
-      if (fired[t] !== 1) continue;
-      x.fired[t] = (x.fired[t] ?? 0) + 1;
-      x.firedPos[t] = (x.firedPos[t] ?? 0) + pos;
-    }
   }
   x.n = Math.max(x.n, to);
 }
@@ -182,14 +169,6 @@ function rowsOf(run: Run, input: McInput, car: number, cands: readonly Cand[], r
       meanMs: s.meanMs,
       quantiles: { p10: quantile(positionPmf, 0.1), p50: quantile(positionPmf, 0.5), p90: quantile(positionPmf, 0.9) },
       pGain: gain / x.n,
-      triggers: x.c.policy.triggers.map((t, k) => {
-        const n = x.fired[k] ?? 0;
-        // what it was worth: E[position] where it did not fire less E[position] where it fired (0 where either is empty)
-        const posFired = x.firedPos[k] ?? 0;
-        const posAll = s.ePos * x.n;
-        const worthPos = n === 0 || n === x.n ? 0 : (posAll - posFired) / (x.n - n) - posFired / n;
-        return { kind: t.kind, fired: n / x.n, worthPos };
-      }),
       diff: diff.mean,
       se: diff.se,
       tie: ranking.tie[i] ?? false,
@@ -246,20 +225,11 @@ function merge(alive: Cand[], all: Cand[], committed: Policy | null): void {
   alive.splice(0, alive.length, ...kept);
 }
 
-const hasRivalPits = (p: Policy | null | undefined): boolean => p?.triggers.some((t) => t.kind === 'rivalPits') === true;
-
 /**
- * The most `raceForecast` calls one evaluation of `x` for car `car` takes: the run's (the cover rule's traced run), one
- * more where a `rivalPits` trigger is played (`x`'s or another of our cars' fixed plan: the field's gaps, a traced run).
- * The cap is charged the calls made (Task 23b); this bounds a batch so it never passes the cap.
+ * The most `raceForecast` calls one evaluation of each of `group` takes: the run's (`Run.cost`, the cover rule's traced
+ * run). The cap is charged the calls made (Task 23b); this bounds a batch so it never passes the cap.
  */
-function costOf(run: Run, car: number, x: Cand): number {
-  let rival = hasRivalPits(x.c.policy);
-  for (const c of run.ours) if (c !== car && hasRivalPits(run.fixed[c])) rival = true;
-  return run.cost + (rival ? 1 : 0);
-}
-
-const costSum = (run: Run, car: number, group: readonly Cand[]): number => group.reduce((s, x) => s + costOf(run, car, x), 0);
+const costSum = (run: Run, group: readonly Cand[]): number => run.cost * group.length;
 
 /** Against the leader `lead`: clearly worse (beyond `zDrop` SEs), clearly within the tie band, or still open. */
 function verdict(lead: Scored, x: Scored, zDrop: number, tieBand: number): 'worse' | 'tie' | 'open' {
@@ -278,7 +248,7 @@ const leaderOf = (xs: readonly Cand[]): Cand => xs.reduce((best, x) => (scoredOf
 function batches(run: Run, input: McInput, car: number, group: Cand[], budget: number, done: () => boolean, after?: () => void): { spent: number; capHit: boolean } {
   const before = run.calls;
   while (!done()) {
-    const step = Math.min(input.config.n0, Math.floor((budget - (run.calls - before)) / costSum(run, car, group)));
+    const step = Math.min(input.config.n0, Math.floor((budget - (run.calls - before)) / costSum(run, group)));
     if (step < 1) return { spent: run.calls - before, capHit: true };
     const to = (group[0] as Cand).n + step;
     for (const x of group) extend(run, input.config, car, x, to);
@@ -320,13 +290,15 @@ function search(run: Run, input: McInput, car: number, budget: number): Searched
   const committed = input.committed[car as CarId] ?? null;
   const all = (input.candidates[car as CarId] ?? []).map((c) => newCand(c, Math.max(budget, 1)));
   const before = run.calls;
-  const first = Math.min(n0, Math.floor(budget / costSum(run, car, all)));
+  // the re-scoring's share is kept back before the first batch, so every re-scored finalist gets its scenarios
+  const reserve = Math.floor(budget * RESCORE_SHARE);
+  const first = Math.min(n0, Math.floor((budget - reserve) / costSum(run, all)));
   if (first === 0) {
     // fewer calls than one scenario each: one scenario each for as many as fit
     const scoredOnes: Cand[] = [];
     let held = 0;
     for (const x of all) {
-      held += costOf(run, car, x);
+      held += run.cost;
       if (held > budget) break;
       scoredOnes.push(x);
     }
@@ -349,7 +321,7 @@ function search(run: Run, input: McInput, car: number, budget: number): Searched
     }
     return !open;
   };
-  const searchBudget = Math.max(0, budget - Math.floor(budget * RESCORE_SHARE) - spent());
+  const searchBudget = Math.max(0, budget - reserve - spent());
   const s = batches(run, input, car, alive, searchBudget, clear, () => merge(alive, all, committed));
   // the re-scoring: the top few together on fresh scenarios, none dropped
   const ranked = choiceOrder(alive, all, zTie, tieBand);

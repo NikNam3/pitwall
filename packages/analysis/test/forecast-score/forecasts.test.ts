@@ -91,13 +91,13 @@ describe('forecast-score policies', () => {
     };
     const start = startOfStops(startingPoint({ lap: 5, lapsTotal: 30, cars: Array.from({ length: 6 }, () => ({})) }), stops);
     expect(forecastPolicies(start)).toEqual([
-      { stops: [{ lap: 12, compound: 'hard' }], triggers: [] },
-      { stops: [], triggers: [] },
-      { stops: [{ lap: 18, compound: 'hard' }], triggers: [] },
-      { stops: [{ lap: 12, compound: 'hard' }], triggers: [] },
-      { stops: [{ lap: 20, compound: 'medium' }], triggers: [] },
+      { stops: [{ lap: 12, compound: 'hard' }] },
+      { stops: [] },
+      { stops: [{ lap: 18, compound: 'hard' }] },
+      { stops: [{ lap: 12, compound: 'hard' }] },
+      { stops: [{ lap: 20, compound: 'medium' }] },
       // Car 5 has no entry: no stop.
-      { stops: [], triggers: [] },
+      { stops: [] },
     ]);
   });
 });

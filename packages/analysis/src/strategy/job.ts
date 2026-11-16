@@ -21,7 +21,6 @@
 //   `scripts/gen-strategy-reference.ts` builds its input with them.
 import { known, unknown, type CarId, type Known, type McRow, type Policy, type StartingPoint, type StrategyOutput } from '@pitwall/domain';
 import type { Rng } from '@pitwall/engine/readers';
-import { RACE_INTERACTION_CONFIG } from '../race-interaction/config.ts';
 import { RAIN_OUTLOOK_CONFIG } from '../rain-outlook/config.ts';
 import { raceMonteCarlo, type McCandidate, type McConfig, type McInput, type McResult } from '../race-monte-carlo/index.ts';
 import { committedField, dpInputOn, followable, mcSettingsFrom, notPlannedWhy, plannedCars, plannedField, roadWorlds, strategyConfigOf, toMcHazard, worldsOf, type StrategyInput } from '../shared/strategy-input/index.ts';
@@ -82,7 +81,7 @@ export function candidatesForRun(input: StrategyInput, rng: Rng): { mc: McInput 
     const dpInput = dpInputOn(field, car, hazard, worlds, config.trafficGapMs);
     const solutions = dpInput.worlds.map((_, w) => solveWorld(dpInput, w));
     const dp = solveDp(dpInput, solutions);
-    const own = candidatesOf(field, car, dp, solutions, { ...config, closeGapMs: RACE_INTERACTION_CONFIG.read(input).closeGapMs, rainPct: RAIN_OUTLOOK_CONFIG.read(input).rainPct });
+    const own = candidatesOf(field, car, dp, solutions, { ...config, rainPct: RAIN_OUTLOOK_CONFIG.read(input).rainPct });
     const original = input.committed[car] ?? null;
     let plan: CarPlan = { candidates: own, followed: null, original: null, infeasible: null };
     if (original !== null) {

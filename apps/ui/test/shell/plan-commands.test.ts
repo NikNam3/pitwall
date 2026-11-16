@@ -21,7 +21,6 @@ const { planCommitId, planClearId, planCommands } = defaults as unknown as PlanS
 
 const POLICY: Policy = {
   stops: [{ lap: 18, compound: 'hard' }],
-  triggers: [{ kind: 'neutralised', condition: 'sc', fromLap: 8, toLap: 30, action: { box: 'medium' } }],
 };
 
 describe('the plan commands (C72)', () => {

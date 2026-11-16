@@ -117,8 +117,8 @@ describe('one committed-teammate rule for every job', () => {
   // row 1
   it('a committed teammate whose planned stop lap has passed boxes this lap, in every job', () => {
     const lap = mateLap();
-    const passed: Policy = { stops: [{ lap: lap - 2, compound: 'hard' }, { lap: lap + 8, compound: 'medium' }], triggers: [] };
-    const followed: Policy = { stops: [{ lap, compound: 'hard' }, { lap: lap + 8, compound: 'medium' }], triggers: [] };
+    const passed: Policy = { stops: [{ lap: lap - 2, compound: 'hard' }, { lap: lap + 8, compound: 'medium' }] };
+    const followed: Policy = { stops: [{ lap, compound: 'hard' }, { lap: lap + 8, compound: 'medium' }] };
     const byJob = mateInEveryJob({ decisions: committed(TEAMMATE, passed) });
     for (const job of JOBS) for (const m of byJob[job]) expect.soft(m, job).toEqual({ ours: true, follows: followed });
   });
@@ -127,15 +127,15 @@ describe('one committed-teammate rule for every job', () => {
   it('a committed stop onto a compound without a set is dropped, in every job', () => {
     const lap = mateLap();
     const noHard = SETS.filter((s) => s.visualCompound !== 'hard');
-    const onHard: Policy = { stops: [{ lap: lap + 4, compound: 'hard' }], triggers: [] };
+    const onHard: Policy = { stops: [{ lap: lap + 4, compound: 'hard' }] };
     const byJob = mateInEveryJob({ sets: { [TEAMMATE]: noHard }, decisions: committed(TEAMMATE, onHard) });
-    for (const job of JOBS) for (const m of byJob[job]) expect.soft(m, job).toEqual({ ours: true, follows: { stops: [], triggers: [] } });
+    for (const job of JOBS) for (const m of byJob[job]) expect.soft(m, job).toEqual({ ours: true, follows: { stops: [] } });
   });
 
   // row 3
   it('the same membership rule in every job', () => {
     // the teammate retired: in the starting point (its sets known) but not in the planned field, its commit kept
-    const spec: ViewSpec = { retired: [TEAMMATE], decisions: committed(TEAMMATE, { stops: [{ lap: mateLap() + 4, compound: 'hard' }], triggers: [] }) };
+    const spec: ViewSpec = { retired: [TEAMMATE], decisions: committed(TEAMMATE, { stops: [{ lap: mateLap() + 4, compound: 'hard' }] }) };
     const s = strategyInput(spec).start;
     expect(s.known && s.value.sets[TEAMMATE] !== undefined, 'the retired teammate is in the starting point with its sets').toBe(true);
     const byJob = mateInEveryJob(spec);
@@ -149,15 +149,15 @@ describe('one committed-teammate rule for every job', () => {
     const noHard = SETS.filter((s) => s.visualCompound !== 'hard');
     const cases: [string, ViewSpec][] = [
       ['no commit', {}],
-      ['a followable commit', { decisions: committed(TEAMMATE, { stops: [{ lap: lap + 5, compound: 'hard' }], triggers: [] }) }],
-      ['a passed stop', { decisions: committed(TEAMMATE, { stops: [{ lap: lap - 2, compound: 'hard' }, { lap: lap + 8, compound: 'medium' }], triggers: [] }) }],
-      ['no set left', { sets: { [TEAMMATE]: noHard }, decisions: committed(TEAMMATE, { stops: [{ lap: lap + 4, compound: 'hard' }], triggers: [] }) }],
+      ['a followable commit', { decisions: committed(TEAMMATE, { stops: [{ lap: lap + 5, compound: 'hard' }] }) }],
+      ['a passed stop', { decisions: committed(TEAMMATE, { stops: [{ lap: lap - 2, compound: 'hard' }, { lap: lap + 8, compound: 'medium' }] }) }],
+      ['no set left', { sets: { [TEAMMATE]: noHard }, decisions: committed(TEAMMATE, { stops: [{ lap: lap + 4, compound: 'hard' }] }) }],
       [
         'both committed',
         {
           decisions: [
-            { kind: 'planCommitted', carId: PLAYER, policy: { stops: [{ lap: lap - 1, compound: 'soft' }], triggers: [] } },
-            { kind: 'planCommitted', carId: TEAMMATE, policy: { stops: [{ lap: lap + 6, compound: 'medium' }], triggers: [] } },
+            { kind: 'planCommitted', carId: PLAYER, policy: { stops: [{ lap: lap - 1, compound: 'soft' }] } },
+            { kind: 'planCommitted', carId: TEAMMATE, policy: { stops: [{ lap: lap + 6, compound: 'medium' }] } },
           ],
         },
       ],

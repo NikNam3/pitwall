@@ -33,7 +33,7 @@ async function start(extra: WithPlan) {
   return { send, answer };
 }
 
-const policy = { stops: [{ lap: 12, compound: 'hard' }], triggers: [{ kind: 'rain', wetnessMs: 4_000, action: { box: 'inter' } }] };
+const policy = { stops: [{ lap: 12, compound: 'hard' }] };
 const actions = [
   { kind: 'plan.commit', feedId: 'f1', carId: 0, policy },
   { kind: 'plan.clear', feedId: 'f1', carId: 0 },

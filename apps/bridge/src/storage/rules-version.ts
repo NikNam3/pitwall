@@ -8,13 +8,20 @@ import { fileURLToPath } from 'node:url';
 /** The root of the tree this bridge runs from. */
 export const SOURCE_ROOT = fileURLToPath(new URL('../../../../', import.meta.url));
 
-/** The bridge's one module that can change the log: where a committed decision lands. It imports nothing. */
+/** The bridge's module that decides where a committed decision lands. It imports nothing. */
 const DECISION_PLACEMENT = 'apps/bridge/src/pipeline/decision-placement.ts';
+/**
+ * The bridge's decisions sidecars: their decoder (`@pitwall/contracts/ui/decode`) shapes every replayed decision fact's
+ * policy (SP4.3d spec §5.1). They import the decoder, its UI types and the logger's type.
+ */
+const DECISION_SIDECARS = 'apps/bridge/src/pipeline/decision-sidecars.ts';
+const SIDECAR_IMPORTS = ['apps/bridge/src/log.ts', 'packages/contracts/src/ui/decode.ts', 'packages/contracts/src/ui/types.ts'];
 
 /**
  * The modules that can change the log, each with everything it imports: the four steps (with their sub-machines and
- * recorders, and the log), the runner, frame assembly and its session tracker, and the bridge's decision placement,
- * which decides the frame a decision fact describes (ruling R28). Protocol decoding is reached through frame assembly.
+ * recorders, and the log), the runner, frame assembly and its session tracker, the bridge's decision placement, which
+ * decides the frame a decision fact describes (ruling R28), and its decisions sidecars, whose decoder shapes a decision
+ * fact's policy. Protocol decoding is reached through frame assembly.
  */
 const ENTRIES = [
   'packages/engine/src/step/step.ts',
@@ -22,6 +29,7 @@ const ENTRIES = [
   'packages/engine/src/frame/assembler.ts',
   'packages/engine/src/frame/session-tracker.ts',
   DECISION_PLACEMENT,
+  DECISION_SIDECARS,
 ];
 
 /**
@@ -44,7 +52,7 @@ export async function walkRulesSources(root: string): Promise<string[]> {
 
 /** The folders whose `.ts` files are the cache key, and the single files it also covers: every file the walk can reach is in them. */
 const KEYED = ['packages/protocol/src', 'packages/domain/src', 'packages/engine/src'];
-const KEYED_FILES = [DECISION_PLACEMENT];
+const KEYED_FILES = [DECISION_PLACEMENT, DECISION_SIDECARS, ...SIDECAR_IMPORTS];
 const isKeyed = (path: string): boolean => KEYED_FILES.includes(path) || KEYED.some((dir) => path.startsWith(`${dir}/`));
 /** Where the walk's file list is cached, under the tree's root. */
 const CACHE = 'node_modules/.cache/pitwall/rules-sources.json';

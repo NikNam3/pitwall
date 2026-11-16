@@ -37,14 +37,8 @@ const decisionsSidecar = (file: string): string => `${file}.decisions.json`;
 type SidecarEntry = { recordIndex: number; decision: { kind: string } & Record<string, unknown> };
 const sidecarOf = (file: string): SidecarEntry[] => (existsSync(decisionsSidecar(file)) ? (JSON.parse(readFileSync(decisionsSidecar(file), 'utf8')) as SidecarEntry[]) : []);
 
-/** A plan with one stop on lap `lap` (the builder's race has 10) and its triggers, thresholds included. */
-const policyAt = (lap: number): Policy => ({
-  stops: [{ lap, compound: 'hard' }],
-  triggers: [
-    { kind: 'neutralised', condition: 'sc', fromLap: 1, toLap: lap, action: { box: 'medium' } },
-    { kind: 'rivalPits', carId: carId(2), withinMs: 1_500, action: 'cover' },
-  ],
-});
+/** A plan with one stop on lap `lap` (the builder's race has 10), a stop list (SP4.3d spec §5.1). */
+const policyAt = (lap: number): Policy => ({ stops: [{ lap, compound: 'hard' }] });
 const commit = (from: FeedId, car: number, lap: number): PlanAction => ({ kind: 'plan.commit', feedId: from, carId: carId(car), policy: policyAt(lap) });
 
 /** What the probe saw on one frame: the race clock, the decisions in the projection and the plans of cars 0 and 1. */

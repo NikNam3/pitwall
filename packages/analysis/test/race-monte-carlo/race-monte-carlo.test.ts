@@ -1,12 +1,13 @@
 // `race-monte-carlo` (SP4.3b spec §7, Task 19; C2, C3, C50): candidate policies of our cars scored over common random
 // scenarios drawn through `race-forecast`, searched under a scenario-policy cap. Starting points are built by hand
 // (`../race-forecast/start.ts`); how these tests read the inputs and outputs is stated in `support.ts`.
-import type { Policy, StartingPoint, Trigger } from '@pitwall/domain';
+import type { Policy, StartingPoint } from '@pitwall/domain';
 import { createRng } from '@pitwall/engine/readers';
 import { describe, expect, it } from 'vitest';
 import * as mc from '../../src/race-monte-carlo/index.ts';
 import { fieldPositions, raceMonteCarlo, scoreAll, SIMULATOR, type FieldInput } from '../../src/race-monte-carlo/index.ts';
 import { raceForecast } from '../../src/race-forecast/index.ts';
+import { drawNeutralisations, scenarioDraws } from '../../src/race-monte-carlo/scenarios.ts';
 import { drawn, interaction, NOISY, PLAIN, startingPoint, type CarSpec } from '../race-forecast/start.ts';
 import { byCar, candidate, carOf, hazard, mcInput, NO_STOP, pmfOf, RIVAL_RULES, rowOf, rowsOf, shareSe, stopAt, type Row } from './support.ts';
 
@@ -24,8 +25,6 @@ function exported<F>(name: string): F {
   if (typeof f !== 'function') throw new Error(`race-monte-carlo/index.ts exports no ${name}`);
   return f as F;
 }
-
-const box = (condition: 'sc' | 'vsc', lap: number): Trigger => ({ kind: 'neutralised', condition, fromLap: lap, toLap: lap, action: { box: 'hard' } });
 
 /** Two cars on the line together, only their pace levels drawn; every pass at the next braking zone is certain. */
 function paceDuel(): { start: StartingPoint; pAhead: number } {
@@ -54,22 +53,14 @@ describe('race-monte-carlo: the simulator marker', () => {
 
 describe('race-monte-carlo: scenarios (spec §7.1)', () => {
   // row 1
+  // ported (SP4.3d1 Task 3): the start laps were read from fired triggers (deleted); now drawn neutralisations' own start laps
   it("SC counts and start laps match race-hazard's table within 3 SE", () => {
     // one car alone, quiet: its race time moves only with the neutralisations; SC on laps 3 and 9, a VSC on lap 7
     const start = startingPoint({ lapsTotal: 10, cars: [{}], ours: [0] });
     const p = { sc3: 0.3, vsc7: 0.25, sc9: 0.2 };
     const hz = hazard(10, { sc: { 2: p.sc3, 8: p.sc9 }, vsc: { 6: p.vsc7 } });
-    const watched: Policy = { stops: [], triggers: [box('sc', 3), box('sc', 5), box('vsc', 7), box('sc', 9)] };
     const n = 5_000;
-    const rows = carOf(scoreAll(mcInput(start, { 0: [NO_STOP, watched] }, { hazard: hz }), createRng(7), n), 0).rows;
-
-    // start laps: each trigger fires when its neutralisation is out on its lap
-    const fired = rowOf(rows, watched).triggers;
-    expect(fired).toHaveLength(4);
-    expect(Math.abs(fired[0]!.fired - p.sc3)).toBeLessThanOrEqual(3 * shareSe(p.sc3, n));
-    expect(fired[1]!.fired).toBe(0);
-    expect(Math.abs(fired[2]!.fired - p.vsc7)).toBeLessThanOrEqual(3 * shareSe(p.vsc7, n));
-    expect(Math.abs(fired[3]!.fired - p.sc9)).toBeLessThanOrEqual(3 * shareSe(p.sc9, n));
+    const rows = carOf(scoreAll(mcInput(start, { 0: [NO_STOP] }, { hazard: hz }), createRng(7), n), 0).rows;
 
     // counts: the mean race time is the green one plus each neutralisation's cost times its chance
     const time = (ns: { kind: 'sc' | 'vsc'; fromLap: number; toLap: number }[]): number => raceForecast(start, [NO_STOP], drawn(1, ns), createRng(1)).raceTimeMs[0]!;
@@ -79,6 +70,18 @@ describe('race-monte-carlo: scenarios (spec §7.1)', () => {
       vsc7: time([{ kind: 'vsc', fromLap: 7, toLap: 7 }]) - green,
       sc9: time([{ kind: 'sc', fromLap: 9, toLap: 9 }]) - green,
     };
+    // start laps and kinds: the share of scenarios whose drawn neutralisations start on each lap
+    const startsOn = (kind: 'sc' | 'vsc', lap: number): number => {
+      let k = 0;
+      for (let id = 0; id < n; id++) if (drawNeutralisations(start, hz, scenarioDraws(start, 7, id)).some((x) => x.kind === kind && x.fromLap === lap)) k++;
+      return k / n;
+    };
+    expect(Math.abs(startsOn('sc', 3) - p.sc3)).toBeLessThanOrEqual(3 * shareSe(p.sc3, n));
+    expect(Math.abs(startsOn('vsc', 7) - p.vsc7)).toBeLessThanOrEqual(3 * shareSe(p.vsc7, n));
+    expect(Math.abs(startsOn('sc', 9) - p.sc9)).toBeLessThanOrEqual(3 * shareSe(p.sc9, n));
+    expect(startsOn('sc', 5) + startsOn('vsc', 5)).toBe(0);
+    expect(startsOn('vsc', 3) + startsOn('sc', 7)).toBe(0);
+
     const mean = green + p.sc3 * cost.sc3 + p.vsc7 * cost.vsc7 + p.sc9 * cost.sc9;
     const variance = cost.sc3 ** 2 * p.sc3 * (1 - p.sc3) + cost.vsc7 ** 2 * p.vsc7 * (1 - p.vsc7) + cost.sc9 ** 2 * p.sc9 * (1 - p.sc9);
     expect(Math.abs(rowOf(rows, NO_STOP).meanMs - mean)).toBeLessThanOrEqual(3 * Math.sqrt(variance / n));
@@ -141,12 +144,12 @@ describe('race-monte-carlo: scenarios (spec §7.1)', () => {
   it('one more stop of one candidate leaves every other draw unchanged', () => {
     const start = noisyField({ lapsTotal: 8 });
     const a = stopAt(3, 'hard');
-    const aMore: Policy = { stops: [{ lap: 3, compound: 'hard' }, { lap: 6, compound: 'medium' }], triggers: [] };
+    const aMore: Policy = { stops: [{ lap: 3, compound: 'hard' }, { lap: 6, compound: 'medium' }] };
     const b = stopAt(4, 'medium');
     const hz = hazard(8, { sc: { 3: 0.2, 5: 0.1 }, vsc: { 4: 0.1 }, scDur: [0.5, 0.5] });
     const before = carOf(scoreAll(mcInput(start, { 2: [a, b] }, { hazard: hz }), createRng(21), 400), 2).rows;
     const after = carOf(scoreAll(mcInput(start, { 2: [aMore, b] }, { hazard: hz }), createRng(21), 400), 2).rows;
-    const outcome = (r: Row) => ({ positionPmf: r.positionPmf, ePos: r.ePos, ePoints: r.ePoints, meanMs: r.meanMs, quantiles: r.quantiles, pGain: r.pGain, triggers: r.triggers });
+    const outcome = (r: Row) => ({ positionPmf: r.positionPmf, ePos: r.ePos, ePoints: r.ePoints, meanMs: r.meanMs, quantiles: r.quantiles, pGain: r.pGain });
     expect(outcome(rowOf(after, b))).toStrictEqual(outcome(rowOf(before, b)));
   });
 
@@ -165,10 +168,11 @@ describe('race-monte-carlo: the search and the rivals (spec §7.2, §7.3)', () =
   // row 7
   it('candidates identical on every scenario are merged', () => {
     const start = noisyField();
-    // no neutralisation is ever drawn, so the trigger never fires: the same outcome as no trigger, in every scenario
-    const never: Policy = { stops: [], triggers: [{ kind: 'neutralised', condition: 'sc', fromLap: 2, toLap: 6, action: { box: 'hard' } }] };
-    const rows = carOf(raceMonteCarlo(mcInput(start, { 2: [NO_STOP, never, stopAt(3, 'hard')] }), createRng(13), 5_000), 2).rows;
-    expect(rowsOf(rows, NO_STOP).length + rowsOf(rows, never).length).toBe(1);
+    // ported (SP4.3d1 Task 3): the same stop list twice (a never-firing trigger is gone with triggers) gives the same
+    // outcome in every scenario
+    const twin: Policy = { stops: [] };
+    const rows = carOf(raceMonteCarlo(mcInput(start, { 2: [NO_STOP, twin, stopAt(3, 'hard')] }), createRng(13), 5_000), 2).rows;
+    expect(rowsOf(rows, NO_STOP)).toHaveLength(1);
   });
 
   // row 9
@@ -198,17 +202,21 @@ describe('race-monte-carlo: the search and the rivals (spec §7.2, §7.3)', () =
     expect(boxed(owes, 'vsc')).toBe(0);
   });
 
-  it('stayOut: no stop while the neutralisation holds; a planned stop inside it moves to the first lap after it', () => {
+  // SP4.3d1 Task 3 row 2 (spec §5.1): a plan is a stop list, played as it stands
+  it("MC play: a scenario with an SC plays a plan's stops unchanged", () => {
     // our car alone ahead of a rival far behind; quiet; an SC out on laps 3–4 in every scenario
     const start = startingPoint({ lapsTotal: 8, cars: [{ gapMs: 0 }, { gapMs: 60_000 }], ours: [0] });
     const sc = hazard(8, { sc: { 2: 1 }, scDur: [0, 1] });
-    const stayOut: Policy = { stops: [{ lap: 3, compound: 'hard' }], triggers: [{ kind: 'neutralised', condition: 'sc', fromLap: 3, toLap: 3, action: 'stayOut' }] };
-    const moved = stopAt(5, 'hard');
+    const scenario = drawn(1, [{ kind: 'sc', fromLap: 3, toLap: 4 }]);
     const underSc = stopAt(3, 'hard');
-    const rows = carOf(scoreAll(mcInput(start, { 0: [stayOut, moved, underSc] }, { hazard: sc }), createRng(23), 50), 0).rows;
-    const forecast = raceForecast(start, [moved, NO_STOP], drawn(1, [{ kind: 'sc', fromLap: 3, toLap: 4 }]), createRng(1));
-    expect(Math.abs(rowOf(rows, stayOut).meanMs - forecast.raceTimeMs[0]!)).toBeLessThanOrEqual(1e-6);
-    expect(Math.abs(rowOf(rows, stayOut).meanMs - rowOf(rows, underSc).meanMs)).toBeGreaterThan(1_000);
+    const after = stopAt(5, 'hard');
+    const twoStops: Policy = { stops: [{ lap: 2, compound: 'medium' }, { lap: 4, compound: 'hard' }] };
+    const rows = carOf(scoreAll(mcInput(start, { 0: [underSc, after, twoStops] }, { hazard: sc }), createRng(23), 50), 0).rows;
+    for (const plan of [underSc, after, twoStops]) {
+      const forecast = raceForecast(start, [plan, NO_STOP], scenario, createRng(1));
+      expect(Math.abs(rowOf(rows, plan).meanMs - forecast.raceTimeMs[0]!), JSON.stringify(plan.stops)).toBeLessThanOrEqual(1e-6);
+    }
+    expect(Math.abs(rowOf(rows, underSc).meanMs - rowOf(rows, after).meanMs), 'the stops are played where they are').toBeGreaterThan(1_000);
   });
 
   it("rivals: rivalNextCompound and hasStopAhead are the one source of a rival's next compound and stop ahead", () => {
@@ -249,7 +257,7 @@ describe('race-monte-carlo: determinism, the full evaluation, the ranking', () =
   // row 14
   it('scoreAll scores every candidate on the same scenarios and drops none', () => {
     const start = noisyField();
-    const twin: Policy = { stops: [], triggers: [] };
+    const twin: Policy = { stops: [] };
     const policies = [NO_STOP, stopAt(2, 'hard'), stopAt(3, 'medium'), twin];
     const n = 300;
     const result = carOf(scoreAll(mcInput(start, { 2: policies }, { hazard: hazard(6, { sc: { 2: 0.3 } }) }), createRng(41), n), 2);
