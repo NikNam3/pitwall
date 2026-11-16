@@ -42,7 +42,7 @@ import type { BuilderRace } from '../../../../test-support/builders/long-race.ts
 import { generateRace, GENERATOR_DEFAULTS, type GeneratorParams } from '../../../../test-support/race-generator/index.ts';
 import { UndeclaredReadError } from '../../../engine/test/support/guarded-input.ts';
 import { engineShaped } from '../engine-shaped.ts';
-import { guardedQuick, NONE, openSpan, PRACTICE, QUALIFYING, RACE, situatedView } from '../situated.ts';
+import { guardedQuick, NONE, openSpan, PRACTICE, RACE, situatedView } from '../situated.ts';
 import { behaviourExport, CALCULATORS, loadUnitFolders } from '../units.ts';
 
 /**
@@ -395,7 +395,8 @@ describe('rival-stops rows', () => {
   });
 
   it('notApplicable outside the race phase (weekend-phase row)', () => {
-    for (const phase of [PRACTICE, QUALIFYING, NONE]) {
+    // ported in SP4.3d2 Task 6: qualifying has its own row (`byStartCompound`, `qualifying.test.ts`)
+    for (const phase of [PRACTICE, NONE]) {
       const out = rivalStops.compute(raceView([{ car: 0, stints: MEDIUM_FROM_1, completed: 5, life: life(15, { medium: 20 }) }], { phase: phase as typeof RACE }));
       const stop = stopOf(out, 0);
       expect(stop.window, phase.kind).toEqual(unknown('notApplicable'));
