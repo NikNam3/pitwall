@@ -4,7 +4,7 @@ import type { MachineSpans } from '@pitwall/contracts';
 import type { NeutralisedDetail, sessionPhaseRaceSpans } from '@pitwall/domain';
 import type { PresentationTable } from '../../kit/presentation.ts';
 import { openSpanOf } from '../../kit/situation.ts';
-import type { Condition } from './rows.ts';
+import type { OutCondition as Condition } from './rows.ts';
 
 type SessionPhaseRaceKind = (typeof sessionPhaseRaceSpans.kinds)[number];
 
