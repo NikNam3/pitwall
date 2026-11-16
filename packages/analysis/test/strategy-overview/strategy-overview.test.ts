@@ -50,8 +50,8 @@ const RIVAL_STOPS_OUT: RivalStops = {
   [carId(3)]: rivalStop(16, 19, 23, known({ hard: 0.8, medium: 0.2 }, 0)),
 } as RivalStops;
 
-const PLAN_A: Policy = { stops: [{ lap: 22, compound: 'hard' }], triggers: [] };
-const PLAN_B: Policy = { stops: [{ lap: 15, compound: 'hard' }, { lap: 30, compound: 'medium' }], triggers: [] };
+const PLAN_A: Policy = { stops: [{ lap: 22, compound: 'hard' }] };
+const PLAN_B: Policy = { stops: [{ lap: 15, compound: 'hard' }, { lap: 30, compound: 'medium' }] };
 
 /** Our plans: A and B saved, then B committed as the active plan. */
 const DECISIONS: DecisionRecord[] = [
