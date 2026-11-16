@@ -114,13 +114,16 @@ export function dpInputOn(field: StartingPoint, car: CarId, hazard: Hazard, worl
   for (const s of field.sets[car] ?? []) if (s.wearPct <= 0) sets[s.compound] += 1;
   const fitted = field.fittedLapsToLimit[car] ?? -1;
   const dpWorlds: DpWorld[] = worlds.map((w) => ({ u: w.u, weight: w.weight, wetnessByLap: shifted(w.path), trafficMsByLap: trafficOf(field, w.road, car, fromLap, trafficGapMs) }));
+  const compound = NOISE_COMPOUNDS[field.compound[car] ?? 1] ?? 'medium';
   return {
     car,
+    // the grid start's free compound (SP4.3d spec §7.2): the DP picks it; else the car is on its tyres
+    startCompound: field.start?.freeCompound[car] === 1 ? null : compound,
     fromLap,
     totalLaps: field.lapsTotal,
     lap: field.lapModel,
     carParams: {
-      compound: NOISE_COMPOUNDS[field.compound[car] ?? 1] ?? 'medium',
+      compound,
       tyreAge: field.tyreAge[car] ?? 0,
       wearPct: field.wearPct[car] ?? 0,
       fuelKg: field.fuelKg[car] ?? 0,

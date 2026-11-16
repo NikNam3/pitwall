@@ -22,7 +22,11 @@ export function toMcHazard(hazard: RaceHazard, start?: Pick<StartingPoint, 'lap'
   return hazardOf({ lap: first, lapsTotal: last }, hazard);
 }
 
-/** A plan's stops as a policy (a stop list, SP4.3d spec §5.1); the one builder of a candidate's policy. */
-export function policyOf(plan: Pick<DpPlan, 'stops'>): Policy {
-  return { stops: plan.stops.map((s) => ({ lap: s.lap, compound: s.compound })) };
+/**
+ * A plan's stops as a policy (a stop list, SP4.3d spec §5.1), with a free start's `startCompound` (§7.2); the one
+ * builder of a candidate's policy.
+ */
+export function policyOf(plan: Pick<DpPlan, 'startCompound' | 'stops'>): Policy {
+  const stops = plan.stops.map((s) => ({ lap: s.lap, compound: s.compound }));
+  return plan.startCompound === undefined ? { stops } : { startCompound: plan.startCompound, stops };
 }

@@ -28,7 +28,10 @@ describe('shared strategy input', () => {
     expect(former.cars.map((c) => c.car)).toEqual(input.ourCars);
     for (const { car, dpInput, policy } of former.cars) {
       const dp: DpInput = toDpInput(input, car);
-      expect(plainValue(dp), `car ${car}: DP input`).toEqual(dpInput);
+      // ported (SP4.3d2 Task 8): the input gained `startCompound`, inside the race the car's own compound; the rest as before
+      const { startCompound, ...rest } = dp;
+      expect(startCompound, `car ${car}: on its tyres`).toBe(dp.carParams.compound);
+      expect(plainValue(rest), `car ${car}: DP input`).toEqual(dpInput);
       const result = solveDp(dp);
       // the best plan, a stop list (SP4.3d spec §5.1); the snapshot holds no triggers
       expect(policyOf(result.plans[0] ?? result.continue), `car ${car}: policy`).toEqual(policy);

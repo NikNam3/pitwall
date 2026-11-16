@@ -18,6 +18,10 @@
 //   neutralisation comes: the expected remaining race time from that lap's start if an SC starts on it (its length by
 //   the SC duration pmf), boxing at its end onto the best compound (`boxUnderMs`, `Infinity` where no stop can be made)
 //   and staying out (`stayMs`); `sc-call` reads it (4.3b2).
+// - A free start (`startCompound` `null`, the grid, SP4.3d spec §7.2): the car starts on a new set of the compound the
+//   DP picks among those with a set left (`freeStarts`), that set counted in the sets used and the compound rule; each
+//   start compound is solved alone (`solveWorld`'s `start`, `solveAll`), the start node the best over them, and every
+//   plan, `boxThisLap` and `continue` carries its `startCompound`. A car on its tyres: no plan carries one.
 // - `reactionTable` (`reaction.ts`, SP4.3d spec §5.2): one world's solve as structured-cloneable typed arrays, the
 //   heaviest world's for `race-monte-carlo`'s SC/VSC reaction: `reactAt` the averaged move at a state, `nodeAlong` a
 //   plan's node at a lap, `continueFrom` the best play from a state where no neutralisation comes.
@@ -27,6 +31,6 @@ export type * from './types.ts';
 export { bestWith } from './best-with.ts';
 export { STRATEGY_DP_CONFIG } from './config.ts';
 export { continueFrom, nodeAlong, reactAt, reactionTable, type ReactionTable } from './reaction.ts';
-export { heaviest, solveDp, solveWorld, type DpSolution } from './solve.ts';
+export { freeStarts, heaviest, solveAll, solveDp, solveWorld, type DpSolution } from './solve.ts';
 
 export const SIMULATOR = defineSimulator('strategy-dp');
