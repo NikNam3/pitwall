@@ -5,19 +5,21 @@
 import type { BehaviourTable } from '../shared/behaviour.ts';
 
 /**
- * `call`: the call is computed, green: SC and VSC each forced from now (a row that changes nothing);
- * `realCondition`: a neutralisation is out: one run on it as it is, the other condition's row `notApplicable`;
- * `notApplicable`: both rows `notApplicable` (C14: outside the race phase; the race stopped or over; the car in the pit
- * lane, no longer competing or done with its race). `notApplicable` wins over `realCondition`, which wins over `call`.
+ * `call`: green running: three blocks, SC and VSC each forced from now and GREEN (SP4.3d spec §6.3);
+ * `realCondition`: a neutralisation is out: its block only, scored on it as it is;
+ * `notApplicable`: no block (C14: outside the race phase; before the start; the race stopped or over; the car in the
+ * pit lane, no longer competing or done with its race). `notApplicable` wins over `realCondition`, which wins over
+ * `call`.
  */
 export type ScCallEffect = 'call' | 'realCondition' | 'notApplicable';
 
 export const SC_CALL_BEHAVIOUR: BehaviourTable<ScCallEffect> = {
   'weekend-phase': { practice: 'notApplicable', qualifying: 'notApplicable', race: 'call', none: 'notApplicable' },
   'session-phase-race': {
-    grid: 'call',
-    formation: 'call',
-    startLights: 'call',
+    // before the start: no stop to call yet (spec §6.3)
+    grid: 'notApplicable',
+    formation: 'notApplicable',
+    startLights: 'notApplicable',
     racing: 'call',
     neutralised: 'realCondition',
     suspended: 'notApplicable',
