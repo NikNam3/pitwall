@@ -1,23 +1,22 @@
-// `strategy`'s candidates (SP4.3b spec §8.1 step 1, S21): per car the DP's plans and its box-now and stay-out variants
-// (source `dp`); the stop-lap neighbours of the best plan, one stop moved by `neighbourMinLaps`–`neighbourMaxLaps` laps
-// either way (`neighbour`; the supervisor's ruling: the best plan's only, so the count stays inside the cap); the rule
-// candidates on the best plan (`rule`): mirror the rival directly ahead and the one directly behind (the first stop at
-// its likeliest stop lap, `stopMid`), cover the car behind and extend past the car ahead (a `rivalPits` trigger within
-// `closeGapMs`, `race-interaction`'s, the one close gap, C43). Every policy is `policyOf(plan, extra)`; no policy twice.
-//
-// SP4.3b Task 23a (supervisor rulings, 2026-11-13): at most `dpPlansMax` DP plans, the best by `expectedMs` (box this
-// lap and continue besides); inter and wet plans only where rain can come (the track's wetness at the DP best plan's
-// rain threshold, or rain coming over the remaining laps by `rain-outlook`'s rule, SP4.3c O3a; no forecast counts as no
-// rain); the best plan's sequence twice, with every trigger of its own and without degradation-off and rain. SP4.3c Task
-// 19 (each plan its own triggers): every other DP plan carries its own neutralised triggers; a neighbour and a rule the
-// best plan's (and a cover or extend rule its own `rivalPits`). Which plans of which weather world are candidates is
-// Task 20's; until then every world's plans are ranked together.
+// `strategy`'s candidates from named sources (SP4.3c Task 20, spec §5.4, supervisor rulings R59, R60; C43): per car
+// - base (`dp`): per weather world and stop count the best `dpPlansMax` DP plans by `expectedMs` (the bound applies
+//   within a stop count, never across), box this lap and continue besides; each with its own neutralised triggers, the
+//   overall best plan twice: with every trigger of its own, and without degradation-off and rain (Task 23a);
+// - neighbours (`neighbour`): the best plan's first stop moved by `neighbourMinLaps`–`neighbourMaxLaps` laps either way
+//   on its compound, `strategy-dp`'s `bestWith` on the best plan's world, so with the DP's own triggers for that plan;
+// - rules (`rule`): mirror the nearest rival ahead and behind not of ours (the first stop on the lap and compound of
+//   `race-monte-carlo`'s one rival policy, `rivalPlainPolicy`, as a `bestWith` query of the first world that gives
+//   one), cover the car behind and extend past the car ahead (the best plan as its base candidate, plus one `rivalPits`
+//   trigger within `race-interaction`'s `closeGapMs`, the one close gap, C43).
+// No candidate copies another's triggers; a `bestWith` query that gives `null` gives no candidate. Inter and wet plans
+// only where rain can come (Task 23a; SP4.3c O3a). Every policy is `policyOf(plan, extra)`; no policy twice. The
+// committed row is the job's.
 import type { CarId, Policy, StartingPoint, Trigger } from '@pitwall/domain';
-import type { McCandidate } from '../race-monte-carlo/index.ts';
+import { rivalPlainPolicy, type McCandidate } from '../race-monte-carlo/index.ts';
 import { startLapOf } from '../race-forecast/index.ts';
 import { RAIN_OUTLOOK_CONFIG, rainComing } from '../rain-outlook/index.ts';
 import { policyOf } from '../shared/strategy-input/index.ts';
-import type { DpPlan, DpResult } from '../strategy-dp/index.ts';
+import { bestWith, type DpPlan, type DpResult, type DpSolution } from '../strategy-dp/index.ts';
 import type { StrategyConfig } from './config.ts';
 
 export { policyOf };
@@ -28,16 +27,7 @@ export { policyOf };
  */
 export type CandidatesConfig = StrategyConfig & { closeGapMs: number; rainPct?: number };
 
-type Stops = DpPlan['stops'];
-
-/** `stops` with stop `k` on `lap`, or `null` where it leaves the race (`fromLap` … `lapsTotal − 1`) or the stops' order. */
-function moveStop(stops: Stops, k: number, lap: number, fromLap: number, lapsTotal: number): Stops | null {
-  if (lap < fromLap || lap >= lapsTotal) return null;
-  const before = stops[k - 1];
-  const after = stops[k + 1];
-  if ((before !== undefined && lap <= before.lap) || (after !== undefined && lap >= after.lap)) return null;
-  return stops.map((s, i) => (i === k ? { ...s, lap } : { ...s }));
-}
+type Stop = DpPlan['stops'][number];
 
 /** The nearest running car that is not one of ours `step` places from `car` in the order (−1 ahead, +1 behind). */
 function rivalNext(start: StartingPoint, car: CarId, step: -1 | 1): CarId | undefined {
@@ -65,8 +55,24 @@ function rainCanCome(start: StartingPoint, fromLap: number, thresholds: readonly
   return start.weather.known && rainComing(start.weather.value.byLap, fromLap, start.lapsTotal, rainPct);
 }
 
-/** Car `car`'s candidates from its DP result (spec §8.1 step 1); the committed row is the job's. */
-export function candidatesOf(start: StartingPoint, car: CarId, dp: DpResult, config: CandidatesConfig): McCandidate[] {
+/** `plans` per world and stop count, each group's best `max` by `expectedMs` (the bound within a stop count, B5). */
+function perStopCount(plans: readonly DpPlan[], max: number): DpPlan[] {
+  const groups = new Map<string, DpPlan[]>();
+  for (const p of plans) {
+    const key = `${p.world}:${p.stops.length}`;
+    groups.set(key, [...(groups.get(key) ?? []), p]);
+  }
+  return [...groups.values()].flatMap((g) => g.sort((a, b) => a.expectedMs - b.expectedMs).slice(0, max));
+}
+
+/** A plan with its own neutralised triggers only. */
+const neutralisedOf = (p: Pick<DpPlan, 'stops' | 'triggers'>): Policy => policyOf({ stops: p.stops, triggers: p.triggers.filter((t) => t.kind === 'neutralised') });
+
+/**
+ * Car `car`'s candidates from its DP result and its weather worlds' solves (`solutions[w]` world w's `solveWorld`, a
+ * plan's `world` indexing it; queried with `bestWith`, never solved again; spec §5.4); the committed row is the job's.
+ */
+export function candidatesOf(start: StartingPoint, car: CarId, dp: DpResult, solutions: readonly DpSolution[], config: CandidatesConfig): McCandidate[] {
   const out: McCandidate[] = [];
   const seen = new Set<string>();
   const add = (policy: Policy, source: McCandidate['source'], rule: McCandidate['rule'] = null): void => {
@@ -76,47 +82,60 @@ export function candidatesOf(start: StartingPoint, car: CarId, dp: DpResult, con
     out.push({ policy, source, rule });
   };
   const fromLap = startLapOf(start, car);
-  const neutralisedOf = (p: Pick<DpPlan, 'triggers'>): Trigger[] => p.triggers.filter((t) => t.kind === 'neutralised');
   const ranked = [...dp.plans].sort((a, b) => a.expectedMs - b.expectedMs);
   // the rain threshold: the DP's best plan's own (SP4.3c Task 19)
   const top = ranked[0] ?? dp.continue;
-  const allowed = rainCanCome(start, fromLap, top.triggers, config.rainPct ?? RAIN_OUTLOOK_CONFIG.defaults.rainPct) ? () => true : (p: Pick<DpPlan, 'stops'>) => !p.stops.some((s) => WET.has(s.compound));
-  const plans = ranked.filter(allowed).slice(0, config.dpPlansMax);
-  const best = plans[0] ?? dp.continue;
-  // a neighbour's and a rule's triggers: the best plan's neutralised ones
-  const thresholds = neutralisedOf(best);
+  const rain = rainCanCome(start, fromLap, top.triggers, config.rainPct ?? RAIN_OUTLOOK_CONFIG.defaults.rainPct);
+  const allowed = (p: Pick<DpPlan, 'stops'>): boolean => rain || !p.stops.some((s) => WET.has(s.compound));
+  const best = ranked.find(allowed) ?? dp.continue;
 
-  // the best plan's own sequence: with every trigger of its own, and without degradation-off and rain
-  add(policyOf(best), 'dp');
+  // base: the best plan's own sequence with every trigger of its own, and without degradation-off and rain
+  const bestBase = policyOf(best);
+  add(bestBase, 'dp');
   add(policyOf({ stops: best.stops, triggers: best.triggers.filter((t) => t.kind !== 'degradationOff' && t.kind !== 'rain') }), 'dp');
-  // every other DP plan with its own neutralised triggers
-  for (const plan of [...plans.slice(1), ...(dp.boxThisLap === null ? [] : [dp.boxThisLap]), dp.continue]) {
-    if (plan !== best && allowed(plan)) add(policyOf({ stops: plan.stops, triggers: neutralisedOf(plan) }), 'dp');
+  // every other base plan of each world and stop count, box this lap and continue: each its own neutralised triggers
+  for (const plan of [...perStopCount(dp.plans.filter(allowed), config.dpPlansMax), ...(dp.boxThisLap === null ? [] : [dp.boxThisLap]), dp.continue]) {
+    if (plan !== best && allowed(plan)) add(neutralisedOf(plan), 'dp');
   }
 
-  for (let k = 0; k < best.stops.length; k++) {
-    const lap = (best.stops[k] as Stops[number]).lap;
+  /** `bestWith`'s plan of world `w` whose first stop is `stop`, where it is one and allowed. */
+  const query = (w: number, stop: Stop): DpPlan | null => {
+    const s = solutions[w];
+    const q = s === undefined ? null : bestWith(s, { stopLap: stop.lap, compound: stop.compound });
+    return q !== null && allowed(q) ? q : null;
+  };
+
+  // neighbours: the best plan's first stop moved, on its compound, in its world
+  const first = best.stops[0];
+  if (first !== undefined) {
     for (let d = config.neighbourMinLaps; d <= config.neighbourMaxLaps; d++) {
-      for (const moved of [lap - d, lap + d]) {
-        const stops = moveStop(best.stops, k, moved, fromLap, start.lapsTotal);
-        if (stops !== null) add(policyOf({ stops, triggers: thresholds }), 'neighbour');
+      for (const lap of [first.lap - d, first.lap + d]) {
+        const q = query(best.world, { lap, compound: first.compound });
+        if (q !== null) add(policyOf(q), 'neighbour');
       }
     }
   }
 
-  if (best.stops.length > 0) {
-    const ahead = rivalNext(start, car, -1);
-    const behind = rivalNext(start, car, 1);
-    const mirrors: [CarId | undefined, 'mirrorAhead' | 'mirrorBehind'][] = [[ahead, 'mirrorAhead'], [behind, 'mirrorBehind']];
-    for (const [rival, rule] of mirrors) {
-      if (rival === undefined) continue;
-      const stops = moveStop(best.stops, 0, start.stopMid[rival] ?? start.lapsTotal, fromLap, start.lapsTotal);
-      if (stops !== null) add(policyOf({ stops, triggers: thresholds }, []), 'rule', rule);
+  // mirrors: the rival's plain first stop, lap and compound, in the first world that gives a plan
+  const ahead = rivalNext(start, car, -1);
+  const behind = rivalNext(start, car, 1);
+  const mirrors: [CarId | undefined, 'mirrorAhead' | 'mirrorBehind'][] = [[ahead, 'mirrorAhead'], [behind, 'mirrorBehind']];
+  for (const [rival, rule] of mirrors) {
+    const stop = rival === undefined ? undefined : rivalPlainPolicy(start, rival, null).stops[0];
+    if (stop === undefined) continue;
+    for (let w = 0; w < solutions.length; w++) {
+      const q = query(w, stop);
+      if (q === null) continue;
+      add(policyOf(q), 'rule', rule);
+      break;
     }
+  }
+
+  // cover and extend: the best plan's base candidate as it is, plus its one rivalPits trigger
+  if (best.stops.length > 0) {
     const rivalPits = (carId: CarId, action: 'cover' | 'extend'): Trigger => ({ kind: 'rivalPits', carId, withinMs: config.closeGapMs, action });
-    const ruled = { stops: best.stops, triggers: thresholds };
-    if (behind !== undefined) add(policyOf(ruled, [rivalPits(behind, 'cover')]), 'rule', 'cover');
-    if (ahead !== undefined) add(policyOf(ruled, [rivalPits(ahead, 'extend')]), 'rule', 'extend');
+    if (behind !== undefined) add(policyOf(bestBase, [rivalPits(behind, 'cover')]), 'rule', 'cover');
+    if (ahead !== undefined) add(policyOf(bestBase, [rivalPits(ahead, 'extend')]), 'rule', 'extend');
   }
   return out;
 }

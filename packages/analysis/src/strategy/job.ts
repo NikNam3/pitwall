@@ -4,8 +4,8 @@
 //
 // - Per car the DP (`strategy-dp`) from the car's lap on (`startLapOf`), its input from the starting point, the hazard,
 //   the weather worlds and each world's plain forecast (`shared/strategy-input/`, SP4.3b2 Task 6, SP4.3c Task 19); its
-//   result gives the candidates
-//   (`candidates.ts`). A committed policy is followed as far as it can be (spec §8.2): a passed stop boxes this lap, a
+//   result and each world's solve (`solveWorld`, queried by `bestWith`) give the candidates (`candidates.ts`, SP4.3c
+//   Task 20). A committed policy is followed as far as it can be (spec §8.2): a passed stop boxes this lap, a
 //   stop onto a compound without a set left is dropped; its row is marked with the reason.
 // - The parts (spec §7.3 item 4, §8.1 step 3): `splitStrategy` gives one part per our car planned (`planCar`), or the
 //   input as it is when none can be planned; `mergeStrategy` takes each car's entry from the part that planned it and
@@ -25,7 +25,7 @@ import { RACE_INTERACTION_CONFIG } from '../race-interaction/config.ts';
 import { RAIN_OUTLOOK_CONFIG } from '../rain-outlook/config.ts';
 import { raceMonteCarlo, type McCandidate, type McConfig, type McInput, type McResult } from '../race-monte-carlo/index.ts';
 import { committedField, dpInputOn, followable, mcSettingsFrom, notPlannedWhy, plannedCars, plannedField, roadWorlds, strategyConfigOf, toMcHazard, worldsOf, type StrategyInput } from '../shared/strategy-input/index.ts';
-import { solveDp } from '../strategy-dp/index.ts';
+import { solveDp, solveWorld } from '../strategy-dp/index.ts';
 import { candidatesOf } from './candidates.ts';
 import type { StrategyConfig } from './config.ts';
 
@@ -79,8 +79,10 @@ export function candidatesForRun(input: StrategyInput, rng: Rng): { mc: McInput 
   const candidates: Record<CarId, McCandidate[]> = {};
   const committed: Record<CarId, Policy | null> = {};
   for (const car of planned) {
-    const dp = solveDp(dpInputOn(field, car, hazard, worlds, config.trafficGapMs));
-    const own = candidatesOf(field, car, dp, { ...config, closeGapMs: RACE_INTERACTION_CONFIG.read(input).closeGapMs, rainPct: RAIN_OUTLOOK_CONFIG.read(input).rainPct });
+    const dpInput = dpInputOn(field, car, hazard, worlds, config.trafficGapMs);
+    const dp = solveDp(dpInput);
+    const solutions = dpInput.worlds.map((_, w) => solveWorld(dpInput, w));
+    const own = candidatesOf(field, car, dp, solutions, { ...config, closeGapMs: RACE_INTERACTION_CONFIG.read(input).closeGapMs, rainPct: RAIN_OUTLOOK_CONFIG.read(input).rainPct });
     const original = input.committed[car] ?? null;
     let plan: CarPlan = { candidates: own, followed: null, original: null, infeasible: null };
     if (original !== null) {
