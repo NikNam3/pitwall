@@ -290,7 +290,9 @@ function search(run: Run, input: McInput, car: number, budget: number): Searched
   const committed = input.committed[car as CarId] ?? null;
   const all = (input.candidates[car as CarId] ?? []).map((c) => newCand(c, Math.max(budget, 1)));
   const before = run.calls;
-  const first = Math.min(n0, Math.floor(budget / costSum(run, all)));
+  // the re-scoring's share is kept back before the first batch, so every re-scored finalist gets its scenarios
+  const reserve = Math.floor(budget * RESCORE_SHARE);
+  const first = Math.min(n0, Math.floor((budget - reserve) / costSum(run, all)));
   if (first === 0) {
     // fewer calls than one scenario each: one scenario each for as many as fit
     const scoredOnes: Cand[] = [];
@@ -319,7 +321,7 @@ function search(run: Run, input: McInput, car: number, budget: number): Searched
     }
     return !open;
   };
-  const searchBudget = Math.max(0, budget - Math.floor(budget * RESCORE_SHARE) - spent());
+  const searchBudget = Math.max(0, budget - reserve - spent());
   const s = batches(run, input, car, alive, searchBudget, clear, () => merge(alive, all, committed));
   // the re-scoring: the top few together on fresh scenarios, none dropped
   const ranked = choiceOrder(alive, all, zTie, tieBand);
