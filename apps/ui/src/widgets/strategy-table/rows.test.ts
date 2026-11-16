@@ -152,8 +152,10 @@ describe('strategy-table trigger wording', () => {
     const sc = (from: number, to: number): Trigger => ({ kind: 'neutralised', condition: 'sc', fromLap: from, toLap: to, action: { box: 'hard' } });
     const vsc = (from: number, to: number): Trigger => ({ kind: 'neutralised', condition: 'vsc', fromLap: from, toLap: to, action: 'stayOut' });
     expect(triggerTexts([sc(12, 24)], FIELD)).toEqual(['SC L12–24']);
-    expect(triggerTexts([vsc(15, 24)], FIELD)).toEqual(['VSC L15–24']);
-    expect(triggerTexts([sc(12, 24), vsc(15, 24)], FIELD)).toEqual(['SC L12–24', 'VSC L15–24']);
+    // the vsc helper's trigger is a stay-out one: it carries the "not this lap" word (Task 22b)
+    expect(triggerTexts([vsc(15, 24)], FIELD)).toEqual(['VSC L15–24 not this lap']);
+    expect(triggerTexts([sc(12, 24), vsc(15, 24)], FIELD)).toEqual(['SC L12–24', 'VSC L15–24 not this lap']);
+    // a box and a stay-out trigger over one range join as today, without the stay-out word (only both stay-out keep it)
     expect(triggerTexts([sc(12, 24), vsc(12, 24)], FIELD)).toEqual(['SC/VSC L12–24']);
     expect(triggerTexts([{ kind: 'damage', lossMsPerLap: 1_200, action: { box: 'hard' } }], FIELD)).toEqual(['DMG +1.2 s/lap']);
     expect(triggerTexts([{ kind: 'degradationOff', wearRateDeltaPct: 30, action: { switchTo: [{ lap: 18, compound: 'hard' }] } }], FIELD)).toEqual(['DEG +30%']);
@@ -163,5 +165,57 @@ describe('strategy-table trigger wording', () => {
     expect(triggerTexts([{ kind: 'rivalPits', carId: RIVAL, withinMs: 1_000, action: 'extend' }], FIELD)).toEqual(['EXT #44 1.0 s']);
     // the joined pair keeps the first one's place
     expect(triggerTexts([{ kind: 'damage', lossMsPerLap: 1_200, action: { box: 'hard' } }, vsc(12, 24), sc(12, 24)], FIELD)).toEqual(['DMG +1.2 s/lap', 'SC/VSC L12–24']);
+  });
+});
+
+// SP4.3c Task 22b (T5, R61): what a "stay out" means on screen. A policy with no stops reads `text.toTheFlag` in STOPS
+// (list and detail rows); a `neutralised` trigger with action 'stayOut' reads its text then `text.notThisLap`
+// (`SC L12–24 not this lap`); a box trigger reads as before; an SC and a VSC trigger over one range join as before and
+// keep the word once when both are stay-out.
+describe('strategy-table stay-out wording', () => {
+  const neutralised = (condition: 'sc' | 'vsc', from: number, to: number, action: { box: 'hard' } | 'stayOut'): Trigger => ({
+    kind: 'neutralised',
+    condition,
+    fromLap: from,
+    toLap: to,
+    action,
+  });
+
+  it('the words live in text.ts', () => {
+    expect(text.toTheFlag).toBe('to the flag');
+    expect(text.notThisLap).toBe('not this lap');
+  });
+
+  it('a zero-stop policy shows "to the flag" in STOPS, in the list and in the detail row', () => {
+    const base = NO_HIGHLIGHT;
+    const i = 2;
+    const rows = base.rows.map((r, j) => (j === i ? { ...r, policy: { ...r.policy, stops: [] } } : r));
+    const plan = { ...base, rows };
+    expect(listRows(plan)[i]!.stops).toBe(text.toTheFlag);
+    expect(infoRow(plan, i, FIELD).stops).toBe(text.toTheFlag);
+    // the other rows keep their stops
+    expect(listRows(plan)[0]!.stops).toBe(stopsText(base.rows[0]!.policy));
+    expect(listRows(plan)[0]!.stops).not.toBe(text.toTheFlag);
+  });
+
+  it('a stay-out neutralised trigger reads "SC L12–24 not this lap"; a box trigger over the same range as today', () => {
+    expect(triggerTexts([neutralised('sc', 12, 24, 'stayOut')], FIELD)).toEqual(['SC L12–24 not this lap']);
+    expect(triggerTexts([neutralised('sc', 12, 24, 'stayOut')], FIELD)).toEqual([`${text.neutralisedText('SC', 12, 24)} ${text.notThisLap}`]);
+    expect(triggerTexts([neutralised('vsc', 12, 24, 'stayOut')], FIELD)).toEqual(['VSC L12–24 not this lap']);
+    expect(triggerTexts([neutralised('sc', 12, 24, { box: 'hard' })], FIELD)).toEqual(['SC L12–24']);
+    expect(triggerTexts([neutralised('vsc', 12, 24, { box: 'hard' })], FIELD)).toEqual(['VSC L12–24']);
+  });
+
+  it('an SC and a VSC stay-out trigger over one range join as today, with the stay-out word once', () => {
+    const joined = triggerTexts([neutralised('sc', 12, 24, 'stayOut'), neutralised('vsc', 12, 24, 'stayOut')], FIELD);
+    expect(joined).toEqual(['SC/VSC L12–24 not this lap']);
+    expect(joined).toEqual([`${text.neutralisedText(text.scOrVsc, 12, 24)} ${text.notThisLap}`]);
+    expect(joined[0]!.split(text.notThisLap)).toHaveLength(2);
+    // the pair keeps the first one's place, after another trigger
+    expect(
+      triggerTexts([{ kind: 'damage', lossMsPerLap: 1_200, action: { box: 'hard' } }, neutralised('vsc', 12, 24, 'stayOut'), neutralised('sc', 12, 24, 'stayOut')], FIELD),
+    ).toEqual(['DMG +1.2 s/lap', 'SC/VSC L12–24 not this lap']);
+    // two box triggers join as today
+    expect(triggerTexts([neutralised('sc', 12, 24, { box: 'hard' }), neutralised('vsc', 12, 24, { box: 'hard' })], FIELD)).toEqual(['SC/VSC L12–24']);
   });
 });

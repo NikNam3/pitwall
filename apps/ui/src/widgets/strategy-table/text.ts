@@ -39,11 +39,18 @@ export const infeasible: Record<NonNullable<McRow['infeasible']>, string> = {
   stopLapPassed: 'infeasible: its stop lap has passed',
   noSetLeft: 'infeasible: no set of its compound left',
 };
+/** The STOPS cell of a policy with no stops. */
+export const toTheFlag = 'to the flag';
+/** Appended to a `neutralised` trigger whose action is `'stayOut'` (`SC L12–24 not this lap`). */
+export const notThisLap = 'not this lap';
 /** The neutralisation words of a `neutralised` trigger, and the joined pair. */
 const condition = { sc: 'SC', vsc: 'VSC' } as const;
 export const scOrVsc = 'SC/VSC';
 /** A `neutralised` trigger's text from its condition word and lap range (`SC L12–24`). */
 export const neutralisedText = (word: string, fromLap: number, toLap: number): string => `${word} ${formatLapRange(fromLap, toLap)}`;
+/** A `neutralised` trigger's text with the stay-out word when it is a stay-out one (`SC L12–24 not this lap`). */
+export const neutralisedActionText = (word: string, fromLap: number, toLap: number, stayOut: boolean): string =>
+  stayOut ? `${neutralisedText(word, fromLap, toLap)} ${notThisLap}` : neutralisedText(word, fromLap, toLap);
 /**
  * One wording per trigger kind (P27); rows.ts `triggerTexts` joins an SC and a VSC trigger over one range. `rivalPits`
  * takes the rival's label as rows.ts resolves it from `cars.overview` (`#44`, or the kit's unknown mark).
@@ -51,7 +58,7 @@ export const neutralisedText = (word: string, fromLap: number, toLap: number): s
 export const trigger: { [K in Exclude<Trigger['kind'], 'rivalPits'>]: (t: TriggerOf<K>) => string } & {
   rivalPits: (t: TriggerOf<'rivalPits'>, car: string) => string;
 } = {
-  neutralised: (t) => neutralisedText(condition[t.condition], t.fromLap, t.toLap),
+  neutralised: (t) => neutralisedActionText(condition[t.condition], t.fromLap, t.toLap, t.action === 'stayOut'),
   damage: (t) => `DMG ${formatSignedSeconds(t.lossMsPerLap, 1)} s/lap`,
   degradationOff: (t) => `DEG +${formatPercent(t.wearRateDeltaPct)}`,
   rain: (t) => `RAIN ${formatSignedSeconds(t.wetnessMs, 1)} s`,
