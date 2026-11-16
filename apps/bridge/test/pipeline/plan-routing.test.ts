@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
-  activeSlot, carId, feedId, known, latestPlan, planSlots, toSessionTime, type DecisionRecord, type FeedId, type NoiseCompound, type Policy, type Slot,
+  activePlan, activeSlot, carId, feedId, known, latestPlan, planSlots, toSessionTime, type DecisionRecord, type FeedId, type NoiseCompound, type Policy, type Slot,
 } from '@pitwall/domain';
 import type { QuickCalculator } from '@pitwall/engine';
 import { PacketId } from '@pitwall/protocol';
@@ -371,6 +371,33 @@ describe('plan slots across the team\'s feeds (SP4.3d1 Task 10; C1a, C73, C76)',
       expect(decisions.at(-1)).toMatchObject({ kind: 'planRemoved', carId: 0, slot: 'B' });
       expect(planSlots({ decisions }, carId(0))).toEqual({ A: policyAt(4) });
       expect(activeSlot({ decisions }, carId(0))).toBe('A');
+    }
+    for (const file of [fileA, fileB]) expect(sidecarDecisions(file).map((d) => d.kind)).toEqual(kinds);
+  });
+
+  // SP4.3d1 final review F1 (C43, R32): the active slot is `activePlan(...)?.slot`, the one answer the board shows.
+  it('slot A activated, then saved again with another policy: remove A is accepted, the committed policy stays active in no slot', async () => {
+    const { answers, a, bb, fileA, fileB } = await twoFeedsWith([save(A, 0, 'A', 4), activate(A, 0, 'A'), save(A, 0, 'A', 9), remove(A, 0, 'A')]);
+    expect(answers).toEqual([{ ok: true }, { ok: true }, { ok: true }, { ok: true }]);
+    const kinds = ['planSaved', 'planCommitted', 'planSaved', 'planRemoved'];
+    for (const feed of [a, bb]) {
+      const decisions = last(feed.seen).decisions;
+      expect(decisions.map((d) => d.kind)).toEqual(kinds);
+      expect(decisions.at(-1)).toMatchObject({ kind: 'planRemoved', carId: 0, slot: 'A' });
+      expect(planSlots({ decisions }, carId(0))).toEqual({});
+      expect(activePlan({ decisions }, carId(0))).toEqual({ policy: policyAt(4), slot: null });
+    }
+    for (const file of [fileA, fileB]) expect(sidecarDecisions(file).map((d) => d.kind)).toEqual(kinds);
+  });
+
+  it('slot B saved, then plan.commit without a slot with B\'s policy: remove B is rejected with a reason, nothing stored', async () => {
+    const { answers, a, bb, fileA, fileB } = await twoFeedsWith([save(A, 0, 'B', 7), commit(A, 0, 7), remove(A, 0, 'B')]);
+    expect(answers).toEqual([{ ok: true }, { ok: true }, rejected]);
+    const kinds = ['planSaved', 'planCommitted'];
+    for (const feed of [a, bb]) {
+      const decisions = last(feed.seen).decisions;
+      expect(decisions.map((d) => d.kind)).toEqual(kinds);
+      expect(activePlan({ decisions }, carId(0))).toEqual({ policy: policyAt(7), slot: 'B' });
     }
     for (const file of [fileA, fileB]) expect(sidecarDecisions(file).map((d) => d.kind)).toEqual(kinds);
   });

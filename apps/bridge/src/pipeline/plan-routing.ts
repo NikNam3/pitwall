@@ -6,7 +6,7 @@
 // checks only the ranges (C73): the stop laps within the race's laps, compounds and slots from their closed lists, an
 // activated slot saved, a removed slot not the active one. Whether the plan can still be followed is `strategy`'s
 // judgement (C43). Every other decision stays with its feed.
-import { activeSlot, NOISE_COMPOUNDS, PLAN_SLOTS, planSlots, type DecisionRecord, type FeedId, type Policy } from '@pitwall/domain';
+import { activePlan, NOISE_COMPOUNDS, PLAN_SLOTS, planSlots, type DecisionRecord, type FeedId, type Policy } from '@pitwall/domain';
 import type { UiAction } from '@pitwall/contracts';
 import type { DecisionResult, FeedPipeline } from './feed-pipeline.ts';
 import type { PlanDecision, TeamFeeds } from './team-feeds.ts';
@@ -53,7 +53,7 @@ function planDecision(action: PlanAction, decisions: Decisions, totalLaps: numbe
     case 'plan.save':
       return { kind: 'planSaved', carId, slot: action.slot, policy: action.policy };
     case 'plan.remove':
-      return activeSlot(history, carId) === action.slot
+      return activePlan(history, carId)?.slot === action.slot
         ? `slot ${action.slot} is the active plan: activate another or clear the plan first`
         : { kind: 'planRemoved', carId, slot: action.slot };
     case 'plan.activate': {
