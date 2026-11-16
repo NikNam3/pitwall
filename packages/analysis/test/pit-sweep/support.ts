@@ -106,7 +106,6 @@ const rejoinAt = (condition: RejoinAt['condition'], position: number, at: number
   lossSource: { kind: 'session', sessionShare: 1, parts: 'test' },
   rejoinPosition: known(position, at),
   order: unknown('insufficientData'),
-  mapPoint: unknown('notApplicable'),
 });
 
 /** `rejoin`'s value for our car `car`: green rejoin position `green`. */

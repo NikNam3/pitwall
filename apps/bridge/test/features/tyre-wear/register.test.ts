@@ -13,6 +13,7 @@ const value = (limitPct: number): TyreWear => ({
   limitPct,
   warnLaps: 3,
   gameLifeSpanLaps: { known: false, reason: 'realism' },
+  wearAtLifeSpanPct: { fl: { known: false, reason: 'realism' }, fr: { known: false, reason: 'realism' }, rl: { known: false, reason: 'realism' }, rr: { known: false, reason: 'realism' } },
 });
 
 describe('tyre-wear feature', () => {

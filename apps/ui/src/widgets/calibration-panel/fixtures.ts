@@ -59,16 +59,20 @@ const driverOf = (src: CalibrationSource): Known<string> => {
   return name === undefined ? unknown('notReceived') : k(name);
 };
 
-/** Priors keys (declared by the units' `priors.ts`): degradation's per compound, tyre-life's, pit-loss's per condition. */
+/**
+ * Priors keys (declared by the units' `priors.ts`): degradation's per compound, pit-loss's per condition. SP4.3c Task 12
+ * (spec §5.2): tyre-life's wear rates (`tyreLife.wearPerLapPct.*`), its age-loss limit and its wear limit are deleted
+ * (the wear rate is tyre-model's, the 70 % limit `tyre-model.limitPct` alone, C43): the panel shows no tyre-life row.
+ */
 export const key = {
   offset: (c: VisualCompound) => `degradation.alphaOffsetMs.${c}`,
   deg: (c: VisualCompound) => `degradation.nuMsPerLap.${c}`,
   sd: (c: VisualCompound) => `degradation.nuSdMs.${c}`,
-  wear: (c: VisualCompound, corner: 'fl' | 'fr' | 'rl' | 'rr') => `tyreLife.wearPerLapPct.${c}.${corner}`,
-  wearLimit: 'tyreLife.wearLimitPct',
-  ageLossLimit: 'tyreLife.ageLossLimitMs',
   pit: (condition: 'green' | 'vsc' | 'sc') => `pitLoss.ms.${condition}`,
 } as const;
+
+/** The deleted tyre-life keys, for the tests that check the panel shows none. */
+export const DELETED_KEYS = ['tyreLife.wearPerLapPct.medium.fl', 'tyreLife.wearLimitPct', 'tyreLife.ageLossLimitMs'] as const;
 
 /** A lap of a source's lap list: `used`, never a pace lap (`{ excluded }`), or excluded by the user. */
 type LapSpec = { lap: number; ms: number; use: LapUse; excluded?: boolean };
@@ -122,12 +126,6 @@ export const leagueEntries: PriorsEntries = {
   [key.offset('soft')]: unknown('insufficientData'), [key.deg('soft')]: unknown('insufficientData'), [key.sd('soft')]: unknown('insufficientData'),
   [key.offset('medium')]: k(0), [key.deg('medium')]: k(52), [key.sd('medium')]: k(6),
   [key.offset('hard')]: unknown('insufficientData'), [key.deg('hard')]: k(45), [key.sd('hard')]: unknown('insufficientData'),
-  [key.wear('medium', 'fl')]: k(2.4), [key.wear('medium', 'fr')]: k(2.2), [key.wear('medium', 'rl')]: k(1.9), [key.wear('medium', 'rr')]: k(2.0),
-  [key.wear('soft', 'fl')]: unknown('insufficientData'), [key.wear('soft', 'fr')]: unknown('insufficientData'),
-  [key.wear('soft', 'rl')]: unknown('insufficientData'), [key.wear('soft', 'rr')]: unknown('insufficientData'),
-  [key.wear('hard', 'fl')]: unknown('insufficientData'), [key.wear('hard', 'fr')]: unknown('insufficientData'),
-  [key.wear('hard', 'rl')]: unknown('insufficientData'), [key.wear('hard', 'rr')]: unknown('insufficientData'),
-  [key.wearLimit]: unknown('notApplicable'), [key.ageLossLimit]: unknown('notApplicable'),
   [key.pit('green')]: k(20_400), [key.pit('vsc')]: k(13_400), [key.pit('sc')]: unknown('insufficientData'),
 };
 
@@ -146,22 +144,18 @@ export const SETS: CalibrationSet[] = [
 
 /** The note of Silverstone's track-file defaults (the mockup's `default · Silverstone track file: community value (R3)`). */
 export const TRACK_NOTE = 'Silverstone track file: community value (R3)';
-/** The note of tyre-life's config defaults (its two limits). */
-export const TYRE_LIFE_NOTE = 'tyre-life config default (racinggames.gg)';
 type Defaults = CalibrationValuesValue['bySet'][string]['defaults'];
 const fromTrack = (value: number): Defaults[string] => ({ value: k(value), source: { kind: 'default', note: TRACK_NOTE, sessionShare: 0, parts: 'track default' } });
-const fromConfig = (value: number, note: string): Defaults[string] => ({ value: k(value), source: { kind: 'default', note, sessionShare: 0, parts: 'config default' } });
 
 /**
  * `league`'s defaults (R35): the value a run on the set uses for each key no source covers, as the units' fallbacks give
  * it. The mockup's S and H rows (offsets against medium: S −0.405 s, H +0.367 s, the mockup's 0, 0.405 and 0.772 to
  * soft; DEG/LAP and SD 0.060 s) and its SC loss (9.8 s), each the track file's; hard's DEG/LAP is overridden, so covered.
- * Tyre-life's wear rates declare no fallback; its two limits fall back to its config.
+ * (SP4.3c Task 12: tyre-life's wear rates and limits are deleted.)
  */
 export const leagueDefaults: Defaults = {
   [key.offset('soft')]: fromTrack(-405), [key.deg('soft')]: fromTrack(60), [key.sd('soft')]: fromTrack(60),
   [key.offset('hard')]: fromTrack(367), [key.sd('hard')]: fromTrack(60),
-  [key.wearLimit]: fromConfig(70, TYRE_LIFE_NOTE), [key.ageLossLimit]: fromConfig(2_000, 'tyre-life config default (pitwall estimate)'),
   [key.pit('sc')]: fromTrack(9_800),
 };
 

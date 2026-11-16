@@ -25,6 +25,7 @@ const OPTIONS = {
   name: { type: 'string' },
   json: { type: 'string' },
   compare: { type: 'string' },
+  runs: { type: 'string' },
   help: { type: 'boolean', short: 'h' },
 } as const;
 

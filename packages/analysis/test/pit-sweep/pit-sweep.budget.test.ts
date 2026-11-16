@@ -11,6 +11,7 @@ import { longRace } from '../../../../test-support/builders/long-race.ts';
 import { PIT_SWEEP_CONFIG, PIT_SWEEP_JOB } from '../../src/pit-sweep/index.ts';
 import { run } from '../../src/pit-sweep/job.ts';
 import { PLAYER, sweepViewAt } from './support.ts';
+import { LONG_RACE_OURS_SETS } from '../strategy/support.ts';
 
 /** The config's `maxScenarioPolicies` (per car and compound) this budget is measured at; sized by the supervisor from an idle measurement (Q10: ≈ 500 races per row at 17 rows). */
 const CAP = 7_000;
@@ -25,6 +26,7 @@ describe('pit-sweep budget', () => {
     // the window L(now + 10)–L(now + 15): rows L(now + 7)–L(now + 23)
     const view = sweepViewAt(longRace(), 2, {
       frameOfLap: 0,
+      sets: LONG_RACE_OURS_SETS,
       window: { compounds: ['soft', 'medium', 'hard'], latestIn: 15, earliestIn: 10 },
       sweepConfig: { maxScenarioPolicies: cap },
     });

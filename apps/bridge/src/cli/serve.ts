@@ -12,6 +12,7 @@ import type { PacketSource } from '../input/packet-source.ts';
 import { WorkerLimit } from '../jobs/worker-limit.ts';
 import { FeedPipeline, type FeedPipelineOptions } from '../pipeline/feed-pipeline.ts';
 import { PlanRouting, type PlanAction } from '../pipeline/plan-routing.ts';
+import { StaleSweep } from '../pipeline/stale-sweep.ts';
 import { TeamFeeds } from '../pipeline/team-feeds.ts';
 import { ReplayController } from '../replay/replay-controller.ts';
 import { loadTrackFile, recordingTrack, TRACKS_DIR } from '../track-files/load.ts';
@@ -21,7 +22,7 @@ import { UiState } from '../ui-state/ui-state.ts';
 import { StartupError } from '../startup-error.ts';
 import type { Db, SessionKey, StoredSessionRow } from '../storage/db.ts';
 import { WeekendRepository } from '../storage/weekend-repository.ts';
-import { WsServer, type ActionOutcome, type ChooseAction } from '../ws/server.ts';
+import { WsServer, type ActionOutcome, type ChooseAction, type EndSessionAction } from '../ws/server.ts';
 import { recordingDecisions } from '../pipeline/decision-sidecars.ts';
 import { recordingProfiles } from '../pipeline/profile-sidecar.ts';
 import { ProfileStore } from '../drivers/store.ts';
@@ -121,8 +122,10 @@ export async function serve(opts: ServeOptions): Promise<number> {
     const planRouting = new PlanRouting({ teams, pipelines });
     const feeds = (): FeedInfo[] => labels.map((label) => ({ ...label, team: teams.team(label.feedId) }));
     // Seeded first, so the UI state opens on the shipped workbooks, never on its own fallback, and on every start path.
-    if (opts.uiDir !== undefined) await seedDefaultWorkbooks(opts.uiDir, DEFAULT_WORKBOOKS_DIR);
-    const uiState = opts.uiDir === undefined ? undefined : UiState.open(opts.uiDir, hub, cliLogger(io, 'warn'));
+    // Today's date names the backup of a user file a shipped default replaces; the bridge, the I/O shell, reads it here only.
+    const now = (): string => new Date().toISOString().slice(0, 10);
+    if (opts.uiDir !== undefined) await seedDefaultWorkbooks(opts.uiDir, DEFAULT_WORKBOOKS_DIR, now);
+    const uiState = opts.uiDir === undefined ? undefined : UiState.open(opts.uiDir, hub, cliLogger(io, 'warn'), { dir: DEFAULT_WORKBOOKS_DIR, now });
     if (uiState) {
       undo.push(() => uiState.close());
       // Acknowledgements of occurrences that have ended are dropped, so state.json does not grow forever.
@@ -135,12 +138,22 @@ export async function serve(opts: ServeOptions): Promise<number> {
       rulesVersion: storage.rulesVersion,
       track: (row) => (row.pwrecPath === null ? loadTrackFile(row.trackId, TRACKS_DIR) : recordingTrack(row.pwrecPath, row.trackId, TRACKS_DIR)),
     });
+    // A session a feed is running (or restoring) right now is no stale session: it is never rebuilt under it (C59). The
+    // bridge's rebuilds run one at a time, each checked when it starts: a restore may begin while it waits.
+    const running = (): Array<SessionKey | undefined> => [...pipelines.values()].map((pipeline) => pipeline.runningSession());
+    const isRunning = (row: SessionKey): boolean => running().some((key) => key !== undefined && sameSession(row, key));
+    let rebuilds: Promise<void> = Promise.resolve();
+    const checkedRebuild = rebuild && ((row: StoredSessionRow): Promise<void> => {
+      const turn = rebuilds.then(() => (isRunning(row) ? undefined : rebuild(row)));
+      rebuilds = turn.catch(() => {});
+      return turn;
+    });
     // The stale sessions a set, a person's links or the suggestions read (C61), rebuilt from their recordings as a session
     // start's weekend context rebuilds its stale ones; a failed rebuild is logged and its session stays stale (C3).
     const rebuildStored = async (keys: readonly SessionKey[]): Promise<void> => {
-      if (rebuild === undefined || calibrationRepo === undefined) return;
+      if (checkedRebuild === undefined || calibrationRepo === undefined) return;
       const rows = keys.flatMap((key) => calibrationRepo.sessionsOf(key.weekendId).filter((row) => sameSession(row, key)));
-      await Promise.all(rows.map((row) => rebuild(row).catch((error: unknown) => {
+      await Promise.all(rows.map((row) => checkedRebuild(row).catch((error: unknown) => {
         calibrationLog.error({ sessionUid: row.sessionUid, weekendId: row.weekendId, playerCar: row.playerCar, err: error }, 'stored session not rebuilt');
       })));
     };
@@ -168,11 +181,15 @@ export async function serve(opts: ServeOptions): Promise<number> {
       : undefined;
     if (profiles) undo.push(() => profiles.close());
     // A rebuild changes the stored projections the sets' sources and the persons' links rest on (C61).
-    const rebuildThenRecompute = rebuild && (async (row: StoredSessionRow) => {
-      await rebuild(row);
+    const rebuildThenRecompute = checkedRebuild && (async (row: StoredSessionRow) => {
+      await checkedRebuild(row);
       calibration?.recompute('rebuild');
       profiles?.recompute('rebuild');
     });
+    // Live: one sweep of stale stored sessions for the run's feeds (C59, C1a); it waits for every feed's first Session packet.
+    const staleSweep = isLive && storage && rebuildThenRecompute
+      ? new StaleSweep({ feeds: feedIds, db: storage.db, rebuild: rebuildThenRecompute, running, log: cliLogger(io, 'warn') })
+      : undefined;
     let controller: ReplayController | undefined;
     // The server opens after the pipeline, and a replay's only once the startup jump has landed: a client that connects
     // earlier would be told the positions the fast-forward passes through, and a dev restart would not come back to the moment it left.
@@ -203,6 +220,12 @@ export async function serve(opts: ServeOptions): Promise<number> {
           if (!feedIds.includes(action.feedId)) return { ok: false, reason: 'invalid', message: `no feed ${action.feedId}` };
           const pipeline = pipelines.get(action.feedId);
           return pipeline === undefined ? { ok: false, reason: 'notSupported' } : pipeline.commitDecision(action.setId);
+        },
+        // Ending a session's recording is the feed's pipeline's (C59, C73).
+        endSession: (action: EndSessionAction): ActionOutcome => {
+          if (!feedIds.includes(action.feedId)) return { ok: false, reason: 'invalid', message: `no feed ${action.feedId}` };
+          const pipeline = pipelines.get(action.feedId);
+          return pipeline === undefined ? { ok: false, reason: 'notSupported' } : pipeline.endSession();
         },
         // A plan is a decision of the team's running sessions (C1a, C76): the plan routing takes it.
         plan: (action: PlanAction): ActionOutcome =>
@@ -271,6 +294,7 @@ export async function serve(opts: ServeOptions): Promise<number> {
       ...(profiles && isLive && { profiles }),
       ...(opts.replay && { recordedProfiles: recordingProfiles(opts.replay.path, pipelineLog) }),
       ...(opts.staleCheck && { staleCheck: opts.staleCheck }),
+      ...(staleSweep && { staleSweep }),
       ...(calcStats && { calcStats }),
       // Live only: a replay reproduces the realism its sidecar recorded (spec 7.9), whatever the UI prefers next.
       ...(uiState && isLive && { realismNextSession: () => uiState.realismNextSession() }),

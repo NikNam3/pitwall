@@ -27,19 +27,34 @@ type Cand = {
 /** The first scenario id of the re-scoring (spec §7.3 step 5): fresh scenarios, none of the search's. */
 const FRESH_FROM = 0x40000000;
 
+/** The scenarios a candidate's outcome arrays hold at first; `extend` grows them (a lifted cap is no allocation). */
+const FIRST_CAPACITY = 1024;
+
 const newCand = (c: McCandidate, capacity: number, from = 0): Cand => ({
   c,
   from,
   n: 0,
-  pos: new Float64Array(capacity),
-  points: new Float64Array(capacity),
-  time: new Float64Array(capacity),
+  pos: new Float64Array(Math.min(capacity, FIRST_CAPACITY)),
+  points: new Float64Array(Math.min(capacity, FIRST_CAPACITY)),
+  time: new Float64Array(Math.min(capacity, FIRST_CAPACITY)),
   fired: new Float64Array(c.policy.triggers.length),
   firedPos: new Float64Array(c.policy.triggers.length),
 });
 
+const grown = (a: Float64Array, size: number): Float64Array => {
+  const b = new Float64Array(size);
+  b.set(a);
+  return b;
+};
+
 /** Runs candidate `x` of car `car` on its scenarios up to its `to`-th. */
 function extend(run: Run, config: McConfig, car: number, x: Cand, to: number): void {
+  if (to > x.pos.length) {
+    const size = Math.max(to, 2 * x.pos.length);
+    x.pos = grown(x.pos, size);
+    x.points = grown(x.points, size);
+    x.time = grown(x.time, size);
+  }
   const fired = new Uint8Array(x.c.policy.triggers.length);
   const cars = run.start.cars;
   for (let i = x.n; i < to; i++) {

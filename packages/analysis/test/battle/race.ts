@@ -16,8 +16,12 @@ import {
   type MiniSectorCrossing,
   type Ms,
   type OpenSpan,
+  type PassCurve,
+  type RaceInteraction,
   type Span,
+  type TrackWetness,
 } from '@pitwall/domain';
+import { RACE_INTERACTION_CONFIG } from '../../src/race-interaction/config.ts';
 import { projectionLengths, type EngineView, type HistoryDelta } from '@pitwall/engine';
 import { guardedView } from '../../../engine/test/support/scheduler.ts';
 import { carState, engineView, neutralisation, openNeutralisation, RACE_PHASES, realismHidden, type DeepPartial } from '../../../../test-support/builders/index.ts';
@@ -103,7 +107,34 @@ export type Scene = {
   config?: EngineView['config'];
   /** No `gaps` output at all. */
   noGaps?: boolean;
+  /** `race-interaction`'s output (SP4.3c Task 15, O13): one band with the config's default curve unless given; `none`: no output. */
+  interaction?: RaceInteraction | 'none';
+  /** `track-wetness`'s one wet rule (O3): `known(false)` unless given; `none`: no output. */
+  wet?: Known<boolean> | 'none';
 };
+
+/** The config's default pass curve (`race-interaction`'s config, SP4.3c Task 15): the curve a default scene passes by. */
+export const DEFAULT_CURVE: PassCurve = {
+  level: RACE_INTERACTION_CONFIG.defaults.passLevel,
+  slopePerMs: RACE_INTERACTION_CONFIG.defaults.passSlopePerMs,
+  cap: RACE_INTERACTION_CONFIG.defaults.passCap,
+  wetFactor: RACE_INTERACTION_CONFIG.defaults.wetFactor,
+  drsFactor: RACE_INTERACTION_CONFIG.defaults.drsPassFactor,
+};
+
+/** A `race-interaction` output with one band per curve, the session in band `band`. */
+export function interactionOf(curves: readonly PassCurve[] = [DEFAULT_CURVE], band: Known<number> = known(0, 0)): RaceInteraction {
+  return {
+    bands: curves.map((curve) => ({ fromDifficulty: 0, toDifficulty: 110, curve, source: { kind: 'default', note: 'test', sessionShare: 0, parts: '' }, episodes: 0, passes: 0 })),
+    band,
+    drsPassFactor: RACE_INTERACTION_CONFIG.defaults.drsPassFactor,
+    drsStraightGainMs: RACE_INTERACTION_CONFIG.defaults.drsStraightGainMs,
+    minGapMs: RACE_INTERACTION_CONFIG.defaults.minGapMs,
+    heldLossMsPerLap: known(0, 0),
+    rejoinPushBackMs: known(0, 0),
+    dirtyAirMsPerLap: 0,
+  };
+}
 
 const RC: MachineId = 'race-control-race';
 const WP: MachineId = 'weekend-phase';
@@ -225,7 +256,12 @@ export function viewOf(s: Scene): EngineView {
     sessionTime: s.now,
     history: { crossings, spans },
     situation: { weekendPhase: weekendPhaseOf(phase), byMachine },
-    outputs: s.noGaps ? new Map() : new Map<string, unknown>([['gaps', gaps]]),
+    outputs: new Map<string, unknown>([
+      ...(s.noGaps ? [] : [['gaps', gaps] as const]),
+      ...(s.interaction === 'none' ? [] : [['race-interaction', s.interaction ?? interactionOf()] as const]),
+      // the fields battle may read of track-wetness: its one wet rule
+      ...(s.wet === 'none' ? [] : [['track-wetness', { wet: s.wet ?? known(false, 0) } satisfies Pick<TrackWetness, 'wet'>] as const]),
+    ]),
     ...(s.config && { config: s.config }),
   });
   return s.teammate === undefined ? view : { ...view, live: { ...view.live, teammateCar: id(s.teammate) } };

@@ -3,8 +3,10 @@
 // `byFraction` bin whose `upTo` is at or above (n − 0.5) / totalLaps (ruling R22), times the lobby factor. No start while
 // a neutralisation is out and on the lap after it ends: under an open one the current lap and the next are 0 and a later
 // lap's chance is the table's times the chance it has ended at least one lap before (its laps-left pmf).
-import { known, unknown, type MachineId, type NeutralisedDetail, type RaceHazard, type TrackHazard } from '@pitwall/domain';
+import { known, unknown, type FrameNumber, type MachineId, type OpenSpan, type RaceHazard, type Span, type TrackHazard } from '@pitwall/domain';
 import type { AsOfView, DeepReadonly } from '@pitwall/engine/readers';
+import { GAPS, leaderLapAt, type GapsOutput } from '../gaps/index.ts';
+import { isEnding, lastNeutralisation, openNeutralisation } from '../shared/neutralised.ts';
 import { rowOf, type RaceHazardEffect } from './behaviour.ts';
 import { RACE_HAZARD_CONFIG } from './config.ts';
 
@@ -29,35 +31,35 @@ function lapsLeft(pmf: readonly number[], run: number, returning: boolean): numb
 }
 
 /**
- * The leader's completed laps (the most of a lap record with `positionAtEnd` 1): `done` now, `doneAtStart` at frame
- * `startFrame` (its records on or before it), `doneBeforeEnd` before frame `endFrame`. Only the newest laps matter: a
- * start more than `maxRun` laps back has run past every duration, an end before the leader's previous lap blocks no
- * lap left. So the list is read from its end, back to one lap past those (the margin for a confirmed lap appended after
- * the next lap's record); a value further back is `-Infinity` (0 when the whole list was read). Reading the whole
- * projection's laps per run would grow with the race.
+ * The leader's completed laps (`gaps`' judgement, SP4.3c Task 6, C43): `done` now (`leaderProgress`), `doneAtStart` at
+ * the open neutralisation's start, `doneBeforeEnd` before the last closed one's end (its phase on `gaps`' x, the
+ * leader's progress there: the laps completed by the start, before the end). All three from one source, so a race the
+ * engine joined (no lap record before the join) counts them alike. A view without `gaps`' output (an as-of build), or
+ * a value `gaps` has not (before the leader's first crossing; a phase it does not list), takes the as-of form of the
+ * same judgement, `leaderLapAt` over the projection's laps.
  */
 function leaderLaps(
-  laps: AsOfView['history']['laps'],
-  startFrame: number | undefined,
-  endFrame: number | undefined,
-  maxRun: number,
+  view: AsOfView,
+  open: DeepReadonly<OpenSpan> | undefined,
+  last: DeepReadonly<Span> | null,
 ): { done: number; doneAtStart: number; doneBeforeEnd: number } {
-  let done = 0;
-  let doneAtStart = -Infinity;
-  let doneBeforeEnd = -Infinity;
-  let i = laps.length - 1;
-  for (; i >= 0; i--) {
-    const lap = laps[i];
-    if (lap === undefined || lap.positionAtEnd !== 1) continue;
-    if (lap.lapNumber < done - Math.max(1, maxRun) - 1) break;
-    if (lap.lapNumber > done) done = lap.lapNumber;
-    if (startFrame !== undefined && lap.frame <= startFrame && lap.lapNumber > doneAtStart) doneAtStart = lap.lapNumber;
-    if (endFrame !== undefined && lap.frame < endFrame && lap.lapNumber > doneBeforeEnd) doneBeforeEnd = lap.lapNumber;
-  }
-  if (i < 0) {
-    doneAtStart = Math.max(doneAtStart, 0);
-    doneBeforeEnd = Math.max(doneBeforeEnd, 0);
-  }
+  const gaps = view.outputs.get(GAPS) as DeepReadonly<GapsOutput> | undefined;
+  const laps = view.history.laps;
+  const progress = gaps?.leaderProgress;
+  const done = progress?.known === true ? progress.value.lap - 1 : leaderLapAt(laps, Infinity as FrameNumber) - 1;
+  // a span's phase is the one that names it (C26), never one matched by time
+  const phaseOf = (span: DeepReadonly<OpenSpan> | null | undefined) =>
+    span == null ? undefined : gaps?.phases.find((p) => p.span.machine === span.machine && p.span.id === span.id);
+  const openPhase = phaseOf(open);
+  const lastPhase = phaseOf(last);
+  const doneAtStart =
+    open === undefined ? 0
+    : openPhase !== undefined ? Math.floor(openPhase.fromLap)
+    : leaderLapAt(laps, open.startFrame) - 1;
+  const doneBeforeEnd =
+    last === null ? 0
+    : lastPhase?.toLap.known === true ? Math.ceil(lastPhase.toLap.value) - 1
+    : leaderLapAt(laps, (last.endFrame - 1) as FrameNumber) - 1;
   return { done, doneAtStart, doneBeforeEnd };
 }
 
@@ -83,27 +85,21 @@ export function raceHazardAsOf(view: AsOfView): RaceHazard {
   const config = RACE_HAZARD_CONFIG.read(view);
   const lobbyFactor = { off: 0, reduced: config.reducedFactor, standard: 1, increased: config.increasedFactor }[lobby.value];
 
-  // the last closed neutralisation (C20: closed spans in the projection)
-  const closed = view.history.spans[PHASES] ?? [];
-  const lastNeutralised = closed.findLast((s) => s.kind === 'neutralised');
+  // the last closed SC or VSC, confirmed only (C18, C20: closed spans in the projection)
+  const lastNeutralised = lastNeutralisation(view.history, view.situation, ['SC', 'VSC']);
 
-  const activeSpan = effect === 'active' ? open : undefined;
-  const activeDetail = activeSpan?.detail as DeepReadonly<NeutralisedDetail> | undefined;
-  const activeCondition = activeDetail === undefined ? undefined : activeDetail.car === 'SC' ? 'sc' : 'vsc';
-  const { done, doneAtStart, doneBeforeEnd } = leaderLaps(
-    view.history.laps,
-    activeSpan?.startFrame,
-    lastNeutralised?.endFrame,
-    activeCondition === undefined ? 0 : hazard.durationLaps[activeCondition].length,
-  );
+  // the SC or VSC out now (a row `active`), from the one owner of the neutralisation kind
+  const now = effect === 'active' ? openNeutralisation(view) : null;
+  const activeSpan = now !== null && now.kind !== 'red' ? now.span : undefined;
+  const activeCondition = now?.kind === 'SC' ? 'sc' : now?.kind === 'VSC' ? 'vsc' : undefined;
+  const { done, doneAtStart, doneBeforeEnd } = leaderLaps(view, activeSpan, lastNeutralised);
   const current = effect === 'fromLapOne' ? 1 : done + 1;
   // the last closed one ended in lap `doneBeforeEnd + 1`: no start then or on the lap after
-  const blockedThrough = lastNeutralised === undefined ? 0 : doneBeforeEnd + 2;
+  const blockedThrough = lastNeutralised === null ? 0 : doneBeforeEnd + 2;
 
   let active: Value['active'] = null;
-  if (activeDetail !== undefined && activeCondition !== undefined) {
-    const returning = activeDetail.stages.some((s) => s.stage !== 'deployed');
-    active = { condition: activeCondition, remainingLaps: lapsLeft(hazard.durationLaps[activeCondition], done - doneAtStart, returning) };
+  if (activeSpan !== undefined && activeCondition !== undefined) {
+    active = { condition: activeCondition, remainingLaps: lapsLeft(hazard.durationLaps[activeCondition], done - doneAtStart, isEnding(activeSpan)) };
   }
 
   const byLap: Value['byLap'] = [];

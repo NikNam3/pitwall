@@ -11,7 +11,8 @@ import { startLapOf } from '../../src/race-forecast/index.ts';
 import { binShares } from '../../src/shared/distribution.ts';
 import { mcSettingsFrom, policyOf, toDpInput, toMcHazard } from '../../src/shared/strategy-input/index.ts';
 import { candidatesForRun } from '../../src/strategy/index.ts';
-import { bestWith, dpResult, solveDp } from '../../src/strategy-dp/index.ts';
+import { bestWith, solveDp, solveWorld } from '../../src/strategy-dp/index.ts';
+import { RACE_INTERACTION_CONFIG } from '../../src/race-interaction/index.ts';
 import { UNDERCUT_CONFIG, UNDERCUT_JOB, type UndercutInput, type UndercutOutput } from '../../src/undercut/index.ts';
 import { run } from '../../src/undercut/job.ts';
 import {
@@ -57,7 +58,8 @@ beforeEach(() => {
 });
 
 const SEED = 1_521_242_745;
-const RANGE = UNDERCUT_CONFIG.defaults.undercutRangeMs;
+// the one close gap: race-interaction's `closeGapMs` (SP4.3c Task 3)
+const RANGE = RACE_INTERACTION_CONFIG.defaults.closeGapMs;
 
 /** The job's input on the view at the leader's lap `lap`, as the worker receives it. */
 const inputOf = (lap: number = LAP, spec: UndercutViewSpec = {}): UndercutInput => structuredClone(UNDERCUT_JOB.prepare(undercutView(lap, spec)));
@@ -99,7 +101,7 @@ describe('undercut: the job', () => {
   // row 1
   it('rivals: the cars directly ahead and behind within 3.0 s, then the next each way within range, in place order', () => {
     for (const rangeMs of [RANGE, 4_500]) {
-      const input = inputOf(LAP, { undercut: { undercutRangeMs: rangeMs } });
+      const input = inputOf(LAP, { raceInteraction: { closeGapMs: rangeMs } });
       const start = startOf(input);
       const out = run(input, createRng(SEED));
       let withNext = 0;
@@ -129,12 +131,12 @@ describe('undercut: the job', () => {
     for (const car of OURS) {
       const v = valueOf(out, car);
       const { input: call } = callOf(car);
-      const sol = solveDp(toDpInput(input.strategy, car));
-      const { thresholds } = dpResult(sol);
+      // SP4.3c Task 19: our plans are the first weather world's solve's (`solveWorld(input, 0)`), each with its own triggers
+      const sol = solveWorld(toDpInput(input.strategy, car), 0);
       const ours = (stopLap: number) => {
         const plan = bestWith(sol, { stopLap, compound: 'best' });
         expect(plan, `bestWith stop ${stopLap}`).not.toBeNull();
-        return policyOf(plan!, thresholds);
+        return policyOf(plan!);
       };
       let cases = 0;
       expect(v.rivals.length).toBeGreaterThanOrEqual(2);
@@ -153,8 +155,9 @@ describe('undercut: the job', () => {
             expect(c.policy).toEqual(ours(later));
             expect(c.rival!.policy.stops).toEqual([{ lap: v.lap, compound: next }]);
           }
-          // the triggers come from policyOf: the DP's thresholds
-          expect(c.policy.triggers).toEqual(thresholds);
+          // the triggers come from policyOf: the plan's own
+          const plan = bestWith(sol, { stopLap: rival.side === 'ahead' ? v.lap : later, compound: 'best' })!;
+          expect(c.policy.triggers).toEqual(plan.triggers);
           expect(c.rival!.gapAtLap).toBe(later + 1);
         }
       }
@@ -216,28 +219,25 @@ describe('undercut: the job', () => {
   }, 120_000);
 
   // row 4
-  it("the box-now case's rejoin position is rejoin's green one (C43)", () => {
+  // SP4.3c Task 17 (O8, B8): one table, one rejoin model; `rejoin`'s green position mixed into the box-now cases is gone
+  it("every case's rejoin position is the simulated rejoin's median, the box-now cases too; rejoin's green position is in none (B8)", () => {
     const view = undercutView();
     const input = structuredClone(UNDERCUT_JOB.prepare(view));
     const out = run(input, createRng(SEED));
     for (const car of OURS) {
       const v = valueOf(out, car);
       const { input: call, result } = callOf(car);
-      const green = { known: true, value: GREEN_REJOIN[car], at: view.live.sessionTime };
       expect(v.rivals.some((r) => r.side === 'ahead' && r.cases.length > 0), `car ${car}: a rival ahead with cases`).toBe(true);
       for (const rival of v.rivals) {
         for (const x of rival.cases) {
-          if (rival.side === 'ahead') {
-            // we box now: rejoin's green position, not the simulated one
-            expect(x.rejoinPosition).toEqual(green);
-          } else {
-            // we box N laps later: the median of the simulated rejoin
-            const { i } = caseIn(call, rival, v.lap, x.n);
-            const [lo, hi] = medianRange(result.outcomes[i]!.rejoin);
-            const got = valueIn(x.rejoinPosition);
-            expect(got).toBeGreaterThanOrEqual(lo);
-            expect(got).toBeLessThanOrEqual(hi);
-          }
+          // we box now (a rival ahead) or N laps later (a rival behind): the median of the simulated rejoin
+          const { i } = caseIn(call, rival, v.lap, x.n);
+          const [lo, hi] = medianRange(result.outcomes[i]!.rejoin);
+          const got = valueIn(x.rejoinPosition);
+          expect(got, `car ${car} vs ${rival.carId} N${x.n}`).toBeGreaterThanOrEqual(lo);
+          expect(got, `car ${car} vs ${rival.carId} N${x.n}`).toBeLessThanOrEqual(hi);
+          // GREEN_REJOIN's places no simulated rejoin gives by chance
+          expect(got, `car ${car}: not rejoin's green position`).not.toBe(GREEN_REJOIN[car]);
         }
       }
     }
@@ -245,7 +245,7 @@ describe('undercut: the job', () => {
 
   // row 5
   it('a case past the last lap, a rival with no stop still ahead, or no set for us is absent', () => {
-    const wide = { undercut: { undercutRangeMs: 60_000 } };
+    const wide = { raceInteraction: { closeGapMs: 60_000 } };
 
     // the last laps: every rival given a stop ahead; a case whose later stop leaves no lap to measure is absent
     const late = inputOf(18, wide);
@@ -280,9 +280,18 @@ describe('undercut: the job', () => {
     }
   }, 120_000);
 
+  it("one close gap (SP4.3c Task 3, C43, C47): the rivals' range is race-interaction's closeGapMs; undercut has no range of its own", () => {
+    expect(Object.keys(UNDERCUT_CONFIG.defaults)).not.toContain('undercutRangeMs');
+    const rivalsWith = (spec: UndercutViewSpec) => OURS.flatMap((car) => inputOf(LAP, spec).cars[car]?.rivals ?? []);
+    expect(rivalsWith({}).length).toBeGreaterThan(0);
+    expect(rivalsWith({ raceInteraction: { closeGapMs: 1 } })).toEqual([]);
+    // an undercut undercutRangeMs is not read
+    expect(rivalsWith({ raceInteraction: { closeGapMs: 1 }, undercut: { undercutRangeMs: 60_000 } })).toEqual([]);
+  });
+
   // row 6
   it('no rival in range: rivals empty, never notApplicable', () => {
-    const input = inputOf(LAP, { undercut: { undercutRangeMs: 1 } });
+    const input = inputOf(LAP, { raceInteraction: { closeGapMs: 1 } });
     const start = startOf(input);
     const out = run(input, createRng(SEED));
     for (const car of OURS) {
@@ -305,10 +314,10 @@ describe('undercut: the job', () => {
       const { c, i } = caseIn(call, rival!, v.lap, 1);
 
       // strategy's boxNow row on the same input and seed: the DP's box-now play as strategy builds its policy
-      const dp = dpResult(solveDp(toDpInput(input.strategy, car)));
-      expect(dp.boxNow).not.toBeNull();
+      const dp = solveDp(toDpInput(input.strategy, car));
+      expect(dp.boxThisLap).not.toBeNull();
       // found by its stops, whatever triggers strategy gives it (non-best plans carry only the neutralised triggers)
-      const boxNowStops = json(policyOf(dp.boxNow!, []).stops);
+      const boxNowStops = json(policyOf(dp.boxThisLap!).stops);
       const strategyRows = candidatesForRun(structuredClone(input.strategy), createRng(SEED)).perCar.get(car)?.candidates ?? [];
       const boxNowRow = strategyRows.find((r) => json(r.policy.stops) === boxNowStops);
       expect(boxNowRow, `car ${car}: strategy has the boxNow row`).toBeDefined();

@@ -23,7 +23,7 @@ const view = (o: Parameters<typeof situatedView>[0] & { laps: LapRecord[] }): En
 
 /** The stints of car `car`, oldest first. */
 const stintsOf = (v: EngineView, car = 0): StintDegradation[] => {
-  const stints = calc.compute(v)[carId(car)];
+  const stints = calc.compute(v).stints[carId(car)];
   if (stints === undefined) throw new Error(`no stints for car ${car}`);
   return stints;
 };
@@ -338,6 +338,11 @@ describe('degradation: the stint start without priors (spec 4.1, 4.4)', () => {
     const priors = viewPriors(priorsSnapshot({ soft: { nuMsPerLap: 40, nuSdMs: 20 } }));
     const s = stintsOf(view({ laps: one(), track: known(track, 0), priors }))[0]!;
     expect(s.source).toMatchObject({ kind: 'calibration', setName: 'Zandvoort long runs' });
+  });
+
+  it('a stint carries no wear rate any more: the wear rate is tyre-model`s (SP4.3c Task 12, spec §5.2 "Deletes")', () => {
+    const s = stintsOf(view({ laps: one(), track: known(track, 0) }))[0]! as unknown as Record<string, unknown>;
+    expect(s).not.toHaveProperty('wearRatePctPerLap');
   });
 });
 

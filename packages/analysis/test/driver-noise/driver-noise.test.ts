@@ -182,7 +182,7 @@ describe('driver-noise on generated races (spec 5.2)', () => {
       ]),
     );
     const folder = (await loadUnitFolders()).find((f) => f.unit === DRIVER_NOISE);
-    expect(Object.keys(folder?.table ?? {}).sort()).toEqual(['car-driver', 'car-status', 'weekend-phase']);
+    expect(Object.keys(folder?.table ?? {}).sort()).toEqual(['car-driver', 'car-location', 'car-status', 'session-phase-race', 'weekend-phase']);
   });
 
   it('6: a takeover at lap 20 switches the model: laps before count as human, after as AI', () => {

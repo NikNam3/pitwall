@@ -2,6 +2,7 @@
 import type { VisualCompound } from '../compounds.ts';
 import type { CarId } from '../ids.ts';
 import type { Known } from '../known.ts';
+import type { DrsOffReason } from '../situations/race-control-race.ts';
 import type { Joules, Ms } from '../units.ts';
 
 /** The car ahead of or behind one of our cars. */
@@ -10,7 +11,7 @@ export type BattleSide = {
   /** The gap to that car as `gaps.intervals` gives it (`toAheadMs` / `toBehindMs`, unsigned); displays sign it by side. */
   gapMs: Known<Ms>;
   /**
-   * From PACE Δ (`paceDeltaMs`): (gap − `drsRangeMs`) / the closing car's edge per lap, on this side while its car
+   * From PACE Δ (`paceDeltaMs`): (gap − `race-interaction`'s `drsRangeMs`) / the closing car's edge per lap, on this side while its car
    * closes; 0 inside DRS range; `notApplicable` while the gap is not closing or race control has DRS off
    * (`BattleCard.drs`); PACE Δ's reason while it is unknown.
    */
@@ -18,17 +19,17 @@ export type BattleSide = {
   /** Over the same last 50 mini-sectors of both cars, s/lap; positive = we are faster. */
   paceDeltaMs: Known<Ms>;
   /**
-   * The margin that applies on this side: `pass` ahead (our edge − `overtakeThresholdMs`), `hold` behind
-   * (`overtakeThresholdMs` − their edge); positive = good for us.
+   * The pass chance (0–1) at the current gap from `race-interaction`'s pass curve (SP4.3c O13): ahead ours to pass, behind
+   * theirs to pass us.
    */
-  margin: Known<{ kind: 'pass' | 'hold'; ms: Ms }>;
+  passChance: Known<number>;
   ours: { compound: VisualCompound; age: number };
   theirs: { compound: VisualCompound; age: number };
   theirErsStoreJ: Known<Joules>;
 };
 
-/** Why race control has DRS off: the game's DRSD reasons, `notEnabledYet` before a race's first DRSE, `unknown` for a reason code we don't know. */
-export type DrsOffReason = 'notEnabledYet' | 'wetTrack' | 'safetyCar' | 'redFlag' | 'minLapNotReached' | 'unknown';
+/** Why race control has DRS off: the race-control span detail's reason. */
+export type { DrsOffReason };
 
 /** Whether race control allows DRS now, from the game's DRSE and DRSD events. */
 export type DrsStatus = { enabled: true } | { enabled: false; reason: DrsOffReason };

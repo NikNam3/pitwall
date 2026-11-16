@@ -2175,15 +2175,15 @@
       "green": {
         "known": true,
         "value": {
-          "value": 20083,
-          "source": "OpenF1, 2025 Monaco Grand Prix R, median of 31 green stops (in-lap + out-lap - 2 x median of the 3 racing laps before; stops with SC, VSC, red or yellow on in-lap or out-lap, on intermediate or wet tyres, or with the pace after off the reference by more than 5 % left out)"
+          "value": 20046,
+          "source": "OpenF1, 2025 Monaco Grand Prix R, median of 32 green stops (in-lap + out-lap - 2 x median of the 3 racing laps before; stops with SC, VSC, red or yellow on in-lap or out-lap, on intermediate or wet tyres, or with the pace after off the reference by more than 5 % left out)"
         },
         "at": 0
       },
       "vsc": {
         "known": true,
         "value": {
-          "value": 11046,
+          "value": 11025,
           "source": "ratio of green, pitwall estimate"
         },
         "at": 0
@@ -2191,7 +2191,7 @@
       "sc": {
         "known": true,
         "value": {
-          "value": 9037,
+          "value": 9021,
           "source": "ratio of green, pitwall estimate"
         },
         "at": 0
@@ -2201,7 +2201,7 @@
       "known": true,
       "value": {
         "value": 0.859,
-        "source": "OpenF1, 2025 Monaco Grand Prix R, median of 31 green stops ((in-lap - reference) / (in-lap + out-lap - 2 x reference), reference the median of the 3 racing laps before, each stop's share clamped to [0, 1]; the green pit loss's stops)"
+        "source": "OpenF1, 2025 Monaco Grand Prix R, median of 32 green stops ((in-lap - reference) / (in-lap + out-lap - 2 x reference), reference the median of the 3 racing laps before, each stop's share clamped to [0, 1]; the green pit loss's stops)"
       },
       "at": 0
     },
@@ -2209,11 +2209,11 @@
       "known": true,
       "value": {
         "value": {
-          "soft": 1088,
+          "soft": 1095,
           "medium": 0,
-          "hard": 117
+          "hard": 124
         },
-        "source": "OpenF1, 2025 Monaco Grand Prix R, median fuel-corrected racing lap (30 ms/kg, 1.8 kg/lap; 48 soft, 449 medium, 775 hard laps)"
+        "source": "OpenF1, 2025 Monaco Grand Prix R, median fuel-corrected racing lap (30 ms/kg, 1.8 kg/lap; 48 soft, 448 medium, 775 hard laps)"
       },
       "at": 0
     },
@@ -2281,6 +2281,6 @@
     "generator": "pitwall-trackdata 0.1.0",
     "sources": "OpenF1 + MultiViewer; drsZones: OpenF1 qualifying car_data drs channel, median of the top five laps, detection point assumed 200 m before the zone start (not in telemetry or the FIA event notes)",
     "season": 2025,
-    "generatedOn": "2026-11-13"
+    "generatedOn": "2026-11-14"
   }
 }

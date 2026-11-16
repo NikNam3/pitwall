@@ -256,6 +256,86 @@ export function situationAt(source: MembershipSource, frame: FrameNumber): Reado
 }
 
 /**
+ * Every visible span covering at least one frame of `[fromFrame, toFrame)` (C26): the closed ones of
+ * `source.history.spans` and the open ones of `source.situation`, from frame numbers only. `machine` keeps that
+ * sub-machine's spans, `carId` that car's spans. An empty range finds nothing; `toFrame` may be `Infinity`.
+ */
+export function spansOverlapping(
+  source: { history: Pick<MembershipSource['history'], 'spans'>; situation?: Pick<Situation, 'byMachine'> },
+  fromFrame: FrameNumber | number,
+  toFrame: FrameNumber | number,
+  machine?: MachineId,
+  carId?: CarId,
+): readonly DeepReadonly<OpenSpan>[] {
+  if (!(fromFrame < toFrame)) return [];
+  const found: DeepReadonly<OpenSpan>[] = [];
+  const add = (spans: readonly DeepReadonly<OpenSpan & { endFrame?: FrameNumber }>[] | undefined) => {
+    for (const s of spans ?? []) {
+      if (carId !== undefined && s.carId !== carId) continue;
+      // A zero-length span `[f, f)` covers no frame (C26), so it overlaps no range.
+      if (s.startFrame === s.endFrame) continue;
+      if (s.startFrame < toFrame && (s.endFrame === undefined || fromFrame < s.endFrame)) found.push(s);
+    }
+  };
+  const bySource = [source.history.spans, source.situation?.byMachine ?? {}] as const;
+  for (const spansOf of bySource) {
+    if (machine !== undefined) add(spansOf[machine]);
+    else for (const spans of Object.values(spansOf)) add(spans);
+  }
+  return found;
+}
+
+/** A built-once coverage query: whether a kept span covers at least one frame of `[fromFrame, toFrame)` (C26). */
+export type Coverage = (fromFrame: FrameNumber | number, toFrame: FrameNumber | number) => boolean;
+
+/**
+ * `spansOverlapping(source, fromFrame, toFrame, machine, carId).filter(keep).length > 0`, built once (SP4.3c Task 25s,
+ * C26): the kept spans of `machine` (that car's with `carId`), closed of the projection and open of the situation, are
+ * read once into merged, sorted frame intervals (an open span runs on), and each answer is a binary search over them.
+ */
+export function coverageOf(
+  source: { history: Pick<MembershipSource['history'], 'spans'>; situation?: Pick<Situation, 'byMachine'> },
+  machine: MachineId,
+  o: { carId?: CarId; keep?: (span: DeepReadonly<OpenSpan>) => boolean } = {},
+): Coverage {
+  const ranges: Array<[number, number]> = [];
+  const add = (spans: readonly DeepReadonly<OpenSpan & { endFrame?: FrameNumber }>[] | undefined) => {
+    for (const s of spans ?? []) {
+      if (o.carId !== undefined && s.carId !== o.carId) continue;
+      if (o.keep !== undefined && !o.keep(s)) continue;
+      // A zero-length span covers no frame (C26): it is dropped.
+      const end = s.endFrame ?? Number.POSITIVE_INFINITY;
+      if (s.startFrame < end) ranges.push([s.startFrame, end]);
+    }
+  };
+  add(source.history.spans[machine]);
+  add(source.situation?.byMachine[machine]);
+  ranges.sort((a, b) => a[0] - b[0]);
+  const starts: number[] = [];
+  const ends: number[] = [];
+  for (const [a, b] of ranges) {
+    const last = ends.length - 1;
+    if (last >= 0 && a <= (ends[last] as number)) ends[last] = Math.max(ends[last] as number, b);
+    else {
+      starts.push(a);
+      ends.push(b);
+    }
+  }
+  return (fromFrame, toFrame) => {
+    if (!(fromFrame < toFrame)) return false;
+    // The last merged interval starting before `toFrame`: the ranges are disjoint and sorted, so it ends last.
+    let lo = 0;
+    let hi = starts.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >>> 1;
+      if ((starts[mid] as number) < toFrame) lo = mid + 1;
+      else hi = mid;
+    }
+    return lo > 0 && fromFrame < (ends[lo - 1] as number);
+  };
+}
+
+/**
  * The spans a fact belongs to (C26), from the frame it describes: of `situationAt(source, fact.frame)`, the spans of
  * session-scoped machines (the clock's included) and, for a car's fact, its car's spans of car-scoped machines. Each
  * machine's scope is its span declaration's in domain (`scopeOf`, C15); a machine without one, and zone spans, never

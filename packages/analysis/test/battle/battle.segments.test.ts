@@ -12,7 +12,10 @@ import { IDLE_FEED, NO_DRIVERS, NO_PRIORS } from '../../../../test-support/build
 import { segmentPackets } from '../../../../test-support/segments.ts';
 import { battleCalculator } from '../../src/battle/calculator.ts';
 import { BATTLE, type BattleOutput } from '../../src/battle/index.ts';
+import { degradationCalculator } from '../../src/degradation/calculator.ts';
 import { gapsCalculator } from '../../src/gaps/calculator.ts';
+import { raceInteractionCalculator } from '../../src/race-interaction/calculator.ts';
+import { trackWetnessCalculator } from '../../src/track-wetness/calculator.ts';
 import { neutralisedSpans } from '../../src/shared/neutralised.ts';
 
 const FULL_LAP = 'race-zandvoort-full-lap.pwrec.gz';
@@ -34,7 +37,9 @@ async function lastRun(file: string): Promise<LastRun> {
   for (const f of frames.slice(frames.indexOf(first))) runner.apply(f, onResult);
   runner.end(onResult);
   if (last === undefined) throw new Error(`${file}: no frame applied`);
-  const scheduler = new Scheduler(CalculatorRegistry.build([guarded(gapsCalculator), guarded(battleCalculator)]), { freezeOutputs: true });
+  // battle reads race-interaction's pass curve and track-wetness's wet rule (SP4.3c Task 15, O13); track-wetness reads degradation
+  const units = [gapsCalculator, raceInteractionCalculator, degradationCalculator, trackWetnessCalculator, battleCalculator];
+  const scheduler = new Scheduler(CalculatorRegistry.build(units.map((u) => guarded(u))), { freezeOutputs: true });
   scheduler.setNeeded([BATTLE]);
   const { state, changed, delta } = last;
   const scheduled = scheduler.run({ live: state, situation: situationOf(state), history: state.history, changed, delta, weekend: state.weekend, feed: IDLE_FEED, config: {}, priors: NO_PRIORS, drivers: NO_DRIVERS, track: unknown('notApplicable') });

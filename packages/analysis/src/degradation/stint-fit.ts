@@ -1,11 +1,10 @@
 // One stint through `degradation`'s rules (spec 4.1), shared by the calculator and the priors (so a source's `lapUse`
-// is the calculator's): each lap's use, its fuel correction, the filter over the pace laps, the basis and the wear rates.
-import { addLaps, emptyCurrentLaps, known, unknown, type CarId, type Corners, type Known, type LapRecord, type LapUse, type Ms } from '@pitwall/domain';
+// is the calculator's): each lap's use, its fuel correction, the filter over the pace laps and the basis.
+import { known, unknown, type CarId, type Corners, type Known, type LapRecord, type LapUse, type Ms } from '@pitwall/domain';
 import type { DeepReadonly } from '@pitwall/engine/readers';
 import { isPaceLap, isRateLap, type LapClassOptions } from '../lap-classes/index.ts';
-import type { Rate, RateOptions } from '../per-lap-rate/index.ts';
+import type { RateOptions } from '../per-lap-rate/index.ts';
 import { burnPerLapKg } from '../shared/fuel-burn.ts';
-import { wearBasis, wearRatePerCorner } from '../shared/wear-rate.ts';
 import type { DEGRADATION_CONFIG } from './config.ts';
 import type { DegradationLap } from './types.ts';
 import { runFilter, type FilterLap, type FilterPrior, type FilterState } from './kalman.ts';
@@ -71,19 +70,8 @@ export function fuelResolver(o: {
 }
 
 /**
- * Every car's laps, one record per lap (C25, the domain's `addLaps`), by lap number: one pass over a list holding any
- * cars' laps. A lap number is an integer key, which an object lists in ascending order.
- */
-export function lapsByCar(laps: readonly Lap[]): Map<CarId, LapRecord[]> {
-  const out = new Map<CarId, LapRecord[]>();
-  // the records are only read
-  addLaps(emptyCurrentLaps(), laps as readonly LapRecord[]).forEach((byLap, car) => out.set(car as CarId, Object.values(byLap)));
-  return out;
-}
-
-/**
  * A stint after the filter: its laps with their uses, the filter's posterior, its pace laps as the filter read them,
- * whether they are fuel-corrected, the basis and the wear rate per corner.
+ * whether they are fuel-corrected and the basis (the wear rate is `tyre-model`'s, SP4.3c Task 12).
  */
 export type FittedStint = {
   laps: DegradationLap[];
@@ -91,7 +79,6 @@ export type FittedStint = {
   paceLaps: FilterLap[];
   fuelCorrected: boolean;
   basis: 'wear' | 'age';
-  wearRatePctPerLap: Corners<Known<number>>;
 };
 
 /**
@@ -101,7 +88,7 @@ export type FittedStint = {
  * none has is fitted on its lap times. The basis is `wear` when the stint's wear is visible (a lap with every corner's
  * start wear known), else `age`.
  */
-export function fitLaps(laps: readonly Lap[], fuelOf: FuelOf, prior: FilterPrior, config: Config, classes: LapClassOptions, rate: RateOptions): FittedStint {
+export function fitLaps(laps: readonly Lap[], fuelOf: FuelOf, prior: FilterPrior, config: Config, classes: LapClassOptions, _rate?: RateOptions): FittedStint {
   const out: DegradationLap[] = [];
   // the rows of the pace laps and the laps as the filter reads them, in lap order: a lap's corrected time when its fuel
   // is known, else its lap time. A stint is corrected only if a pace lap's fuel is known, so in a stint that is not, every
@@ -125,7 +112,7 @@ export function fitLaps(laps: readonly Lap[], fuelOf: FuelOf, prior: FilterPrior
       else paceUnfuelled = true;
     }
     if (fuel.known) anyFuel = true;
-    // the stint's basis: `wear` once any lap's start wear gives it (the shared rule, `wearBasis`)
+    // the stint's basis: `wear` once any lap's start wear is known on every corner
     if (basis === 'age') basis = wearBasis(lap.wearAtStartPct);
   }
   const fuelCorrected = fitted.length > 0 ? paceFuel : anyFuel;
@@ -143,12 +130,10 @@ export function fitLaps(laps: readonly Lap[], fuelOf: FuelOf, prior: FilterPrior
     const use = state.uses[i];
     if (row !== undefined && use !== undefined) row.use = use;
   }
-  return { laps: out, state, paceLaps, fuelCorrected, basis, wearRatePctPerLap: wearRates(laps, classes, rate) };
+  return { laps: out, state, paceLaps, fuelCorrected, basis };
 }
 
-/** Per corner the wear rate in % per lap of the stint's laps: the shared rule (`wearRatePerCorner`, C43), as a plain rate. */
-function wearRates(laps: readonly Lap[], classes: LapClassOptions, rate: RateOptions): Corners<Known<number>> {
-  const rates = wearRatePerCorner(laps, { lapClasses: classes, rate });
-  const perLap = (r: Known<Rate>): Known<number> => (r.known ? known(r.value.perLap, r.at) : r);
-  return { fl: perLap(rates.fl), fr: perLap(rates.fr), rl: perLap(rates.rl), rr: perLap(rates.rr) };
+/** The basis of a stint's fit: `wear` when every corner's wear is known, else `age`. */
+function wearBasis(wear: DeepReadonly<Corners<Known<number>>>): 'wear' | 'age' {
+  return wear.fl.known && wear.fr.known && wear.rl.known && wear.rr.known ? 'wear' : 'age';
 }

@@ -1,26 +1,30 @@
 // The dry references `track-wetness`'s state is measured against (SP4.3b Task 19c, research 19's wetness spike: a stint's
-// own first laps read a race that starts wet as dry). A reference is a dry pace level on the medium's scale: a stint's
-// fuel-corrected time at tyre age 0 (`ref` of its line `ref + ν · age`) minus its compound's offset against medium (the
-// lap model's prior offsets, `priorOffsets`). Sources, in order: a car's own dry slick laps this session; else the
-// field's dry reference: the median of the cars' own references this session, else of the cars' dry slick stints in the
-// weekend's earlier sessions (`view.weekend`, C39, C62). A lap on inters or wets goes on the slick scale through the lap
-// model's inter and wet terms (`forecast-field`'s config): w = (excess − offset) / slope.
-import type { TyreType, VisualCompound } from '@pitwall/domain';
-import type { AsOfView, DeepReadonly, StoredSession } from '@pitwall/engine/readers';
-import { tyreTypeOf } from '../crossover/tyre-type.ts';
+// own first laps read a race that starts wet as dry; SP4.3c O3: `track-wetness` owns the one dry reference). A reference
+// is a dry pace level on the medium's scale: a stint's fuel-corrected time at tyre age 0 (`ref` of its line `ref + ν ·
+// age`) minus its compound's offset against medium (the lap model's parameters, `lapModelParams`). Sources, in order: a
+// car's own dry slick laps this session; else the field's dry reference: the median of the cars' own references this
+// session, else the calibration set's priors entry `trackWetness.dryRefMs` (C62a), else the median of the cars' dry
+// slick stints in the weekend's earlier sessions (`view.weekend`, C39, C62). A lap on inters or wets goes on the slick
+// scale through the lap model's inter and wet terms: w = (excess − offset) / slope.
+//
+// Without any dry reference (no slick lap anywhere), the game's slick delta is a wetness reading, never a second dry
+// reference (research 22 §1.9): the fresh slick's delta against the fitted inter or wet, on the slick scale.
+import { currentLaps, known, tyreTypeOf, unknown, type Known, type LapModelParams, type LapRecord, type Ms, type TyreSet, type TyreType, type VisualCompound } from '@pitwall/domain';
+import { definePriors, type AsOfView, type CalculatorId, type DeepReadonly, type PriorDecl, type PriorsCtx, type StoredSource, type StoredSession } from '@pitwall/engine/readers';
 import { DEGRADATION_CONFIG, fitStint, phaseRow } from '../degradation/index.ts';
-import { fitLaps, fuelResolver, lapsByCar } from '../degradation/stint-fit.ts';
-import { LAP_CLASSES_CONFIG } from '../lap-classes/index.ts';
+import { fitLaps, fuelResolver, type FuelOf } from '../degradation/stint-fit.ts';
+import { LAP_CLASSES_CONFIG, type LapClassOptions } from '../lap-classes/index.ts';
 import { PER_LAP_RATE_CONFIG } from '../per-lap-rate/index.ts';
-import { FORECAST_FIELD_CONFIG } from '../shared/forecast-field/config.ts';
-import { priorOffsets } from '../shared/forecast-field/lap-model-params.ts';
+import { configOf } from '../shared/config-of.ts';
+import { lapModelParams } from '../shared/forecast-field/lap-model-params.ts';
+import { median } from '../shared/stats.ts';
+import { lapsByCar } from '../shared/stint-laps.ts';
+import { bestFreshSet } from '../shared/tyre-prior.ts';
 
-export function median(values: readonly number[]): number {
-  const sorted = [...values].sort((a, b) => a - b);
-  const mid = sorted.length >> 1;
-  const upper = sorted[mid] as number;
-  return sorted.length % 2 === 1 ? upper : ((sorted[mid - 1] as number) + upper) / 2;
-}
+type Lap = DeepReadonly<LapRecord>;
+
+/** The priors key of the dry reference (C62a). */
+export const DRY_REF_KEY = 'trackWetness.dryRefMs';
 
 /** The lap model's terms a lap is put on the slick scale with: per compound its dry offset against medium, per tyre type its slope. */
 export type SlickScale = {
@@ -30,19 +34,16 @@ export type SlickScale = {
   slope(type: TyreType): number;
 };
 
-/** The slick scale of `view`'s lap model: `forecast-field`'s config and the prior offsets of the dry compounds. */
-export function slickScaleOf(view: Pick<AsOfView, 'config' | 'track'>): SlickScale {
-  const c = FORECAST_FIELD_CONFIG.read(view);
-  const slicks = priorOffsets(view);
+/** The slick scale of a lap model's parameters (O3: the lap model's terms, no offsets of `track-wetness`'s own). */
+export function slickScaleFrom(p: DeepReadonly<LapModelParams>): SlickScale {
   return {
     offsetMs: (visual, type) => {
-      if (type === 'inter') return c.interOffsetMs;
-      if (type === 'wet') return c.wetOffsetMs;
-      if (visual === 'medium') return 0;
-      if (visual === 'soft' || visual === 'hard') return slicks[visual];
+      if (type === 'inter') return p.compoundOffsetMs.inter;
+      if (type === 'wet') return p.compoundOffsetMs.wet;
+      if (visual === 'soft' || visual === 'medium' || visual === 'hard') return p.compoundOffsetMs[visual];
       return undefined;
     },
-    slope: (type) => (type === 'inter' ? c.interMsPerWetnessMs : type === 'wet' ? c.wetMsPerWetnessMs : c.slickMsPerWetnessMs),
+    slope: (type) => p.wetnessMsPerMs[type],
   };
 }
 
@@ -62,42 +63,48 @@ function setRuns<L extends { lapNumber: number; tyreAgeAtStart: number; actualCo
   return runs;
 }
 
+/** What a stored run's reference is fitted with: `degradation`'s filter and rules for the session's weekend phase (C43). */
+type RunFit = { fuelOf: FuelOf; config: (typeof DEGRADATION_CONFIG)['defaults']; classes: LapClassOptions; rate: (typeof PER_LAP_RATE_CONFIG)['defaults'] };
+
+/** The fit of one stored session: its weekend phase's lap classes and its fuel, `ourCar`'s laps standing in for hidden loads. */
+function runFitOf(holder: { readonly config: AsOfView['config'] }, isRace: boolean, ourCar: Lap['carId'], ourLaps: () => readonly Lap[]): RunFit {
+  const config = configOf(DEGRADATION_CONFIG, holder);
+  const classes = { isRace, ...configOf(LAP_CLASSES_CONFIG, holder) };
+  const rate = configOf(PER_LAP_RATE_CONFIG, holder);
+  const fuelOf = fuelResolver({ isRace, ourCar, ourLaps, classes, rate, fallbackBurnKgPerLap: config.fallbackBurnKgPerLap });
+  return { fuelOf, config, classes, rate };
+}
+
 /**
- * The medium-scale dry references of one earlier session's cars: per car the median over its fuel-corrected slick
- * stints with a fit (`degradation`'s filter, its rules for that session's weekend phase, C43) of `α` minus the compound's
- * offset. A stint without a known fuel is left out (its time is not on the corrected scale, C3).
+ * One run's medium-scale dry reference: a slick run fuel-corrected and fitted (`degradation`'s filter), `α` minus the
+ * compound's offset; `undefined` for a run on another type, without a known fuel (its time is not on the corrected
+ * scale, C3) or without a fit.
  */
+function runReference(run: readonly Lap[], fit: RunFit, scale: SlickScale): number | undefined {
+  const first = run[0];
+  if (first === undefined || tyreTypeOf(first.actualCompound) !== 'slick') return undefined;
+  const offset = scale.offsetMs(first.visualCompound, 'slick');
+  if (offset === undefined) return undefined;
+  const prior = { nuMsPerLap: fit.config.defaultNuMsPerLap, nuSdMs: fit.config.defaultNuSdMs };
+  const fitted = fitLaps(run, fit.fuelOf, prior, fit.config, fit.classes, fit.rate);
+  if (!fitted.fuelCorrected) return undefined;
+  const stint = fitStint(fitted.paceLaps, prior, fit.config);
+  return stint.known ? stint.value.alphaMs - offset : undefined;
+}
+
+/** Whether a stored session's weekend phase is the race. */
+const isRacePhase = (phase: string | undefined): boolean => phase !== undefined && phaseRow(phase as Parameters<typeof phaseRow>[0]).isRace === true;
+
+/** The medium-scale dry references of one earlier session's cars: per car the median over its slick runs' references. */
 function storedReferences(session: DeepReadonly<StoredSession>, view: Pick<AsOfView, 'config'>, scale: SlickScale): number[] {
   const projection = session.projection;
-  const phase = (projection.spans['weekend-phase'] ?? []).at(-1)?.kind;
-  const isRace = phase !== undefined && phaseRow(phase as Parameters<typeof phaseRow>[0]).isRace === true;
-  const config = DEGRADATION_CONFIG.read(view);
-  const classes = { isRace, ...LAP_CLASSES_CONFIG.read(view) };
-  const rate = PER_LAP_RATE_CONFIG.read(view);
-  const byCar = lapsByCar(projection.laps);
-  const fuelOf = fuelResolver({
-    isRace,
-    ourCar: session.playerCar,
-    ourLaps: () => byCar.get(session.playerCar) ?? [],
-    classes,
-    rate,
-    fallbackBurnKgPerLap: config.fallbackBurnKgPerLap,
-  });
-  const prior = { nuMsPerLap: config.defaultNuMsPerLap, nuSdMs: config.defaultNuSdMs };
+  const byCar = lapsByCar(projection);
+  const fit = runFitOf(view, isRacePhase((projection.spans['weekend-phase'] ?? []).at(-1)?.kind), session.playerCar, () => byCar.get(session.playerCar) ?? []);
   const out: number[] = [];
   for (const laps of byCar.values()) {
-    const refs: number[] = [];
-    for (const run of setRuns(laps)) {
-      const first = run[0];
-      if (first === undefined || tyreTypeOf(first.actualCompound) !== 'slick') continue;
-      const offset = scale.offsetMs(first.visualCompound, 'slick');
-      if (offset === undefined) continue;
-      const fitted = fitLaps(run, fuelOf, prior, config, classes, rate);
-      if (!fitted.fuelCorrected) continue;
-      const fit = fitStint(fitted.paceLaps, prior, config);
-      if (fit.known) refs.push(fit.value.alphaMs - offset);
-    }
-    if (refs.length > 0) out.push(median(refs));
+    const refs = setRuns(laps).flatMap((run) => runReference(run, fit, scale) ?? []);
+    const ref = median(refs);
+    if (ref !== undefined) out.push(ref);
   }
   return out;
 }
@@ -106,6 +113,94 @@ function storedReferences(session: DeepReadonly<StoredSession>, view: Pick<AsOfV
 export function weekendFieldReference(view: Pick<AsOfView, 'weekend' | 'config'>, scale: SlickScale): number | undefined {
   const weekend = view.weekend;
   if (weekend === undefined) return undefined;
-  const refs = weekend.sessions.flatMap((s) => storedReferences(s, view, scale));
-  return refs.length === 0 ? undefined : median(refs);
+  return median(weekend.sessions.flatMap((s) => storedReferences(s, view, scale)));
+}
+
+/** The calibration set's dry reference (`view.priors`' entry `trackWetness.dryRefMs`) with its set, if the run has one. */
+export function calibrationReference(view: Pick<AsOfView, 'priors'>): { ms: number; setName: string; sources: number } | undefined {
+  if (!view.priors.known) return undefined;
+  const snapshot = view.priors.value;
+  const entry = snapshot.entries[DRY_REF_KEY];
+  return entry?.known === true ? { ms: entry.value, setName: snapshot.setName, sources: snapshot.sources } : undefined;
+}
+
+/** A calibration source's dry reference: its stint fitted with its session's rules, on the lap model's prior offsets. */
+function sourceReference(source: StoredSource, ctx: PriorsCtx): number | undefined {
+  const ourCar = source.source.feedCar;
+  const ourLaps = source.sessionLaps.filter((l) => l.carId === ourCar);
+  const fit = runFitOf(ctx, phaseRow(source.phase.kind).isRace === true, ourCar, () => ourLaps);
+  // no session outputs between runs: the offsets are the lap model's priors (`lapModelParams` without fitted stints)
+  const scale = slickScaleFrom(lapModelParams({ config: ctx.config, track: source.track }, new Map<CalculatorId, unknown>()));
+  const laps = [...source.laps].sort((a, b) => a.lapNumber - b.lapNumber);
+  return runReference(laps, fit, scale);
+}
+
+const dryRefEntry: PriorDecl = {
+  version: 1,
+  range: [20_000, 300_000],
+  /** The median over the set's dry slick stints of their medium-scale references; an override replaces it. */
+  aggregate: (sources, ctx): Known<number> => {
+    const override = ctx.overrides[DRY_REF_KEY];
+    if (override !== undefined) return known(override, 0);
+    const ref = median(sources.flatMap((s) => sourceReference(s, ctx) ?? []));
+    return ref === undefined ? unknown('insufficientData') : known(Math.round(ref), 0);
+  },
+  samples: (sources, ctx) => sources.filter((s) => sourceReference(s, ctx) !== undefined).length,
+  /** The source's own reference minus the set's, in ms. */
+  residual: (source, set): Known<number> => {
+    const own = source[DRY_REF_KEY];
+    const pooled = set[DRY_REF_KEY];
+    if (own?.known !== true || pooled?.known !== true) return unknown('insufficientData');
+    return known(own.value - pooled.value, Math.max(own.at, pooled.at));
+  },
+};
+
+/** `track-wetness`'s priors entries (C62a): the dry reference over a set's dry slick stints. */
+export const TRACK_WETNESS_PRIORS = definePriors('track-wetness', {
+  entries: { [DRY_REF_KEY]: dryRefEntry },
+  candidate: (source) => tyreTypeOf(source.stint.actualCompound) === 'slick',
+});
+
+/** The slick-scale wetness the game's slick delta reads on one lap's sets; `undefined` without a reading. */
+function deltaReading(sets: readonly DeepReadonly<TyreSet>[], scale: SlickScale): number | undefined {
+  const fitted = sets.find((s) => s.fitted);
+  const fittedType = fitted === undefined ? undefined : tyreTypeOf(fitted.actualCompound);
+  if (fitted === undefined || fittedType === undefined || fittedType === 'slick') return undefined;
+  const fittedOffset = scale.offsetMs(fitted.visualCompound, fittedType);
+  const slope = scale.slope('slick') - scale.slope(fittedType);
+  if (fittedOffset === undefined || !(slope > 0)) return undefined;
+  let best: number | undefined;
+  for (const visual of ['soft', 'medium', 'hard'] as const) {
+    const fresh = bestFreshSet(sets as TyreSet[], visual);
+    const offset = scale.offsetMs(visual, 'slick');
+    if (fresh === undefined || offset === undefined) continue;
+    // delta = (slick offset − fitted offset) + (slick slope − fitted slope) · w, against the fitted set's own laps
+    const w = (fresh.lapDeltaMs - fitted.lapDeltaMs - (offset - fittedOffset)) / slope;
+    if (best === undefined || w < best) best = w;
+  }
+  return best;
+}
+
+/**
+ * Per lap `1..leaderLap` the game's slick delta as a wetness reading (research 22 §1.9): the median over the laps of that
+ * number whose record carries the game's sets on a fitted inter or wet of the fresh slick's delta on the slick scale,
+ * known since the newest of them. Read only while no dry reference exists.
+ */
+export function slickDeltaReadings(view: Pick<AsOfView, 'history'>, leaderLap: number, scale: SlickScale): ({ value: number; at: Ms } | undefined)[] {
+  const byLap: { values: number[]; at: Ms }[] = Array.from({ length: leaderLap + 1 }, () => ({ values: [], at: 0 }));
+  for (const lap of currentLaps(view.history.laps as LapRecord[])) {
+    if (lap.lapNumber < 1 || lap.lapNumber > leaderLap || !lap.tyreSets.known) continue;
+    const w = deltaReading(lap.tyreSets.value, scale);
+    if (w === undefined) continue;
+    const slot = byLap[lap.lapNumber] as { values: number[]; at: Ms };
+    slot.values.push(w);
+    slot.at = Math.max(slot.at, lap.tyreSets.at);
+  }
+  const out: ({ value: number; at: Ms } | undefined)[] = [];
+  for (let lap = 1; lap <= leaderLap; lap++) {
+    const slot = byLap[lap] as { values: number[]; at: Ms };
+    const m = median(slot.values);
+    out.push(m === undefined ? undefined : { value: m, at: slot.at });
+  }
+  return out;
 }

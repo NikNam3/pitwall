@@ -4,6 +4,7 @@ export * from './config.ts';
 export { GAPS_BEHAVIOUR, type GapsRow } from './behaviour.ts';
 export type { GapsOutput } from './output.ts';
 export { gapperLines } from '../shared/gapper-lines.ts';
+export { leaderLapAt } from './leader.ts';
 
 /** The calculator id. */
 export const GAPS = 'gaps';

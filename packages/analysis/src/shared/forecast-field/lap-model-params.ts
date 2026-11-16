@@ -3,14 +3,13 @@
 import type { LapModelParams, NoiseCompound } from '@pitwall/domain';
 import type { AsOfView, CalculatorId, DeepReadonly } from '@pitwall/engine/readers';
 import { DEGRADATION, DEGRADATION_CONFIG, type DegradationOutput } from '../../degradation/index.ts';
+import { SLICK_CONFIG } from '../../tyre-model/types/slick.ts';
+import { configOf } from '../config-of.ts';
 import { FORECAST_FIELD_CONFIG } from './config.ts';
 
 /** The dry compounds whose offsets are fitted against medium (medium is 0). */
 const FITTED = ['soft', 'hard'] as const satisfies readonly NoiseCompound[];
 type Fitted = (typeof FITTED)[number];
-
-const configOf = <C extends object>(section: { key: string; defaults: C }, view: Pick<AsOfView, 'config'>): C =>
-  ({ ...section.defaults, ...view.config[section.key] }) as C;
 
 /** The prior of the fitted offsets against medium: the track file's (relative to its medium), else the config's. */
 export function priorOffsets(view: Pick<AsOfView, 'track' | 'config'>): Record<Fitted, number> {
@@ -29,7 +28,7 @@ export function priorOffsets(view: Pick<AsOfView, 'track' | 'config'>): Record<F
  * car's pace profiled out, the offsets are the Gaussian posterior under the prior (the track file's offsets, sd
  * `compoundOffsetPriorSdMs`): a compound no car ran against another keeps the prior.
  */
-function fittedOffsets(degradation: DeepReadonly<DegradationOutput>, prior: Record<Fitted, number>, priorSdMs: number): Record<Fitted, number> {
+function fittedOffsets(degradation: DeepReadonly<DegradationOutput['stints']>,prior: Record<Fitted, number>, priorSdMs: number): Record<Fitted, number> {
   const n = FITTED.length;
   const precision = 1 / (priorSdMs * priorSdMs);
   // the normal equations A·o = b over the fitted offsets
@@ -96,15 +95,17 @@ function solve(a: number[][], b: number[]): number[] {
  * the pace was corrected by; the cold-tyre terms of lap 1 and 2 and their wet factor; the neutralised factors; the
  * wetness terms.
  */
-export function lapModelParams(view: AsOfView, outputs: ReadonlyMap<CalculatorId, unknown>): LapModelParams {
+export function lapModelParams(view: Pick<AsOfView, 'config' | 'track'>, outputs: ReadonlyMap<CalculatorId, unknown>): LapModelParams {
   const c = configOf(FORECAST_FIELD_CONFIG, view);
-  const degradation = (outputs.get(DEGRADATION) as DeepReadonly<DegradationOutput> | undefined) ?? {};
+  const slick = configOf(SLICK_CONFIG, view);
+  const degradation = (outputs.get(DEGRADATION) as DeepReadonly<DegradationOutput> | undefined)?.stints ?? {};
   const offsets = fittedOffsets(degradation, priorOffsets(view), c.compoundOffsetPriorSdMs);
   return {
     compoundOffsetMs: { soft: offsets.soft, medium: 0, hard: offsets.hard, inter: c.interOffsetMs, wet: c.wetOffsetMs },
     fuelMsPerKg: configOf(DEGRADATION_CONFIG, view).gammaMsPerKg,
-    convexFromPct: c.convexFromPct,
-    convexMsPerPct2: c.convexMsPerPct2,
+    // the convex tyre term is the slick module's (`tyre-model`, SP4.3c Task 12; flagged)
+    convexFromPct: slick.convexFromPct,
+    convexMsPerPct2: slick.convexMsPerPct2,
     convexFlagged: true,
     coldTyreMs: [c.coldTyreLap1Ms, c.coldTyreLap2Ms],
     coldTyreWetFactor: c.coldTyreWetFactor,

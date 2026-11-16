@@ -2,18 +2,17 @@
 // driver at the frame (its car-driver span), each value its session estimate shrunk towards its prior: a human's
 // profile entry (`view.drivers`), else the human default; an AI car's the AI default, its σ the AI field's own median
 // this session. Every value is a `Known` with its source (C3).
-import { known, unknown, type CarId, type CarNoise, type DriverNoise, type DriverProfile, type EstimateSource, type Known, type NoiseCompound } from '@pitwall/domain';
+import { known, unknown, type CarId, type CarNoise, type DriverNoise, type DriverProfile, type EstimateSource } from '@pitwall/domain';
 import type { AsOfView, DeepReadonly } from '@pitwall/engine/readers';
 import { DAMAGE_CONFIG } from '../damage/config.ts';
 import { INCIDENTS_CONFIG } from '../incidents/config.ts';
+import { median } from '../shared/stats.ts';
 import { isRaceAt } from './behaviour.ts';
 import { DRIVER_NOISE_CONFIG } from './config.ts';
 import { carModelsOf, type CarModels, type Model, type ModelEstimates, type ResidualConfig } from './residuals.ts';
 import { shrink, type Prior, type SessionEstimate } from './shrink.ts';
 
 type Config = (typeof DRIVER_NOISE_CONFIG)['defaults'];
-
-const COMPOUNDS: readonly NoiseCompound[] = ['soft', 'medium', 'hard', 'inter', 'wet'];
 
 /** The profile entry keys (spec 4, `DRIVER_NOISE_PROFILES`). */
 export const PROFILE_KEYS = {
@@ -22,7 +21,6 @@ export const PROFILE_KEYS = {
   mistakeRate: 'driverNoise.mistakeRate',
   mistakeMedianMs: 'driverNoise.mistakeMedianMs',
   mistakeSigmaLog: 'driverNoise.mistakeSigmaLog',
-  wearRatePct: (c: NoiseCompound) => `driverNoise.wearRatePct.${c}`,
 } as const;
 
 /** The config `driver-noise` reads, its own and the time-loss detection's (C43: `incidents`' and `damage`'s thresholds). */
@@ -40,7 +38,6 @@ const CONFIG_DEFAULT = defaultSource('driver-noise config');
 
 /** A car's entry outside the race phase: every value `notApplicable`. */
 function notApplicableCar(driver: CarNoise['driver']): CarNoise {
-  const perCompound = <T>(v: T) => Object.fromEntries(COMPOUNDS.map((c) => [c, v])) as Record<NoiseCompound, T>;
   return {
     driver,
     sigmaMs: NA,
@@ -49,8 +46,6 @@ function notApplicableCar(driver: CarNoise['driver']): CarNoise {
     mistakeSize: NA,
     bigEventRatePerLap: NA,
     retireRatePerLap: NA,
-    wearRatePctPerLap: perCompound(NA),
-    wearRateSource: perCompound(CONFIG_DEFAULT),
     source: CONFIG_DEFAULT,
     laps: 0,
   };
@@ -106,29 +101,8 @@ function aiPriors(fieldSigmaMs: number | undefined, c: Config): Priors {
   };
 }
 
-/** A car's wear rate of one compound: its own, else (a human) its profile's, else our car's this race, else the default. */
-function wearOf(
-  car: CarModels,
-  compound: NoiseCompound,
-  human: boolean,
-  profile: DeepReadonly<DriverProfile> | undefined,
-  ours: CarModels | undefined,
-  c: Config,
-): { rate: Known<number>; source: EstimateSource } {
-  const own = car.ownWear[compound];
-  if (own !== undefined) return { rate: known(own.ratePct, own.at), source: { kind: 'session', sessionShare: 1, parts: `${own.laps} laps` } };
-  if (human) {
-    const p = profilePrior(profile, PROFILE_KEYS.wearRatePct(compound));
-    if (p !== undefined) return { rate: known(p.value, 0), source: p.source };
-  }
-  const our = ours?.ownWear[compound];
-  if (our !== undefined) return { rate: known(our.ratePct, our.at), source: { kind: 'session', sessionShare: 1, parts: 'our car' } };
-  const value = human ? c.humanWearRatePct : c.defaultWearRatePct;
-  return { rate: known(value, 0), source: defaultSource(human ? 'driver-noise human default' : 'driver-noise default') };
-}
-
-/** One car's entry: the model of its driver, each value shrunk towards its prior. */
-function carNoiseOf(car: CarModels, model: ModelEstimates, priors: Priors, human: boolean, profile: DeepReadonly<DriverProfile> | undefined, ours: CarModels | undefined, c: Config): CarNoise {
+/** One car's entry: the model of its driver, each value shrunk towards its prior (its wear rates are `tyre-model`'s). */
+function carNoiseOf(car: CarModels, model: ModelEstimates, priors: Priors, c: Config): CarNoise {
   const k = c.shrinkLaps;
   const at = model.at ?? 0;
   const sigma = shrink(model.sigmaMs, priors.sigmaMs, k);
@@ -138,7 +112,6 @@ function carNoiseOf(car: CarModels, model: ModelEstimates, priors: Priors, human
   const sigmaLog = shrink(model.mistakeSigmaLog, priors.mistakeSigmaLog, k);
   const big = shrink(rateOf(model.bigEvents, model.paceLaps), priors.bigEventRate, k);
   const retire = shrink(rateOf(model.retirements, model.allLaps), priors.retireRate, k);
-  const wear = Object.fromEntries(COMPOUNDS.map((compound) => [compound, wearOf(car, compound, human, profile, ours, c)])) as Record<NoiseCompound, ReturnType<typeof wearOf>>;
   return {
     driver: car.driver,
     sigmaMs: known(sigma.value, at),
@@ -147,25 +120,16 @@ function carNoiseOf(car: CarModels, model: ModelEstimates, priors: Priors, human
     mistakeSize: known({ medianMs: Math.round(medianMs.value), sigmaLog: sigmaLog.value }, at),
     bigEventRatePerLap: known(big.value, at),
     retireRatePerLap: known(retire.value, at),
-    wearRatePctPerLap: Object.fromEntries(COMPOUNDS.map((compound) => [compound, wear[compound].rate])) as Record<NoiseCompound, Known<number>>,
-    wearRateSource: Object.fromEntries(COMPOUNDS.map((compound) => [compound, wear[compound].source])) as Record<NoiseCompound, EstimateSource>,
     source: sigma.source,
     laps: model.laps,
   };
 }
 
-function median(values: readonly number[]): number {
-  const sorted = [...values].sort((a, b) => a - b);
-  const mid = sorted.length >> 1;
-  const upper = sorted[mid] as number;
-  return sorted.length % 2 === 1 ? upper : ((sorted[mid - 1] as number) + upper) / 2;
-}
-
 /** The model a car's entry reports: its driver's; a car without a car-driver span the AI's. */
 const reportedModel = (car: CarModels): Model => (car.driver === 'human' ? 'human' : 'ai');
 
-/** Every car's models and what their entries share: the config, the AI priors, the AI field's rates, our car. */
-type Field = { c: Config; cars: Map<CarId, CarModels>; ai: Priors; aiField: DriverNoise['aiField']; ours: CarModels | undefined };
+/** Every car's models and what their entries share: the config, the AI priors, the AI field's rates. */
+type Field = { c: Config; cars: Map<CarId, CarModels>; ai: Priors; aiField: DriverNoise['aiField'] };
 
 /** The field as of `view`'s frame; outside the race `undefined`. */
 function fieldOf(view: AsOfView, c: Config, cars: Map<CarId, CarModels>): Field | undefined {
@@ -185,24 +149,21 @@ function fieldOf(view: AsOfView, c: Config, cars: Map<CarId, CarModels>): Field 
     pooled.allLaps += ai.allLaps;
     fieldAt = Math.max(fieldAt, ai.at ?? 0);
   }
-  const ai = aiPriors(aiSigmas.length > 0 ? median(aiSigmas) : undefined, c);
+  const ai = aiPriors(median(aiSigmas), c);
   const k = c.shrinkLaps;
   const aiField: DriverNoise['aiField'] = {
     mistakeRatePerLap: known(shrink(rateOf(pooled.mistakes, pooled.mistakeBase), ai.mistakeRate, k).value, fieldAt),
     bigEventRatePerLap: known(shrink(rateOf(pooled.bigEvents, pooled.paceLaps), ai.bigEventRate, k).value, fieldAt),
     retireRatePerLap: known(shrink(rateOf(pooled.retirements, pooled.allLaps), ai.retireRate, k).value, fieldAt),
   };
-
-  const player = view.fixed.playerCar;
-  const ours = player.known ? cars.get(player.value) : undefined;
-  return { c, cars, ai, aiField, ours };
+  return { c, cars, ai, aiField };
 }
 
 /** One car's entry with `model`'s values. */
 function entryOf(view: AsOfView, field: Field, id: CarId, car: CarModels, model: Model): CarNoise {
   const profile = model === 'human' ? profileOf(view, id) : undefined;
   const priors = model === 'human' ? humanPriors(profile, field.c) : field.ai;
-  return carNoiseOf(car, car.models[model], priors, model === 'human', profile, field.ours === car ? undefined : field.ours, field.c);
+  return carNoiseOf(car, car.models[model], priors, field.c);
 }
 
 /** Every car's noise model and the AI field's rates, as of `view`'s frame. */
@@ -221,16 +182,16 @@ export function driverNoiseAsOf(view: AsOfView): DriverNoise {
 
 /**
  * Car `carId`'s entry with its human model's values, whoever drove it last (a driver profile's session: the linked
- * car's human-span laps, C62c), with its own measured wear rates; `undefined` outside the race or without the car. It
- * equals the car's entry of `driverNoiseAsOf` when the car's driver is human.
+ * car's human-span laps, C62c); `undefined` outside the race or without the car. It equals the car's entry of
+ * `driverNoiseAsOf` when the car's driver is human.
  */
-export function humanNoiseAsOf(view: AsOfView, carId: CarId): { noise: CarNoise; ownWear: CarModels['ownWear'] } | undefined {
+export function humanNoiseAsOf(view: AsOfView, carId: CarId): CarNoise | undefined {
   const { own: c, residual } = residualConfigOf(view);
   const cars = carModelsOf(view, residual);
   const field = fieldOf(view, c, cars);
   const car = cars.get(carId);
   if (field === undefined || car === undefined) return undefined;
-  return { noise: { ...entryOf(view, field, carId, car, 'human'), driver: car.driver }, ownWear: car.ownWear };
+  return { ...entryOf(view, field, carId, car, 'human'), driver: car.driver };
 }
 
 /** The car slot's linked driver profile (`view.drivers`, C62c), if any. */

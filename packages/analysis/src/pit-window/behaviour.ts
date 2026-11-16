@@ -10,7 +10,10 @@ export type PitWindowEffect = {
   race?: boolean;
   /** The weekend phase is not the race (C14): our car's value is `notApplicable`. */
   notApplicable?: boolean;
-  /** The compound rule is still to be met: the fitted compound is no option (K4) and a stop is mandatory. */
+  /**
+   * The compound rule applies. Whether the car still owes it (then the fitted compound is no option, K4, and a stop is
+   * mandatory) is `shared/compound-rule.ts`' judgement over its stints (`owesSecondDryCompound`, SP4.3c B4, C43).
+   */
   ruleRequired?: boolean;
   /** The car stopped: a span of this kind opened since the stint start closes the window. */
   stopped?: boolean;

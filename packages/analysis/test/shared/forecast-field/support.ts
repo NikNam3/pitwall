@@ -1,17 +1,19 @@
 // Shared setup of the `forecast-field` tests (SP4.3a spec 6.1, plan Task 16): a small generator race with its append
 // frames, its as-of and live views, the upstream units' outputs, and plain `driver-noise` and `race-interaction`
 // outputs of their declared types (those units are written apart, Tasks 10 and 12).
+//
+// Ported in SP4.3c Task 12: the tyre terms are `tyre-model`'s (spec §5.2), so `tyre-model` is a merged unit and
+// `driver-noise`'s plain output carries no wear rate (deleted); the generator's laps and cars carry no tyre sets, so the
+// generated race's views get the game's sets (`withGameSets`) and `tyre-model` its prior's usable life.
 import {
   known,
   MINI_SECTORS,
-  NOISE_COMPOUNDS,
   type CarId,
   type CarNoise,
   type DriverNoise,
   type FrameNumber,
   type LapRecord,
   type MiniSectorCrossing,
-  type NoiseCompound,
   type RaceInteraction,
   type SessionTime,
   type StartingPoint,
@@ -29,9 +31,11 @@ import { trackWetnessCalculator } from '../../../src/track-wetness/calculator.ts
 import { TRACK_WETNESS, trackWetnessAsOf } from '../../../src/track-wetness/index.ts';
 import { tyreLifeCalculator } from '../../../src/tyre-life/calculator.ts';
 import { TYRE_LIFE, tyreLifeAsOf } from '../../../src/tyre-life/index.ts';
+import { TYRE_MODEL, tyreModelAsOf, tyreModelCalculator } from '../../../src/tyre-model/index.ts';
 import type { BuilderRace } from '../../../../../test-support/builders/long-race.ts';
 import { generateRace, GENERATOR_DEFAULTS, type GeneratorParams } from '../../../../../test-support/race-generator/index.ts';
 import { withoutInLapShare, zandvoortTrack } from '../../../../../test-support/track.ts';
+import { lapWithGameSets, withGameSets } from '../../tyre-model/support.ts';
 
 /** The track file of every view here: braking zones, DRS zones and pit-loss defaults. */
 // ported in SP4.3b Task 26: the track's in-lap share left out, so the config prior holds
@@ -64,12 +68,9 @@ export const PARAMS: GeneratorParams = {
   field: GENERATOR_DEFAULTS.field.slice(12).map((car, i) => ({ ...car, stops: [{ lap: 8 + (i % 3), compound: 'hard' as const }] })),
 };
 
-/** Every car's wear rate per compound in the plain `driver-noise` output (% per lap): each compound its own. */
-export const WEAR_RATES: Record<NoiseCompound, number> = { soft: 3.1, medium: 1.7, hard: 1.2, inter: 2.5, wet: 2.0 };
-
 const DEFAULT_SOURCE = { kind: 'default', note: 'test', sessionShare: 0, parts: 'default' } as const;
 
-/** A plain `driver-noise` output for car slots `0..cars - 1`; slots in `humans` are human. */
+/** A plain `driver-noise` output for car slots `0..cars - 1`; slots in `humans` are human (no wear rate: tyre-model's, Task 12). */
 export function plainNoise(cars: number, humans: readonly number[] = [], at: SessionTime = 0): DriverNoise {
   const out: Record<CarId, CarNoise> = {};
   for (let i = 0; i < cars; i++) {
@@ -82,8 +83,6 @@ export function plainNoise(cars: number, humans: readonly number[] = [], at: Ses
       mistakeSize: known({ medianMs: 1_500, sigmaLog: 0.6 }, at),
       bigEventRatePerLap: known(0.001, at),
       retireRatePerLap: known(0.002, at),
-      wearRatePctPerLap: Object.fromEntries(NOISE_COMPOUNDS.map((c) => [c, known(WEAR_RATES[c], at)])) as CarNoise['wearRatePctPerLap'],
-      wearRateSource: Object.fromEntries(NOISE_COMPOUNDS.map((c) => [c, DEFAULT_SOURCE])) as CarNoise['wearRateSource'],
       source: DEFAULT_SOURCE,
       laps: 10,
     };
@@ -108,18 +107,22 @@ export function plainInteraction(at: SessionTime = 0): RaceInteraction {
   };
 }
 
-/** The upstream units whose as-of forms are merged, as `runAsOf` runs them (their calculators' reads). */
+/** The upstream units whose as-of forms are merged, as `runAsOf` runs them (their calculators' reads), in their reads' order. */
 const MERGED_UNITS: readonly AsOfUnit[] = [
   { id: DEGRADATION, reads: degradationCalculator.reads, asOf: degradationAsOf },
   { id: PIT_LOSS, reads: pitLossCalculator.reads, asOf: pitLossAsOf },
-  { id: TYRE_LIFE, reads: tyreLifeCalculator.reads, asOf: tyreLifeAsOf },
   { id: TRACK_WETNESS, reads: trackWetnessCalculator.reads, asOf: trackWetnessAsOf },
+  { id: TYRE_MODEL, reads: tyreModelCalculator.reads, asOf: tyreModelAsOf },
+  { id: TYRE_LIFE, reads: tyreLifeCalculator.reads, asOf: tyreLifeAsOf },
   { id: RIVAL_STOPS, reads: rivalStopsCalculator.reads, asOf: rivalStopsAsOf },
 ];
 
+/** `view` with the game's sets on every lap that has none (`lapWithGameSets`, idempotent): the long race's views too. */
+const asOfWithGameSets = (view: AsOfView): AsOfView => ({ ...view, history: { ...view.history, laps: (view.history.laps as readonly LapRecord[]).map(lapWithGameSets) } as AsOfView['history'] });
+
 /**
- * The outputs `buildStartingPoint` reads on `view`: the merged units' as-of forms run on it, and the plain `noise` and
- * `interaction` outputs in place of `driver-noise` and `race-interaction`.
+ * The outputs `buildStartingPoint` reads on `view`: the merged units' as-of forms run on it (its laps with the game's
+ * sets), and the plain `noise` and `interaction` outputs in place of `driver-noise` and `race-interaction`.
  */
 export function upstreamOf(
   view: AsOfView,
@@ -130,7 +133,7 @@ export function upstreamOf(
     [DRIVER_NOISE, noise],
     [RACE_INTERACTION, interaction],
   ]);
-  return runAsOf(MERGED_UNITS, { ...view, outputs: given });
+  return runAsOf(MERGED_UNITS, { ...asOfWithGameSets(view), outputs: given });
 }
 
 /** `view` as a plain object (its getters read once), with `over` on top. */
@@ -141,7 +144,7 @@ export function materialised(view: AsOfView, over: Partial<AsOfView> = {}): AsOf
 /** A generated race with its final projection's append frames and its views. */
 export type Generated = {
   race: BuilderRace;
-  /** The view after frame N, with the track file. */
+  /** The view after frame N, with the track file and the game's tyre sets (`withGameSets`). */
   viewAt(frame: FrameNumber): EngineView;
   /** The final projection, with its append frames, and the final situation: what `startingPointAt` cuts. */
   full: { history: Projection; situation: EngineView['situation'] };
@@ -152,7 +155,7 @@ export type Generated = {
 /** `params`' race, seeded with `seed`. */
 export function generated(params: GeneratorParams = PARAMS, seed = 7): Generated {
   const { race } = generateRace(params, seed);
-  const viewAt = (frame: FrameNumber): EngineView => ({ ...race.viewAt(frame), track: TRACK });
+  const viewAt = (frame: FrameNumber): EngineView => withGameSets({ ...race.viewAt(frame), track: TRACK });
   const final = viewAt(race.lastFrame);
   const full = { history: withAppendFrames(final.history as Projection), situation: final.situation };
   const byCar = new Map<CarId, MiniSectorCrossing[]>();

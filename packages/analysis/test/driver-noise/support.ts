@@ -179,7 +179,7 @@ export function stintOf(c: CarLaps): StintDegradation {
   const laps = carLaps(c);
   const at = laps.at(-1)?.completedAt ?? 0;
   const compound = c.compound ?? 'medium';
-  const rate = c.wear === 'hidden' ? unknown('realism') : known(1, at);
+  // ported in SP4.3c Task 12: a stint carries no wear rate any more (tyre-model's, spec §5.2)
   return {
     stint: 1,
     firstLap: laps[0]?.lapNumber ?? 1,
@@ -191,7 +191,7 @@ export function stintOf(c: CarLaps): StintDegradation {
     nuSdMs: known(5, at),
     basis: c.wear === 'hidden' ? 'age' : 'wear',
     fuelCorrected: true,
-    wearRatePctPerLap: { fl: rate, fr: rate, rl: rate, rr: rate },
+    fuelIncluded: false,
     source: { kind: 'session', sessionShare: 1, parts: `${laps.length} laps` },
     cov: known([[100, 0], [0, 1]], at),
     startPrior: { nuMsPerLap: 0, nuSdMs: 30, alphaOffsetMs: known(0, 0), source: { kind: 'default', note: 'test', sessionShare: 0, parts: 'default' } },
@@ -213,6 +213,10 @@ export function dryWetness(laps: number): TrackWetness {
       commonModeMs: { slick: known(0, 0), inter: unknown('insufficientData'), wet: unknown('insufficientData') },
     })),
     state: known({ wetnessMs: 0, sdMs: 100 }, 0),
+    wet: known(false, 0),
+    dryRefMs: unknown('insufficientData'),
+    dryRefSource: { kind: 'default', note: 'test', sessionShare: 0, parts: '' },
+    slickScale: unknown('insufficientData'),
   };
 }
 
@@ -250,7 +254,7 @@ export function rowView(
   }
   const byMachine: Record<string, OpenSpan[]> = {};
   for (const span of open) (byMachine[span.machine] ??= []).push(span);
-  const degradation: DegradationOutput = Object.fromEntries(cars.map((c) => [carId(c.car), [stintOf(c)]]));
+  const degradation: DegradationOutput = { stints: Object.fromEntries(cars.map((c) => [carId(c.car), [stintOf(c)]])), standIn: unknown('notApplicable') };
   return engineView({
     cars: states,
     sessionTime: startOf(0, lastLap + 1) + 1_000,

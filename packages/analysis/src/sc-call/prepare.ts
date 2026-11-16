@@ -1,9 +1,10 @@
 // `sc-call`'s job input (SP4.3b spec §9.3; SP4.3b2 Task 9): the shared strategy input (`shared/strategy-input/`, C43)
-// and, per our car, `rejoin`'s rejoin position, loss and loss source per condition (as the 4.2 calculator took them),
+// and, per our car, `rejoin`'s loss and loss source per condition (as the 4.2 calculator took them),
 // whether the car already boxed under the neutralisation out now, and its behaviour row (C44). Structured-cloneable
 // (C51).
-import { unknown, type CarId, type EstimateSource, type Known, type Ms, type NeutralisedDetail, type Rejoin } from '@pitwall/domain';
-import type { CalculatorId, EngineView } from '@pitwall/engine/readers';
+import { unknown, type CarId, type EstimateSource, type Known, type Ms, type Rejoin } from '@pitwall/domain';
+import { spansOverlapping, type CalculatorId, type EngineView } from '@pitwall/engine/readers';
+import { openNeutralisation } from '../shared/neutralised.ts';
 import { RACE_HAZARD } from '../race-hazard/id.ts';
 import { REJOIN, type RejoinOutput } from '../rejoin/index.ts';
 import { behaviourFor } from '../shared/behaviour.ts';
@@ -13,8 +14,8 @@ import { effectOf, SC_CALL_BEHAVIOUR, type ScCallEffect } from './behaviour.ts';
 /** A neutralising condition: the call's rows. */
 export type ScCondition = 'sc' | 'vsc';
 
-/** `rejoin`'s answer for one condition (C43). */
-export type ScRejoin = { rejoinPosition: Known<number>; lossMs: Known<Ms>; lossSource: EstimateSource };
+/** `rejoin`'s loss for one condition, with its source (C43); the row's rejoin position is the box run's (one model, B8). */
+export type ScRejoin = { lossMs: Known<Ms>; lossSource: EstimateSource };
 
 /** One of our cars as the job reads it. */
 export type ScCallCar = {
@@ -39,8 +40,8 @@ const NO_SOURCE: EstimateSource = { kind: 'default', note: 'no rejoin answer', s
 /** `rejoin`'s answer for `condition`, its reason passed through where unknown; without one, `insufficientData`. */
 function rejoinAt(rejoin: Rejoin | undefined, condition: ScCondition): ScRejoin {
   const at = rejoin?.conditions[condition];
-  if (at === undefined) return { rejoinPosition: unknown('insufficientData'), lossMs: unknown('insufficientData'), lossSource: NO_SOURCE };
-  return { rejoinPosition: at.rejoinPosition, lossMs: at.lossMs, lossSource: at.lossSource };
+  if (at === undefined) return { lossMs: unknown('insufficientData'), lossSource: NO_SOURCE };
+  return { lossMs: at.lossMs, lossSource: at.lossSource };
 }
 
 /** The job's input from the view (C41: through what `SC_CALL_JOB` reads). */
@@ -49,15 +50,19 @@ export function prepareScCall(view: EngineView): ScCallInput {
   const outputs = new Map<CalculatorId, unknown>();
   for (const id of [RACE_HAZARD, REJOIN]) if (view.outputs.has(id)) outputs.set(id, view.outputs.get(id));
   const strategy = strategyInputFrom(new Proxy(view, { get: (target, key) => (key === 'outputs' ? outputs : Reflect.get(target, key)) }));
-  const open = view.situation.byMachine['session-phase-race']?.find((s) => s.kind === 'neutralised');
-  const neutralised: ScCondition | null = open === undefined ? null : (open.detail as NeutralisedDetail).car === 'VSC' ? 'vsc' : 'sc';
+  // the SC or VSC out now, from the one owner of the neutralisation kind; a suspension is none
+  const now = openNeutralisation(view);
+  const open = now !== null && now.kind !== 'red' ? now.span : undefined;
+  const neutralised: ScCondition | null = now?.kind === 'SC' ? 'sc' : now?.kind === 'VSC' ? 'vsc' : null;
   const rejoin = view.outputs.get(REJOIN) as RejoinOutput | undefined;
-  const boxStops = view.history.spans['car-activity-race'] ?? [];
   const cars: Record<CarId, ScCallCar> = {};
   for (const car of strategy.ourCars) {
     const own = rejoin?.cars[car] as Rejoin | undefined;
-    // a stop that ended once the neutralisation was out: the car boxed under it
-    const boxedUnder = open !== undefined && boxStops.some((s) => s.carId === car && s.kind === 'boxStop' && s.endFrame > open.startFrame);
+    // a stop that ended once the neutralisation was out: a closed box stop of the projection (the open one is no stop
+    // yet) covering a frame from the neutralisation's first on, by the projection module's span-range query (C26)
+    const boxedUnder =
+      open !== undefined &&
+      spansOverlapping({ history: view.history }, open.startFrame, Infinity, 'car-activity-race', car).some((s) => s.kind === 'boxStop');
     cars[car] = {
       effect: effectOf(behaviourFor(SC_CALL_BEHAVIOUR, view, car)),
       boxedUnder,

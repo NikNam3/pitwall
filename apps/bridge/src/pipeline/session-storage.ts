@@ -65,6 +65,7 @@ export type SessionStorageOptions = {
 };
 
 const keyOf = (row: SessionKey): SessionKey => ({ sessionUid: row.sessionUid, weekendId: row.weekendId, playerCar: row.playerCar });
+const sameKey = (a: SessionKey, b: SessionKey): boolean => a.sessionUid === b.sessionUid && a.weekendId === b.weekendId && a.playerCar === b.playerCar;
 
 /**
  * One session's access to the database. Never throws: the first failure goes to `onError` and turns storage off
@@ -86,9 +87,13 @@ export class SessionStorage {
     }
   }
 
-  /** The session starts: live, its row and cars are written and a log stored under its key is replaced (the newest run wins). */
-  start(row: SessionRow): void {
-    if (this.#o.mode === 'append') this.#access?.writer.startSession(row);
+  /**
+   * The session starts: live, its row and cars are written. `continued`: the run continues the session's stored
+   * recording (C59), so a log stored under its key with this rules version is kept and only appended to; any other
+   * stored log under its key is replaced whole (C24, C61).
+   */
+  start(row: SessionRow, opts: { continued: boolean }): void {
+    if (this.#o.mode === 'append') this.#access?.writer.startSession(row, opts);
   }
 
   /** The session's row and cars whenever its identity or its teammate changed (the newest wins); live only. */
@@ -103,18 +108,19 @@ export class SessionStorage {
 
   /**
    * The session ended with `log` complete (its closing spans in it): live, the rest is appended and the session marked
-   * complete; a rebuild replaces the stored log whole. `interrupted`: a rebuild that was stopped before the recording's
-   * end writes nothing, so the stored log stays as it was (C24).
+   * complete; a rebuild replaces the stored log whole. `interrupted`: the input was stopped before the session ended
+   * (a bridge stop, a stopped rebuild), so its closing spans never happened: nothing is written and the stored log
+   * stays as it was, a live one incomplete, to be continued by the next run (C24, C38, C59).
    */
   finish(row: SessionRow, log: DeepReadonly<EngineState['log']>, opts: { interrupted: boolean }): void {
     const writer = this.#access?.writer;
-    if (writer === undefined) return;
+    if (writer === undefined || opts.interrupted) return;
     if (this.#o.mode === 'append') {
       writer.writeLog(keyOf(row), log);
       if (this.#access !== undefined) writer.complete(keyOf(row));
       // Stored complete, unless the write failed (storage then is off).
       if (this.#access !== undefined) this.#o.onStored?.();
-    } else if (!opts.interrupted) {
+    } else {
       writer.replaceLog(row, log, this.#o.rulesVersion);
     }
   }
@@ -128,7 +134,7 @@ export class SessionStorage {
     if (repo === undefined) return undefined;
     try {
       const { context, incomplete } = repo.weekendContext(row.weekendId, player, keyOf(row), { startedAt: row.startedAt });
-      if (incomplete.length > 0) this.#rebuildInBackground(repo, row.weekendId, incomplete);
+      if (incomplete.length > 0) this.#rebuildInBackground(repo.sessionsOf(row.weekendId).filter((s) => incomplete.some((k) => sameKey(k, s))));
       return context;
     } catch (error) {
       this.#fail(error);
@@ -136,11 +142,10 @@ export class SessionStorage {
     }
   }
 
-  #rebuildInBackground(repo: WeekendRepository, weekendId: string, keys: readonly SessionKey[]): void {
+  #rebuildInBackground(rows: readonly StoredSessionRow[]): void {
     const { rebuild, log } = this.#o;
     if (rebuild === undefined) return;
-    const same = (a: SessionKey, b: SessionKey) => a.sessionUid === b.sessionUid && a.weekendId === b.weekendId && a.playerCar === b.playerCar;
-    for (const stored of repo.sessionsOf(weekendId).filter((s) => keys.some((k) => same(k, s)))) {
+    for (const stored of rows) {
       rebuild(stored).catch((error: unknown) => {
         log.error({ sessionUid: stored.sessionUid, weekendId: stored.weekendId, playerCar: stored.playerCar, err: error }, 'stored session not rebuilt');
       });

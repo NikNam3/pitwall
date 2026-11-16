@@ -16,7 +16,7 @@ const overview = (id: number, name: string): CarOverview =>
 const cars = [overview(1, 'Kuhnlein'), overview(3, 'Charles Leclerc'), overview(7, 'Alexander Albon')];
 const side = (id: number, gapMs: number): BattleSide => ({
   carId: carId(id), gapMs: k(gapMs), lapsToDrs: unknown('notApplicable'), paceDeltaMs: k(100),
-  margin: k({ kind: 'pass', ms: 150 }),
+  passChance: k(0.1),
   ours: { compound: 'inter', age: 4 }, theirs: { compound: 'inter', age: 6 }, theirErsStoreJ: k(2_000_000),
 });
 const card: BattleCard = { carId: carId(1), ahead: k(side(3, 1800)), behind: k(side(7, 2600)), drs: { enabled: false, reason: 'wetTrack' } };
@@ -38,11 +38,13 @@ describe('BattleCards: DRS off', () => {
   });
 });
 
-describe('BattleCards: pass and hold', () => {
+// SP4.3c Task 15 (O13): the PASS column shows each side's pass chance as a whole percent; a likely pass is bold white
+// ahead (ours) and bold warning behind (theirs). The fixed PASS/HOLD margin is gone.
+describe('BattleCards: the pass chance', () => {
   const holdCard: BattleCard = {
     carId: carId(1),
-    ahead: k({ ...side(3, 1800), margin: k({ kind: 'pass', ms: 250 }), lapsToDrs: k(3) }),
-    behind: k({ ...side(7, 600), margin: k({ kind: 'hold', ms: -400 }), lapsToDrs: k(0) }),
+    ahead: k({ ...side(3, 1800), passChance: k(0.31), lapsToDrs: k(3) }),
+    behind: k({ ...side(7, 600), passChance: k(0.42), lapsToDrs: k(0) }),
     drs: { enabled: true },
   };
   const showHold = () =>
@@ -53,21 +55,23 @@ describe('BattleCards: pass and hold', () => {
     });
   const field = (c: HTMLElement, t: string): HTMLElement | undefined => [...c.querySelectorAll('span')].find((s) => s.textContent?.trim() === t);
 
-  it('shows PASS +0.25 s/lap and HOLD −0.40 s/lap, and no CLOSING', () => {
+  it('shows 31% ahead and 42% behind, and no CLOSING, no margin, no HOLD', () => {
     const { container } = showHold();
-    expect(container.textContent).toContain('PASS +0.25 s/lap');
-    expect(container.textContent).toContain('HOLD −0.40 s/lap');
+    expect(field(container, '31%')).toBeDefined();
+    expect(field(container, '42%')).toBeDefined();
     expect(container.textContent).not.toContain('CLOSING');
+    expect(container.textContent).not.toContain('MARGIN');
+    expect(container.textContent).not.toContain('HOLD');
   });
 
-  it('a positive PASS is bold white, a negative HOLD is bold warning', () => {
+  it('a likely pass ahead is bold white, a likely pass behind is bold warning', () => {
     const { container } = showHold();
-    const pass = field(container, 'PASS +0.25 s/lap');
-    const hold = field(container, 'HOLD −0.40 s/lap');
-    expect(pass?.closest('strong')).not.toBeNull();
-    expect(pass?.getAttribute('style') ?? '').not.toMatch(/warning/);
-    expect(hold?.closest('strong')).not.toBeNull();
-    expect(hold?.getAttribute('style') ?? '').toMatch(/warning/);
+    const ours = field(container, '31%');
+    const theirs = field(container, '42%');
+    expect(ours?.closest('strong')).not.toBeNull();
+    expect(ours?.getAttribute('style') ?? '').not.toMatch(/warning/);
+    expect(theirs?.closest('strong')).not.toBeNull();
+    expect(theirs?.getAttribute('style') ?? '').toMatch(/warning/);
   });
 
   it('writes no verdict word', () => {

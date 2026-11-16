@@ -1,21 +1,40 @@
 // `battle` (timing spec 6.3, live polish spec 3.1): each of our cars against the car ahead and the car behind. The gap
-// now is from `gaps.intervals`; PACE Δ from the mini-sector crossings (`battle.ts`), and from it the margin and the laps
-// to DRS; the DRS status from race control's spans. Incremental (C31): the accumulator folds the projection alone
-// (C31.2); `output` adds `gaps`, the open spans and the live state. Every number is positive when it is good for our car.
-import { known, unknown, type BattleCard, type BattleSide, type CarId, type CarState, type DrsOffReason, type DrsStatus, type Known, type Ms } from '@pitwall/domain';
+// now is from `gaps.intervals`; PACE Δ from the mini-sector crossings (`battle.ts`), and from it the laps to DRS and
+// the pass chance (`race-interaction`'s one curve at the gap, O13); the DRS status from race control's spans.
+// Incremental (C31): the accumulator folds the projection alone (C31.2); `output` adds `gaps`, `race-interaction`,
+// `track-wetness`, the open spans and the live state. Every number is positive when it is good for our car.
+import {
+  known,
+  ourCars,
+  unknown,
+  type BattleCard,
+  type BattleSide,
+  type CarId,
+  type CarState,
+  type DrsOffDetail,
+  type DrsStatus,
+  type Known,
+  type Ms,
+  type RaceInteraction,
+  type TrackWetness,
+} from '@pitwall/domain';
 import { openSpansOf, type DeepReadonly, type EngineView, type IncrementalCalculator } from '@pitwall/engine/readers';
 import type { GapsOutput } from '../gaps/index.ts';
+import { RACE_INTERACTION } from '../race-interaction/index.ts';
+import { passChance, sessionCurve } from '../race-interaction/pass-chance.ts';
+import { TRACK_WETNESS } from '../track-wetness/index.ts';
 import { behaviourFor } from '../shared/behaviour.ts';
 import { NEUTRALISATION_READS } from '../shared/neutralised.ts';
-import { ourCars } from '../shared/our-cars.ts';
-import { emptyBattleAcc, foldBattle, openNeutralised, paceDelta, type BattleAcc } from './battle.ts';
+import { emptyBattleAcc, foldBattle, paceDelta, type BattleAcc } from './battle.ts';
+import { RACE_INTERACTION_CONFIG } from '../race-interaction/config.ts';
 import { BATTLE, BATTLE_BEHAVIOUR, BATTLE_CONFIG, type BattleOutput } from './index.ts';
 
 export type { BattleAcc } from './battle.ts';
 
 const NOT_APPLICABLE = unknown('notApplicable');
 type Car = DeepReadonly<CarState>;
-type Config = ReturnType<typeof BATTLE_CONFIG.read>;
+/** `battle`'s config and the one DRS range, `race-interaction`'s `drsRangeMs` (C43, C47). */
+type Config = ReturnType<typeof BATTLE_CONFIG.read> & { drsRangeMs: number };
 
 /**
  * The laps to DRS range on one side: (gap − `drsRangeMs`) / the closing car's edge per lap (`edge`, positive while the
@@ -31,24 +50,38 @@ function lapsToDrs(drs: DrsStatus, gapMs: Known<Ms>, pace: Known<Ms>, edge: numb
   return known((gapMs.value - drsRangeMs) / edge, Math.max(gapMs.at, pace.at));
 }
 
-/** What one side needs besides the cars: the fold, the gaps, DRS, the neutralisations and the config. */
-type Context = { acc: BattleAcc; view: EngineView; gaps: GapsOutput; drs: DrsStatus; neutralised: ReturnType<typeof openNeutralised>; config: Config };
+/**
+ * The pass chance on one side (O13): `race-interaction`'s one curve at the side's gap for the closing car's edge (`edge`,
+ * ours ahead, theirs behind), DRS as race control has it, wet by `track-wetness`'s rule. No race-interaction output:
+ * `notReceived`; no band: `insufficientData`; the gap or PACE Δ unknown: its reason.
+ */
+function sidePassChance(pass: PassInputs, drs: DrsStatus, gapMs: Known<Ms>, pace: Known<Ms>, edge: number, drsRangeMs: number): Known<number> {
+  if (pass.interaction === undefined) return unknown('notReceived');
+  const curve = sessionCurve(pass.interaction);
+  if (curve === undefined) return unknown('insufficientData');
+  if (!gapMs.known) return gapMs;
+  if (!pace.known) return pace;
+  return known(passChance(edge, gapMs.value, { curve, wet: pass.wet, drs: drs.enabled, drsRangeMs }), Math.max(gapMs.at, pace.at));
+}
+
+/** What the pass chance reads of other units: race-interaction's output and track-wetness's one wet rule (unknown: dry). */
+type PassInputs = { interaction: RaceInteraction | undefined; wet: boolean };
+
+/** What one side needs besides the cars: the fold, the gaps, DRS, the pass inputs and the config. */
+type Context = { acc: BattleAcc; view: EngineView; gaps: GapsOutput; drs: DrsStatus; pass: PassInputs; config: Config };
 
 function side(ctx: Context, ourId: CarId, theirId: CarId, isAhead: boolean): Known<BattleSide> {
-  const { acc, view, gaps, drs, neutralised, config } = ctx;
+  const { acc, view, gaps, drs, pass, config } = ctx;
   const ours = view.live.cars[ourId];
   const theirs = view.live.cars[theirId];
   if (ours === undefined || theirs === undefined) return NOT_APPLICABLE;
   const interval = gaps.intervals.find((i) => i.carId === ourId);
   const gapMs = (isAhead ? interval?.toAheadMs : interval?.toBehindMs) ?? unknown('notReceived');
 
-  const { overtakeThresholdMs, drsRangeMs, minPaceSegments } = config;
-  const pace = paceDelta(acc, view, [...acc.neutralised, ...neutralised], ourId, theirId, minPaceSegments);
+  const { drsRangeMs, minPaceSegments } = config;
+  const pace = paceDelta(acc, view, ourId, theirId, minPaceSegments);
   // the closing car's edge per lap: ours on the car ahead, theirs (−PACE Δ) on the car behind
   const edge = pace.known ? (isAhead ? pace.value : -pace.value) : 0;
-  const margin: Known<{ kind: 'pass' | 'hold'; ms: Ms }> = !pace.known
-    ? pace
-    : known(isAhead ? { kind: 'pass', ms: (edge - overtakeThresholdMs) as Ms } : { kind: 'hold', ms: (overtakeThresholdMs - edge) as Ms }, pace.at);
   const ers = theirs.energy.ers;
   const tyre = (c: Car) => ({ compound: c.tyres.visualCompound, age: c.tyres.age });
   return known(
@@ -57,7 +90,7 @@ function side(ctx: Context, ourId: CarId, theirId: CarId, isAhead: boolean): Kno
       gapMs,
       lapsToDrs: lapsToDrs(drs, gapMs, pace, edge, drsRangeMs),
       paceDeltaMs: pace,
-      margin,
+      passChance: sidePassChance(pass, drs, gapMs, pace, edge, drsRangeMs),
       ours: tyre(ours),
       theirs: tyre(theirs),
       theirErsStoreJ: ers.known ? known(ers.value.storeJ, ers.at) : ers,
@@ -72,7 +105,7 @@ function drsOf(view: EngineView, race: boolean): DrsStatus {
   const row = behaviourFor({ 'race-control-race': BATTLE_BEHAVIOUR['race-control-race'] }, view)[0];
   if (row === undefined) return { enabled: false, reason: 'notEnabledYet' };
   if (row.drs === 'enabled') return { enabled: true };
-  const detail = openSpansOf(view, 'race-control-race')[0]?.detail as { reason?: DrsOffReason } | undefined;
+  const detail = openSpansOf(view, 'race-control-race')[0]?.detail as DrsOffDetail | undefined;
   return { enabled: false, reason: detail?.reason ?? 'unknown' };
 }
 
@@ -101,7 +134,12 @@ function output(acc: BattleAcc, view: EngineView): BattleOutput {
   // a pending weekend phase (no span yet) reads as a race grid (C14): the cards are computed, DRS is not enabled yet
   const computed = phase === undefined || phase.cards === 'computed';
   const drs = drsOf(view, phase?.cards !== 'notApplicable');
-  const ctx = { acc, view, gaps, drs, neutralised: computed && gaps !== undefined ? openNeutralised(view) : [], config: BATTLE_CONFIG.read(view) };
+  const wetness = view.outputs.get(TRACK_WETNESS) as Pick<TrackWetness, 'wet'> | undefined;
+  const pass: PassInputs = {
+    interaction: view.outputs.get(RACE_INTERACTION) as RaceInteraction | undefined,
+    wet: wetness !== undefined && wetness.wet.known && wetness.wet.value,
+  };
+  const ctx = { acc, view, gaps, drs, pass, config: { ...BATTLE_CONFIG.read(view), drsRangeMs: RACE_INTERACTION_CONFIG.read(view).drsRangeMs } };
   const out: BattleOutput = {};
   for (const id of ourCars(view.live)) out[id] = cardOf(ctx, computed, id);
   return out;
@@ -113,6 +151,8 @@ export const battleCalculator: IncrementalCalculator<BattleAcc, BattleOutput> = 
   kind: 'incremental',
   reads: [
     { calculator: 'gaps' },
+    { calculator: RACE_INTERACTION },
+    { calculator: TRACK_WETNESS },
     'miniSectors',
     'spans:car-location',
     ...NEUTRALISATION_READS,

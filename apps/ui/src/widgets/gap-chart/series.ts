@@ -5,6 +5,7 @@ import { carCodeById } from '../../kit/car/car-label.ts';
 import type { ChartSeries, PhaseBand } from '../../kit/chart/data.ts';
 import { GHOST_DASH, GHOST_ROLE } from '../../kit/ghost/ghost.ts';
 import { ghostLetter } from '../../kit/text.ts';
+import { msToSeconds } from '../../kit/values/format.ts';
 import { role } from '../../theme/index.ts';
 import { lineLook } from './emphasis.ts';
 
@@ -49,8 +50,8 @@ export function gapSeries(lines: GapperLines, cars: readonly CarOverview[], ours
   const player = ours.values().next().value;
   for (const line of lines.cars) {
     if (line.points.length === 0 && !line.now.known) continue;
-    const points: ChartSeries['points'] = line.points.map((p) => [p.lap, -p.gapMs / 1000]);
-    if (line.now.known) points.push([line.now.value.lap, -line.now.value.gapMs / 1000]);
+    const points: ChartSeries['points'] = line.points.map((p) => [p.lap, -msToSeconds(p.gapMs)]);
+    if (line.now.known) points.push([line.now.value.lap, -msToSeconds(line.now.value.gapMs)]);
     const look = lineLook(ours.has(line.carId), line.carId, player);
     out.push({
       label: carCodeById(cars, line.carId).text,
@@ -81,7 +82,7 @@ export function ghostSeries(ghosts: GhostLines | undefined, primary: CarId | und
     if (line === undefined || line.points.length === 0) return [];
     return [{
       label: ghostLetter(condition),
-      points: line.points.map((p): [number, number] => [p.lap, -p.gapMs / 1000]),
+      points: line.points.map((p): [number, number] => [p.lap, -msToSeconds(p.gapMs)]),
       colour: { colour: role(GHOST_ROLE), dashed: false, ownCar: false },
       dash: GHOST_DASH[condition],
       widthPx: GHOST_WIDTH_PX,

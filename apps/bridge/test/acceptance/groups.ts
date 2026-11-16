@@ -8,11 +8,13 @@ import {
   CROSSOVER,
   CROSSOVER_CONFIG,
   crossoverCalculator,
+  degradationCalculator,
   LAP_CLASSES_CONFIG,
   LAP_OVERVIEW,
   lapOverviewCalculator,
   PIT_LOSS,
   pitLossCalculator,
+  trackWetnessCalculator,
   type CrossoverOutput,
   type LapOverviewOutput,
   type PitLossOutput,
@@ -128,7 +130,7 @@ export function racesAcceptance(group: readonly FixtureName[]): void {
         expect(last).toBeDefined();
         if (last === undefined) return;
         state = last.state;
-        const scheduler = new Scheduler(CalculatorRegistry.build([pitLossCalculator, lapOverviewCalculator, crossoverCalculator]), { freezeOutputs: true });
+        const scheduler = new Scheduler(CalculatorRegistry.build([pitLossCalculator, lapOverviewCalculator, degradationCalculator, trackWetnessCalculator, crossoverCalculator]), { freezeOutputs: true });
         scheduler.setNeeded([LAP_OVERVIEW, CROSSOVER]);
         const { changed, delta } = last;
         const scheduled = scheduler.run({ live: state, situation: situationOf(state), history: state.history, changed, delta, weekend: state.weekend, feed: IDLE_FEED, config: {}, priors: NO_PRIORS, drivers: NO_DRIVERS, track: unknown('notApplicable') });

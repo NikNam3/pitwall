@@ -16,6 +16,9 @@ import {
   gapsToCar,
   sessionRemainingCalculator,
   tyreLifeCalculator,
+  tyreModelCalculator,
+  tyreModelFitCalculator,
+  trackWetnessCalculator,
   tyreWearCalculator,
   type AlarmsOutput,
   type CarBandsOutput,
@@ -149,13 +152,17 @@ beforeAll(async () => {
     }
   };
 
-  // tyre-wear publishes from tyre-life, which reads degradation (spec 4.2)
+  // tyre-wear publishes from tyre-life, which reads tyre-model (on degradation and track-wetness; SP4.3c Task 12)
   const calculators = [
     gapsCalculator,
     carBandsCalculator,
     alarmsCalculator,
     tyreWearCalculator,
     tyreLifeCalculator,
+    tyreModelCalculator,
+    // SP4.3c Task 12s (ruling R53): tyre-model reads tyre-model-fit
+    tyreModelFitCalculator,
+    trackWetnessCalculator,
     degradationCalculator,
     fuelCalculator,
     damageCalculator,

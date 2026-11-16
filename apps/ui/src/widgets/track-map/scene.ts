@@ -1,12 +1,12 @@
 // The track map's scene (spec 7.2): a pure mapping from the topic values to what the kit's track canvas draws. It
 // chooses roles and styles only (C65, from `presentation.ts`, C66); the canvas places everything. Colours only as
 // theme roles or `carColour` (C68).
-import type { Known, MapCar, MapIncident, PitCondition, Rejoin, TrackCars, TrackGeometry } from '@pitwall/domain';
+import type { Known, MapCar, MapIncident, PitCondition, RejoinGhost, TrackCars, TrackGeometry } from '@pitwall/domain';
 import { ghostLetter, incidentKinds } from '../../kit/text.ts';
 import type { TrackDot, TrackGhost, TrackLabel, TrackScene, TrackStretch } from '../../kit/track/types.ts';
 import type { WidgetSize } from '../../kit/types.ts';
 import { carColour } from '../../theme/index.ts';
-import { dots, parts, presentation } from './presentation.ts';
+import { dots, labels, parts, presentation } from './presentation.ts';
 import { sectorLabels } from './text.ts';
 
 const keyOf = (c: MapCar) => ({ id: c.carId, teamId: c.teamId, raceNumber: c.raceNumber });
@@ -36,42 +36,43 @@ function stretchesOf(cars: TrackCars): TrackStretch[] {
   });
 }
 
-/** The turn labels and the sector labels (full size only). */
-function labelsOf(geometry: TrackGeometry): TrackLabel[] {
-  const turns = geometry.turns.map((t) => ({ text: t.label, at: t.point }));
-  const sectors = geometry.sectorStarts.map((at, i) => ({ text: sectorLabels[i] ?? '', at }));
-  return [...turns, ...sectors];
+/** The turn labels, the sector labels and every car's code at its point, as the size's row of `labels` shows them. */
+function labelsOf(geometry: TrackGeometry, cars: Known<TrackCars>, row: (typeof labels)[keyof typeof labels]): TrackLabel[] {
+  const turns = row.turns ? geometry.turns.map((t) => ({ text: t.label, at: t.point })) : [];
+  const sectors = row.sectors ? geometry.sectorStarts.map((at, i) => ({ text: sectorLabels[i] ?? '', at })) : [];
+  const codes = row.codes && cars.known ? cars.value.cars.map((c) => ({ text: c.code, at: c.point })) : [];
+  return [...turns, ...sectors, ...codes];
 }
 
 /** The ghost's conditions in drawing order. */
 const CONDITIONS = ['green', 'vsc', 'sc'] as const satisfies readonly PitCondition[];
 
 /** One ghost per condition whose map point is known, lettered in the full size only; none before the value arrives. */
-function ghostsOf(rejoin: Rejoin | undefined, full: boolean): TrackGhost[] {
-  if (rejoin === undefined) return [];
+function ghostsOf(ghost: RejoinGhost | undefined, full: boolean): TrackGhost[] {
+  if (ghost === undefined) return [];
   return CONDITIONS.flatMap((c) => {
-    const point = rejoin.conditions[c].mapPoint;
+    const point = ghost.conditions[c].mapPoint;
     return point.known ? [{ at: point.value, letter: full ? ghostLetter(c) : undefined }] : [];
   });
 }
 
-/** The scene of the geometry, the cars, the markers and the rejoin ghost at the panel's size. */
+/** The scene of the geometry, the cars, the markers and the rejoin ghost (`rejoinGhost.car`) at the panel's size. */
 export function sceneOf(
   geometry: TrackGeometry,
   cars: Known<TrackCars>,
   markers: Known<MapIncident[]> | undefined,
   size: Pick<WidgetSize, 'mode'>,
-  rejoin?: Rejoin,
+  ghost?: RejoinGhost,
 ): TrackScene {
   const full = size.mode === 'full';
   return {
     outline: geometry.outline,
     lineRole: parts.outline,
     stretches: cars.known ? stretchesOf(cars.value) : [],
-    labels: full ? labelsOf(geometry) : [],
+    labels: labelsOf(geometry, cars, labels[full ? 'full' : 'compact']),
     dots: cars.known ? dotsOf(cars.value.cars) : [],
     // the compact size draws the triangle only, as the mockup does
     markers: markers?.known === true ? markers.value.map((m) => ({ at: m.point, label: full ? incidentKinds[m.kind] : '', role: parts.marker })) : [],
-    ghosts: ghostsOf(rejoin, full),
+    ghosts: ghostsOf(ghost, full),
   };
 }

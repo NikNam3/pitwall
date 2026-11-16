@@ -5,10 +5,12 @@ import { known, unknown, type Known, type LapUse, type VisualCompound } from '@p
 import { definePriors, type FallbackCtx, type PriorDecl, type PriorsCtx, type StoredSource } from '@pitwall/engine/readers';
 import { LAP_CLASSES_CONFIG } from '../lap-classes/index.ts';
 import { PER_LAP_RATE_CONFIG } from '../per-lap-rate/index.ts';
+import { configOf } from '../shared/config-of.ts';
+import { lapsByCar } from '../shared/stint-laps.ts';
 import { phaseRow } from './behaviour.ts';
 import { DEGRADATION_CONFIG } from './config.ts';
 import { fitStint, type StintFitResult } from './kalman.ts';
-import { fitLaps, fuelResolver, lapClassOf, lapsByCar, type FittedStint } from './stint-fit.ts';
+import { fitLaps, fuelResolver, lapClassOf, type FittedStint } from './stint-fit.ts';
 import type { StartPrior } from './types.ts';
 
 /** The compounds a set holds priors for. */
@@ -19,10 +21,6 @@ const REFERENCE: VisualCompound = 'medium';
 
 /** The key of entry `name` for `compound`: `degradation.<name>.<compound>`. */
 export const priorKey = (name: 'alphaOffsetMs' | 'nuMsPerLap' | 'nuSdMs', compound: VisualCompound): string => `degradation.${name}.${compound}`;
-
-/** A config section's effective values in a priors or fallback context (C47): the defaults under `ctx.config`'s overrides. */
-const configOf = <C extends object>(section: { key: string; defaults: C }, ctx: Pick<PriorsCtx, 'config'>): C =>
-  ({ ...section.defaults, ...ctx.config[section.key] }) as C;
 
 /** The default source's note: the config default's. */
 const CONFIG_NOTE = 'degradation config default (pitwall estimate)';
@@ -53,7 +51,7 @@ function sourceFit(source: StoredSource, ctx: PriorsCtx): FittedStint {
   const fuelOf = fuelResolver({
     isRace,
     ourCar: source.source.feedCar,
-    ourLaps: () => lapsByCar(source.sessionLaps).get(source.source.feedCar) ?? [],
+    ourLaps: () => lapsByCar({ laps: source.sessionLaps }).get(source.source.feedCar) ?? [],
     classes,
     rate,
     fallbackBurnKgPerLap: config.fallbackBurnKgPerLap,

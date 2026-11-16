@@ -4,7 +4,7 @@
 import { carId, known, unknown, type CarId, type CompoundEstimate, type FitPoint, type Known, type SessionTime, type StintFit } from '@pitwall/domain';
 import { copyPlain, type EngineView, type QuickCalculator } from '@pitwall/engine/readers';
 import { DEGRADATION, type DegradationOutput, type StintDegradation } from '../degradation/index.ts';
-import { ourCars } from '../shared/our-cars.ts';
+import { ourCars } from '@pitwall/domain';
 import { STINT_ANALYSIS, type StintAnalysisOutput } from './index.ts';
 import { poolCompound } from './pool.ts';
 
@@ -79,7 +79,7 @@ function compoundsOf(stints: readonly StintDegradation[], now: SessionTime): Com
 }
 
 /** Our cars' stints in the order they started (the first lap), the player's first on a tie. */
-function ourStints(degradation: DegradationOutput, cars: readonly CarId[]): StintDegradation[] {
+function ourStints(degradation: DegradationOutput['stints'],cars: readonly CarId[]): StintDegradation[] {
   const stints = cars.flatMap((car) => degradation[car] ?? []);
   const firstLap = (s: StintDegradation): number => s.laps[0]?.lapNumber ?? Number.POSITIVE_INFINITY;
   return stints.map((s, i) => ({ s, i })).sort((a, b) => firstLap(a.s) - firstLap(b.s) || a.i - b.i).map(({ s }) => s);
@@ -92,7 +92,8 @@ export const stintAnalysisCalculator: QuickCalculator<StintAnalysisOutput> = {
   reads: [{ calculator: DEGRADATION }, 'identity'],
   cadence: 'frame',
   compute: (view: EngineView): StintAnalysisOutput => {
-    const degradation = (view.outputs.get(DEGRADATION) ?? {}) as DegradationOutput;
+    // a car's stints only: the field's stand-in for a car without a lap is no stint of it (R47)
+    const degradation = (view.outputs.get(DEGRADATION) as DegradationOutput | undefined)?.stints ?? {};
     const now = view.live.sessionTime;
     const out: StintAnalysisOutput = {};
     for (const key of Object.keys(degradation)) out[carId(Number(key))] = unknown('notApplicable');

@@ -3,7 +3,7 @@
 // Spa race (08 Nov). Two seats, Mercedes #12 and #63, linked to the persons kuh and lin. kuh's σ lap has an override
 // (0.380 s; computed 0.412 s); lin's soft wear is unknown (no soft laps). kuh excluded the Zandvoort race (a guest in #12).
 // The config carries `strategy`'s real keys (its race-monte-carlo settings among them; a simulator has no config of its
-// own, C50) and `battle`'s `drsRangeMs`; `config.json` set `strategy.neighbourMaxLaps` and `battle.drsRangeMs`.
+// own, C50) and `race-interaction`'s `drsRangeMs`; `config.json` set `strategy.neighbourMaxLaps` and `race-interaction.drsRangeMs`.
 import type { ConfigEffectiveValue, SessionInfo } from '@pitwall/contracts';
 import { carId, feedId, known, toSessionTime, unknown } from '@pitwall/domain';
 import type {
@@ -32,7 +32,8 @@ export const key = {
   mistakeRate: 'driverNoise.mistakeRate',
   mistakeMedian: 'driverNoise.mistakeMedianMs',
   mistakeSigmaLog: 'driverNoise.mistakeSigmaLog',
-  wear: (c: 'soft' | 'medium' | 'hard') => `driverNoise.wearRatePct.${c}`,
+  /** SP4.3c Task 12 (spec §5.2): the wear entry is `tyre-model`'s factor k per compound, replacing `driverNoise.wearRatePct.*`. */
+  wear: (c: 'soft' | 'medium' | 'hard') => `tyreModel.wearFactor.${c}`,
 } as const;
 
 /**
@@ -100,9 +101,9 @@ export const kuhEntries: Record<string, ProfileEntry> = {
   [key.mistakeRate]: entry(0.024, 214, 5, '2026-11-08'),
   [key.mistakeMedian]: entry(1_900, 214, 5, '2026-11-08'),
   [key.mistakeSigmaLog]: entry(0.55, 214, 5, '2026-11-08'),
-  [key.wear('soft')]: entry(3.1, 22, 2, '2026-11-07'),
-  [key.wear('medium')]: entry(2.2, 118, 4, '2026-11-08'),
-  [key.wear('hard')]: entry(1.6, 74, 3, '2026-11-01'),
+  [key.wear('soft')]: entry(1.19, 22, 2, '2026-11-07'),
+  [key.wear('medium')]: entry(1.31, 118, 4, '2026-11-08'),
+  [key.wear('hard')]: entry(1.24, 74, 3, '2026-11-01'),
 };
 /** lin's entries; soft wear unknown (no soft laps). */
 export const linEntries: Record<string, ProfileEntry> = {
@@ -112,8 +113,8 @@ export const linEntries: Record<string, ProfileEntry> = {
   [key.mistakeMedian]: entry(2_300, 166, 4, '2026-11-08'),
   [key.mistakeSigmaLog]: entry(0.61, 166, 4, '2026-11-08'),
   [key.wear('soft')]: entry('insufficientData', 0, 0, ''),
-  [key.wear('medium')]: entry(2.4, 96, 3, '2026-11-08'),
-  [key.wear('hard')]: entry(1.7, 61, 3, '2026-11-01'),
+  [key.wear('medium')]: entry(1.42, 96, 3, '2026-11-08'),
+  [key.wear('hard')]: entry(1.35, 61, 3, '2026-11-01'),
 };
 
 const person = (
@@ -181,9 +182,9 @@ export const sessionInfo = (s: GameSettings = settings): SessionInfo => ({
 export const config: ConfigEffectiveValue = {
   values: {
     strategy: { neighbourMinLaps: 1, neighbourMaxLaps: 2, rivalScBoxChance: 0.88, rivalScMinTyreAge: 4, rivalReactionLaps: 0 },
-    battle: { drsRangeMs: 1_200 },
+    'race-interaction': { drsRangeMs: 1_200 },
   },
-  overridden: { strategy: ['neighbourMaxLaps'], battle: ['drsRangeMs'] },
+  overridden: { strategy: ['neighbourMaxLaps'], 'race-interaction': ['drsRangeMs'] },
 };
 
 /** The gallery's synthetic cases; the tests take them from here, since only the gallery imports gallery.ts (C69). */

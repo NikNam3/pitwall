@@ -1,7 +1,8 @@
 // PACE Δ of `battle` (live polish spec 3.1, contract C26, C31, C43): the accumulator folds each car's current mini-sector
-// crossings of its last 4 laps, the closed pit-lane and garage spans and the closed neutralisations, all from the
-// projection (C31.2); `paceDelta` adds the open spans of the situation (C20) and compares two cars over the same last 50
-// mini-sectors.
+// crossings of its last 4 laps and the closed spans that skip a segment (pit-lane and garage spans, neutralisations),
+// all from the projection (C31.2); `paceDelta` adds the open spans of the situation (C20), asks the projection module's
+// span-range query (`spansOverlapping`) which segments they share a frame with, and compares two cars over the same last
+// 50 mini-sectors.
 import {
   foldCurrentCrossing,
   known,
@@ -14,21 +15,22 @@ import {
   type MachineId,
   type MiniSectorCrossing,
   type Ms,
+  type OpenSpan,
   type Span,
 } from '@pitwall/domain';
-import { openSpansOf, type DeepReadonly, type EngineView } from '@pitwall/engine/readers';
+import { spansOverlapping, type DeepReadonly, type EngineView } from '@pitwall/engine/readers';
 import { isNeutralisation, NEUTRALISATION_MACHINES } from '../shared/neutralised.ts';
 import { skipsSegments, type SegmentMachine } from './behaviour.ts';
 
 const CAR_LOCATION = 'car-location';
 
+/** The machines whose spans can skip a segment: car location (a car's own) and the session phases (every car's). */
+const SEGMENT_MACHINES: readonly SegmentMachine[] = [CAR_LOCATION, ...(NEUTRALISATION_MACHINES as readonly SegmentMachine[])];
+
 /** The laps of a car's crossings the accumulator keeps: the window's 3-lap reach plus one lap. */
 const KEPT_LAPS = 4;
 /** How far back the window reaches from its end: 3 laps of segments. */
 const REACH = 3 * MINI_SECTORS;
-
-/** The frames a span covers: from the one it opened on up to, not including, the one it closed on (C26); open: no end. */
-type Frames = { startFrame: FrameNumber; endFrame: FrameNumber };
 
 /** Battle's accumulator: a pure fold over projection entries (C31.2). */
 export type BattleAcc = {
@@ -36,18 +38,19 @@ export type BattleAcc = {
   folded: { crossings: number; spans: Record<MachineId, number> };
   /** Each car's current crossings of its last `KEPT_LAPS` laps, by car, lap and segment (`foldCurrentCrossing`). */
   crossings: CrossingIndex;
-  /** Each car's closed spans off the track (pit lane, garage). */
-  offTrack: Map<CarId, Frames[]>;
-  /** The closed neutralisations of the session, as `shared/neutralised.ts` counts them. */
-  neutralised: Frames[];
+  /** The closed spans that skip a segment (`skips`), by machine, in their order. */
+  skipping: Record<MachineId, DeepReadonly<Span>[]>;
 };
 
 export const emptyBattleAcc = (): BattleAcc => ({
   folded: { crossings: 0, spans: {} },
   crossings: new Map(),
-  offTrack: new Map(),
-  neutralised: [],
+  skipping: {},
 });
+
+/** Whether a span of `machine` skips the segments it shares a frame with: by battle's behaviour table, a neutralisation as `shared/neutralised.ts` counts it. */
+const skips = (machine: SegmentMachine, span: DeepReadonly<OpenSpan>): boolean =>
+  (machine === CAR_LOCATION ? span.carId !== undefined : isNeutralisation(machine, span)) && skipsSegments(machine, span.kind);
 
 /** Drops a car's laps older than its newest lap's last `KEPT_LAPS`. */
 function trim(byLap: Map<number, (MiniSectorCrossing | undefined)[]>): void {
@@ -78,38 +81,25 @@ export function foldBattle(acc: BattleAcc, view: EngineView): BattleAcc {
   acc.folded.crossings = crossings.length;
   for (const [id, byLap] of acc.crossings) if (touched.has(id)) trim(byLap);
 
-  for (const span of newSpans(acc, view, CAR_LOCATION)) {
-    if (span.carId === undefined || !skipsSegments(CAR_LOCATION, span.kind)) continue;
-    const list = acc.offTrack.get(span.carId) ?? [];
-    acc.offTrack.set(span.carId, list);
-    list.push({ startFrame: span.startFrame, endFrame: span.endFrame });
-  }
-  for (const machine of NEUTRALISATION_MACHINES) {
-    for (const span of newSpans(acc, view, machine)) {
-      if (isNeutralisation(machine, span) && skipsSegments(machine as SegmentMachine, span.kind)) {
-        acc.neutralised.push({ startFrame: span.startFrame, endFrame: span.endFrame });
-      }
-    }
+  for (const machine of SEGMENT_MACHINES) {
+    for (const span of newSpans(acc, view, machine)) if (skips(machine, span)) (acc.skipping[machine] ??= []).push(span);
   }
   return acc;
 }
 
-/** The open spans (C20) of the session that skip segments: the open neutralisations. */
-export function openNeutralised(view: EngineView): Frames[] {
-  const open: Frames[] = [];
-  for (const machine of NEUTRALISATION_MACHINES) {
-    for (const span of openSpansOf(view, machine)) {
-      if (isNeutralisation(machine, span) && skipsSegments(machine as SegmentMachine, span.kind)) open.push({ startFrame: span.startFrame, endFrame: Infinity });
-    }
-  }
-  return open;
-}
+/** Whether a segment of a car from frame `from` to frame `to` is skipped (C26). */
+type Skipped = (from: FrameNumber, to: FrameNumber) => boolean;
 
-/** A car's spans off the track, the closed ones of `acc` and its open one (C20). */
-function offTrackOf(acc: BattleAcc, view: EngineView, id: CarId): Frames[] {
-  const spans = [...(acc.offTrack.get(id) ?? [])];
-  for (const span of openSpansOf(view, CAR_LOCATION, id)) if (skipsSegments(CAR_LOCATION, span.kind)) spans.push({ startFrame: span.startFrame, endFrame: Infinity });
-  return spans;
+/**
+ * Whether a span that skips segments shares a frame with a car's segment `[from, to)`: its own pit-lane or garage span,
+ * or a neutralisation, closed (of `acc`) or open (of the situation, C20), by the projection module's span-range query.
+ */
+function skippedFor(acc: BattleAcc, view: EngineView, id: CarId): Skipped {
+  const source = { history: { spans: acc.skipping }, situation: view.situation };
+  return (from, to) =>
+    SEGMENT_MACHINES.some((machine) =>
+      spansOverlapping(source, from, to, machine, machine === CAR_LOCATION ? id : undefined).some((span) => skips(machine, span)),
+    );
 }
 
 /** A car's crossings, looked up by their count of segments from (1, 0). */
@@ -164,11 +154,11 @@ function windowEnd(ours: Track, theirs: Track): { ours: Pass; theirs: Pass } | u
 }
 
 /** The ms a car took over the segment ending at its pass `end`; none when a crossing is missing or a span skips it (C26). */
-function segmentMs(track: Track, end: number, skips: readonly Frames[]): number | undefined {
+function segmentMs(track: Track, end: number, skipped: Skipped): number | undefined {
   const from = passOf(track, end - 1);
   const to = passOf(track, end);
   if (from === undefined || to === undefined) return undefined;
-  if (skips.some((s) => from.frame < s.endFrame && to.frame > s.startFrame)) return undefined;
+  if (skipped(from.frame, to.frame)) return undefined;
   return to.at - from.at;
 }
 
@@ -176,16 +166,16 @@ function segmentMs(track: Track, end: number, skips: readonly Frames[]): number 
  * PACE Δ of `ourId` against `theirId` (spec 3.1): their time minus ours over the same last 50 usable mini-sectors,
  * normalised to one lap, rounded to the ms; positive = we are faster. The window ends at the newest boundary both
  * cars crossed and reaches back at most 3 laps; a segment is skipped when either car's own pass of it shares a frame
- * with its own span off the track or with a neutralisation (`neutralised`, closed and open). Fewer than `minSegments`
+ * with its own span off the track or with a neutralisation, closed and open (`skippedFor`). Fewer than `minSegments`
  * usable: `insufficientData`.
  */
-export function paceDelta(acc: BattleAcc, view: EngineView, neutralised: readonly Frames[], ourId: CarId, theirId: CarId, minSegments: number): Known<Ms> {
+export function paceDelta(acc: BattleAcc, view: EngineView, ourId: CarId, theirId: CarId, minSegments: number): Known<Ms> {
   const ours = trackOf(acc, ourId);
   const theirs = trackOf(acc, theirId);
   const end = ours === undefined || theirs === undefined ? undefined : windowEnd(ours, theirs);
   if (ours === undefined || theirs === undefined || end === undefined) return unknown('insufficientData');
-  const ourSkips = [...offTrackOf(acc, view, ourId), ...neutralised];
-  const theirSkips = [...offTrackOf(acc, view, theirId), ...neutralised];
+  const ourSkips = skippedFor(acc, view, ourId);
+  const theirSkips = skippedFor(acc, view, theirId);
   let segments = 0;
   let sum = 0;
   for (let back = 0; back < REACH && segments < MINI_SECTORS; back++) {

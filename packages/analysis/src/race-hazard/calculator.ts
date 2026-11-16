@@ -3,14 +3,16 @@
 // or a change of the session's game settings (the lobby's SC setting).
 import type { RaceHazard } from '@pitwall/domain';
 import { asOfNow, type EngineView, type QuickCalculator } from '@pitwall/engine/readers';
+import { GAPS } from '../gaps/index.ts';
 import { raceHazardAsOf } from './asof.ts';
 import { RACE_HAZARD } from './id.ts';
 
 export const raceHazardCalculator: QuickCalculator<RaceHazard> = {
   id: RACE_HAZARD,
   kind: 'quick',
-  // `session`: totalLaps and the lobby setting; `laps`: the leader's laps; `view.track` is fixed for the run (C62b)
-  reads: ['session', 'spans:session-phase-race', 'spans:weekend-phase', 'laps'],
+  // `session`: totalLaps and the lobby setting; `laps`: the leader's lap at a neutralisation's start and end; `gaps`: the
+  // leader's progress now (SP4.3c Task 6); `view.track` is fixed for the run (C62b)
+  reads: ['session', 'spans:session-phase-race', 'spans:weekend-phase', 'laps', { calculator: GAPS }],
   cadence: { onChange: ['leaderLap', 'spans:session-phase-race', 'sessionSettings'] },
   compute: (view: EngineView): RaceHazard => raceHazardAsOf(asOfNow(view)),
 };

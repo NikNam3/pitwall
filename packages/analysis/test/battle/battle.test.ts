@@ -1,13 +1,15 @@
 // `battle` (timing spec 6.3, live polish spec 3.1): our cars against the car ahead and behind. The neighbours and the gaps
-// are `gaps.intervals`'; PACE Δ comes from the mini-sector crossings (pace-window.test.ts holds its window); `margin` and
-// `lapsToDrs` come from PACE Δ; DRS from race control's spans. Every number is positive when it is good for our car.
-import { known, unknown, type BattleCard, type DrsStatus, type Known, type Ms } from '@pitwall/domain';
+// are `gaps.intervals`'; PACE Δ comes from the mini-sector crossings (pace-window.test.ts holds its window); `lapsToDrs`
+// comes from PACE Δ, `passChance` from PACE Δ and the gap by race-interaction's pass curve (SP4.3c Task 15); DRS from race control's spans. Every number is positive when it is good for our car.
+import { known, unknown, type BattleCard, type DrsStatus, type Known, type Ms, type PassCurve } from '@pitwall/domain';
 import type { EngineView } from '@pitwall/engine';
 import { describe, expect, it } from 'vitest';
 import { BATTLE, BATTLE_BEHAVIOUR, BATTLE_CONFIG } from '../../src/battle/index.ts';
 import { battleCalculator } from '../../src/battle/calculator.ts';
+import { followingEpisodes, passChance, RACE_INTERACTION_CONFIG, type PassContext } from '../../src/race-interaction/index.ts';
+import { laps, projectionOf, scene, TRACK } from '../race-interaction/scene.ts';
 import { NEUTRALISATION_READS } from '../../src/shared/neutralised.ts';
-import { cardOf, cardsOf, closedDrs, crossingAt, deltaOf, guarded, id, viewOf, type Neutralised, type Run, type Scene } from './race.ts';
+import { cardOf, cardsOf, closedDrs, crossingAt, DEFAULT_CURVE, deltaOf, guarded, id, interactionOf, viewOf, type Neutralised, type Run, type Scene } from './race.ts';
 
 const NA = unknown('notApplicable');
 
@@ -46,11 +48,12 @@ const value = (k: Known<number>): number => {
 const BASE_LAPS_TO_DRS = [expect.objectContaining({ known: true, value: 1.2 }), expect.objectContaining({ known: true, value: 2.4 })];
 
 describe('battle', () => {
-  it('is the incremental calculator battle, run every frame, reading gaps, the mini-sectors, car location, the neutralisations, tyres, energy, identity, race control and the weekend phase', () => {
+  it('is the incremental calculator battle, run every frame, reading gaps, race-interaction, track-wetness, the mini-sectors, car location, the neutralisations, tyres, energy, identity, race control and the weekend phase', () => {
     expect(battleCalculator.id).toBe(BATTLE);
     expect(battleCalculator.kind).toBe('incremental');
     expect(battleCalculator.cadence).toBe('frame');
-    const reads = [{ calculator: 'gaps' }, 'miniSectors', 'spans:car-location', ...NEUTRALISATION_READS, 'tyres', 'energy', 'identity', 'spans:race-control-race', 'spans:weekend-phase'];
+    // SP4.3c Task 15 (O13): the pass curve is race-interaction's, the wet rule track-wetness's
+    const reads = [{ calculator: 'gaps' }, { calculator: 'race-interaction' }, { calculator: 'track-wetness' }, 'miniSectors', 'spans:car-location', ...NEUTRALISATION_READS, 'tyres', 'energy', 'identity', 'spans:race-control-race', 'spans:weekend-phase'];
     expect(battleCalculator.reads).toEqual(expect.arrayContaining(reads));
     expect(battleCalculator.reads).toHaveLength(reads.length);
   });
@@ -90,29 +93,68 @@ describe('battle', () => {
     expect(behind.paceDeltaMs).toMatchObject({ known: true, value: -500 });
   });
 
-  it('AHEAD margin is { pass, our edge − 1000 }, BEHIND { hold, 1000 − their edge }; positive = good for us on both', () => {
-    // we gain 500 ms a lap on the car ahead: 500 short of a pass; the car behind gains 500 on us: we hold by 500
-    const slow = sides(cardOf(base()));
-    expect(slow.ahead.margin).toMatchObject({ known: true, value: { kind: 'pass', ms: -500 } });
-    expect(slow.behind.margin).toMatchObject({ known: true, value: { kind: 'hold', ms: 500 } });
-    // we gain 2.5 s a lap on the car ahead: a pass by 1.5 s; the car behind gains 1.5 s on us: we hold by −500
+  // SP4.3c Task 15 (O13, C43): the fixed 1,000 ms margin is gone; each side carries the pass chance at its gap from
+  // `race-interaction`'s one pass curve (`passChance(deltaMs, gapMs, ctx)`, which `race-forecast` calls too): ahead our
+  // chance to pass (our edge, PACE Δ), behind theirs to pass us (their edge, −PACE Δ). The context: the session's curve
+  // (`sessionCurve` of race-interaction's output), track-wetness's one wet rule (unknown or no output: dry, as the
+  // starting point reads it), race control's DRS (`BattleCard.drs`) and the one DRS range (`drsRangeMs`).
+  const chanceCtx = (over: Partial<PassContext> = {}): PassContext => ({ curve: DEFAULT_CURVE, wet: false, drs: true, drsRangeMs: RACE_INTERACTION_CONFIG.defaults.drsRangeMs, ...over });
+
+  it("the pass chance is race-interaction's at the side's gap: ahead ours on our edge, behind theirs on their edge", () => {
+    const { ahead, behind } = sides(cardOf(base()));
+    // ahead: 500 ms a lap faster, 1.6 s behind (outside DRS range); behind: it is 500 ms a lap faster, 2.2 s back
+    expect(value(ahead.passChance)).toBeCloseTo(passChance(500 as Ms, 1600 as Ms, chanceCtx()), 12);
+    expect(value(behind.passChance)).toBeCloseTo(passChance(500 as Ms, 2200 as Ms, chanceCtx()), 12);
+    expect(value(ahead.passChance)).toBeGreaterThan(0);
+    expect(value(ahead.passChance)).toBeLessThan(1);
+    // 2.5 s a lap faster on the car ahead; the car behind 1.5 s faster on us
     const fast = sides(cardOf(base({ runs: { 1: run(0, 1850), 0: US, 3: run(14_000, 1770) } })));
-    expect(fast.ahead.paceDeltaMs).toMatchObject({ known: true, value: 2500 });
-    expect(fast.ahead.margin).toMatchObject({ known: true, value: { kind: 'pass', ms: 1500 } });
-    expect(fast.behind.paceDeltaMs).toMatchObject({ known: true, value: -1500 });
-    expect(fast.behind.margin).toMatchObject({ known: true, value: { kind: 'hold', ms: -500 } });
+    expect(value(fast.ahead.passChance)).toBeCloseTo(passChance(2500 as Ms, 1600 as Ms, chanceCtx()), 12);
+    expect(value(fast.behind.passChance)).toBeCloseTo(passChance(1500 as Ms, 2200 as Ms, chanceCtx()), 12);
+    expect(value(fast.ahead.passChance)).toBeGreaterThan(value(ahead.passChance));
   });
 
-  it('the overtaking threshold comes from the config, on both sides', () => {
-    const { ahead, behind } = sides(cardOf(base({ config: { [BATTLE_CONFIG.key]: { overtakeThresholdMs: 2000 } } })));
-    expect(ahead.margin).toMatchObject({ known: true, value: { kind: 'pass', ms: -1500 } });
-    expect(behind.margin).toMatchObject({ known: true, value: { kind: 'hold', ms: 1500 } });
+  it('inside the DRS range the DRS term counts; with race control’s DRS off it does not', () => {
+    const close = (over: Partial<Scene> = {}) => sides(cardOf(base({ gaps: { 0: { toAheadMs: known(800, NOW) } }, ...over }))).ahead;
+    expect(value(close().passChance)).toBeCloseTo(passChance(500 as Ms, 800 as Ms, chanceCtx()), 12);
+    expect(value(close().passChance)).toBeGreaterThan(passChance(500 as Ms, 800 as Ms, chanceCtx({ drs: false })));
+    expect(value(close({ drs: { off: 'safetyCar' } }).passChance)).toBeCloseTo(passChance(500 as Ms, 800 as Ms, chanceCtx({ drs: false })), 12);
+    // the one DRS range: race-interaction's drsRangeMs
+    const ranged = close({ config: { [RACE_INTERACTION_CONFIG.key]: { drsRangeMs: 700 } } });
+    expect(value(ranged.passChance)).toBeCloseTo(passChance(500 as Ms, 800 as Ms, chanceCtx({ drsRangeMs: 700 })), 12);
+  });
+
+  it("the session's curve: its band's, from race-interaction's output (this race's fit included)", () => {
+    const steep: PassCurve = { ...DEFAULT_CURVE, level: -1, slopePerMs: 0.003 };
+    const { ahead } = sides(cardOf(base({ interaction: interactionOf([DEFAULT_CURVE, steep], known(1, 0)) })));
+    expect(value(ahead.passChance)).toBeCloseTo(passChance(500 as Ms, 1600 as Ms, chanceCtx({ curve: steep })), 12);
+  });
+
+  it("wet by track-wetness's one rule: the chance × the curve's wet factor; an unknown verdict or no output reads dry", () => {
+    const dry = value(sides(cardOf(base())).ahead.passChance);
+    expect(value(sides(cardOf(base({ wet: known(true, 0) }))).ahead.passChance)).toBeCloseTo(DEFAULT_CURVE.wetFactor * dry, 12);
+    expect(value(sides(cardOf(base({ wet: unknown('insufficientData') }))).ahead.passChance)).toBeCloseTo(dry, 12);
+    expect(value(sides(cardOf(base({ wet: 'none' }))).ahead.passChance)).toBeCloseTo(dry, 12);
+  });
+
+  it('a car no faster than the one it follows has no chance: 0, known', () => {
+    // the car ahead as fast as us; the car behind slower than us
+    expect(sides(cardOf(withPace(1, 1800))).ahead.passChance).toMatchObject({ known: true, value: 0 });
+    expect(sides(cardOf(withPace(3, 1810))).behind.passChance).toMatchObject({ known: true, value: 0 });
+  });
+
+  it("without race-interaction's output the chance is notReceived; without a band insufficientData; an unknown gap gives its reason", () => {
+    const none = sides(cardOf(base({ interaction: 'none' })));
+    expect(none.ahead.passChance).toEqual(unknown('notReceived'));
+    expect(none.behind.passChance).toEqual(unknown('notReceived'));
+    expect(sides(cardOf(base({ interaction: interactionOf([]) }))).ahead.passChance).toEqual(unknown('insufficientData'));
+    expect(sides(cardOf(base({ gaps: { 0: { toAheadMs: unknown('notReceived') } } }))).ahead.passChance).toEqual(unknown('notReceived'));
   });
 
   it("lapsToDrs from PACE Δ on both sides: (gap − DRS range) / the closing car's edge; 0 inside DRS range; notApplicable while the gap is not closing or DRS is off", () => {
     expect(lapsToDrsOf(cardOf(base()))).toEqual(BASE_LAPS_TO_DRS);
     // inside DRS range ahead: 0 as of the gap; behind (2200 − 1600) / 500
-    const inRange = lapsToDrsOf(cardOf(base({ config: { [BATTLE_CONFIG.key]: { drsRangeMs: 1600 } } })));
+    const inRange = lapsToDrsOf(cardOf(base({ config: { [RACE_INTERACTION_CONFIG.key]: { drsRangeMs: 1600 } } })));
     expect(inRange).toEqual([known(0, NOW), expect.objectContaining({ known: true, value: 1.2 })]);
     // not closing: the car ahead is faster than us or as fast, the car behind slower
     expect(lapsToDrsOf(cardOf(withPace(1, 1790)))[0]).toEqual(NA);
@@ -122,35 +164,54 @@ describe('battle', () => {
     expect(lapsToDrsOf(cardOf(base({ drs: { off: 'wetTrack' } })))).toEqual([NA, NA]);
   });
 
-  it('the DRS range comes from the config', () => {
-    const { ahead } = sides(cardOf(base({ config: { [BATTLE_CONFIG.key]: { drsRangeMs: 800 } } })));
+  it("the DRS range comes from race-interaction's config", () => {
+    const { ahead } = sides(cardOf(base({ config: { [RACE_INTERACTION_CONFIG.key]: { drsRangeMs: 800 } } })));
     // (1600 − 800) / 500
     expect(value(ahead.lapsToDrs)).toBe(1.6);
   });
 
-  it('with PACE Δ unknown, lapsToDrs and the margin carry its reason; a gap inside DRS range is still 0 laps to DRS', () => {
+  it("one DRS range (SP4.3c Task 3, C43, C47): overriding race-interaction's drsRangeMs changes battle's DRS range and race-interaction's alike", () => {
+    // battle: the default 1000 gives 1.2 laps ahead; 300 gives (1600 − 300) / 500
+    const config = { [RACE_INTERACTION_CONFIG.key]: { drsRangeMs: 300 } };
+    expect(value(sides(cardOf(base({ config }))).ahead.lapsToDrs)).toBe(2.6);
+    // race-interaction: car 1 0.4 s behind car 0 has DRS at the default range, none at 300
+    const pair = projectionOf(scene([
+      { car: 0, startAt: 0, lapTimes: laps(6, 90_000) },
+      { car: 1, startAt: 400, lapTimes: laps(6, 90_000) },
+    ]));
+    const drsZones = (c: EngineView['config']) => followingEpisodes(pair, TRACK, RACE_INTERACTION_CONFIG.read({ config: c })).flatMap((e) => e.zones).filter((z) => z.drs);
+    expect(drsZones({}).length).toBeGreaterThan(0);
+    expect(drsZones(config)).toEqual([]);
+  });
+
+  it("an override of a battle drsRangeMs is not read: battle declares no DRS range of its own", () => {
+    expect(value(sides(cardOf(base({ config: { [BATTLE_CONFIG.key]: { drsRangeMs: 300 } } }))).ahead.lapsToDrs)).toBe(1.2);
+  });
+
+  it('with PACE Δ unknown, lapsToDrs and the pass chance carry its reason; a gap inside DRS range is still 0 laps to DRS', () => {
     // our 20th segment of the race: too few for PACE Δ
     const early = base({ now: crossingAt(US, 1, 20) });
     const { ahead, behind } = sides(cardOf(early));
     for (const side of [ahead, behind]) {
       expect(side.paceDeltaMs).toEqual(unknown('insufficientData'));
       expect(side.lapsToDrs).toEqual(unknown('insufficientData'));
-      expect(side.margin).toEqual(unknown('insufficientData'));
+      expect(side.passChance).toEqual(unknown('insufficientData'));
     }
     const close = sides(cardOf({ ...early, gaps: { 0: { toAheadMs: known(900, early.now) } } }));
     expect(close.ahead.lapsToDrs).toEqual(known(0, early.now));
   });
 
-  it('writes no CLOSING and no old overtaking margin on either side: `margin` replaces them', () => {
+  it('writes no CLOSING, no old overtaking margin and no fixed margin on either side: `passChance` replaces them (SP4.3c Task 15)', () => {
     const { ahead, behind } = sides(cardOf(base()));
     for (const side of [ahead, behind]) {
       expect(side).not.toHaveProperty('closingMsPerLap');
       expect(side).not.toHaveProperty('overtakeMarginMs');
+      expect(side).not.toHaveProperty('margin');
     }
   });
 
-  it('declares no closing config: only the DRS range, the overtake threshold and the PACE Δ minimum', () => {
-    expect(Object.keys(BATTLE_CONFIG.defaults).sort()).toEqual(['drsRangeMs', 'minPaceSegments', 'overtakeThresholdMs']);
+  it("declares no closing config, no DRS range (race-interaction's, SP4.3c Task 3) and no overtake threshold (the pass curve's, Task 15): only the PACE Δ minimum", () => {
+    expect(Object.keys(BATTLE_CONFIG.defaults).sort()).toEqual(['minPaceSegments']);
   });
 
   it('compound and tyre age of both cars come from the car states', () => {
@@ -185,13 +246,13 @@ describe('battle', () => {
     expect(ahead.paceDeltaMs).toMatchObject({ known: true, value: 500 });
   });
 
-  it('realism: theirErsStoreJ unknown(realism); the gap, PACE Δ, the margin and lapsToDrs still known (the crossings are public)', () => {
+  it('realism: theirErsStoreJ unknown(realism); the gap, PACE Δ, the pass chance and lapsToDrs still known (the crossings are public)', () => {
     const { ahead, behind } = sides(cardOf(base({ hidden: [1, 3] })));
     for (const side of [ahead, behind]) {
       expect(side.theirErsStoreJ).toMatchObject({ known: false, reason: 'realism' });
       expect(side.gapMs).toMatchObject({ known: true });
       expect(side.paceDeltaMs).toMatchObject({ known: true });
-      expect(side.margin).toMatchObject({ known: true });
+      expect(side.passChance).toMatchObject({ known: true });
       expect(side.lapsToDrs).toMatchObject({ known: true });
       expect(side.theirs).toEqual({ compound: 'soft', age: 0 });
     }
@@ -309,7 +370,7 @@ describe('battle: the behaviour table (C44), one test per row', () => {
     }
 
     it('drsOff: a side already inside DRS range has lapsToDrs notApplicable, not 0', () => {
-      const c = cardOf(base({ drs: { off: 'notEnabledYet' }, config: { [BATTLE_CONFIG.key]: { drsRangeMs: 1600 } } }));
+      const c = cardOf(base({ drs: { off: 'notEnabledYet' }, config: { [RACE_INTERACTION_CONFIG.key]: { drsRangeMs: 1600 } } }));
       expect(lapsToDrsOf(c)).toEqual([NA, NA]);
     });
 

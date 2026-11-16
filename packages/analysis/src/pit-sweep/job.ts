@@ -1,11 +1,11 @@
 // `pit-sweep`'s job module (SP4.3b spec §9.2): `run` runs in a worker (C51). No state between runs (C31, C32).
 //
-// Per our car one DP solve (`solveDp(toDpInput(...))`, the shared strategy input, C43); per compound with a new set and
+// Per our car one DP solve (`solveWorld(toDpInput(...), 0)`, the shared strategy input, C43); per compound with a new set and
 // per stop lap L from `max(now, window.from − rowsBefore)` (now: the DP's `fromLap`, at least the leader's lap, where
 // `scoreCalls` plays our stops from) to `min(flag − 1, window.to + rowsAfter)`, the window being the compound's
 // `pit-window` `windowLaps` (every stop lap from now to `flag − 1` while it is unknown, Task 18q B), the candidate "box
 // at L onto the compound, then the DP's best continuation"
-// (`policyOf(bestWith(...), thresholds)`, to the flag); one `scoreCalls` per compound on common scenarios,
+// (`policyOf(bestWith(...))`, with the plan's own triggers, to the flag); one `scoreCalls` per compound on common scenarios,
 // `floor(maxScenarioPolicies / rows)` each (a count, C2). A stop lap whose `bestWith` is `null` has no row; a compound
 // without a row is absent. The car is the call's only car of ours, with a committed teammate as certain input (as far
 // as it can follow its plan) and an uncommitted one modelled like a rival, as `strategy`'s final call does.
@@ -13,8 +13,8 @@ import { known, unknown, type CarId, type Known, type PitSweepCar, type PitSweep
 import type { Rng } from '@pitwall/engine/readers';
 import { startLapOf } from '../race-forecast/index.ts';
 import { scoreCalls, type CallCandidate } from '../race-monte-carlo/index.ts';
-import { committedField, mcSettingsFrom, notPlannedWhy, plannedCars, plannedField, policyOf, toDpInput, toMcHazard } from '../shared/strategy-input/index.ts';
-import { bestWith, dpResult, solveDp } from '../strategy-dp/index.ts';
+import { committedField, mcSettingsFrom, notPlannedWhy, plannedCars, plannedField, policyOf, strategyConfigOf, toDpInput, toMcHazard } from '../shared/strategy-input/index.ts';
+import { bestWith, solveWorld } from '../strategy-dp/index.ts';
 import type { PitSweepInput, SweepCar } from './prepare.ts';
 import { rowsOf } from './rows.ts';
 
@@ -41,8 +41,8 @@ function rowRange(now: number, flag: number, window: Known<{ from: number; to: n
 function tablesOf(input: PitSweepInput, start: StartingPoint, at: SessionTime, car: CarId, c: SweepCar, position: number, rng: Rng): PitSweepCar['byCompound'] {
   const { strategy, config } = input;
   const field = plannedField(start, plannedCars(strategy, start));
-  const solution = solveDp(toDpInput(strategy, car));
-  const thresholds = dpResult(solution).thresholds;
+  // the first weather world's solve (the heaviest, `toDpInput`'s order); Task 20 selects across worlds
+  const solution = solveWorld(toDpInput(strategy, car), 0);
   const now = solution.input.fromLap;
   const flag = c.flag.known ? c.flag.value : start.lapsTotal;
   const { start: callStart, committed } = callField(input, field, car);
@@ -59,13 +59,14 @@ function tablesOf(input: PitSweepInput, start: StartingPoint, at: SessionTime, c
       const plan = bestWith(solution, { stopLap: lap, compound });
       if (plan === null) continue;
       stopLaps.push(lap);
-      candidates.push({ policy: policyOf(plan, thresholds), rival: null, untilLap: null });
+      candidates.push({ policy: policyOf(plan), rival: null, untilLap: null });
     }
     if (candidates.length === 0) continue;
     const scenarios = Math.max(1, Math.floor(config.maxScenarioPolicies / candidates.length));
-    const traffic = { gapMs: config.trafficGapMs, laps: config.trafficLaps };
+    // the one traffic gap (C43): strategy's, as the DP's and sc-call's
+    const traffic = { gapMs: strategyConfigOf(strategy.config).trafficGapMs, laps: config.trafficLaps };
     const { outcomes } = scoreCalls({ start: callStart, car, candidates, committed, hazard, rivalRules, scenarios, traffic }, rng);
-    const rows = rowsOf(stopLaps, outcomes, { now, position, cars: callStart.cars, latest: c.latest, greenRejoin: c.greenRejoin, zTie, tieBand, at });
+    const rows = rowsOf(stopLaps, outcomes, { position, cars: callStart.cars, latest: c.latest, zTie, tieBand, at });
     if (rows.length === 0) continue;
     const table: PitSweepTable = { compound, rows, scenarios };
     byCompound[compound] = known(table, at);

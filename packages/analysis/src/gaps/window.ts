@@ -3,6 +3,9 @@
 // cars that could be ours, and the output picks the set of our cars (`ourCars`).
 import { MAX_CARS, type CarId, type Ms, type SessionTime } from '@pitwall/domain';
 
+/** `MAX_CARS` as a module constant: the hot loops below read it once per step, not through the import binding. */
+const CARS: number = MAX_CARS;
+
 /** How far apart two cars are for the window: within `windowMs`, up to `windowMs + windowExitMs`, or beyond. */
 const NEAR = 0;
 const EDGE = 1;
@@ -30,34 +33,65 @@ export const windowThresholds = ({ windowMs, windowExitMs }: { windowMs: Ms; win
   farMs: windowMs + windowExitMs,
 });
 
-export const emptyWindow = (): GapperWindow => ({ zones: new Uint8Array(MAX_CARS * MAX_CARS).fill(FAR), inside: new Uint8Array(MAX_CARS ** 3) });
+export const emptyWindow = (): GapperWindow => ({ zones: new Uint8Array(CARS * CARS).fill(FAR), inside: new Uint8Array(CARS ** 3) });
 
 /** The index of the unordered pair or set `{a, b}`. */
-const pairOf = (a: CarId, b: CarId): number => (a < b ? a * MAX_CARS + b : b * MAX_CARS + a);
+const pairOf = (a: CarId, b: CarId): number => (a < b ? a * CARS + b : b * CARS + a);
 
 const zoneOf = (w: GapperWindow, a: CarId, b: CarId): Zone => w.zones[pairOf(a, b)] as Zone;
 
 /** Judges `car` in the window of every set that holds `anchor` (and not `car`), on its nearer pair with the set's cars. */
 function judgeAround(w: GapperWindow, car: CarId, anchor: CarId): void {
-  for (let i = 0; i < MAX_CARS; i++) {
+  for (let i = 0; i < CARS; i++) {
     const other = i as CarId;
     if (other === car) continue;
     const nearest = Math.min(zoneOf(w, car, anchor), zoneOf(w, car, other));
-    const at = pairOf(anchor, other) * MAX_CARS + car;
+    const at = pairOf(anchor, other) * CARS + car;
     if (nearest === NEAR) w.inside[at] = 1;
     else if (nearest === FAR) w.inside[at] = 0;
   }
 }
 
 /**
- * Car `car` passed `progress` at `at`: it and every car that passed the same point before it (by `tracks`, each car's
+ * Every car's crossing times by progress in one dense array (`progress × MAX_CARS + car`, `NaN` where the car has no
+ * crossing), so judging a crossing reads one row of `MAX_CARS` cells. Grown by doubling.
+ */
+export type CrossingTimes = { at: Float64Array };
+
+export const emptyCrossingTimes = (): CrossingTimes => ({ at: new Float64Array(64 * CARS).fill(NaN) });
+
+/** Sets `car`'s time at `progress` (`NaN`: none). */
+export function setCrossingTime(times: CrossingTimes, car: CarId, progress: number, at: number): void {
+  const cell = progress * CARS + car;
+  if (cell >= times.at.length) {
+    let size = times.at.length * 2;
+    while (cell >= size) size *= 2;
+    const grown = new Float64Array(size).fill(NaN);
+    grown.set(times.at);
+    times.at = grown;
+  }
+  times.at[cell] = at;
+}
+
+/** Clears `car`'s times from `from` up to, not including, `to`. */
+export function clearCrossingTimes(times: CrossingTimes, car: CarId, from: number, to: number): void {
+  const end = Math.min(to * CARS, times.at.length);
+  for (let cell = from * CARS + car; cell < end; cell += CARS) times.at[cell] = NaN;
+}
+
+/**
+ * Car `car` passed `progress` at `at`: it and every car that passed the same point before it (by `times`, each car's
  * crossing times by progress from 0) are judged on the time between them there. A pair that moves to another zone
  * judges each car again in the window of every set that holds the other; in the same zone nothing changes.
  */
-export function judgeCrossing(w: GapperWindow, tracks: readonly ({ at: readonly SessionTime[] } | undefined)[], car: CarId, progress: number, at: SessionTime, { nearMs, farMs }: WindowThresholds): void {
-  for (let id = 0; id < tracks.length; id++) {
-    const t = id === car ? undefined : tracks[id]?.at[progress];
-    if (t === undefined) continue;
+export function judgeCrossing(w: GapperWindow, times: CrossingTimes, car: CarId, progress: number, at: SessionTime, { nearMs, farMs }: WindowThresholds): void {
+  const row = progress * CARS;
+  if (row >= times.at.length) return;
+  const cells = times.at;
+  for (let id = 0; id < CARS; id++) {
+    if (id === car) continue;
+    const t = cells[row + id] as number;
+    if (t !== t) continue; // NaN: no crossing there
     const gap = Math.abs(at - t);
     const zone: Zone = gap <= nearMs ? NEAR : gap <= farMs ? EDGE : FAR;
     const pair = pairOf(car, id as CarId);
@@ -78,6 +112,6 @@ export function othersInWindow(w: GapperWindow, ours: readonly CarId[]): CarId[]
   if (x === undefined) return [];
   const set = pairOf(x, ours[1] ?? x);
   const others: CarId[] = [];
-  for (let i = 0; i < MAX_CARS; i++) if (w.inside[set * MAX_CARS + i] === 1 && !ours.includes(i as CarId)) others.push(i as CarId);
+  for (let i = 0; i < CARS; i++) if (w.inside[set * CARS + i] === 1 && !ours.includes(i as CarId)) others.push(i as CarId);
   return others;
 }

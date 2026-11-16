@@ -2,7 +2,8 @@
 // mini-sector crossings into `incidents.feed`, by its behaviour table (`behaviour.ts`, C44): the race from the weekend
 // phase (C14), the neutralisations from the session-phase spans (through `shared/neutralised.ts`), pit visits from
 // car-location, retirements and disqualifications from car-status, warnings from their spans, penalties given from the
-// projection's penalty records, one entry per record (C25, C45). A span is matched to a mini-sector by frames (C26). Positions and gaps before and after, and the sector, come from the
+// projection's penalty records, one entry per record (C25, C45). A mini-sector is no time loss by the one exclusion
+// (`timeLossExcludedOf`, membership by the projection module, C26), as for `driver-noise`. Positions and gaps before and after, and the sector, come from the
 // crossings, so a flashback reproduces them. A log: it reads the history only, never another analysis's output (C45);
 // its damage entries come from the shared jump grouping over the `damageChange` events (`shared/damage-jumps.ts`) and
 // stay through a repair. The accumulator folds the projection's lists and closed spans and the config alone (C31.2);
@@ -40,16 +41,23 @@ import {
 import { openSpansOf, type ChangeTag, type DeepReadonly, type EngineView, type IncrementalCalculator } from '@pitwall/engine/readers';
 import { ALARMS_CONFIG } from '../alarms/index.ts';
 import { DAMAGE_CONFIG } from '../damage/index.ts';
-import { GAPS_CONFIG } from '../gaps/index.ts';
+import { GAPS_CONFIG, leaderLapAt } from '../gaps/index.ts';
 import { LAP_CLASSES_CONFIG } from '../lap-classes/index.ts';
-import { PACE_CONFIG } from '../pace/index.ts';
+import { PACE_DELTA_CONFIG } from '../pace-delta/config.ts';
 import { paceDeltaAround } from '../pace-delta/index.ts';
 import { emptyDamageJumps, finishJump, foldDamageJumps, type DamageJumpFold, type FinishedJump } from '../shared/damage-jumps.ts';
-import { isNeutralisation, leaderLapAt, NEUTRALISATION_MACHINES, NEUTRALISATION_READS, neutralisationKind, type NeutralisationKind } from '../shared/neutralised.ts';
+import {
+  isNeutralisation,
+  NEUTRALISATION_MACHINES,
+  NEUTRALISATION_READS,
+  neutralisationKind,
+  timeLossExcludedOf,
+  type NeutralisationKind,
+} from '../shared/neutralised.ts';
 import { behaviourFor } from '../shared/behaviour.ts';
-import { ourCars } from '../shared/our-cars.ts';
+import { ourCars, pointAt } from '@pitwall/domain';
 import { warningInCycle } from '../shared/penalties.ts';
-import { pointAt, turnAt } from '../shared/track-lookup.ts';
+import { turnAt } from '../shared/track-lookup.ts';
 import { behaviourOf, INCIDENTS_BEHAVIOUR } from './behaviour.ts';
 import {
   addCrossing,
@@ -61,8 +69,8 @@ import {
   mergesInto,
   resetTrack,
   slowRuns,
-  type Point,
   type SlowRun,
+  type TimeLossExcluded,
   type Track,
 } from '../shared/time-loss/index.ts';
 import { fractionAt, gapIn, isNear, positionIn, sectorAt, snapshotAt, type Snapshot, type TrackLayout } from './incidents.ts';
@@ -111,9 +119,6 @@ type CarMachine = (typeof CAR_MACHINES)[number];
 /** The weekend phase's rows alone: whether the feed holds anything (C14). */
 const WEEKEND_PHASE = { 'weekend-phase': INCIDENTS_BEHAVIOUR['weekend-phase'] };
 
-/** A car's span of row `noTimeLoss` (a pit visit, a garage spell): the frames it covers, `startFrame <= f < endFrame` (C26). */
-type Visit = { startFrame: FrameNumber; endFrame: FrameNumber };
-
 type CarSpan = DeepReadonly<Span> | DeepReadonly<OpenSpan>;
 
 /** A closed neutralisation: its start and the frames it covers, `startFrame <= f < endFrame` (C26). */
@@ -134,16 +139,19 @@ type Acc = {
   /** How many closed spans of each session-phase sub-machine are folded. */
   closedPhases: Record<MachineId, number>;
   /**
-   * Per car id; each mini-sector evaluated against the closed neutralisations and visits. One that an open span covers
-   * too is `excluded` only in `output`, which knows the open spans (`cutOf`).
+   * Per car id; each mini-sector evaluated against the closed spans of `noTime` (`timeLossExcludedOf`). One that an
+   * open span covers too is excluded only in `output`, which knows the open spans (`Now.excluded`).
    */
   tracks: (Track | undefined)[];
   /** The closed neutralisations by session-phase sub-machine, in their order. */
   neutralised: Record<MachineId, ClosedNeutralised[]>;
   /** Every lap folded so far: its number and the frame it describes, for the leader's lap at a frame (C26). */
   lapFrames: Pick<LapRecord, 'lapNumber' | 'frame'>[];
-  /** Per car id, its closed pit visits and garage spells, by frame. */
-  visits: Visit[][];
+  /**
+   * The closed spans of rows `neutralised` and `noTimeLoss` (the neutralisations, the pit visits and garage spells), by
+   * sub-machine: what `timeLossExcludedOf` excludes a mini-sector by, through the projection module's membership (C26).
+   */
+  noTime: Record<MachineId, DeepReadonly<Span>[]>;
   /** The entries of the closed spans, by car sub-machine. */
   spanEvents: Record<CarMachine, CarEvent[]>;
   /** Per car id, the corner-cutting count of its newest closed warnings span (0 for no warning): what the next one rises from. */
@@ -182,8 +190,8 @@ type Now = {
   layout: TrackLayout;
   /** The neutralisations, closed then open, with the leader's lap at each start. */
   neutralisedNow: Neutralised[];
-  /** The start frame of the open neutralisation, if one is open. */
-  openNeutralisedFrom: FrameNumber | undefined;
+  /** The one time-loss exclusion (`timeLossExcludedOf`) over the closed spans of `noTime` and the open ones (C20, C26). */
+  excluded: TimeLossExcluded;
   /** Per car id, the start frame of its open pit visit or garage spell. */
   openVisits: (FrameNumber | undefined)[];
   /** Per car id, the frame its open retired span opened on. */
@@ -197,10 +205,6 @@ type Now = {
 /** The fold and the view's now, as `output` combines them. */
 type Board = Acc & Now;
 
-/** The mini-sector from crossing `from` to crossing `to` covers frames `from.frame <= f < to.frame`: it shares one with `span` (C26). */
-const sharesFrame = (from: Point, to: Point, span: { startFrame: FrameNumber; endFrame: FrameNumber }): boolean =>
-  from.frame < span.endFrame && to.frame > span.startFrame;
-
 /** The config sections the feed reads (C47), fixed for the run. */
 const settings = (view: EngineView) => {
   const { jumpPct, jumpWindowMs } = DAMAGE_CONFIG.read(view);
@@ -210,7 +214,7 @@ const settings = (view: EngineView) => {
     jumpWindowMs,
     warningLimit: ALARMS_CONFIG.read(view).warningsBeforePenalty,
     neighbourhoodMs: GAPS_CONFIG.read(view).neighbourhoodMs,
-    window: PACE_CONFIG.read(view).window,
+    window: PACE_DELTA_CONFIG.read(view).windowLaps,
     maxNeutralisedMs: LAP_CLASSES_CONFIG.read(view).maxNeutralisedMs,
   };
 };
@@ -224,6 +228,7 @@ const foldNeutralised = (acc: Acc, view: EngineView): boolean => {
       const span = list[i] as DeepReadonly<Span>;
       if (!isNeutralisation(machine, span) || behaviourOf(machine, span.kind) !== 'neutralised') continue;
       (acc.neutralised[machine] ??= []).push({ at: span.start, startFrame: span.startFrame, endFrame: span.endFrame, neutralisation: neutralisationKind(span) });
+      (acc.noTime[machine] ??= []).push(span);
       changed = true;
     }
     acc.closedPhases[machine] = list.length;
@@ -272,7 +277,7 @@ const foldCarSpans = (acc: Acc, view: EngineView): Set<CarId> => {
       if (id === undefined) continue;
       const row = behaviourOf(machine, span.kind);
       if (row === 'noTimeLoss') {
-        (acc.visits[id] ??= []).push({ startFrame: span.startFrame, endFrame: span.endFrame });
+        (acc.noTime[machine] ??= []).push(span);
         changed.add(id);
       }
       if (row === 'retirement' && span.confirmed) acc.retiredFrom[id] ??= span.startFrame;
@@ -287,7 +292,7 @@ const foldCarSpans = (acc: Acc, view: EngineView): Set<CarId> => {
 /**
  * Folds the new crossings; a new closed pit visit or garage spell of a car (`visitsChanged`) re-evaluates its crossings,
  * and a new closed neutralisation (`neutralisedChanged`) every car's, so the fold equals a run from scratch (C31). A
- * mini-sector is no time loss when it shares a frame with a closed neutralisation or one of its car's closed visits
+ * mini-sector is no time loss where the one exclusion (`timeLossExcludedOf`) over the closed spans of `noTime` says so
  * (C26); the open ones are applied by `output`.
  */
 const foldCrossings = (acc: Acc, view: EngineView, neutralisedChanged: boolean, visitsChanged: ReadonlySet<CarId>): void => {
@@ -300,16 +305,11 @@ const foldCrossings = (acc: Acc, view: EngineView, neutralisedChanged: boolean, 
   }
   acc.crossings = crossings.length;
 
-  const neutralised = NEUTRALISATION_MACHINES.flatMap((machine) => acc.neutralised[machine] ?? []);
+  const excluded = timeLossExcludedOf({ history: { spans: acc.noTime } });
   acc.tracks.forEach((track, id) => {
     if (track === undefined) return;
     if (neutralisedChanged || visitsChanged.has(id as CarId)) resetTrack(track);
-    const visits = acc.visits[id] ?? [];
-    evaluate(
-      track,
-      acc.config.timeLossMs,
-      (from, to) => neutralised.some((n) => sharesFrame(from, to, n)) || visits.some((v) => sharesFrame(from, to, v)),
-    );
+    evaluate(track, acc.config.timeLossMs, (from, to) => excluded(id as CarId, from.frame, to.frame));
   });
 };
 
@@ -378,7 +378,7 @@ const init = (view: EngineView): Acc =>
       tracks: [],
       neutralised: Object.fromEntries(NEUTRALISATION_MACHINES.map((machine) => [machine, []])),
       lapFrames: [],
-      visits: [],
+      noTime: {},
       spanEvents: { 'car-location': [], 'car-status': [], warnings: [] },
       cornerCuttingOf: [],
       collisions: [],
@@ -423,19 +423,13 @@ const nowOf = (acc: Acc, view: EngineView): Now => {
     ours: ourCars(live),
     layout: { trackLengthM, sector2StartM, sector3StartM },
     neutralisedNow: spans.map((n) => ({ ...n, lap: leaderLapAt(acc.lapFrames, n.startFrame) })),
-    openNeutralisedFrom: open.reduce<FrameNumber | undefined>((min, span) => (min === undefined || span.startFrame < min ? span.startFrame : min), undefined),
+    excluded: timeLossExcludedOf({ history: { spans: acc.noTime }, situation: view.situation }),
     openVisits,
     openRetiredFrom,
     openEvents,
     snapshots: new Map(),
   };
 };
-
-/**
- * The frame after which the open spans exclude the car's mini-sectors: an open neutralisation or pit visit covers every
- * frame from its start on, so a mini-sector ending after it shares a frame with it (C26); `Infinity` with none open.
- */
-const cutOf = (b: Board, id: CarId): FrameNumber => Math.min(b.openNeutralisedFrom ?? Infinity, b.openVisits[id] ?? Infinity);
 
 /** A feed entry before its neighbourhood, forUs and pace are resolved. */
 type Candidate = {
@@ -486,14 +480,16 @@ const crossingLap = (acc: Board, id: CarId, t: SessionTime): number => {
 };
 
 /**
- * The time loss runs that stand: of the slow mini-sectors no open span covers (`cutOf`), minus those still running into
- * a pit visit or garage spell the car is in now (its open span).
+ * The time loss runs that stand: of the slow mini-sectors the one exclusion leaves (`Now.excluded`, the open spans with
+ * the closed ones), minus those still running into a pit visit or garage spell the car is in now (its open span).
  */
 const standingRuns = (acc: Board): SlowRun[] =>
   acc.tracks.flatMap((track, id) => {
     if (track === undefined) return [];
-    const cut = cutOf(acc, id as CarId);
-    const runs = slowRuns(id as CarId, cut === Infinity ? track.slow : track.slow.filter((s) => s.endFrame <= cut));
+    const runs = slowRuns(
+      id as CarId,
+      track.slow.filter((s) => !acc.excluded(id as CarId, s.startFrame, s.endFrame)),
+    );
     const newest = track.points[track.points.length - 1]?.progress;
     return acc.openVisits[id] !== undefined ? runs.filter((r) => r.endProgress !== newest) : runs;
   });
@@ -552,13 +548,13 @@ const runsLoss = (runs: SlowRun[]): Known<Ms> =>
     Math.max(...runs.map((r) => r.endAt)),
   );
 
-/** The loss of the car's mini-sector that holds `t`, against its median; none where an open span covers it (`cutOf`). */
+/** The loss of the car's mini-sector that holds `t`, against its median; none where the one exclusion excludes it (`Now.excluded`). */
 const segmentLoss = (acc: Board, id: CarId, t: SessionTime): Known<Ms> => {
   const track = acc.tracks[id];
   const point = track && latestAt(track, t);
   const loss = point && track?.loss[point.progress];
   if (track === undefined || point === undefined || loss === undefined) return unknown('notReceived');
-  if (loss === 'excluded' || (track.lossFrame[point.progress] as FrameNumber) > cutOf(acc, id)) return unknown('notApplicable');
+  if (loss === 'excluded' || acc.excluded(id, point.frame, track.lossFrame[point.progress] as FrameNumber)) return unknown('notApplicable');
   if (loss === 'fewLaps') return unknown('insufficientData');
   return known(loss.lossMs, loss.end);
 };

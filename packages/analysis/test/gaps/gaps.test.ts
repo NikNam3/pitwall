@@ -1,4 +1,4 @@
-import { carId, known, unknown, type Interval, type Known } from '@pitwall/domain';
+import { carId, known, unknown, type Interval, type Known, type MiniSectorCrossing } from '@pitwall/domain';
 import type { EngineView } from '@pitwall/engine';
 import { describe, expect, it } from 'vitest';
 import { GAPS, GAPS_CONFIG, type GapsOutput } from '../../src/gaps/index.ts';
@@ -638,13 +638,19 @@ describe('the gapper line of a car out of the race', () => {
 });
 
 // Phase bands in the leader's progress (review RU4, wave 2 T6): the gapper carries the race's neutralisations (SC, VSC)
-// and suspensions (red flag) on the chart's x, from the crossings at the span's start and end, so a band that ended
-// mid-lap ends there. Since Task 19 they are the session-phase spans (C20): the closed `neutralised` and `suspended`
-// spans of the projection plus the open one of the situation (`shared/neutralised.ts`); a `neutralised` span closed
-// with `confirmed: false` is no neutralisation (C18, C43), an open one still waiting for its confirmation is one.
+// and suspensions (red flag) on the chart's x. Since Task 19 they are the session-phase spans (C20): the closed
+// `neutralised` and `suspended` spans of the projection plus the open one of the situation (`shared/neutralised.ts`); a
+// `neutralised` span closed with `confirmed: false` is no neutralisation (C18, C43), an open one still waiting for its
+// confirmation is one. SP4.3c Task 6 fix round (F1, C26): a phase's bounds come from the leader's crossings'
+// membership, never from times (several frames share one race-clock time): `fromLap` is the leader's progress at its
+// first crossing the projection module puts inside the span, `toLap` at its last one inside it (a span covers
+// `startFrame <= f < endFrame`); each phase names its span (`span: { machine, id }`). These crossings are on frame =
+// their session time (`framed`), so the builders' spans (`startFrame = start`, `endFrame = end`) place them by frame.
 describe('the gapper phases', () => {
+  /** The crossings on frame = their session time. */
+  const framed = (list: readonly MiniSectorCrossing[]): MiniSectorCrossing[] => list.map((m) => ({ ...m, frame: m.at }));
   /** Car 0 laps in 90 s (a mini-sector every 1.8 s) and leads throughout; car 1 laps in 92 s. 8 laps from 0. */
-  const eightLaps = () => field({ cars: 2, laps: 8, paceMs: [90_000, 92_000] }).crossings;
+  const eightLaps = () => framed(field({ cars: 2, laps: 8, paceMs: [90_000, 92_000] }).crossings);
   /** The phases as `[kind, fromLap, toLap or its reason]`, laps to 6 decimals. */
   const phasesOf = (lines: ReturnType<typeof gapperLines>) =>
     lines.phases.map((p) => [p.kind, round(p.fromLap), p.toLap.known ? round(p.toLap.value) : p.toLap.reason]);
@@ -655,45 +661,76 @@ describe('the gapper phases', () => {
     expect(gapsCalculator.reads).toEqual(expect.arrayContaining(['spans:session-phase-race', 'spans:session-phase-qualifying', 'spans:session-phase-practice']));
   });
 
-  it("places a phase at the leader's newest crossing at its start and at its end: completed laps + mini-sectors / 50", () => {
-    // SC from 200 500 to 299 999: the leader last crossed (3, 11) at 199 800 and (4, 16) at 298 800
+  it("places a phase at the leader's first crossing inside the span and its last one inside it: completed laps + mini-sectors / 50", () => {
+    // SC on frames 200 500 to 299 999: the leader's first crossing inside is (3, 12) on 201 600, its last (4, 16) on 298 800
     const sc = neutralisation({ kind: 'SC', start: 200_500, end: 299_999 });
     const lines = gapperLines(run(viewOf(eightLaps(), { phases: [sc] })), fixed);
-    expect(phasesOf(lines)).toEqual([['SC', 2.22, 3.32]]);
+    expect(phasesOf(lines)).toEqual([['SC', 2.24, 3.32]]);
   });
 
-  it('places a phase that ended laps ago from the crossings of that time, not the recent ones', () => {
-    // the race is at the end of lap 8; the VSC ran from (2, 5) at 99 000 to (2, 40) at 162 000
+  it('places a phase that ended laps ago from the crossings of that time, not the recent ones; its closing frame is outside it', () => {
+    // the race is at the end of lap 8; the VSC ran on frames 99 000 to 162 000: from (2, 5) on 99 000 (inside) to
+    // (2, 39) on 160 200, as (2, 40) on 162 000 is on its closing frame, which it does not cover (C26)
     const vsc = neutralisation({ kind: 'VSC', start: 99_000, end: 162_000 });
     const lines = gapperLines(run(viewOf(eightLaps(), { phases: [vsc] })), fixed);
-    expect(phasesOf(lines)).toEqual([['VSC', 1.1, 1.8]]);
+    expect(phasesOf(lines)).toEqual([['VSC', 1.1, 1.78]]);
   });
 
   it('gives the open phase its start and toLap notApplicable, after the closed ones in their order', () => {
-    // up to 560 s: an SC and a red flag (a suspension) closed, a VSC open since 500 000, where the leader last crossed (6, 27) at 498 600
+    // up to 560 s: an SC (frames 199 800 to 298 800: (3, 11) to (4, 15)) and a red flag (360 000 to 405 000: (5, 0) to
+    // (5, 24)) closed, a VSC open since frame 500 000, where the leader's first crossing inside is (6, 28) on 500 400
     const ms = eightLaps().filter((m) => m.at <= 560_000);
     const sc = neutralisation({ kind: 'SC', start: 199_800, end: 298_800, id: 3 });
     const red = neutralisation({ kind: 'red', start: 360_000, end: 405_000, id: 5 });
     const open = openNeutralisation({ kind: 'VSC', start: 500_000, id: 7 });
     const lines = gapperLines(run(viewOf(ms, { phases: [sc, red], open })), fixed);
     expect(phasesOf(lines)).toEqual([
-      ['SC', 2.22, 3.32],
-      ['red', 4, 4.5],
-      ['VSC', 5.54, 'notApplicable'],
+      ['SC', 2.22, 3.3],
+      ['red', 4, 4.48],
+      ['VSC', 5.56, 'notApplicable'],
     ]);
+  });
+
+  it('names each phase by its span: the machine and the span id, closed and open (F1)', () => {
+    const ms = eightLaps().filter((m) => m.at <= 560_000);
+    const sc = neutralisation({ kind: 'SC', start: 199_800, end: 298_800, id: 3 });
+    const red = neutralisation({ kind: 'red', start: 360_000, end: 405_000, id: 5 });
+    const open = openNeutralisation({ kind: 'VSC', start: 500_000, id: 7 });
+    const out = run(viewOf(ms, { phases: [sc, red], open }));
+    expect(out.phases.map((p) => p.span)).toEqual([
+      { machine: 'session-phase-race', id: 3 },
+      { machine: 'session-phase-race', id: 5 },
+      { machine: 'session-phase-race', id: 7 },
+    ]);
+  });
+
+  it("by frame, not by time (F1, C26): a span opening on the frame after the leader's crossing, at the same session time, starts at its next crossing", () => {
+    // the leader crosses (3, 11) at 199 800 on frame 199 800; the SC opens at the same session time on frame 199 801, so
+    // (3, 11) is not inside it: the phase starts at (3, 12) on 201 600. It closes on frame 298 800 at 298 800, the frame
+    // and session time of the leader's (4, 16), which it does not cover: it ends at (4, 15) on 297 000.
+    const sc = neutralisation({ kind: 'SC', start: 199_800, startFrame: 199_801, end: 298_800, endFrame: 298_800 });
+    expect(phasesOf(gapperLines(run(viewOf(eightLaps(), { phases: [sc] })), fixed))).toEqual([['SC', 2.24, 3.3]]);
+    // open: the same start by frame
+    const open = openNeutralisation({ kind: 'SC', start: 199_800, startFrame: 199_801 });
+    const early = eightLaps().filter((m) => m.at <= 250_000);
+    expect(phasesOf(gapperLines(run(viewOf(early, { open })), fixed))).toEqual([['SC', 2.24, 'notApplicable']]);
   });
 
   it('takes the leader at that moment: the car furthest along when the phase started and when it ended', () => {
     // car 0 laps in 90 s from 0; car 1 laps in 85 s from 3 s and passes it at 54 s, so car 1 leads from then on.
-    // At 30 000 car 0 is at (1, 16) and car 1 at (1, 15); at 300 000 car 0 is at (4, 16) and car 1 at (4, 24).
-    const ms = byTime([
-      ...[1, 2, 3, 4, 5].flatMap((n) => crossings(carId(0), n, 90_000, (n - 1) * 90_000)),
-      ...[1, 2, 3, 4, 5].flatMap((n) => crossings(carId(1), n, 85_000, 3_000 + (n - 1) * 85_000)),
-    ]).filter((m) => m.at <= 400_000);
+    // Before frame 30 000 car 0 is furthest, at (1, 16), car 1 at (1, 15); the first crossing inside that leads the road
+    // is car 0's (1, 17) on 30 600 (car 1's (1, 16) on 30 200 only draws level). Before frame 300 000 car 1 is at
+    // (4, 24) on 298 800, car 0 at (4, 16).
+    const ms = framed(
+      byTime([
+        ...[1, 2, 3, 4, 5].flatMap((n) => crossings(carId(0), n, 90_000, (n - 1) * 90_000)),
+        ...[1, 2, 3, 4, 5].flatMap((n) => crossings(carId(1), n, 85_000, 3_000 + (n - 1) * 85_000)),
+      ]).filter((m) => m.at <= 400_000),
+    );
     const sc = neutralisation({ kind: 'SC', start: 30_000, end: 300_000 });
     const out = run(viewOf(ms, { phases: [sc] }));
     expect(out.intervals[0]?.carId).toBe(1);
-    expect(phasesOf(gapperLines(out, fixed))).toEqual([['SC', 0.32, 3.48]]);
+    expect(phasesOf(gapperLines(out, fixed))).toEqual([['SC', 0.34, 3.48]]);
   });
 
   it('is the same for every reference: the phases do not depend on the virtual car', () => {
@@ -711,13 +748,13 @@ describe('the gapper phases', () => {
     const never = neutralisation({ kind: 'SC', start: 200_500, end: 203_500, confirmed: false });
     expect(gapperLines(run(viewOf(eightLaps(), { phases: [never] })), fixed).phases).toEqual([]);
     const vsc = neutralisation({ kind: 'VSC', start: 99_000, end: 162_000, id: 2 });
-    expect(phasesOf(gapperLines(run(viewOf(eightLaps(), { phases: [never, vsc] })), fixed))).toEqual([['VSC', 1.1, 1.8]]);
+    expect(phasesOf(gapperLines(run(viewOf(eightLaps(), { phases: [never, vsc] })), fixed))).toEqual([['VSC', 1.1, 1.78]]);
   });
 
   it('an open neutralisation still waiting for its confirmation is on the gapper from its start (ruling 2: the earliest reliable signal, C18)', () => {
     const ms = eightLaps().filter((m) => m.at <= 250_000);
     const pending = openNeutralisation({ kind: 'SC', start: 200_500, confirmed: false });
-    expect(phasesOf(gapperLines(run(viewOf(ms, { open: pending })), fixed))).toEqual([['SC', 2.22, 'notApplicable']]);
+    expect(phasesOf(gapperLines(run(viewOf(ms, { open: pending })), fixed))).toEqual([['SC', 2.24, 'notApplicable']]);
   });
 
   it('a pending neutralisation that closes unconfirmed leaves the gapper: update equals init (C18, C31)', () => {
@@ -725,7 +762,7 @@ describe('the gapper phases', () => {
     const waiting = viewOf(ms.filter((m) => m.at <= 202_000), { open: openNeutralisation({ kind: 'SC', start: 200_500, confirmed: false }) });
     const dropped = viewOf(ms.filter((m) => m.at <= 210_000), { phases: [neutralisation({ kind: 'SC', start: 200_500, end: 203_500, confirmed: false })] });
     const acc = gaps.init(guarded(waiting));
-    expect(phasesOf(gapperLines(gaps.output(acc), fixed))).toEqual([['SC', 2.22, 'notApplicable']]);
+    expect(phasesOf(gapperLines(gaps.output(acc), fixed))).toEqual([['SC', 2.24, 'notApplicable']]);
     const updated = gaps.output(gaps.update(acc, deltaOf(waiting, dropped), guarded(dropped)));
     expect(updated).toEqual(run(dropped));
     expect(gapperLines(updated, fixed).phases).toEqual([]);
@@ -738,10 +775,10 @@ describe('the gapper phases', () => {
     const sc = neutralisation({ kind: 'SC', start: 200_500, end: 299_999 });
     const closed = viewOf(ms, { phases: [sc] });
     const acc = gaps.init(guarded(opening));
-    expect(phasesOf(gapperLines(gaps.output(acc), fixed))).toEqual([['SC', 2.22, 'notApplicable']]);
+    expect(phasesOf(gapperLines(gaps.output(acc), fixed))).toEqual([['SC', 2.24, 'notApplicable']]);
     const updated = gaps.output(gaps.update(acc, deltaOf(opening, closed), guarded(closed)));
     expect(gapperLines(updated, fixed).phases).toEqual(gapperLines(run(closed), fixed).phases);
-    expect(phasesOf(gapperLines(updated, fixed))).toEqual([['SC', 2.22, 3.32]]);
+    expect(phasesOf(gapperLines(updated, fixed))).toEqual([['SC', 2.24, 3.32]]);
   });
 
   it('flashback equals fresh run: a phase the flashback took back is gone', () => {

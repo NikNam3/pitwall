@@ -7,8 +7,6 @@ export const FORECAST_FIELD_CONFIG = defineConfig('forecast-field', {
   placementToleranceMs: 1500,
   /** The pace σ of a car whose stint has no posterior yet (fewer than two pace laps), in ms. Source: pitwall estimate. */
   fallbackPaceSdMs: 500,
-  /** The least wear rate a car's degradation per % wear is divided by, in % per lap (bounds `ν / rate`). Source: pitwall estimate. */
-  minWearRatePctPerLap: 0.05,
   /** The sd of the track file's compound offsets as the fit's prior, in ms: a weak prior (spec 6.2). Source: pitwall estimate. */
   compoundOffsetPriorSdMs: 500,
   /** The soft's fresh-set offset against medium without a track file's, in ms. Source: research 13 §1 (assumed). */
@@ -19,10 +17,6 @@ export const FORECAST_FIELD_CONFIG = defineConfig('forecast-field', {
   interOffsetMs: 3500,
   /** The wet's offset against medium on a dry track, in ms. Source: spike 4.3b-defaults (research 19 §4): Miami's wet/inter meeting at 12.5 s inter excess, with interOffsetMs 3500 and interMsPerWetnessMs 0.5; one race, thin */
   wetOffsetMs: 8100,
-  /** The convex tyre term starts at this wear, in %. Source: research 12 §4, 13 §1 (Fieni's shape, flagged). */
-  convexFromPct: 40,
-  /** The convex tyre term per (% wear past `convexFromPct`)², in ms: about 4 s at 80 %. Source: pitwall estimate (flagged prior); spike 4.3b-defaults (research 19 §3): wet stints bracket 1.7–5.4 (25 stints past 40 %, Mexico and Miami), dry not identified (max 50 %): kept */
-  convexMsPerPct2: 2.5,
   /** The cold-tyre term of the first lap on a set, in ms. Source: research 12 §3 (Texas, +0.41 s dry). */
   coldTyreLap1Ms: 410,
   /** The cold-tyre term of the second lap on a set, in ms. Source: spike 4.3b-defaults (research 19 §5): lap 2 on a new set −170 ± 156 ms (all green, 40), −475 ± 261 (free air, 10) without the term, after the ν prior change; a fresh-set peak not identified; thin. */
@@ -57,11 +51,6 @@ export const FORECAST_FIELD_CONFIG = defineConfig('forecast-field', {
    * model's zero offset; final review F4).
    */
   unknownCompound: 'medium' as string,
-  /**
-   * A competing car without a completed lap (still on lap 1) takes the leader's newest lap as its stand-in, its lap time
-   * plus this (ms). Source: pitwall estimate (a car on lap 1 runs at about the leader's pace; final review F4).
-   */
-  noLapStandInOffsetMs: 0,
   /** Whether a car whose driver is unknown (no car-driver span yet) is modelled as a human. Source: pitwall estimate (the AI, the field's majority; final review F4). */
   unknownDriverIsHuman: false as boolean,
 });

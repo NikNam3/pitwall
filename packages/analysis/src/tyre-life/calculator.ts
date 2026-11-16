@@ -1,44 +1,40 @@
-// `tyre-life` (spec 4.2): per car in the session, the laps until its set reaches its limit, on the wear basis (per corner
-// at its wear rate, the worst corner limiting) when the car's wear is visible, else on the age basis (`degradation`'s
-// `ν`); and the fresh-set life per compound. The limits are the config's unless the run's calibration set overrides them.
-// The scheduled run is the as-of form on `asOfNow(view)` (Task 15c, ruling R16) with the live state's tyres in place of
-// the projection's: the set fitted now, the wear now (mid-lap) and the set's `lifeSpanLaps`.
-import { known, unknown, type CarState, type Known, type TyreSet } from '@pitwall/domain';
+// `tyre-life` (spec 4.2; SP4.3c Task 12): a reader of `tyre-model`. Per car in the session, per corner the wear now,
+// `tyre-model`'s rate for the fitted compound and the laps until `tyre-model`'s limit; the set's laps to the limit and
+// the game's life span of the fitted set, both `tyre-model`'s (C43: tyre-life judges no second one). The scheduled run is
+// the as-of form on `asOfNow(view)` (Task 15c, ruling R16) with the live state's compound and wear (mid-lap).
+import type { CarState, Known } from '@pitwall/domain';
 import { asOfNow, type DeepReadonly, type EngineView, type QuickCalculator } from '@pitwall/engine/readers';
 import { CAR_STATUS_READS } from '../shared/car-status.ts';
-import { tyreLifeOf, type TyresNow } from './as-of.ts';
+import { TYRE_MODEL } from '../tyre-model/id.ts';
+import { refittedAfter, tyreLifeOf, type TyresNow } from './as-of.ts';
 import { TYRE_LIFE } from './index.ts';
 import type { TyreLifeOutput } from './types.ts';
 
-/** The fitted set's `lifeSpanLaps`, as of the `sets` value. */
-function gameLifeSpan(sets: DeepReadonly<Known<{ sets: TyreSet[]; fittedIdx: number }>>): Known<number> {
-  if (!sets.known) return sets;
-  const fitted = sets.value.sets[sets.value.fittedIdx];
-  return fitted === undefined ? unknown('notReceived') : known(fitted.lifeSpanLaps, sets.at);
-}
+const NOT_RECEIVED: Known<number> = { known: false, reason: 'notReceived' };
 
-/** A car's tyres as the live state holds them now. */
-function tyresNow(tyres: DeepReadonly<CarState['tyres']>): TyresNow {
+/**
+ * A car's tyres as the live state holds them now; the life span `tyre-model`'s. A set fitted at a stop no recorded lap
+ * ran on yet has no rate here (`refittedAfter`, as the as-of form: the rate is of a set the projection shows).
+ */
+function tyresNow(tyres: DeepReadonly<CarState['tyres']>, refitted: boolean): TyresNow {
   const { corners } = tyres;
   return {
-    set: { actualCompound: tyres.actualCompound, visualCompound: tyres.visualCompound, age: tyres.age },
+    compound: refitted ? undefined : tyres.visualCompound,
     wearPct: { fl: corners.fl.wearPct, fr: corners.fr.wearPct, rl: corners.rl.wearPct, rr: corners.rr.wearPct },
-    gameLifeSpanLaps: gameLifeSpan(tyres.sets),
+    gameLifeSpanLaps: (model) => (model?.fittedLifeSpanLaps as Known<number> | undefined) ?? NOT_RECEIVED,
   };
 }
 
-/**
- * Per car in the session (its rows, `TYRE_LIFE_BEHAVIOUR`): wear now, its rate (the median of the rate laps' own wear
- * gains, over the current stint's laps on the fitted set) and the laps until the wear limit (0 at or past it) per corner;
- * the set's laps to its limit on its basis (each `insufficientData` before the current stint has run `minLaps` laps); the fresh-set life per compound; the game's life span of the fitted set.
- */
+/** Per car in the session (its rows, `TYRE_LIFE_BEHAVIOUR`): its set's wear, rates and laps to the limit, from `tyre-model`. */
 export const tyreLifeCalculator: QuickCalculator<TyreLifeOutput> = {
   id: TYRE_LIFE,
   kind: 'quick',
-  reads: ['laps', 'stints', 'tyres', 'decisions', CAR_STATUS_READS, { calculator: 'degradation' }],
+  // `laps` and `stints`: what the as-of form reads for a car's set and wear (the newest lap, a fitting after it)
+  reads: ['tyres', 'laps', 'stints', CAR_STATUS_READS, { calculator: TYRE_MODEL }],
   cadence: { hz: 4 },
   compute: (view: EngineView): TyreLifeOutput => {
     const tyres = new Map(view.live.cars.map((c) => [c.id, c.tyres]));
-    return tyreLifeOf(asOfNow(view), [...tyres.keys()], (id) => tyresNow(tyres.get(id) as DeepReadonly<CarState['tyres']>));
+    const asOf = asOfNow(view);
+    return tyreLifeOf(asOf, [...tyres.keys()], (id, laps) => tyresNow(tyres.get(id) as DeepReadonly<CarState['tyres']>, refittedAfter(asOf, id, laps.at(-1))));
   },
 };

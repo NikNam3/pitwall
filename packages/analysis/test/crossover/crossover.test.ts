@@ -16,14 +16,14 @@ import {
   type PitLosses,
   type PitLossEstimate,
   type Span,
-  type TyreType,
+  type TrackWetness,
   type WeekendPhase,
 } from '@pitwall/domain';
+import { TRACK_WETNESS } from '../../src/track-wetness/index.ts';
 import type { EngineView } from '@pitwall/engine/readers';
 import { describe, expect, it } from 'vitest';
 import { crossoverCalculator } from '../../src/crossover/calculator.ts';
 import { CROSSOVER, CROSSOVER_CONFIG } from '../../src/crossover/index.ts';
-import { tyreTypeOf } from '../../src/crossover/tyre-type.ts';
 import { PIT_LOSS } from '../../src/pit-loss/index.ts';
 import { lap, neutralisation, RACE_PHASES } from '../../../../test-support/builders/index.ts';
 import { guardedQuick, PRACTICE, QUALIFYING, RACE, situatedView } from '../situated.ts';
@@ -80,17 +80,33 @@ const pitLosses = (green: Known<Ms> = known(21_000, 0)): PitLosses => ({
   stops: [],
 });
 
-/** The view of a session holding `laps` (sorted by completion), closed session-phase spans, `pit-loss`'s output and a phase. */
+/**
+ * `track-wetness`'s output with the dry reference `dryRefMs` (SP4.3c Task 14, O3: crossover reads its dry reference
+ * from it); the rest is a dry track. Default: no dry reference yet.
+ */
+const wetnessWith = (dryRefMs: Known<Ms> = unknown('insufficientData')): TrackWetness => ({
+  byLap: [],
+  state: known({ wetnessMs: 0, sdMs: 300 }, 0),
+  wet: known(false, 0),
+  dryRefMs,
+  dryRefSource: { kind: 'session', sessionShare: 1, parts: 'slick laps' },
+  slickScale: unknown('insufficientData'),
+});
+
+/** The view of a session holding `laps` (sorted by completion), closed session-phase spans, `pit-loss`'s and `track-wetness`'s outputs and a phase. */
 function view(
   laps: LapRecord[],
-  o: { phase?: WeekendPhase; spans?: Span[]; loss?: PitLosses; teammate?: number; config?: EngineView['config'] } = {},
+  o: { phase?: WeekendPhase; spans?: Span[]; loss?: PitLosses; wetness?: TrackWetness; teammate?: number; config?: EngineView['config'] } = {},
 ): EngineView {
   const spans: Record<string, Span[]> = {};
   for (const span of o.spans ?? []) (spans[span.machine] ??= []).push(span);
   const v = situatedView({
     phase: o.phase ?? RACE,
     history: { laps: [...laps].sort((a, b) => a.completedAt - b.completedAt), spans },
-    outputs: new Map<string, unknown>([[PIT_LOSS, o.loss ?? pitLosses()]]),
+    outputs: new Map<string, unknown>([
+      [PIT_LOSS, o.loss ?? pitLosses()],
+      [TRACK_WETNESS, o.wetness ?? wetnessWith()],
+    ]),
     config: o.config ?? {},
   });
   return o.teammate === undefined ? v : { ...v, live: { ...v.live, teammateCar: carId(o.teammate) } };
@@ -126,53 +142,36 @@ describe('crossover calculator', () => {
     expect(crossoverCalculator.reads).toEqual(
       expect.arrayContaining(['laps', 'identity', { calculator: PIT_LOSS }, 'spans:weekend-phase', 'spans:session-phase-race']),
     );
+    // SP4.3c Task 14 (O3): the dry reference is track-wetness's
+    expect(crossoverCalculator.reads).toEqual(expect.arrayContaining([{ calculator: TRACK_WETNESS }]));
   });
 
-  // 1
-  it('tyreTypeOf: inter → inter; wet, classicWet, f2Wet → wet; unknown → undefined; every other compound → slick', () => {
-    const cases: Record<ActualCompound, TyreType | undefined> = {
-      C0: 'slick',
-      C1: 'slick',
-      C2: 'slick',
-      C3: 'slick',
-      C4: 'slick',
-      C5: 'slick',
-      C6: 'slick',
-      inter: 'inter',
-      wet: 'wet',
-      classicDry: 'slick',
-      classicWet: 'wet',
-      f2SuperSoft: 'slick',
-      f2Soft: 'slick',
-      f2Medium: 'slick',
-      f2Hard: 'slick',
-      f2Wet: 'wet',
-      unknown: undefined,
-    };
-    for (const [compound, type] of Object.entries(cases)) expect([compound, tyreTypeOf(compound as ActualCompound)]).toEqual([compound, type]);
-  });
+  // 1: `tyreTypeOf` is the domain helper (SP4.3c Task 1); its case table moved to `shared/tyre-type.test.ts`.
 
   // 2
-  it('no green slick lap yet: dryRefMs, line110Ms and ourPct are insufficientData', () => {
+  // SP4.3c Task 14 (O3, B3): ported; the dry reference is `track-wetness`'s (crossover's own `dryRefOf` is deleted)
+  it('no dry reference yet (track-wetness has none): dryRefMs, line110Ms and ourPct are insufficientData', () => {
     // only inter laps, ours among them, and one SC slick lap (not green)
     const c = ours(view([L(US, 5, 100_000, 'inter'), L(1, 5, 99_000, 'inter'), L(2, 5, 95_000, 'C3', { scShare: 0.5 })]));
     expect(c.dryRefMs).toEqual(INSUFFICIENT);
     expect(c.line110Ms).toEqual(INSUFFICIENT);
     expect(c.ourPct).toEqual(INSUFFICIENT);
+    // slick medians alone make no dry reference of crossover's own
+    expect(ours(view(DRY_REF_LAPS())).dryRefMs).toEqual(INSUFFICIENT);
   });
 
-  // 3
-  it('the dry reference is the lowest slick median so far, the 110 % line 1.1 times it', () => {
-    const c = ours(view(DRY_REF_LAPS()));
+  // 3 (SP4.3c Task 14: ported, the reference is track-wetness's)
+  it("the dry reference is track-wetness's, the 110 % line 1.1 times it; the medians stay crossover's", () => {
+    const c = ours(view(DRY_REF_LAPS(), { wetness: wetnessWith(known(90_400, 1_000_200)) }));
     expect(lapOf(c, 10).slick).toMatchObject({ known: true, value: 90_400 });
     expect(lapOf(c, 11).slick).toMatchObject({ known: true, value: 92_000 });
-    expect(c.dryRefMs).toMatchObject({ known: true, value: 90_400 });
-    expect(valueOf(c.line110Ms)).toBeCloseTo(99_440, 6);
+    expect(c.dryRefMs).toEqual(known(90_400, 1_000_200));
+    expect(c.line110Ms).toEqual(known(99_440, 1_000_200));
   });
 
   // 4
   it('ourPct is our latest green lap over the dry reference, as a percentage', () => {
-    const c = ours(view([...DRY_REF_LAPS(), OUR_LAP_12()]));
+    const c = ours(view([...DRY_REF_LAPS(), OUR_LAP_12()], { wetness: wetnessWith(known(90_400, 1_000_200)) }));
     expect(c.ourType).toMatchObject({ known: true, value: 'slick' });
     expect(valueOf(c.ourPct)).toBeCloseTo(109.29, 2);
   });
@@ -317,9 +316,9 @@ describe('crossover calculator', () => {
       'session-phase-race': phaseRows,
       'weekend-phase': {
         race: { isRace: true },
-        practice: { notApplicable: true },
-        qualifying: { notApplicable: true },
-        none: { notApplicable: true },
+        practice: { isRace: false, notApplicable: true },
+        qualifying: { isRace: false, notApplicable: true },
+        none: { isRace: false, notApplicable: true },
       },
     });
   });

@@ -1,7 +1,8 @@
 // The forecast's field (spec 6.3): every car's state as typed arrays, and what happens at a car's line: its lap ends
 // (wear, fuel, a stop's new set) and its next lap starts (its lap time from `lap-model`, its draws for that lap).
-import { NOISE_COMPOUNDS, type LapInput, type NoiseCompound, type Policy, type Scenario, type StartingPoint } from '@pitwall/domain';
+import { NOISE_COMPOUNDS, tyreIndex, type LapInput, type NoiseCompound, type Policy, type Scenario, type StartingPoint } from '@pitwall/domain';
 import { lapTimeMs } from '../lap-model/index.ts';
+import { isWet } from '../track-wetness/wet.ts';
 import { BIG_EVENT_MAX_MS, BIG_EVENT_MIN_MS } from './constants.ts';
 import { drawsInto, normal, normalOf, PURPOSE, streamKey, streamOf, uniformOf, type Draws } from './draws.ts';
 
@@ -92,17 +93,16 @@ export type Field = {
   compound: Uint8Array;
   wearPct: Float64Array;
   fuelKg: Float64Array;
-  burnKg: Float64Array;
   lapOnSet: Int16Array;
   /** Our cars' sets fitted so far, per car and compound index. */
   setsUsed: Map<number, Int16Array>;
 };
 
 /** One reused lap-model input: the forecast calls the lap model once per car and lap. */
-const input: LapInput = { paceMs: 0, degMsPerLap: 0, wearPct: 0, fuelKg: 0, compound: 'medium', lapOnSet: 1, neutralised: 'none', wetnessMs: 0, scatterMs: 0, mistakeMs: 0 };
+const input: LapInput = { paceMs: 0, degMsPerLap: 0, wearPct: 0, fuelKg: 0, compound: 'medium', lapOnSet: 1, neutralised: 'none', wetnessMs: 0, wet: false, scatterMs: 0, mistakeMs: 0 };
 
 /** A field's typed arrays, by size: per car, per car and lap, per lap. */
-type Arrays = Pick<Field, 'neutralByLap' | 'vscLapMs' | 'stopCompound' | 'car' | 'order' | 'carKeys' | 'lap' | 'lineT' | 'running' | 'paceMs' | 'degMs' | 'scatterMs' | 'innovationMs' | 'compound' | 'wearPct' | 'fuelKg' | 'burnKg' | 'lapOnSet'>;
+type Arrays = Pick<Field, 'neutralByLap' | 'vscLapMs' | 'stopCompound' | 'car' | 'order' | 'carKeys' | 'lap' | 'lineT' | 'running' | 'paceMs' | 'degMs' | 'scatterMs' | 'innovationMs' | 'compound' | 'wearPct' | 'fuelKg' | 'lapOnSet'>;
 
 function allocate(n: number, laps: number): Arrays {
   return {
@@ -122,7 +122,6 @@ function allocate(n: number, laps: number): Arrays {
     compound: new Uint8Array(n),
     wearPct: new Float64Array(n),
     fuelKg: new Float64Array(n),
-    burnKg: new Float64Array(n),
     lapOnSet: new Int16Array(n),
   };
 }
@@ -144,7 +143,6 @@ function arraysFor(n: number, laps: number): Arrays {
   a.lap.fill(0);
   a.lineT.fill(Number.NaN);
   a.scatterMs.fill(0);
-  a.burnKg.fill(0);
   return a;
 }
 
@@ -183,12 +181,23 @@ export function createField(start: StartingPoint, policies: readonly Policy[], s
     // pace level and degradation, drawn once per scenario around their σ (spec 6.3)
     const key = keyOf(draws, c, 0);
     f.paceMs[c] = (start.paceMs[c] ?? 0) + (scenario.plain ? 0 : (start.paceSdMs[c] ?? 0) * normalDraw(key, PURPOSE.pace, 0));
-    f.degMs[c] = (start.degMsPerLap[c] ?? 0) + (scenario.plain ? 0 : (start.degSdMs[c] ?? 0) * normalDraw(key, PURPOSE.deg, 0));
+    f.degMs[c] = degOf(f, c, start.compound[c] ?? 0);
     f.lapOnSet[c] = (start.tyreAge[c] ?? 0) + 1;
     const rho = start.rho[c] ?? 0;
     f.innovationMs[c] = Math.sqrt(1 - rho * rho) * (start.sigmaMs[c] ?? 0);
   }
   return f;
+}
+
+/**
+ * Car `c`'s degradation per % of wear on compound index `k`: the compound's own (`tyreIndex`), drawn once per scenario
+ * around its σ (spec 6.3) with the car's one draw, so a stop changes the compound's terms, not the draw.
+ */
+function degOf(f: Field, c: number, k: number): number {
+  const s = f.start;
+  const t = tyreIndex(c, k);
+  const deg = s.tyre.degMsPerLap[t] ?? 0;
+  return f.plain ? deg : deg + (s.tyre.degSdMs[t] ?? 0) * normalDraw(keyOf(f.draws, c, 0), PURPOSE.deg, 0);
 }
 
 /** The track's wetness on lap `lap` (`Scenario.wetnessByLap`; the starting point's where the scenario has none). */
@@ -197,6 +206,18 @@ export function wetnessOn(f: Field, lap: number): number {
   const i = lap - f.start.lap;
   if (w === undefined || w.length === 0 || i < 0) return f.start.wetness.wetnessMs;
   return w[Math.min(i, w.length - 1)] ?? f.start.wetness.wetnessMs;
+}
+
+/**
+ * Whether the track is wet on lap `lap` by `track-wetness`'s one rule (O3): a scenario's path lap is one world, so the
+ * rule with sd 0; the starting point's verdict where the scenario has none.
+ */
+export function wetOn(f: Field, lap: number): boolean {
+  const w = f.wetnessByLap;
+  const i = lap - f.start.lap;
+  if (w === undefined || w.length === 0 || i < 0) return f.start.wetness.wet;
+  const ms = w[Math.min(i, w.length - 1)];
+  return ms === undefined ? f.start.wetness.wet : isWet(ms, 0, 0);
 }
 
 export const lineIndex = (f: Field, car: number, lap: number): number => car * (f.start.lapsTotal + 2) + lap;
@@ -235,6 +256,7 @@ export function startLap(f: Field, c: number, lap: number, fromFraction: number,
   input.compound = compounds[f.compound[c] ?? 0] ?? 'medium';
   input.lapOnSet = f.lapOnSet[c] ?? 1;
   input.wetnessMs = wetnessOn(f, lap);
+  input.wet = wetOn(f, lap);
   input.neutralised = 'none';
   const green = lapTime(s.lapModel, input);
   car[b + GREEN_MS] = green;
@@ -269,25 +291,24 @@ export function startLap(f: Field, c: number, lap: number, fromFraction: number,
       car[b + LAP_MS] = f.vscLapMs[lap] ?? 0;
     } else car[b + LAP_MS] = lapTime(s.lapModel, input);
   }
-  if (first) {
-    // fuel runs to empty at the flag
-    const lapsLeft = s.lapsTotal - lap + 1 - fromFraction;
-    f.burnKg[c] = lapsLeft > 0 ? (f.fuelKg[c] ?? 0) / lapsLeft : 0;
-  }
 }
 
 /** Car `c` crossed the line ending lap `lap`: wear and fuel of the lap, a stop's new set; returns the stop's set if it stopped. */
 export function endLap(f: Field, c: number, lap: number): NoiseCompound | undefined {
   const s = f.start;
   const kind = f.car[c * W + NEUTRAL_AT] ?? NEUTRAL.none;
+  // the compound fitted now: after a stop the new compound's rate (SP4.3c Task 12)
+  const rate = s.tyre.wearRatePct[tyreIndex(c, f.compound[c] ?? 0)] ?? 0;
+  // the starting point's burn (`forecast-field`'s, from `shared/fuel-burn.ts`, O15)
+  const burn = s.fuelBurnKgPerLap[c] ?? 0;
   if (kind === NEUTRAL.none) {
     // a green lap's factors are 1 (and × 1 is exact)
-    f.wearPct[c] = (f.wearPct[c] ?? 0) + (s.wearRatePct[c] ?? 0);
-    f.fuelKg[c] = Math.max(0, (f.fuelKg[c] ?? 0) - (f.burnKg[c] ?? 0));
+    f.wearPct[c] = (f.wearPct[c] ?? 0) + rate;
+    f.fuelKg[c] = Math.max(0, (f.fuelKg[c] ?? 0) - burn);
   } else {
     const factors = kind === NEUTRAL.sc ? s.lapModel.neutralised.sc : s.lapModel.neutralised.vsc;
-    f.wearPct[c] = (f.wearPct[c] ?? 0) + (s.wearRatePct[c] ?? 0) * factors.wearFactor;
-    f.fuelKg[c] = Math.max(0, (f.fuelKg[c] ?? 0) - (f.burnKg[c] ?? 0) * factors.fuelFactor);
+    f.wearPct[c] = (f.wearPct[c] ?? 0) + rate * factors.wearFactor;
+    f.fuelKg[c] = Math.max(0, (f.fuelKg[c] ?? 0) - burn * factors.fuelFactor);
   }
   f.lapOnSet[c] = (f.lapOnSet[c] ?? 0) + 1;
   const k = f.car[c * W + IN_LAP] === 1 ? stopAt(f, c, lap) : -1;
@@ -301,6 +322,8 @@ export function fitStop(f: Field, c: number, k: number): NoiseCompound {
   f.compound[c] = k;
   f.lapOnSet[c] = 1;
   f.wearPct[c] = 0;
+  // the new compound's degradation, with the scenario's one draw for the car (SP4.3c Task 12: per-compound terms)
+  f.degMs[c] = degOf(f, c, k);
   const used = f.setsUsed.get(c);
   if (used !== undefined) {
     // our car fits its next set of that compound, at that set's wear; a fresh set once none is left

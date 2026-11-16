@@ -20,6 +20,7 @@
     layoutEditCommand,
     panelCommands,
     panelRemoveCommands,
+    sessionEndCommand,
     windowCommands,
     type CommandContext,
     type ShellOverlay,
@@ -226,6 +227,7 @@
     sendReplay,
     open: (next) => (overlay = next),
     workbookNames: () => (value?.names ?? []),
+    activeWorkbook: () => value?.active.name,
     groups: () => groups ?? [],
     settings: () => settings,
     fontPx: () => fontPx,
@@ -280,6 +282,7 @@
     ...(defaultFeed === undefined || activeCalibration === undefined
       ? []
       : calibrationCommands(trackSets, { send, feedId: defaultFeed, pick: () => openGarage('calibration-panel') })),
+    ...(defaultFeed === undefined ? [] : [sessionEndCommand({ send, feedId: defaultFeed })]),
     ...(editing
       ? [
           layoutEditAddCommand(addToActiveGroup),

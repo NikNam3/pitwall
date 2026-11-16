@@ -6,12 +6,13 @@
 // How these tests read `strategy` (the test agent's decisions, Task 20 report):
 // - `prepareStrategy(view)` gives the job's input; `runStrategy(input, rng)` its output, per our car (`ourCars`) a
 //   `Known` of its rows; `notApplicable` for a car it cannot plan (outside the race phase, no braking zones, retired).
-// - `candidatesOf(start, car, dp, config)` (`candidates.ts`) builds one car's candidates from its DP result: every DP
+// - `candidatesOf(start, car, dp, config)` (`candidates.ts`; `config`: strategy's config plus `race-interaction`'s
+//   `closeGapMs`, SP4.3c Task 3) builds one car's candidates from its DP result: every DP
 //   plan, `boxNow` (where not `null`) and `stayOut`, source `dp`; the stop-lap neighbours, source `neighbour`: a DP
 //   plan with one stop moved by 1–3 laps (`neighbourMinLaps`–`neighbourMaxLaps`), the rest kept; the rule candidates,
 //   source `rule`, on the best plan (`plans[0]`): mirror ahead and mirror behind (its first stop moved to the rival's
 //   likeliest stop lap, `start.stopMid`), cover (a `rivalPits` trigger on the rival directly behind, action `cover`,
-//   within `ruleGapMs`) and extend (the same on the rival directly ahead, action `extend`). Every policy is
+//   within `closeGapMs`) and extend (the same on the rival directly ahead, action `extend`). Every policy is
 //   `policyOf(plan, thresholds)`: the DP's thresholds, plus the rule's own `rivalPits` trigger for cover and extend.
 // - A `race-monte-carlo` call plans car `c` when `input.candidates[c]` is not empty. While it scores one car, our other
 //   car follows `committed[other] ?? candidates[other][0]` (race-monte-carlo's rule, `search.ts`); our other car is
@@ -33,6 +34,7 @@ import type { BuilderRace } from '../../../../test-support/builders/long-race.ts
 import { generateRace, GENERATOR_DEFAULTS, type GeneratorParams } from '../../../../test-support/race-generator/index.ts';
 import { zandvoortTrack } from '../../../../test-support/track.ts';
 import { raceHazardCalculator } from '../../src/race-hazard/index.ts';
+import { withGaps } from '../gaps/output.ts';
 import type { McInput } from '../../src/race-monte-carlo/index.ts';
 import { STRATEGY_JOB } from '../../src/strategy/index.ts';
 
@@ -95,6 +97,15 @@ const set = (visualCompound: 'soft' | 'medium' | 'hard', wearPct: number, fitted
 
 /** Our cars' default sets: the fitted medium, then a new soft, medium and hard each. */
 export const SETS: readonly TyreSet[] = [set('medium', 10, true), set('soft', 0, false), set('medium', 0, false), set('hard', 0, false)];
+
+/**
+ * Our cars' sets for the 70-lap long race (`test-support/builders`): `SETS` with a usable life of 30 laps, so four stints
+ * cover the race within the 70 % limit (SP4.3c Task 19: no plan holds a stint past `lapsToLimit`; 18-lap sets leave no
+ * stop at lap 2 feasible).
+ */
+export const LONG_RACE_SETS: readonly TyreSet[] = SETS.map((s) => ({ ...s, usableLifeLaps: 30 }));
+/** `LONG_RACE_SETS` for both our cars, as a `ViewSpec`'s `sets`. */
+export const LONG_RACE_OURS_SETS = Object.fromEntries(OURS.map((c) => [c, LONG_RACE_SETS])) as Partial<Record<CarId, readonly TyreSet[]>>;
 
 /** Only the fitted set: no set left to stop onto. */
 export const NO_SETS_LEFT: readonly TyreSet[] = [set('medium', 10, true)];
@@ -175,7 +186,8 @@ export function viewAtFrame(race: BuilderRace, frame: FrameNumber, spec: ViewSpe
     config: { strategy: { maxScenarioPolicies: TEST_CAP, ...spec.config } },
     outputs: new Map(),
   };
-  const hazard = spec.hazard ?? raceHazardCalculator.compute(base);
+  // `race-hazard` reads `gaps`' leader progress (SP4.3c Task 6): `gaps` over the same view first
+  const hazard = spec.hazard ?? raceHazardCalculator.compute(withGaps(base));
   return { ...base, outputs: new Map([['race-hazard', hazard]]) };
 }
 

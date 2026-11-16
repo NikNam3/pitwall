@@ -10,7 +10,8 @@
 import type { PassCurve, StartingPoint } from '@pitwall/domain';
 import { createRng } from '@pitwall/engine/readers';
 import { describe, expect, it } from 'vitest';
-import { passChance, raceForecast } from '../../src/race-forecast/index.ts';
+import { raceForecast } from '../../src/race-forecast/index.ts';
+import { passChance } from '../../src/race-interaction/index.ts';
 import { drawn, interaction, noStops, PACE_MS, PLAIN, startingPoint } from './start.ts';
 
 const range = (from: number, to: number): number[] => Array.from({ length: to - from + 1 }, (_, i) => from + i);
@@ -63,7 +64,8 @@ describe('race-forecast: plain-mode passes (SP4.3b Task 11f)', () => {
 
     // and they are the pass curve's draws: one per braking zone (four a lap) at p = passChance(FITTED, dry, no DRS, 1 s)
     // on the DRS-free laps 1 and 2; across 2,000 scenarios the share passed by each lap's end within 4 standard errors
-    const p = passChance({ wetFactor: 1, ...FITTED } as PassCurve, false, false, 1_000);
+    // (`race-interaction`'s one pass chance since SP4.3c Task 15, O13: 1 s a lap faster, DRS closed)
+    const p = passChance(1_000, 0, { curve: { wetFactor: 1, ...FITTED } as PassCurve, wet: false, drs: false, drsRangeMs: 1_000 });
     const N = 2_000;
     const laps = range(1, N).map((id) => firstPassLap(start, drawn(id), 2));
     for (const lap of [1, 2]) {

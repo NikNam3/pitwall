@@ -11,6 +11,12 @@ import type { Ms } from './units.ts';
 /** The compounds in `StartingPoint.compound`'s index order. */
 export const NOISE_COMPOUNDS = ['soft', 'medium', 'hard', 'inter', 'wet'] as const satisfies readonly NoiseCompound[];
 
+/**
+ * The index of car `car`'s terms on compound `compound` (an index into `NOISE_COMPOUNDS`) in `StartingPoint.tyre`'s
+ * arrays: `car * NOISE_COMPOUNDS.length + compound`.
+ */
+export const tyreIndex = (car: number, compound: number): number => car * NOISE_COMPOUNDS.length + compound;
+
 /** A DRS zone by lap fraction (the track file's `drsZones`). */
 export type DrsZone = { detection: number; start: number; end: number };
 
@@ -29,10 +35,10 @@ export type StartingPoint = {
   tyreAge: Int16Array;
   wearPct: Float64Array;
   fuelKg: Float64Array;
+  /** kg per lap: the car's measured burn, else its fuel over the laps left (`shared/fuel-burn.ts`, SP4.3c O15). */
+  fuelBurnKgPerLap: Float64Array;
   paceMs: Float64Array;
   paceSdMs: Float64Array;
-  degMsPerLap: Float64Array;
-  degSdMs: Float64Array;
   sigmaMs: Float64Array;
   rho: Float64Array;
   mistakeRate: Float64Array;
@@ -40,14 +46,26 @@ export type StartingPoint = {
   mistakeSigmaLog: Float64Array;
   bigEventRate: Float64Array;
   retireRate: Float64Array;
-  wearRatePct: Float64Array;
+  /**
+   * The tyre terms per car and compound, each array indexed `tyreIndex(car, compound)` (`car * NOISE_COMPOUNDS.length +
+   * compound`): the wear rate (% per lap), the degradation (ms per % wear) and its σ, and the laps a fresh set lasts to
+   * its wear limit (-1: no limit known).
+   */
+  tyre: { wearRatePct: Float64Array; degMsPerLap: Float64Array; degSdMs: Float64Array; lapsToLimit: Int16Array };
   stopLow: Int16Array;
   stopMid: Int16Array;
   stopHigh: Int16Array;
   owesStop: Uint8Array;
+  /** Per car the fitted set's laps left to the limit (`tyre-model`'s `fittedLapsToLimit`, floored); −1 while unknown (SP4.3c Task 19). */
+  fittedLapsToLimit: Int16Array;
+  /** Per car `rival-stops`' next-compound odds; `null` while unknown (SP4.3c Task 18, O9). */
+  nextOdds: (Partial<Record<NoiseCompound, number>> | null)[];
+  /** Per car `rival-stops`' tyre-type switch from the game's delta; `null` while unknown (SP4.3c Task 18, O5). */
+  typeSwitch: ({ lap: number; to: TyreType } | null)[];
   /** Our cars only. */
   sets: Record<CarId, { compound: NoiseCompound; wearPct: number }[]>;
-  wetness: { wetnessMs: number; sdMs: number };
+  /** `wet`: track-wetness's one wet rule at the starting point (SP4.3c O3). */
+  wetness: { wetnessMs: number; sdMs: number; wet: boolean };
   /**
    * The weather forecast's samples mapped onto race laps by the leader's lap time: per lap its rain chance (0–100) and
    * the forecast's accuracy (SP4.3b spec §7.1, S12); unknown where no forecast reached the view (C3).
@@ -88,6 +106,8 @@ export type LapInput = {
   lapOnSet: number;
   neutralised: 'none' | 'vsc' | 'sc';
   wetnessMs: number;
+  /** The one wet rule's verdict for this lap (SP4.3c O3). */
+  wet: boolean;
   scatterMs: number;
   mistakeMs: number;
 };

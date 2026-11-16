@@ -18,11 +18,11 @@ import {
   type WeekendPhase,
 } from '@pitwall/domain';
 import type { EngineView, IncrementalCalculator } from '@pitwall/engine/readers';
-import { LAP_CLASSES_CONFIG, type LapClassOptions } from '../lap-classes/index.ts';
+import { LAP_CLASSES_CONFIG, lapPhaseRowOf, type LapClassOptions } from '../lap-classes/index.ts';
 import { behaviourByCar } from '../shared/behaviour.ts';
 import { carsInSession } from '../shared/car-status.ts';
 import { bestsOf, columnLeadersOf, newestSectorsOf,rowOf, sessionBestBoard, sessionBestsOf, type Best, type CarBests, type LivePass } from './lap-times.ts';
-import { LAP_TIMES_BEHAVIOUR, type LapTimesEffect } from './behaviour.ts';
+import { LAP_TIMES_BEHAVIOUR, LAP_TIMES_PHASE_ROWS, type LapTimesEffect } from './behaviour.ts';
 import { LAP_TIMES, LAP_TIMES_CONFIG, type LapTimesOutput } from './index.ts';
 
 /**
@@ -97,7 +97,7 @@ const nowOf = (view: EngineView): Now => {
     session: { phase, timeLeftMs: s.timeLeftMs, updatedAt: s.updatedAt },
     at: live.sessionTime,
     eliminated: { q1: config.eliminatedQ1, q2: config.eliminatedQ2 },
-    classes: { isRace: phase.kind === 'race', ...LAP_CLASSES_CONFIG.read(view) },
+    classes: { isRace: lapPhaseRowOf(LAP_TIMES_PHASE_ROWS, phase.kind).isRace, ...LAP_CLASSES_CONFIG.read(view) },
   };
 };
 

@@ -9,7 +9,7 @@ import {
 } from '@pitwall/contracts';
 import type { TopicHub } from '../hub/topic-hub.ts';
 import type { Logger } from '../log.ts';
-import { ensureDir, parseJson, readText, sha256, workbookNames, workbookPath, writeAtomic } from './ui-files.ts';
+import { ensureDir, parseJson, readText, replaceKeepingBackup, sha256, workbookNames, workbookPath, writeAtomic } from './ui-files.ts';
 
 const SAVE_DEBOUNCE_MS = 300;
 /** Waits for an editor to finish a non-atomic write before the file is read. */
@@ -31,6 +31,13 @@ const withDefaultGroups = (groups: LinkGroup[]): LinkGroup[] => {
 
 type SavedState = { activeWorkbook: string; linkGroups: LinkGroup[]; acknowledged: string[]; muted: InsightCategory[]; realism: boolean };
 
+/** The shipped default workbooks `workbook.reset` restores, and today's date for a backup's name. */
+export type ShippedDefaults = { dir: string; now: () => string };
+
+/** Whether `name` can name a workbook file: not empty, no path, no dotfile. */
+const safeName = (name: string): boolean =>
+  name !== '' && !name.includes('/') && !name.includes('\\') && !name.includes('..') && !name.startsWith('.');
+
 export type ApplyResult = { ok: true } | { ok: false; reason: 'invalid' };
 const OK: ApplyResult = { ok: true };
 const INVALID: ApplyResult = { ok: false, reason: 'invalid' };
@@ -39,6 +46,7 @@ export class UiState {
   private readonly ui: string;
   private readonly hub: TopicHub;
   private readonly log: Logger;
+  private readonly defaults: ShippedDefaults | undefined;
   /** SHA-256 of what was last written or read, per file path. */
   private readonly hashes = new Map<string, string>();
   private readonly watchers: FSWatcher[] = [];
@@ -57,15 +65,19 @@ export class UiState {
   private realism = false;
   private keys: Record<string, unknown> = {};
 
-  private constructor(ui: string, hub: TopicHub, log: Logger) {
+  private constructor(ui: string, hub: TopicHub, log: Logger, defaults: ShippedDefaults | undefined) {
     this.ui = ui;
     this.hub = hub;
     this.log = log;
+    this.defaults = defaults;
   }
 
-  /** Loads (or, on a first start, creates) the state in `ui`, publishes it and starts watching the files. */
-  static open(ui: string, hub: TopicHub, log: Logger): UiState {
-    const state = new UiState(ui, hub, log);
+  /**
+   * Loads (or, on a first start, creates) the state in `ui`, publishes it and starts watching the files. Without
+   * `defaults`, `workbook.reset` is invalid.
+   */
+  static open(ui: string, hub: TopicHub, log: Logger, defaults?: ShippedDefaults): UiState {
+    const state = new UiState(ui, hub, log, defaults);
     state.load();
     state.publishAll();
     state.startWatching();
@@ -79,6 +91,7 @@ export class UiState {
     switch (action.kind) {
       case 'workbook.open': return this.openWorkbook(action.name);
       case 'workbook.saveAs': return this.saveAs(action.name);
+      case 'workbook.reset': return this.reset(action.name);
       case 'workbook.updateWindow': {
         const windows = this.active.windows;
         const at = windows.findIndex((window) => window.id === action.window.id);
@@ -121,6 +134,9 @@ export class UiState {
       case 'calibration.choose':
       case 'calibration.prefer':
         // The calibration store's (C62a), not UI state.
+        return INVALID;
+      case 'session.end':
+        // The feed pipeline's (C59, SP4.3c Task 10b), not UI state.
         return INVALID;
       case 'drivers.add':
       case 'drivers.link':
@@ -177,7 +193,7 @@ export class UiState {
   }
 
   private saveAs(name: string): ApplyResult {
-    if (name === '' || name.includes('/') || name.includes('\\') || name.includes('..') || name.startsWith('.')) return INVALID;
+    if (!safeName(name)) return INVALID;
     this.flush();
     this.active = { ...this.active, name };
     this.error = undefined;
@@ -186,6 +202,31 @@ export class UiState {
     this.stateDirty = true;
     this.publishWorkbooks();
     this.scheduleSave();
+    return OK;
+  }
+
+  /** Replaces workbook `name` with its shipped default, keeping a different user file as a dated backup (spec §5.9). */
+  private reset(name: string): ApplyResult {
+    if (this.defaults === undefined || !safeName(name)) return INVALID;
+    const text = readText(join(this.defaults.dir, `${name}.json`));
+    const parsed = text === undefined ? undefined : this.parseWorkbook(name, text);
+    if (text === undefined || parsed === undefined || !parsed.ok) return INVALID;
+    // A pending edit is written first, so it is what the backup keeps; the reset then wins over it.
+    this.flush();
+    const path = workbookPath(this.ui, name);
+    try {
+      replaceKeepingBackup(path, text, this.defaults.now());
+    } catch (error) {
+      this.log.error({ err: error, path }, 'cannot reset the workbook');
+      return INVALID;
+    }
+    this.hashes.set(path, sha256(text));
+    if (name === this.active.name) {
+      this.active = parsed.workbook;
+      this.error = undefined;
+    }
+    this.names = workbookNames(join(this.ui, 'workbooks'));
+    this.publishWorkbooks();
     return OK;
   }
 

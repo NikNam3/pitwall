@@ -1,7 +1,7 @@
 // A car's status as car-status decided it (contract C17, C20, C43): the one place units read whether a car is in the
-// session or still competes, instead of `car.active` or the game's result status. They decide nothing again.
-import { carStatusSpans, known, unknown, type CarId, type Known } from '@pitwall/domain';
-import { openSpansOf, type ChangeTag, type EngineView } from '@pitwall/engine/readers';
+// session, instead of `car.active` or the game's result status. They decide nothing again.
+import { carStatusSpans, type CarId } from '@pitwall/domain';
+import type { ChangeTag, EngineView } from '@pitwall/engine/readers';
 import { openSpansByCar } from './behaviour.ts';
 
 /** A car's status: competing, retired, disqualified or absent. */
@@ -11,27 +11,17 @@ export type CarStatusKind = (typeof carStatusSpans.kinds)[number];
 export const CAR_STATUS_READS = 'spans:car-status' satisfies ChangeTag;
 
 /**
- * The kind of the car's open car-status span, known since the span started; `unknown('notReceived')` while car-status
- * has no span open for the car. Reads `openSpansOf` (`spans:car-status`, C41).
+ * The one in-session row set (C43, C44, SP4.3c O7): every car-status kind but `absent` is in the session and has an
+ * entry. A unit that reads car-status spreads these rows into its behaviour table's `car-status` part.
  */
-export function carStatusKind(view: EngineView, carId: CarId): Known<CarStatusKind> {
-  const span = openSpansOf(view, carStatusSpans.machine, carId)[0];
-  return span === undefined ? unknown('notReceived') : known(span.kind as CarStatusKind, span.start);
-}
+export const IN_SESSION_ROWS = {
+  competing: { inSession: true },
+  retired: { inSession: true },
+  disqualified: { inSession: true },
+  absent: { inSession: false },
+} as const satisfies Readonly<Record<CarStatusKind, { inSession: boolean }>>;
 
-/** The car is in the session: its status is known and not `absent` (as the engine's `carsInSessionOf` reads it). */
-export function inSession(view: EngineView, carId: CarId): boolean {
-  const kind = carStatusKind(view, carId);
-  return kind.known && kind.value !== 'absent';
-}
-
-/** The car still competes: its status is `competing`. */
-export function competing(view: EngineView, carId: CarId): boolean {
-  const kind = carStatusKind(view, carId);
-  return kind.known && kind.value === 'competing';
-}
-
-/** The cars in the session (`inSession`), by id ascending: car-status's open spans read once (`spans:car-status`, C41). */
+/** The cars in the session (any status but `absent`), by id ascending: car-status's open spans read once (`spans:car-status`, C41). */
 export function carsInSession(view: EngineView): CarId[] {
   const ids: CarId[] = [];
   for (const [id, spans] of openSpansByCar(view, carStatusSpans.machine)) {

@@ -30,18 +30,33 @@ const outlook = (forecast: ForecastSample[], config: Partial<typeof RAIN_OUTLOOK
 
 const AT_0_5_15 = [sample(0, 20), sample(5, 45), sample(15, 60)];
 
+// SP4.3c Task 14 (O3a): rain-outlook gains `samplesAhead` (the samples `weather` publishes; `weather`'s copy of the filter
+// is deleted, its rows 1 and 2 moved here as 7 and 8) and `maxChanceByLap`; rows 1–5 compare the fields they are about
+// (ported from whole-object equality to the wider output).
 describe('rain-outlook', () => {
-  it('1. no sample: firstRain notApplicable, withinHorizon false', () => {
-    expect(outlook([])).toEqual({ firstRain: unknown('notApplicable'), withinHorizon: false });
+  it('1. no sample: firstRain notApplicable, withinHorizon false, no sample ahead', () => {
+    expect(outlook([])).toMatchObject({ firstRain: unknown('notApplicable'), withinHorizon: false, samplesAhead: [] });
   });
 
   it('2. samples at 0 (20 %), 5 (45 %), 15 (60 %) min: firstRain is the 5-min sample (index 1), within the horizon', () => {
-    expect(outlook(AT_0_5_15)).toEqual({ firstRain: { known: true, at: 0, value: { index: 1, offsetMin: 5, rainPct: 45 } }, withinHorizon: true });
+    expect(outlook(AT_0_5_15)).toMatchObject({ firstRain: { known: true, at: 0, value: { index: 1, offsetMin: 5, rainPct: 45 } }, withinHorizon: true });
   });
 
   it('3. the same samples out of order, plus one at -5 min with 90 %: the same answer (sorted by offsetMin, offsetMin < 0 ignored)', () => {
     const shuffled = [sample(15, 60), sample(-5, 90), sample(5, 45), sample(0, 20)];
-    expect(outlook(shuffled)).toEqual({ firstRain: { known: true, at: 0, value: { index: 1, offsetMin: 5, rainPct: 45 } }, withinHorizon: true });
+    expect(outlook(shuffled)).toMatchObject({ firstRain: { known: true, at: 0, value: { index: 1, offsetMin: 5, rainPct: 45 } }, withinHorizon: true });
+  });
+
+  it('7. samplesAhead: the samples out of order come sorted by offsetMin (moved from weather row 1)', () => {
+    const out = outlook([sample(15, 10), sample(0, 0), sample(30, 20), sample(5, 5)]) as RainOutlook & { samplesAhead: ForecastSample[] };
+    expect(out.samplesAhead).toEqual([sample(0, 0), sample(5, 5), sample(15, 10), sample(30, 20)]);
+  });
+
+  it('8. samplesAhead: a sample with offsetMin < 0 is left out (R6; moved from weather row 2); firstRain.index is into them', () => {
+    const out = outlook([sample(5, 45), sample(-5, 90), sample(0, 0)]) as RainOutlook & { samplesAhead: ForecastSample[] };
+    expect(out.samplesAhead).toEqual([sample(0, 0), sample(5, 45)]);
+    expect(out.firstRain).toMatchObject({ known: true, value: { index: 1 } });
+    expect(out.firstRain.known && out.samplesAhead[out.firstRain.value.index]).toEqual(sample(5, 45));
   });
 
   it('4. first rain at 15 min: withinHorizon false by default (10 min); with horizonMin 20 it is true', () => {
@@ -54,8 +69,8 @@ describe('rain-outlook', () => {
 
   it('5. a sample at exactly rainPct (40 %) counts; 39 % does not', () => {
     expect(RAIN_OUTLOOK_CONFIG.defaults.rainPct).toBe(40);
-    expect(outlook([sample(5, 40)])).toEqual({ firstRain: { known: true, at: 0, value: { index: 0, offsetMin: 5, rainPct: 40 } }, withinHorizon: true });
-    expect(outlook([sample(5, 39)])).toEqual({ firstRain: unknown('notApplicable'), withinHorizon: false });
+    expect(outlook([sample(5, 40)])).toMatchObject({ firstRain: { known: true, at: 0, value: { index: 0, offsetMin: 5, rainPct: 40 } }, withinHorizon: true });
+    expect(outlook([sample(5, 39)])).toMatchObject({ firstRain: unknown('notApplicable'), withinHorizon: false });
   });
 
   it('6. guarded view: reads only session', () => {

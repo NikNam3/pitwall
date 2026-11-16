@@ -8,6 +8,7 @@ export * from './config.ts';
 export { raceInteractionAsOf } from './asof.ts';
 export { excludedLap, followingEpisodes, type EpisodeZone, type FollowingEpisode, type LapFilterCtx } from './episodes.ts';
 export { fitPassCurve } from './fit.ts';
+export { passChance, sessionCurve, type PassContext } from './pass-chance.ts';
 export { passLevelKey, passSlopeKey, RACE_INTERACTION_PRIORS } from './priors.ts';
 
 /** The calculator id. */

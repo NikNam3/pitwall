@@ -63,8 +63,9 @@ vi.mock('../../src/strategy-dp/index.ts', async (importOriginal) => {
   calls.dp = real;
   return {
     ...real,
-    solveDp: (input: DpInput) => {
-      const solution = real.solveDp(input);
+    // SP4.3c Task 19: the call solves the first weather world (`solveWorld(input, 0)`) and queries it
+    solveWorld: (input: DpInput, world: number) => {
+      const solution = real.solveWorld(input, world);
       calls.solves.push({ input, solution });
       return solution;
     },
@@ -75,6 +76,18 @@ vi.mock('../../src/strategy-dp/index.ts', async (importOriginal) => {
     },
   };
 });
+
+/**
+ * Car `car`'s stay-out plan of the call under `condition` at `lap` (its recorded `bestWith` noStopThrough query): the
+ * DP's triggers a call carries are each plan's own (SP4.3c Task 19), so the stay-out row's are this plan's.
+ */
+function stayPlanOf(car: CarId, lap: number, condition: 'sc' | 'vsc'): DpPlan {
+  const { solution } = solveOf(car);
+  const found = calls.bests.filter((b) => b.solution === solution && 'noStopThrough' in b.first && b.first.noStopThrough === lap && b.under?.condition === condition);
+  expect(found, `car ${car}: the stay-out query under ${condition}`).toHaveLength(1);
+  expect(found[0]!.plan, `car ${car}: a stay-out plan under ${condition}`).not.toBeNull();
+  return found[0]!.plan!;
+}
 
 vi.mock('../../src/race-monte-carlo/index.ts', async (importOriginal) => {
   const real = await importOriginal<typeof mcModule>();
@@ -227,8 +240,9 @@ describe('sc-call: the job', () => {
     let some = false;
     for (const car of OURS) {
       const call = callOf(out, car);
-      const thresholds = calls.dp.dpResult(solveOf(car).solution).thresholds;
       for (const condition of ['sc', 'vsc'] as const) {
+        // SP4.3c Task 19: the stay-out plan's own triggers (the next stop after staying out)
+        const thresholds = stayPlanOf(car, call.lap, condition).triggers;
         const t = thresholds.find((x): x is Extract<Trigger, { kind: 'neutralised' }> => x.kind === 'neutralised' && x.condition === condition);
         const range = rowOf(call, condition).range;
         if (t === undefined) {
@@ -296,39 +310,54 @@ describe('sc-call: the job', () => {
   });
 
   // row 5
-  it("rejoin position, loss and its source equal rejoin's and the 4.2 values (ported rows)", () => {
-    const INSUFFICIENT = unknown('insufficientData');
+  // SP4.3c Task 17 (O8, B8): one row, one model. The rejoin position is the box run's simulated rejoin (its median over
+  // the scenarios that stopped), as the row's ePosDelta and pGain come from those runs; `rejoin`'s position is mixed in
+  // no more. The loss and its source stay `rejoin`'s (the 4.2 values, ported).
+  it("rejoin position: the box run's simulated rejoin median, not rejoin's; loss and its source equal rejoin's and the 4.2 values (B8)", () => {
     const NOT_RECEIVED = unknown('notReceived');
     const RIVAL = 0 as CarId;
     const rejoin = rejoinOutput({
       [PLAYER]: rejoinOf(PLAYER),
-      [TEAMMATE]: rejoinOf(TEAMMATE, { ...POSITIONS, sc: INSUFFICIENT }, { ...LOSSES, vsc: NOT_RECEIVED }),
+      [TEAMMATE]: rejoinOf(TEAMMATE, POSITIONS, { ...LOSSES, vsc: NOT_RECEIVED }),
       // rejoin never holds a rival; if it does, the rival stays absent
       [RIVAL]: rejoinOf(RIVAL),
     });
     const out = runOn(green(LAP, { rejoin }));
     expect(Object.hasOwn(out, RIVAL)).toBe(false);
 
-    // 4.2 row 1: [sc: 9, 9 800, default], [vsc: 10, 13 100, calibration]
+    /** The middles of the box run's rejoin places (scenarios with a stop). */
+    const middlesOf = (car: CarId, condition: 'sc' | 'vsc', lap: number): [number, number] => {
+      const places = Array.from(pairOf(scoreUnder(car, condition), lap).boxOut.rejoin)
+        .filter((p) => p > 0)
+        .sort((a, b) => a - b);
+      expect(places.length, `car ${car} ${condition}: the box run stops`).toBeGreaterThan(0);
+      return [places[Math.floor((places.length - 1) / 2)]!, places[Math.floor(places.length / 2)]!];
+    };
+    for (const car of OURS) {
+      const call = callOf(out, car);
+      for (const condition of ['sc', 'vsc'] as const) {
+        const got = valueOf(rowOf(call, condition).rejoinPosition, `car ${car} ${condition} rejoinPosition`);
+        const [lo, hi] = middlesOf(car, condition, call.lap);
+        expect(got, `car ${car} ${condition}`).toBeGreaterThanOrEqual(lo);
+        expect(got, `car ${car} ${condition}`).toBeLessThanOrEqual(hi);
+      }
+    }
+
+    // 4.2 row 1: [sc: 9 800, default], [vsc: 13 100, calibration]
     const ours = callOf(out, PLAYER);
-    expect(rowOf(ours, 'sc').rejoinPosition).toMatchObject({ known: true, value: 9 });
     expect(rowOf(ours, 'sc').lossMs).toMatchObject({ known: true, value: 9_800 });
     expect(rowOf(ours, 'sc').lossSource).toEqual(DEFAULT_SOURCE);
-    expect(rowOf(ours, 'vsc').rejoinPosition).toMatchObject({ known: true, value: 10 });
     expect(rowOf(ours, 'vsc').lossMs).toMatchObject({ known: true, value: 13_100 });
     expect(rowOf(ours, 'vsc').lossSource).toEqual(CALIBRATION_SOURCE);
 
-    // 4.2: an unknown rejoin position and an unknown loss pass through with their reasons
+    // 4.2: an unknown loss passes through with its reason
     const mate = callOf(out, TEAMMATE);
-    expect(rowOf(mate, 'sc').rejoinPosition).toEqual(INSUFFICIENT);
     expect(rowOf(mate, 'sc').lossMs).toMatchObject({ known: true, value: 9_800 });
-    expect(rowOf(mate, 'vsc').rejoinPosition).toMatchObject({ known: true, value: 10 });
     expect(rowOf(mate, 'vsc').lossMs).toEqual(NOT_RECEIVED);
     expect(rowOf(mate, 'vsc').lossSource).toEqual(CALIBRATION_SOURCE);
 
-    // under an SC out, the SC row's too
+    // under an SC out, the SC row's loss and source too
     const sc = callOf(runOn(scViewAt(SC_OUT(), 6, { rejoin })), PLAYER);
-    expect(rowOf(sc, 'sc').rejoinPosition).toMatchObject({ known: true, value: 9 });
     expect(rowOf(sc, 'sc').lossMs).toMatchObject({ known: true, value: 9_800 });
     expect(rowOf(sc, 'sc').lossSource).toEqual(DEFAULT_SOURCE);
   });
@@ -372,7 +401,6 @@ describe('sc-call: the job', () => {
     for (const car of OURS) {
       const call = callOf(out, car);
       const { solution } = solveOf(car);
-      const thresholds = calls.dp.dpResult(solution).thresholds;
       for (const condition of ['sc', 'vsc'] as const) {
         const remaining = Float64Array.from(hazard.durationLaps[condition]);
         // the query: box at the start lap, the DP picks the compound, from the state "that neutralisation out now"
@@ -385,7 +413,8 @@ describe('sc-call: the job', () => {
         const plan = calls.dp.bestWith(solution, { stopLap: call.lap, compound: 'best' }, { condition, remaining });
         expect(plan, `car ${car}: a box plan under ${condition}`).not.toBeNull();
         const { box } = pairOf(scoreUnder(car, condition), call.lap);
-        expect(box.policy).toEqual(policyOf(plan!, thresholds));
+        // SP4.3c Task 19: the plan with its own triggers
+        expect(box.policy).toEqual(policyOf(plan!));
         expect(box.policy.stops[0]?.lap).toBe(call.lap);
       }
     }
@@ -420,8 +449,9 @@ describe('sc-call: the job', () => {
     let some = false;
     for (const car of OURS) {
       const call = callOf(out, car);
-      const thresholds = calls.dp.dpResult(solveOf(car).solution).thresholds;
       for (const condition of ['sc', 'vsc'] as const) {
+        // SP4.3c Task 19: the stay-out plan's own triggers
+        const thresholds = stayPlanOf(car, call.lap, condition).triggers;
         const score = scoreUnder(car, condition);
         const { stay } = pairOf(score, call.lap);
         // the DP's thresholds kept, plus the one stay-out trigger covering only the forced neutralisation

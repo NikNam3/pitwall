@@ -8,8 +8,21 @@ import { RIVAL_STOPS, type RivalStopsOutput } from './index.ts';
 export const rivalStopsCalculator: QuickCalculator<RivalStopsOutput> = {
   id: RIVAL_STOPS,
   kind: 'quick',
-  // `session`, `identity` and `tyres`: what `asOfNow` reads for the as-of view's `fixed` (the race's laps, the cars' sets)
-  reads: ['stints', 'pitStops', 'laps', 'spans:compound-rule', 'spans:car-driver', CAR_STATUS_READS, 'spans:weekend-phase', 'session', 'identity', 'tyres', { calculator: 'tyre-life' }],
+  // `session`, `identity` and `tyres`: what `asOfNow` reads for the as-of view's `fixed` (the race's laps, our cars)
+  reads: [
+    'stints',
+    'pitStops',
+    'laps',
+    'spans:compound-rule',
+    'spans:car-driver',
+    CAR_STATUS_READS,
+    'spans:weekend-phase',
+    'session',
+    'identity',
+    'tyres',
+    { calculator: 'tyre-life' },
+    { calculator: 'tyre-model' },
+  ],
   cadence: 'lapCompleted',
   compute: (view: EngineView): RivalStopsOutput => rivalStopsAsOf(asOfNow(view)),
 };

@@ -9,11 +9,18 @@ const c = (wearPct: number, rate: number, laps: number) => ({
   ratePctPerLap: known(rate, at),
   lapsToLimit: known(laps, at),
 });
-const base = (over: Partial<TyreWear['corners']> = {}, life: TyreWear['gameLifeSpanLaps'] = known(22, at)): TyreWear => ({
+/** The marker `tyre-wear` judged per corner (B1): the display draws it as given. */
+const MARKERS: TyreWear['wearAtLifeSpanPct'] = { fl: known(44, at), fr: known(37.4, at), rl: known(26.4, at), rr: known(28.6, at) };
+const base = (
+  over: Partial<TyreWear['corners']> = {},
+  life: TyreWear['gameLifeSpanLaps'] = known(22, at),
+  markers: Partial<TyreWear['wearAtLifeSpanPct']> = {},
+): TyreWear => ({
   corners: { fl: c(18, 2, 37.9), fr: c(21, 1.7, 29), rl: c(15, 1.2, 46), rr: c(17, 1.3, 41), ...over },
   limitPct: 70,
   warnLaps: 3,
   gameLifeSpanLaps: life,
+  wearAtLifeSpanPct: { ...MARKERS, ...markers },
 });
 
 describe('barColumns', () => {
@@ -62,21 +69,36 @@ describe('tyreLifeRows', () => {
     expect(fl.bar.text[14]).toBe('|');
   });
 
-  it("puts the game's life span as `:` at the wear the corner's rate reaches by then (rate x life span laps)", () => {
-    const fl = tyreLifeRows(base(), 20)[0]!; // 2 %/lap x 22 laps = 44 %
+  it("puts the game's life span as `:` at tyre-wear's wearAtLifeSpanPct", () => {
+    const fl = tyreLifeRows(base(), 20)[0]!; // 44 % of 20 cells
     expect(fl.bar.kinds[8]).toBe('marker');
     expect(fl.bar.text[8]).toBe(':');
     expect(fl.bar.kinds.filter((k) => k === 'marker')).toHaveLength(1);
   });
 
-  it('draws no marker when the game gives no life span', () => {
-    const fl = tyreLifeRows(base({}, unknown('notReceived')), 20)[0]!;
+  // B1 (C65): the display does no arithmetic; the marker is the topic's field, not the rate times the life span.
+  it('the marker is the input field as given, never computed from the rate and the life span', () => {
+    const wear = base({}, known(22, at), { fl: known(30, at) }); // 2 %/lap x 22 laps would be 44 %: the field says 30
+    const rows = tyreLifeRows(wear, 20);
+    for (const row of rows) expect(row.barInput.marker).toEqual(wear.wearAtLifeSpanPct[row.corner]);
+    expect(rows[0]!.bar.kinds[6]).toBe('marker'); // 30 % of 20 cells
+    expect(rows[0]!.bar.kinds[8]).not.toBe('marker');
+    // A known marker while the game gives no life span: still drawn, the display judges nothing.
+    expect(tyreLifeRows(base({}, unknown('notReceived')), 20)[0]!.bar.kinds[8]).toBe('marker');
+  });
+
+  it('draws no marker when tyre-wear gives none', () => {
+    const fl = tyreLifeRows(base({}, unknown('notReceived'), { fl: unknown('notReceived') }), 20)[0]!;
     expect(fl.bar.kinds).not.toContain('marker');
   });
 
   it('leaves the bar tail empty when the rate is unknown: no marker, only the limit past the fill', () => {
     const rows = tyreLifeRows(
-      base({ fl: { wearPct: known(18, at), ratePctPerLap: unknown('insufficientData'), lapsToLimit: unknown('insufficientData') } }),
+      base(
+        { fl: { wearPct: known(18, at), ratePctPerLap: unknown('insufficientData'), lapsToLimit: unknown('insufficientData') } },
+        known(22, at),
+        { fl: unknown('insufficientData') },
+      ),
       20,
     );
     const fl = rows[0]!;
@@ -94,7 +116,7 @@ describe('tyreLifeRows', () => {
 
   it('shows an unknown wear as an empty cell with its reason and an unfilled bar', () => {
     const hidden = { wearPct: unknown('realism'), ratePctPerLap: unknown('realism'), lapsToLimit: unknown('realism') };
-    const fl = tyreLifeRows(base({ fl: hidden }), 20)[0]!;
+    const fl = tyreLifeRows(base({ fl: hidden }, known(22, at), { fl: unknown('realism') }), 20)[0]!;
     expect(fl.wearText).toBe('');
     expect(fl.rateText).toBe('');
     expect(fl.lapsText).toBe('');

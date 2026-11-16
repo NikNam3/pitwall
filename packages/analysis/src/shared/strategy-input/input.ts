@@ -3,12 +3,13 @@
 // config from the view; structured-cloneable (C51). `strategy` and the calls read the same input (C43).
 import { latestPlan, unknown, type CarId, type DecisionRecord, type Known, type Policy, type RaceHazard, type StartingPoint } from '@pitwall/domain';
 import { asOfNow, runAsOf, type Dependency, type EngineView } from '@pitwall/engine/readers';
+import { GAPS } from '../../gaps/index.ts';
 import { RACE_HAZARD } from '../../race-hazard/id.ts';
 import { STRATEGY_BEHAVIOUR } from '../../strategy/behaviour.ts';
 import { behaviourFor } from '../behaviour.ts';
 import { CAR_STATUS_READS } from '../car-status.ts';
 import { buildStartingPoint, FORECAST_UNITS } from '../forecast-field/index.ts';
-import { ourCars } from '../our-cars.ts';
+import { ourCars } from '@pitwall/domain';
 
 /**
  * The input: the starting point and hazard as of the trigger; our cars, those of them planned (`planned`, by
@@ -31,6 +32,8 @@ const OWN_READS: Dependency[] = [
   'laps', 'stints', 'pitStops', 'miniSectors', 'events', 'decisions', 'drivers', 'session', 'identity', 'tyres', 'timing',
   'spans:session-phase-race', 'spans:car-activity-race', 'spans:car-driver', 'spans:compound-rule', 'spans:weekend-phase', CAR_STATUS_READS,
   { calculator: 'race-hazard' },
+  // the present order and gaps are `gaps`' (SP4.3c Task 13, O10): passed to forecast-field
+  { calculator: GAPS },
 ];
 
 /** What `strategyInputFrom` reads (C41): its own reads and those of `forecast-field`'s estimation units, which run inside it. */
@@ -49,7 +52,11 @@ function startOf(view: EngineView): Known<StartingPoint> {
   if (!track.known || !track.value.brakingZones.known) return unknown('notApplicable');
   // the estimation units read no output from the view (they run their upstream inside): none is copied (C41)
   const asOf = { ...asOfNow(view), outputs: new Map() };
-  return buildStartingPoint(asOf, runAsOf(FORECAST_UNITS, asOf));
+  const outputs = new Map(runAsOf(FORECAST_UNITS, asOf));
+  // a live build: the order and the gaps now are `gaps`' (O10)
+  const gaps = view.outputs.get(GAPS);
+  if (gaps !== undefined) outputs.set(GAPS, gaps);
+  return buildStartingPoint(asOf, outputs);
 }
 
 /** The strategy input from the view (≤ 20 ms, spec §8.1). */

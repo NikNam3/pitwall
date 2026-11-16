@@ -1,12 +1,17 @@
 // `session-remaining` (spec 4, A.2): laps left in a race, time left in a timed session, by the weekend phase (C14) and,
 // in a race, the leader's activity (C44: one test per row of the behaviour table). The live session stays the builder's
-// race: the unit takes the phase from the situation, not from `session.kind`.
-import { carId, unknown, type CarState, type OpenSpan, type WeekendPhase } from '@pitwall/domain';
+// race: the unit takes the phase from the situation, not from `session.kind`. SP4.3c Task 6 (O10, C43): the leader and
+// its progress are `gaps`' (`intervals[0]`, `leaderProgress`), never the live timing; the views carry `gaps`' output
+// built from their cars (the leader at position 1, its progress its lap and lap distance over 5000 m).
+import { carId, known, unknown, type CarId, type CarState, type OpenSpan, type WeekendPhase } from '@pitwall/domain';
+import type { EngineView } from '@pitwall/engine/readers';
 import { guardedView } from '../../../engine/test/support/scheduler.ts';
 import { describe, expect, it } from 'vitest';
 import { carState, engineView } from '../../../../test-support/builders/index.ts';
 import { sessionRemainingCalculator } from '../../src/session-remaining/calculator.ts';
 import { SESSION_REMAINING } from '../../src/session-remaining/index.ts';
+import { GAPS } from '../../src/gaps/index.ts';
+import { gapsOutput, orderOf, withGaps } from '../gaps/output.ts';
 
 const RACE: WeekendPhase = { kind: 'race', format: 'grandPrix' };
 const PRACTICE: WeekendPhase = { kind: 'practice', format: 'practice', segment: undefined };
@@ -25,9 +30,19 @@ const span = (machine: string, kind: string, car?: number, detail?: unknown): Op
 
 const leader = (lap: number, lapDistanceM: number): CarState => carState({ id: 0 as CarState['id'], timing: { position: 1, lap, lapDistanceM } });
 
-/** A view in `phase` whose leader (car 0) has this race activity open (none for another phase). */
-const view = (phase: WeekendPhase, cars: CarState[], session: Parameters<typeof engineView>[0] extends infer O ? (O extends { session?: infer S } ? S : never) : never, activity?: string) =>
-  engineView({
+/** `gaps`' output for these cars: the order by position, the leader's progress its lap and lap distance over 5000 m. */
+const gapsFor = (cars: readonly CarState[]) => {
+  const order = [...cars].sort((a, b) => a.timing.position - b.timing.position);
+  const first = order[0];
+  return gapsOutput({
+    intervals: orderOf(order.map((c) => c.id)),
+    leaderProgress: first === undefined ? unknown('notReceived') : known({ lap: first.timing.lap, fraction: first.timing.lapDistanceM / 5000 }, 0),
+  });
+};
+
+/** A view in `phase` whose leader (car 0) has this race activity open (none for another phase), with `gaps`' output for its cars. */
+const view = (phase: WeekendPhase, cars: CarState[], session: Parameters<typeof engineView>[0] extends infer O ? (O extends { session?: infer S } ? S : never) : never, activity?: string): EngineView =>
+  withGaps(engineView({
     cars,
     session,
     situation: {
@@ -37,10 +52,10 @@ const view = (phase: WeekendPhase, cars: CarState[], session: Parameters<typeof 
         ...(activity !== undefined && { 'car-activity-race': [span('car-activity-race', activity, 0)] }),
       },
     },
-  });
+  }), gapsFor(cars));
 
 /** `compute` through the guarded view: a read the calculator does not declare throws (C41). */
-const compute = (v: ReturnType<typeof view>) => sessionRemainingCalculator.compute(guardedView(v, sessionRemainingCalculator.reads, { unit: 'session-remaining' }));
+const compute = (v: EngineView) => sessionRemainingCalculator.compute(guardedView(v, sessionRemainingCalculator.reads, { unit: 'session-remaining' }));
 
 const RACE_SESSION = { totalLaps: 50, trackLengthM: 5000 } as const;
 
@@ -48,7 +63,33 @@ describe('session-remaining', () => {
   it('has the id session-remaining and reads the weekend phase and the leader\'s race activity (C41)', () => {
     expect(sessionRemainingCalculator.id).toBe(SESSION_REMAINING);
     expect(sessionRemainingCalculator.id).toBe('session-remaining');
-    expect(sessionRemainingCalculator.reads).toEqual(expect.arrayContaining(['session', 'timing', 'spans:weekend-phase', 'spans:car-activity-race']));
+    expect(sessionRemainingCalculator.reads).toEqual(expect.arrayContaining(['session', 'spans:weekend-phase', 'spans:car-activity-race', { calculator: GAPS }]));
+  });
+
+  // SP4.3c Task 6 (O10, C43): one owner of the leader's progress now
+  describe("the leader's progress is gaps' (leaderProgress)", () => {
+    it('lapsLeft is totalLaps minus the leader progress, not the live timing: lap 21 half done of 50 is 29.5', () => {
+      const v = withGaps(view(RACE, [leader(20, 2000)], RACE_SESSION, 'racingLap'), gapsOutput({ intervals: orderOf([carId(0)]), leaderProgress: known({ lap: 21, fraction: 0.5 }, 0) }));
+      const out = compute(v);
+      expect(out.lapsLeft.known && out.lapsLeft.value).toBeCloseTo(29.5, 6);
+    });
+
+    it('a leader progress not received yet gives lapsLeft notReceived, not a lap count from the live timing (C3)', () => {
+      const v = withGaps(view(RACE, [leader(20, 2000)], RACE_SESSION, 'racingLap'), gapsOutput({ intervals: orderOf([carId(0)]) }));
+      expect(compute(v).lapsLeft).toEqual(unknown('notReceived'));
+    });
+
+    it("the leader whose race activity counts is gaps' order's first car", () => {
+      // the live timing says car 0 leads; gaps' order says car 1 does, and car 1 has finished: the race is over
+      const other = carState({ id: 1 as CarState['id'], timing: { position: 2, lap: 50, lapDistanceM: 4900 } });
+      const base = engineView({
+        cars: [leader(50, 4000), other],
+        session: RACE_SESSION,
+        situation: { weekendPhase: RACE, byMachine: { 'weekend-phase': [span('weekend-phase', 'race')], 'car-activity-race': [span('car-activity-race', 'racingLap', 0), span('car-activity-race', 'finished', 1)] } },
+      });
+      const v = withGaps(base, gapsOutput({ intervals: orderOf([carId(1), carId(0)] as CarId[]), leaderProgress: known({ lap: 51, fraction: 0 }, 0) }));
+      expect(compute(v).lapsLeft).toMatchObject({ known: true, value: 0 });
+    });
   });
 
   describe('row weekend-phase race', () => {
@@ -90,11 +131,12 @@ describe('session-remaining', () => {
 
     it('only the leader\'s activity counts: another car finished does not end the race', () => {
       const other = carState({ id: 1 as CarState['id'], timing: { position: 2, lap: 50, lapDistanceM: 4000 } });
-      const v = engineView({
-        cars: [leader(49, 2000), other],
+      const cars = [leader(49, 2000), other];
+      const v = withGaps(engineView({
+        cars,
         session: RACE_SESSION,
         situation: { weekendPhase: RACE, byMachine: { 'weekend-phase': [span('weekend-phase', 'race')], 'car-activity-race': [span('car-activity-race', 'racingLap', 0), span('car-activity-race', 'finished', 1)] } },
-      });
+      }), gapsFor(cars));
       expect(compute(v).lapsLeft).toMatchObject({ known: true });
       expect((compute(v).lapsLeft as { value: number }).value).toBeGreaterThan(0);
     });

@@ -1,7 +1,7 @@
 <script lang="ts">
   // Session name (by the weekend phase), track, the player's lap and the session clock, grey: nothing here is a warning.
   import * as text from '../../../kit/text.ts';
-  import { formatCount, formatSessionClock, formatSessionKind, formatTrack } from '../../../kit/values/format.ts';
+  import { formatCount, formatSessionClock, formatTrack } from '../../../kit/values/format.ts';
   import { role } from '../../../theme/index.ts';
   import type { TopBarModel } from '../model.svelte.ts';
   import { sessionOf } from '../session-presentation.ts';
@@ -16,7 +16,7 @@
 </script>
 
 {#if s !== undefined}
-  {#if shown?.name !== undefined}<span style:color={role('text')}>{formatSessionKind(shown.name)}</span>{/if}
+  {#if shown?.name !== undefined}<span style:color={role('text')}>{shown.name}</span>{/if}
   <span>{formatTrack(s.trackId)}</span>
   {#if lap === undefined}
     <span>{text.topBar.laps(formatCount(s.totalLaps))}</span>

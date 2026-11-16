@@ -22,6 +22,8 @@ export type CommandContext = {
   sendReplay: (control: ReplayControl) => void;
   open: (overlay: ShellOverlay) => void;
   workbookNames: () => readonly string[];
+  /** The name of the workbook the bridge publishes as active; without it, or before one is published, `workbook.reset` does nothing. */
+  activeWorkbook?: () => string | undefined;
   groups: () => readonly LinkGroup[];
   settings: () => Pick<UiSettings, 'realismNextSession'> | undefined;
   /** This window's font size in px. */
@@ -87,6 +89,16 @@ export function defaultCommands(ctx: CommandContext): Command[] {
     })),
     { id: 'workbook.pick', title: t.workbookPick, group: g.workbooks, run: () => ctx.open({ kind: 'workbooks' }) },
     { id: 'workbook.saveAs', title: t.workbookSaveAs, group: g.workbooks, run: () => ctx.open({ kind: 'saveAs' }) },
+    {
+      // The bridge resets the file and publishes the default; the window keeps no copy (C73).
+      id: 'workbook.reset',
+      title: t.workbookReset,
+      group: g.workbooks,
+      run: () => {
+        const name = ctx.activeWorkbook?.();
+        if (name !== undefined) ctx.send({ kind: 'workbook.reset', name });
+      },
+    },
     {
       id: 'alerts.ackAll',
       title: t.alertsAckAll,
@@ -202,6 +214,19 @@ export function planCommands(
       : [{ id: planCommitId(carId), title: t.planCommit(carId), group: g, run: () => ctx.send({ kind: 'plan.commit', feedId: ctx.feedId, carId, policy }) }]),
     { id: planClearId(carId), title: t.planClear(carId), group: g, run: () => ctx.send({ kind: 'plan.clear', feedId: ctx.feedId, carId }) },
   ]);
+}
+
+/**
+ * `session.end` (C59, C72): ends the recording of the window's feed's session now; it sends `session.end` for the feed.
+ * The window keeps no copy (C73): the session ends when the bridge ends it.
+ */
+export function sessionEndCommand(ctx: Pick<CommandContext, 'send'> & { feedId: FeedId }): Command {
+  return {
+    id: 'session.end',
+    title: text.commandTitles.sessionEnd,
+    group: text.commandGroups.session,
+    run: () => ctx.send({ kind: 'session.end', feedId: ctx.feedId }),
+  };
 }
 
 /** `layout.edit.toggle`: turns the window's edit mode (window-local, C73) on or off. */

@@ -123,9 +123,11 @@ const weightOf = (ctx: ProfileCtx): number => Number(ctx.config['fake']?.['weigh
 /**
  * One unit `fake` with two profile entries: `fake.lapCount` (the human laps times the config's `fake.weight`, range
  * [0, 10 000]) and `fake.meanLapMs` (their mean lap time, range [60 000, 200 000]). The entries judge which laps count
- * (from `humanSpans`), not the store. Every aggregate call's sessions are recorded.
+ * (from `humanSpans`), not the store. Every aggregate call's sessions are recorded. The unit declares its profile
+ * `samples` (SP4.3c Task 8, B2): a session's human laps times `o.samplesPerLap` (default 1), the number the bridge shows
+ * as the session's laps; the bridge counts no lap itself (C26, C28, C43).
  */
-function fakeFeatures(o: { countVersion?: number } = {}) {
+function fakeFeatures(o: { countVersion?: number; samplesPerLap?: number } = {}) {
   const calls = { count: [] as StoredDriverSession[][], mean: [] as StoredDriverSession[][] };
   const decl = defineProfiles('fake', {
     entries: {
@@ -147,6 +149,7 @@ function fakeFeatures(o: { countVersion?: number } = {}) {
         },
       },
     },
+    samples: (session: StoredDriverSession) => humanLaps(session).length * (o.samplesPerLap ?? 1),
   });
   const features: Feature[] = [{ name: 'fake', calculators: [], topics: [], profiles: [decl] }];
   return { features, calls };
@@ -671,6 +674,25 @@ describe('ProfileStore: a person\'s linked sessions (SP4.3b2 Task 10)', () => {
     // A person without a link has no sessions, and keeps nothing.
     t.ok({ kind: 'drivers.add', person: 'ben', displayName: 'Ben' });
     expect(personOf(t, 'ben')).toMatchObject({ sessions: [], kept: { sessions: 0, laps: 0 } });
+  });
+
+  // SP4.3c Task 8, B2 (C26, C28, C43, C62c): a linked session's laps are the unit's declared `samples`; the bridge judges
+  // no lap's membership in a human span itself, it only shows (and sums, for `kept`) the declared number.
+  it('a linked session`s laps are the units` declared samples, not a count of the bridge`s', () => {
+    const s1 = driverSession('1', { startedAt: day(1), slots: [HOST, anna(2)] });
+    const s2 = driverSession('2', { startedAt: day(2), slots: [HOST, anna(2, { laps: 4, driver: { humanUntilLap: 3 } })] });
+    // The unit counts each human lap ten times: the published laps follow it, not the 5 and 3 human laps.
+    const t = setup({ sessions: [s1, s2], features: fakeFeatures({ samplesPerLap: 10 }) });
+    t.addAndLink('anna', 'Anna', s1, 2);
+    expect(sessionsOf(t, 'anna').map((s) => [s.session.sessionUid, s.laps])).toEqual([['2', 30], ['1', 50]]);
+    expect(personOf(t, 'anna')?.kept).toEqual({ sessions: 2, laps: 80 });
+    t.ok({ kind: 'drivers.exclude', person: 'anna', session: ref(s2) });
+    expect(personOf(t, 'anna')?.kept).toEqual({ sessions: 1, laps: 50 });
+  });
+
+  it('the bridge keeps no lap count of its own: `humanLapCount` is gone from drivers/links.ts', async () => {
+    const links: Record<string, unknown> = await import('../../src/drivers/links.ts');
+    expect(links['humanLapCount']).toBeUndefined();
   });
 
   // Row 5 (C62c, C73): `drivers.include` removes the exclusion; an unknown person or session is rejected, never stored.

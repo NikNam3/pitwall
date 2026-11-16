@@ -1,15 +1,18 @@
-// `bestWith` (SP4.3b2 Task 5, spec §6, §9): a query of one solve's table, never a new solve. The best closed-loop play
-// to the flag whose first stop is forced: the car stays out on its set up to the forced lap, over every neutralisation
-// those laps may bring, then boxes at its end onto the forced compound (`'best'`: per state the child the table values
-// best) or, for `noStopThrough`, plays free from the lap after it; the rest of the race is the table's values from
-// there. With `under`, the start lap is neutralised by it with its laps left drawn from `remaining` (as `input.active`),
-// so a stop at its end costs that condition's loss. Pure (C2); `null` where no such play keeps the rule and the sets (C3).
+// `bestWith` (SP4.3b2 Task 5, spec §6, §9): a query of one world's solve (`solveWorld`), never a new solve. The best
+// closed-loop play to the flag whose first stop is forced: the car stays out on its set up to the forced lap, over every
+// neutralisation those laps may bring, then boxes at its end onto the forced compound (`'best'`: per state the child the
+// table values best) or, for `noStopThrough`, plays free from the lap after it; the rest of the race is the table's
+// values from there. With `under`, the start lap is neutralised by it with its laps left drawn from `remaining` (as
+// `input.active`), so a stop at its end costs that condition's loss. The plan is tagged with the solve's world and
+// carries its own neutralised triggers along its stops (SP4.3c Task 19; the best plan's damage, degradation-off and rain
+// thresholds are `solveDp`'s, not a query's). Pure (C2); `null` where no such play keeps the rule, the sets and the 70 %
+// limit (C3).
 //
 // The forced laps walk a few neutralisation states forward (any laps left); the table is read at the first lap the play
 // is free, which must lie within the solved layout: `under.remaining` no longer than the hazard's duration pmf of its
 // condition (or `input.active`'s) plus the forced laps. A longer one is a caller's bug.
-import { COND_SC, COND_VSC, NS_GREEN, NS_NO_START, nodeAt, pathFrom, stopCostMs, type Layout, type SolvedNode } from './state.ts';
-import type { DpSolution } from './solve.ts';
+import { adaptivePlan, type DpSolution } from './solve.ts';
+import { COND_SC, COND_VSC, NS_GREEN, NS_NO_START, nodeAt, pathFrom, stintLimit, stopCostMs, type Layout, type SolvedNode } from './state.ts';
 import type { DpFirst, DpInput, DpPlan, DpUnder } from './types.ts';
 
 /** One part of the state distribution at a lap's start: green (a start possible), green with none, SC or VSC laps left. */
@@ -105,7 +108,7 @@ function bestChild(s: DpSolution, root: SolvedNode, part: Part, i: number): numb
 /**
  * The best plan to the flag whose first stop is `first` (at `stopLap` onto that compound, `'best'`: the DP picks; or
  * after `noStopThrough`), from the state "that neutralisation out at the start lap" with `under`; `null` when no such
- * plan keeps the compound rule and the sets.
+ * plan keeps the compound rule, the sets and the limit.
  */
 export function bestWith(s: DpSolution, first: DpFirst, under?: DpUnder): DpPlan | null {
   const { input, layout, graph } = s;
@@ -120,6 +123,8 @@ export function bestWith(s: DpSolution, first: DpFirst, under?: DpUnder): DpPlan
   if (box && (forced < 0 || forced >= n - 1)) return null;
   const childArg = box && first.compound !== 'best' ? root.node.children.findIndex((c) => c.compound === first.compound) : -1;
   if (box && first.compound !== 'best' && childArg < 0) return null;
+  // the 70 % limit: the forced laps on the car's set (and the lap it boxes at the end of) within its laps
+  if ((box ? forced + 1 : forced) > stintLimit(input, null)) return null;
 
   // the laps on the car's set before the first free action
   let parts = startParts(input, under);
@@ -136,7 +141,7 @@ export function bestWith(s: DpSolution, first: DpFirst, under?: DpUnder): DpPlan
     if (forced >= n) ms += root.node.terminal;
     else for (const part of parts) ms += part.p * (root.entry[forced * layout.ns + stateOf(layout, part)] ?? Infinity);
     if (!Number.isFinite(ms)) return null;
-    return { stops: pathFrom(input, layout, graph, { index: s.adaptiveRoot, i: forced, j: forced, s: stateOf(layout, path) }), expectedMs: ms };
+    return adaptivePlan(s, { stops: pathFrom(input, layout, graph, { index: s.adaptiveRoot, i: forced, j: forced, s: stateOf(layout, path) }), expectedMs: ms });
   }
 
   // the forced stop at the end of lap offset `forced`, then the table's values from the next lap
@@ -151,5 +156,5 @@ export function bestWith(s: DpSolution, first: DpFirst, under?: DpUnder): DpPlan
   const child = root.node.children[childArg >= 0 ? childArg : bestChild(s, root, path, i)];
   if (child === undefined) return null;
   const rest = pathFrom(input, layout, graph, { index: child.node, i: i + 1, j: 0, s: stateOf(layout, pathNext(path)) });
-  return { stops: [{ lap: input.fromLap + i, compound: child.compound }, ...rest], expectedMs: ms };
+  return adaptivePlan(s, { stops: [{ lap: input.fromLap + i, compound: child.compound }, ...rest], expectedMs: ms });
 }

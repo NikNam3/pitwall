@@ -7,6 +7,7 @@ import {
   known,
   MINI_SECTORS,
   NOISE_COMPOUNDS,
+  tyreIndex,
   unknown,
   type CarId,
   type CarNoise,
@@ -22,13 +23,16 @@ import {
   type StartingPoint,
   type StintRecord,
   type TrackWetness,
+  type TyreModelCompound,
+  type TyreModelOutput,
   type UnknownReason,
 } from '@pitwall/domain';
 import { projectionAsOf, runAsOf, type AsOfUnit, type AsOfView, type CalculatorId, type DeepReadonly } from '@pitwall/engine/readers';
 import { degradationAsOf, degradationCalculator } from '../../degradation/calculator.ts';
-import { DEGRADATION, DEGRADATION_CONFIG, type DegradationOutput, type StintDegradation } from '../../degradation/index.ts';
+import { DEGRADATION, DEGRADATION_CONFIG, type DegradationOutput } from '../../degradation/index.ts';
 import { fuelResolver } from '../../degradation/stint-fit.ts';
 import { driverNoiseCalculator } from '../../driver-noise/calculator.ts';
+import { GAPS, type GapsOutput } from '../../gaps/index.ts';
 import { DRIVER_NOISE, driverNoiseAsOf } from '../../driver-noise/index.ts';
 import { LAP_CLASSES_CONFIG } from '../../lap-classes/index.ts';
 import { PER_LAP_RATE_CONFIG } from '../../per-lap-rate/index.ts';
@@ -43,7 +47,14 @@ import { trackWetnessCalculator } from '../../track-wetness/calculator.ts';
 import { TRACK_WETNESS, trackWetnessAsOf } from '../../track-wetness/index.ts';
 import { tyreLifeCalculator } from '../../tyre-life/calculator.ts';
 import { TYRE_LIFE, tyreLifeAsOf } from '../../tyre-life/index.ts';
-import { ourCars } from '../our-cars.ts';
+import { tyreModelAsOf, tyreModelCalculator } from '../../tyre-model/calculator.ts';
+import { TYRE_MODEL } from '../../tyre-model/id.ts';
+import { worstWearRate } from '../../tyre-model/index.ts';
+import { ourCars } from '@pitwall/domain';
+import { startLapOf } from '../../race-forecast/index.ts';
+import { configOf } from '../config-of.ts';
+import { burnPerLapKg, planBurnKgPerLap } from '../fuel-burn.ts';
+import { isHumanDriver } from '../human-driver.ts';
 import { FORECAST_FIELD_CONFIG } from './config.ts';
 import { lapModelParams } from './lap-model-params.ts';
 import { distanceAsOf, distanceOf, leaderTimeAt, leaderTimes, newestCrossings, orderOf } from './placement.ts';
@@ -52,21 +63,19 @@ export * from './config.ts';
 export { lapModelParams } from './lap-model-params.ts';
 
 /**
- * The units whose as-of forms the starting point reads, as `runAsOf` runs them: degradation, pit-loss, tyre-life,
- * track-wetness, driver-noise, rival-stops, race-interaction.
+ * The units whose as-of forms the starting point reads, as `runAsOf` runs them: degradation, pit-loss, track-wetness,
+ * tyre-model, tyre-life, driver-noise, rival-stops, race-interaction.
  */
 export const FORECAST_UNITS: readonly AsOfUnit[] = [
   { id: DEGRADATION, reads: degradationCalculator.reads, asOf: degradationAsOf },
   { id: PIT_LOSS, reads: pitLossCalculator.reads, asOf: pitLossAsOf },
-  { id: TYRE_LIFE, reads: tyreLifeCalculator.reads, asOf: tyreLifeAsOf },
   { id: TRACK_WETNESS, reads: trackWetnessCalculator.reads, asOf: trackWetnessAsOf },
+  { id: TYRE_MODEL, reads: tyreModelCalculator.reads, asOf: tyreModelAsOf },
+  { id: TYRE_LIFE, reads: tyreLifeCalculator.reads, asOf: tyreLifeAsOf },
   { id: DRIVER_NOISE, reads: driverNoiseCalculator.reads, asOf: driverNoiseAsOf },
   { id: RIVAL_STOPS, reads: rivalStopsCalculator.reads, asOf: rivalStopsAsOf },
   { id: RACE_INTERACTION, reads: raceInteractionCalculator.reads, asOf: raceInteractionAsOf },
 ];
-
-const configOf = <C extends object>(section: { key: string; defaults: C }, view: Pick<AsOfView, 'config'>): C =>
-  ({ ...section.defaults, ...view.config[section.key] }) as C;
 
 const isNoiseCompound = (c: string): c is NoiseCompound => (NOISE_COMPOUNDS as readonly string[]).includes(c);
 
@@ -104,15 +113,12 @@ class Needs {
 }
 
 /**
- * The starting point at `view`'s frame from the units' `outputs`; `progress` is the live frame's lap progress, else
- * each car is placed by its newest crossing and the time since at its current pace. `notApplicable` before lap 1 is
- * complete or outside the race.
+ * The starting point at `view`'s frame from the units' `outputs`. Each car is placed by its newest crossing and the
+ * time since at its current pace. A live build (`gaps`' output among `outputs`, SP4.3c Task 13, O10) takes the order
+ * and the gaps at the last common crossing from `gaps` and carries each gap forward to the view's time; an as-of build
+ * extrapolates both from the crossings. `notApplicable` before lap 1 is complete or outside the race.
  */
-export function buildStartingPoint(
-  view: AsOfView,
-  outputs: ReadonlyMap<CalculatorId, unknown>,
-  progress?: { lapFraction: number[]; gapMs: number[] },
-): Known<StartingPoint> {
+export function buildStartingPoint(view: AsOfView, outputs: ReadonlyMap<CalculatorId, unknown>): Known<StartingPoint> {
   if (view.situation.weekendPhase.kind !== 'race') return unknown('notApplicable');
   const fixed = view.fixed;
   if (!fixed.totalLaps.known) return unknown(fixed.totalLaps.reason);
@@ -129,7 +135,8 @@ export function buildStartingPoint(
 
   const crossings = view.history.crossings as readonly MiniSectorCrossing[];
   const newest = newestCrossings(crossings, cars);
-  const order = orderOf(newest, retired);
+  const gaps = outputs.get(GAPS) as DeepReadonly<GapsOutput> | undefined;
+  const order = gaps === undefined ? orderOf(newest, retired) : orderByGaps(gaps, orderOf(newest, retired), retired);
   const leader = order[0] as number;
   const leaderNewest = newest[leader];
   // before the leader has completed lap 1 there is no lap to start from
@@ -137,17 +144,16 @@ export function buildStartingPoint(
 
   const laps = view.history.laps as readonly LapRecord[];
   const newestLap = newestLaps(laps, cars);
-  const standIn = newestLap[leader];
-  if (standIn === undefined) return unknown('insufficientData');
   const stintsByCar: StintRecord[][] = Array.from({ length: cars }, () => []);
   for (const s of view.history.stints as readonly StintRecord[]) if (s.carId >= 0 && s.carId < cars) stintsByCar[s.carId]?.push(s);
 
-  const degradation = (outputs.get(DEGRADATION) as DeepReadonly<DegradationOutput> | undefined) ?? {};
+  const degradation = outputs.get(DEGRADATION) as DeepReadonly<DegradationOutput> | undefined;
   const noise = outputs.get(DRIVER_NOISE) as DeepReadonly<DriverNoise> | undefined;
   const stops = (outputs.get(RIVAL_STOPS) as DeepReadonly<RivalStops> | undefined) ?? {};
   const wetness = outputs.get(TRACK_WETNESS) as DeepReadonly<TrackWetness> | undefined;
   const pitLoss = outputs.get(PIT_LOSS) as DeepReadonly<PitLossOutput> | undefined;
   const interaction = outputs.get(RACE_INTERACTION) as RaceInteraction | undefined;
+  const tyreModel = (outputs.get(TYRE_MODEL) as DeepReadonly<TyreModelOutput> | undefined) ?? {};
   if (noise === undefined || interaction === undefined) return unknown('insufficientData');
   const lapModel = lapModelParams(view, outputs);
   const need = new Needs();
@@ -180,10 +186,9 @@ export function buildStartingPoint(
     tyreAge: new Int16Array(cars),
     wearPct: f64(),
     fuelKg: f64(),
+    fuelBurnKgPerLap: f64(),
     paceMs: f64(),
     paceSdMs: f64(),
-    degMsPerLap: f64(),
-    degSdMs: f64(),
     sigmaMs: f64(),
     rho: f64(),
     mistakeRate: f64(),
@@ -191,11 +196,22 @@ export function buildStartingPoint(
     mistakeSigmaLog: f64(),
     bigEventRate: f64(),
     retireRate: f64(),
-    wearRatePct: f64(),
+    tyre: {
+      wearRatePct: new Float64Array(cars * NOISE_COMPOUNDS.length),
+      degMsPerLap: new Float64Array(cars * NOISE_COMPOUNDS.length),
+      degSdMs: new Float64Array(cars * NOISE_COMPOUNDS.length),
+      // no limit known yet (Task 12: tyre-model's)
+      lapsToLimit: new Int16Array(cars * NOISE_COMPOUNDS.length).fill(-1),
+    },
     stopLow: new Int16Array(cars),
     stopMid: new Int16Array(cars),
     stopHigh: new Int16Array(cars),
     owesStop: new Uint8Array(cars),
+    // filled from tyre-model (below)
+    fittedLapsToLimit: new Int16Array(cars).fill(-1),
+    // filled from rival-stops with the window (below)
+    nextOdds: Array.from({ length: cars }, () => null),
+    typeSwitch: Array.from({ length: cars }, () => null),
     sets: {},
     wetness: wetnessOf(wetness, config.priorWetnessSdMs),
     // filled once the cars are placed (`weatherOf`)
@@ -207,16 +223,26 @@ export function buildStartingPoint(
     lapModel,
   };
 
-  // the declared stand-ins (C3, final review F4): an unknown compound's, a car without a lap's, an unknown driver's
+  // the declared stand-ins (C3, final review F4): an unknown compound's, an unknown driver's; a car without a lap takes
+  // degradation's field stand-in (SP4.3c Task 13, R47, C43: which car's lap stands in is degradation's): its pace, and
+  // the compound, tyre age and lap record of the car it names (`fromCarId`)
   const unknownCompound: NoiseCompound = isNoiseCompound(config.unknownCompound) ? config.unknownCompound : (FORECAST_FIELD_CONFIG.defaults.unknownCompound as NoiseCompound);
-  const noLap: LapRecord = { ...standIn, lapTimeMs: standIn.lapTimeMs + config.noLapStandInOffsetMs };
+  const stintsBy = degradation?.stints ?? {};
+  const standIn = degradation?.standIn.known === true ? degradation.standIn.value : undefined;
+  const standInLap: LapRecord | undefined = standIn === undefined ? undefined : newestLap[standIn.fromCarId];
 
   const lapMs = new Float64Array(cars);
   for (let k = 0; k < cars; k++) {
     const id = k as CarId;
-    // a car without a completed lap (lap 1 not yet done) takes the leader's newest lap as its stand-in (the config's)
+    // a car without a completed lap (lap 1 not yet done) runs on the stand-in car's newest lap; without a stand-in a
+    // running car makes the build unknown (C3), a retired car is not run
     const own = newestLap[k];
-    const lap = own ?? noLap;
+    const lap = own ?? standInLap;
+    if (lap === undefined) {
+      if (retired[k] === 0) need.of(unknown('insufficientData'));
+      sp.compound[k] = NOISE_COMPOUNDS.indexOf(unknownCompound);
+      continue;
+    }
     // just stopped (on its in lap, or a stint closed on its newest lap): a fresh set; the old compound stands in until
     // its out lap is recorded
     const stopped = own !== undefined && (own.inLap || (stintsByCar[k] ?? []).some((s) => s.lastLap >= own.lapNumber));
@@ -227,31 +253,52 @@ export function buildStartingPoint(
 
     const carNoise = noise.cars[id] as DeepReadonly<CarNoise> | undefined;
     const driver = carNoise?.driver ?? 'unknown';
-    sp.human[k] = driver === 'human' || (driver === 'unknown' && config.unknownDriverIsHuman) ? 1 : 0;
-    const rate = Math.max(config.minWearRatePctPerLap, need.of(carNoise?.wearRatePctPerLap[compound], worstRate(degradation[id]?.at(-1))));
-    sp.wearRatePct[k] = rate;
+    sp.human[k] = isHumanDriver(driver === 'unknown' ? undefined : driver, config.unknownDriverIsHuman) ? 1 : 0;
+    // the tyre terms are `tyre-model`'s, per compound (SP4.3c Task 12): the rate at the worst corner
+    const model = tyreModel[id];
+    const termsOf = (c: NoiseCompound) => model?.compounds[c];
+    const rateOf = (c: NoiseCompound): number => need.of(worstOrUndefined(termsOf(c)));
+    const rate = rateOf(compound);
     // wear: the worst corner where every corner is visible, else tyre age × the car's wear rate (realism, C8)
     const w = lap.wearAtEndPct;
     sp.wearPct[k] = stopped ? 0 : own !== undefined && w.fl.known && w.fr.known && w.rl.known && w.rr.known ? Math.max(w.fl.value, w.fr.value, w.rl.value, w.rr.value) : tyreAge * rate;
-    // fuel at the end of the lap: as the fuel at the start of the next (degradation's rule for a hidden load)
-    sp.fuelKg[k] = own === undefined ? need.of(fuelOf(lap)) : need.of(fuelOf({ ...own, lapNumber: own.lapNumber + 1, fuelAtStartKg: own.fuelAtEndKg }));
-
-    // pace on the reference compound (the lap model adds the compound's offset) and degradation per % wear (ruling R18)
-    const stints = degradation[id] ?? [];
+    // pace on the reference compound (the lap model adds the compound's offset): `degradation`'s base pace alone (O2,
+    // SP4.3c Task 13: its fit or its newest lap; for a car without a lap the field's stand-in); a running car without
+    // one makes the build unknown (C3), a retired car is not run
+    const stints = stintsBy[id] ?? [];
     const paced = [...stints].reverse().find((s) => s.basePaceMs.known);
+    let fuelIncluded = false;
     if (paced !== undefined && paced.basePaceMs.known) {
       sp.paceMs[k] = paced.basePaceMs.value - offsetOf(lapModel.compoundOffsetMs, paced.visual);
       sp.paceSdMs[k] = paced.cov.known ? Math.sqrt(Math.max(0, paced.cov.value[0][0])) : config.fallbackPaceSdMs;
-    } else {
-      const fuel = fuelOf(lap);
-      sp.paceMs[k] = lap.lapTimeMs - (fuel.known ? lapModel.fuelMsPerKg * fuel.value : 0) - lapModel.compoundOffsetMs[compound];
+      fuelIncluded = paced.fuelIncluded;
+    } else if (own === undefined && standIn !== undefined) {
+      sp.paceMs[k] = standIn.basePaceMs - offsetOf(lapModel.compoundOffsetMs, standIn.compound);
       sp.paceSdMs[k] = config.fallbackPaceSdMs;
-    }
+      fuelIncluded = standIn.fuelIncluded;
+    } else if (retired[k] === 0) need.of(unknown('insufficientData'));
+    // fuel at the end of the lap: as the fuel at the start of the next (degradation's rule for a hidden load); a base
+    // pace that holds the car's fuel (`fuelIncluded`, B9) gets no fuel term on top: the lap model's fuel is 0
+    if (fuelIncluded) sp.fuelKg[k] = 0;
+    else sp.fuelKg[k] = own === undefined ? need.of(fuelOf(lap)) : need.of(fuelOf({ ...own, lapNumber: own.lapNumber + 1, fuelAtStartKg: own.fuelAtEndKg }));
+    // ν's sd per lap is degradation's (its current stint's posterior, else its default), per % of wear on each compound
     const current = stints.at(-1);
-    const nu = current === undefined ? degConfig.defaultNuMsPerLap : need.of(current.nuMsPerLap);
     const nuSd = current === undefined ? degConfig.defaultNuSdMs : current.cov.known ? Math.sqrt(Math.max(0, current.cov.value[1][1])) : need.of(current.nuSdMs);
-    sp.degMsPerLap[k] = nu / rate;
-    sp.degSdMs[k] = nuSd / rate;
+    // each compound its own terms: after a stop the car runs on the new compound's (`tyreIndex`)
+    for (let i = 0; i < NOISE_COMPOUNDS.length; i++) {
+      const c = NOISE_COMPOUNDS[i] as NoiseCompound;
+      const t = tyreIndex(k, i);
+      const terms = termsOf(c);
+      const r = c === compound ? rate : rateOf(c);
+      sp.tyre.wearRatePct[t] = r;
+      sp.tyre.degMsPerLap[t] = need.of(terms?.lossMsPerPct.value);
+      sp.tyre.degSdMs[t] = r > 0 ? nuSd / r : 0;
+      const limit = terms?.lapsToLimit;
+      sp.tyre.lapsToLimit[t] = limit?.known === true ? Math.floor(limit.value) : -1;
+    }
+    // the fitted set's laps to the 70 % limit (tyre-model's, floored; at or past it 0); −1 while unknown
+    const fittedLimit = model?.fittedLapsToLimit;
+    sp.fittedLapsToLimit[k] = fittedLimit?.known === true ? Math.max(0, Math.floor(fittedLimit.value)) : -1;
 
     sp.sigmaMs[k] = need.of(carNoise?.sigmaMs);
     sp.rho[k] = need.of(carNoise?.rho);
@@ -283,31 +330,44 @@ export function buildStartingPoint(
     }
     const owes = stop === undefined ? false : stop.owesStop.known ? stop.owesStop.value : config.assumeOwesStop;
     sp.owesStop[k] = owes ? 1 : 0;
+    // its next compound's odds and its tyre-type switch from the game's delta (SP4.3c O9, O5); null while unknown
+    sp.nextOdds[k] = stop?.nextCompound.known === true ? { ...stop.nextCompound.value } : null;
+    sp.typeSwitch[k] = stop?.switchLap.known === true && stop.switchTo.known ? { lap: stop.switchLap.value, to: stop.switchTo.value } : null;
 
     lapMs[k] = lap.lapTimeMs;
   }
   if (need.reason !== undefined) return unknown(need.reason);
 
-  // where the cars are: the live frame's lap progress, else "as of" the frame from the crossings
-  if (progress !== undefined) {
-    for (let k = 0; k < cars; k++) {
-      sp.lapFraction[k] = progress.lapFraction[k] ?? 0;
-      sp.gapMs[k] = progress.gapMs[k] ?? 0;
-    }
-  } else {
-    const distances = newest.map((c, k) => distanceAsOf(c, at, lapMs[k] as number, retired[k] === 1));
-    // the leader's times back to the rearmost running car (a retired car's gap is measured from the nearest time kept)
-    const rearmost = Math.min(...distances.filter((_, k) => retired[k] === 0));
-    const times = leaderTimes(crossings, leader as CarId, Math.floor(rearmost), distanceOf(leaderNewest));
-    for (let k = 0; k < cars; k++) {
-      const d = distances[k] as number;
-      sp.lapFraction[k] = (d % MINI_SECTORS) / MINI_SECTORS;
-      const t = leaderTimeAt(times, d);
-      sp.gapMs[k] = t === undefined ? 0 : Math.max(0, at - t);
-    }
+  // where the cars are "as of" the frame: each car moved on from its newest crossing at its newest lap's pace
+  const distances = newest.map((c, k) => distanceAsOf(c, at, lapMs[k] as number, retired[k] === 1));
+  // the leader's times back to the rearmost running car (a retired car's gap is measured from the nearest time kept)
+  const rearmost = Math.min(...distances.filter((_, k) => retired[k] === 0));
+  const times = leaderTimes(crossings, leader as CarId, Math.floor(rearmost), distanceOf(leaderNewest));
+  const present = gaps === undefined ? undefined : gapsAtCrossing(gaps, lapMs[leader] as number);
+  for (let k = 0; k < cars; k++) {
+    const d = distances[k] as number;
+    sp.lapFraction[k] = (d % MINI_SECTORS) / MINI_SECTORS;
+    const t = leaderTimeAt(times, d);
+    const own = retired[k] === 0 ? present?.get(k as CarId) : undefined;
+    const c = newest[k];
+    const tc = c === undefined ? undefined : leaderTimeAt(times, distanceOf(c));
+    if (own !== undefined && c !== undefined) {
+      // a live build: gaps' gap at the last common crossing, carried forward to the view's time (a forecast step): the
+      // gap now as the crossings extrapolate it less the gap at the car's newest crossing
+      sp.gapMs[k] = own + (t === undefined || tc === undefined ? 0 : at - t - (c.at - tc));
+    } else sp.gapMs[k] = t === undefined ? 0 : Math.max(0, at - t);
   }
 
-  sp.sets = setsOf(view, cars);
+  // the burn the simulators use (O15): the car's measured burn, else its fuel over its whole laps left from where it
+  // starts (a whole count: the as-of and the live builds differ only in lap fraction and gap)
+  const burnOptions = { lapClasses: configOf(LAP_CLASSES_CONFIG, view), rate: configOf(PER_LAP_RATE_CONFIG, view) };
+  const lapsByCar: LapRecord[][] = Array.from({ length: cars }, () => []);
+  for (const l of laps) if (l.carId >= 0 && l.carId < cars) lapsByCar[l.carId]?.push(l);
+  for (let k = 0; k < cars; k++) {
+    sp.fuelBurnKgPerLap[k] = planBurnKgPerLap(burnPerLapKg(lapsByCar[k] ?? [], burnOptions), sp.fuelKg[k] ?? 0, lapsTotal - startLapOf(sp, k) + 1);
+  }
+
+  sp.sets = setsOf(view, tyreModel, cars);
   sp.weather = weatherOf(view, sp.lap, lapsTotal, sp.lapFraction[leader] ?? 0, lapMs[leader] ?? 0);
   return known(sp, at);
 }
@@ -346,20 +406,36 @@ function weatherOf(view: AsOfView, lap: number, lapsTotal: number, leaderFractio
   return known({ byLap, accuracy: weather.forecastAccuracy }, view.at);
 }
 
+/**
+ * A live build's order (SP4.3c Task 13, O10): the running cars `gaps` lists, in its order; then the running cars it does
+ * not list and the retired cars last, each as `crossings` (the crossings' order) has them.
+ */
+function orderByGaps(gaps: DeepReadonly<GapsOutput>, crossings: Int8Array, retired: Uint8Array): Int8Array {
+  const listed: number[] = [];
+  for (const i of gaps.intervals) if (i.carId >= 0 && i.carId < retired.length && retired[i.carId] === 0 && !listed.includes(i.carId)) listed.push(i.carId);
+  return Int8Array.from([...listed, ...Array.from(crossings).filter((k) => !listed.includes(k))]);
+}
+
+/**
+ * Per car `gaps` lists with a known gap, its gap to the leader at the last crossing both passed; a lapped car's
+ * (`lapsDown`) adds a lap of the leader's newest lap time per lap down (a forecast step, R34).
+ */
+function gapsAtCrossing(gaps: DeepReadonly<GapsOutput>, leaderLapMs: number): Map<CarId, number> {
+  const out = new Map<CarId, number>();
+  for (const i of gaps.intervals) if (i.toLeaderMs.known) out.set(i.carId, i.toLeaderMs.value + i.lapsDown * leaderLapMs);
+  return out;
+}
+
 /** An offset of the lap model for a stint's visual compound (0 for one it does not tell apart). */
 const offsetOf = (offsets: Record<NoiseCompound, number>, visual: string): number => (isNoiseCompound(visual) ? offsets[visual] : 0);
 
-/** A stint's worst corner's wear rate, where every corner's is known; else none. */
-function worstRate(stint: DeepReadonly<StintDegradation> | undefined): number | undefined {
-  if (stint === undefined) return undefined;
-  const { fl, fr, rl, rr } = stint.wearRatePctPerLap;
-  return fl.known && fr.known && rl.known && rr.known ? Math.max(fl.value, fr.value, rl.value, rr.value) : undefined;
-}
+/** A compound's wear rate at its worst corner: `tyre-model`'s pick (R64); `undefined` without the compound's terms. */
+const worstOrUndefined = (terms: DeepReadonly<TyreModelCompound> | undefined): Known<number> | undefined => (terms === undefined ? undefined : worstWearRate(terms));
 
 /** The track's wetness (track-wetness's state); without a known state, the declared prior: dry with `priorSdMs` (C3, ruling R40). */
 function wetnessOf(wetness: DeepReadonly<TrackWetness> | undefined, priorSdMs: number): StartingPoint['wetness'] {
   const state = wetness?.state;
-  return state?.known === true ? { wetnessMs: state.value.wetnessMs, sdMs: state.value.sdMs } : { wetnessMs: 0, sdMs: priorSdMs };
+  return state?.known === true ? { wetnessMs: state.value.wetnessMs, sdMs: state.value.sdMs, wet: wetness?.wet.known === true && wetness.wet.value } : { wetnessMs: 0, sdMs: priorSdMs, wet: false };
 }
 
 /**
@@ -381,18 +457,16 @@ function trackOf(view: AsOfView, pitLoss: DeepReadonly<PitLossOutput> | undefine
   return { brakingZones: Float64Array.from(braking), drsZones: drs, pitLossMs: { green: lossOf('green'), vsc: lossOf('vsc'), sc: lossOf('sc'), inLapShare } };
 }
 
-/** Our cars' sets left (the shared `ourCars` rule, C43): every available set but the fitted one, of a compound the model tells apart. */
-function setsOf(view: AsOfView, cars: number): StartingPoint['sets'] {
+/** Our cars' sets left (the shared `ourCars` rule, C43): `tyre-model`'s used sets, where it knows them. */
+function setsOf(view: AsOfView, tyreModel: DeepReadonly<TyreModelOutput>, cars: number): StartingPoint['sets'] {
   const fixed = view.fixed;
   const out: StartingPoint['sets'] = {};
-  if (!fixed.playerCar.known || fixed.setsNow === null) return out;
+  if (!fixed.playerCar.known) return out;
   const teammate = fixed.teammateCar.known ? fixed.teammateCar.value : undefined;
   for (const car of ourCars({ playerCar: fixed.playerCar.value, teammateCar: teammate })) {
-    const sets = fixed.setsNow[car];
-    if (car >= cars || sets === undefined || !sets.known) continue;
-    out[car] = sets.value.sets.flatMap((s, i) =>
-      s.available && !s.fitted && i !== sets.value.fittedIdx && isNoiseCompound(s.visualCompound) ? [{ compound: s.visualCompound, wearPct: s.wearPct }] : [],
-    );
+    const used = tyreModel[car]?.usedSets;
+    if (car >= cars || used === undefined || !used.known) continue;
+    out[car] = used.value.map((s) => ({ compound: s.compound, wearPct: s.wearPct }));
   }
   return out;
 }

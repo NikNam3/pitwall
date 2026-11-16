@@ -49,6 +49,7 @@ const wear = (over: Partial<Corners<Known<number>>> = {}): TyreWear => ({
   limitPct: 70,
   warnLaps: 3,
   gameLifeSpanLaps: k(25),
+  wearAtLifeSpanPct: four(() => k(37.5)),
 });
 
 describe('cornerBlockRows', () => {

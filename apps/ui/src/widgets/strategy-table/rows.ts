@@ -32,9 +32,11 @@ export type InfoRow = {
 /** The field's identities (`cars.overview`): a `rivalPits` trigger names its rival by race number, never by slot. */
 export type Cars = readonly CarOverview[];
 
-/** Each stop `L20 H`, joined by a space. */
+/** Each stop `L20 H`, joined by a space; a policy with no stops reads `to the flag`. */
 export const stopsText = (policy: Policy): string =>
-  policy.stops.map((s) => `${formatLapNumber(s.lap, 2)} ${COMPOUND_MARK[s.compound].letter}`).join(' ');
+  policy.stops.length === 0
+    ? text.toTheFlag
+    : policy.stops.map((s) => `${formatLapNumber(s.lap, 2)} ${COMPOUND_MARK[s.compound].letter}`).join(' ');
 
 /** A row's source word with its hover; a rule candidate's hover names its rule. */
 function sourceCell(row: McRow): Cell {
@@ -123,17 +125,23 @@ function triggerText(t: Trigger, cars: Cars): string {
 type Neutralised = Extract<Trigger, { kind: 'neutralised' }>;
 const sameRange = (a: Neutralised, b: Neutralised): boolean => a.fromLap === b.fromLap && a.toLap === b.toLap;
 
-/** One text per trigger in policy order; an SC and a VSC trigger over one range join as `SC/VSC L12–24` at the first one's place. */
+/**
+ * One text per trigger in policy order; an SC and a VSC trigger over one range join as `SC/VSC L12–24` at the first
+ * one's place, with the stay-out word when both are stay-out.
+ */
 export function triggerTexts(triggers: readonly Trigger[], cars: Cars): string[] {
   const joined = new Set<number>();
   const out: string[] = [];
   triggers.forEach((t, i) => {
     if (joined.has(i)) return;
     if (t.kind === 'neutralised') {
-      const pair = triggers.findIndex((u, j) => j > i && !joined.has(j) && u.kind === 'neutralised' && u.condition !== t.condition && sameRange(t, u));
-      if (pair >= 0) {
+      const isPair = (u: Trigger, j: number): u is Neutralised =>
+        j > i && !joined.has(j) && u.kind === 'neutralised' && u.condition !== t.condition && sameRange(t, u);
+      const pair = triggers.findIndex(isPair);
+      const other = triggers[pair];
+      if (other !== undefined && isPair(other, pair)) {
         joined.add(pair);
-        out.push(text.neutralisedText(text.scOrVsc, t.fromLap, t.toLap));
+        out.push(text.neutralisedActionText(text.scOrVsc, t.fromLap, t.toLap, t.action === 'stayOut' && other.action === 'stayOut'));
         return;
       }
     }

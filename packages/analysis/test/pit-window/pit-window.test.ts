@@ -1,6 +1,8 @@
 // `pit-window` (SP4.2 spec 3.4, 6.1): per our car the fitted set's latest stop lap and, per compound we still have a new
-// set of, the window from which it reaches the flag; the car's `window` state. Builder data; `tyre-life`'s output is
-// passed explicitly; every case runs through the guarded view (C41); race only, a pending phase reads as the race (C14).
+// set of, the window from which it reaches the flag; the car's `window` state. Builder data; `tyre-life`'s output (the
+// fitted set's laps to the limit) and `tyre-model`'s (each compound's fresh-set life and the available fresh sets, SP4.3c
+// Task 12 rows 7, 10, 10b) are passed explicitly; the live state's tyre sets are never read (`notReceived` unless a case
+// says otherwise); every case runs through the guarded view (C41); race only, a pending phase reads as the race (C14).
 import {
   carId,
   known,
@@ -9,6 +11,7 @@ import {
   type ActualCompound,
   type Known,
   type LapRecord,
+  type NoiseCompound,
   type OpenSpan,
   type PitStopRecord,
   type PitWindow,
@@ -26,7 +29,9 @@ import { PIT_WINDOW_BEHAVIOUR } from '../../src/pit-window/behaviour.ts';
 import { pitWindowCalculator } from '../../src/pit-window/calculator.ts';
 import { PIT_WINDOW, PIT_WINDOW_CONFIG, type PitWindowOutput } from '../../src/pit-window/index.ts';
 import { TYRE_LIFE, type TyreLife, type TyreLifeOutput } from '../../src/tyre-life/index.ts';
+import { TYRE_MODEL } from '../../src/tyre-model/index.ts';
 import { carState, lap } from '../../../../test-support/builders/index.ts';
+import { freshCounts, plainModelCar } from '../tyre-model/support.ts';
 import { guardedQuick, NONE, openSpan, PRACTICE, QUALIFYING, RACE, situatedView } from '../situated.ts';
 
 const calc = guardedQuick(pitWindowCalculator);
@@ -48,9 +53,8 @@ const ACTUAL: Record<VisualCompound, ActualCompound> = {
   wet: 'wet',
   unknown: 'unknown',
 };
-const VISUALS = Object.keys(ACTUAL) as VisualCompound[];
 
-/** The fresh-set life per compound (`tyre-life`'s `freshLifeLaps`) unless a case says otherwise. */
+/** The fresh-set life per compound (`tyre-model`'s `lapsToLimit` of each compound) unless a case says otherwise. */
 const LIVES: Partial<Record<VisualCompound, number>> = { soft: 9, medium: 20, hard: 30, inter: 25, wet: 25 };
 
 /** One tyre set of the car's allocation: new (wear 0) and available unless said otherwise. */
@@ -68,16 +72,13 @@ const tyreSet = (s: SetSpec): TyreSet => ({
   lapDeltaMs: 0,
 });
 
-/** `tyre-life`'s set of one car: its laps to the limit and the fresh-set life per compound (a compound not given: insufficientData). */
-const tyreLife = (lapsToLimit: Known<number>, lives: Partial<Record<VisualCompound, number>>): TyreLife => {
+/** `tyre-life`'s set of one car: its laps to the limit (ported in SP4.3c Task 12: the fresh-set life is `tyre-model`'s). */
+const tyreLife = (lapsToLimit: Known<number>): TyreLife => {
   const corner = () => ({ wearPct: known(20, 0), ratePctPerLap: known(2, 0), lapsToLimit });
   return {
     corners: { fl: corner(), fr: corner(), rl: corner(), rr: corner() },
     lapsToLimit,
-    basis: 'wear',
     limitPct: 70,
-    ageLossLimitMs: 2_000,
-    freshLifeLaps: Object.fromEntries(VISUALS.map((c) => [c, lives[c] === undefined ? unknown('insufficientData') : known(lives[c], 0)])) as TyreLife['freshLifeLaps'],
     gameLifeSpanLaps: unknown('notReceived'),
   };
 };
@@ -92,6 +93,8 @@ type Case = {
   fitted?: VisualCompound;
   /** The stint's first lap (default 1, a set fitted for the start); a later one follows a stop at the end of the lap before. */
   fromLap?: number;
+  /** The compound of the closed stint before `fromLap` (default soft). */
+  previous?: VisualCompound;
   /** The sets besides the fitted one (default: a new medium, a new hard and a new soft). */
   sets?: SetSpec[];
   /** The `compound-rule` span of our car (default `required`). */
@@ -103,19 +106,21 @@ type Case = {
   activity?: { kind: string; start?: number };
   /** Closed spans in the projection. */
   closed?: Span[];
-  /** Our tyre sets as the live state holds them, replacing the built ones (a `notReceived`). */
-  tyreSets?: CarTyreSets;
+  /** `tyre-model`'s fresh sets of our car, replacing the counts of `sets` (a `notReceived`: the sets not received yet). */
+  freshSets?: Known<number>;
+  /** The live state's tyre sets (default `notReceived`: pit-window reads `tyre-model`'s `freshSets`, never these). */
+  liveSets?: CarTyreSets;
   flag?: number;
 };
 type CarTyreSets = ReturnType<typeof carState>['tyres']['sets'];
 
 const DEFAULT_SETS: SetSpec[] = [{ compound: 'medium' }, { compound: 'hard' }, { compound: 'soft' }];
 
-/** Our laps 1 … `c.lap − 1`: on the old set (soft) before `fromLap`, the in lap the one before it, then the fitted set from its out lap. */
-function ourLaps(c: Required<Pick<Case, 'lap' | 'fromLap' | 'fitted'>>): LapRecord[] {
+/** Our laps 1 … `c.lap − 1`: on the old set (`previous`) before `fromLap`, the in lap the one before it, then the fitted set from its out lap. */
+function ourLaps(c: Required<Pick<Case, 'lap' | 'fromLap' | 'fitted' | 'previous'>>): LapRecord[] {
   return Array.from({ length: c.lap - 1 }, (_, i) => {
     const n = i + 1;
-    const compound: VisualCompound = n < c.fromLap ? 'soft' : c.fitted;
+    const compound: VisualCompound = n < c.fromLap ? c.previous : c.fitted;
     return lap({
       carId: carId(US),
       lapNumber: n,
@@ -135,20 +140,21 @@ function ourLaps(c: Required<Pick<Case, 'lap' | 'fromLap' | 'fitted'>>): LapReco
 function view(c: Case): EngineView {
   const fitted = c.fitted ?? 'medium';
   const fromLap = c.fromLap ?? 1;
+  const previous = c.previous ?? 'soft';
   const ltl = c.lapsToLimit ?? 8.6;
   const lapsToLimit = typeof ltl === 'number' ? known(ltl, (c.lap - 1) * LAP_MS) : ltl;
-  const sets = [tyreSet({ compound: fitted, fitted: true, wearPct: 25 }), ...(c.sets ?? DEFAULT_SETS).map(tyreSet)];
+  const specs: SetSpec[] = [{ compound: fitted, fitted: true, wearPct: 25 }, ...(c.sets ?? DEFAULT_SETS)];
   const tyres = {
     actualCompound: ACTUAL[fitted],
     visualCompound: fitted,
     age: c.lap - fromLap,
-    sets: c.tyreSets ?? known({ sets, fittedIdx: 0 }, 0),
+    sets: c.liveSets ?? unknown('notReceived'),
   };
   const us = carState({ id: carId(US), timing: { lap: c.lap }, tyres });
-  const rival = carState({ id: carId(RIVAL), timing: { lap: c.lap }, tyres: { ...tyres, sets: known({ sets, fittedIdx: 0 }, 0) } });
+  const rival = carState({ id: carId(RIVAL), timing: { lap: c.lap }, tyres });
   const stopLap = fromLap - 1;
   const stints: StintRecord[] =
-    stopLap < 1 ? [] : [{ carId: carId(US), firstLap: 1, lastLap: stopLap, actualCompound: 'C3', visualCompound: 'soft', tyreAgeAtFitting: 0, frame: stopLap * LAP_MS }];
+    stopLap < 1 ? [] : [{ carId: carId(US), firstLap: 1, lastLap: stopLap, actualCompound: ACTUAL[previous], visualCompound: previous, tyreAgeAtFitting: 0, frame: stopLap * LAP_MS }];
   const pitStops: PitStopRecord[] =
     stopLap < 1
       ? []
@@ -175,15 +181,19 @@ function view(c: Case): EngineView {
     openSpan('compound-rule', 'required', { car: RIVAL }),
     openSpan('car-activity-race', 'racingLap', { car: RIVAL }),
   ];
-  const lives = c.lives ?? LIVES;
-  const tyreLifeOut: TyreLifeOutput = { [carId(US)]: tyreLife(lapsToLimit, lives), [carId(RIVAL)]: tyreLife(lapsToLimit, lives) };
+  const lives = (c.lives ?? LIVES) as Partial<Record<NoiseCompound, number>>;
+  const tyreLifeOut: TyreLifeOutput = { [carId(US)]: tyreLife(lapsToLimit), [carId(RIVAL)]: tyreLife(lapsToLimit) };
+  const model = plainModelCar({ lives, freshSets: c.freshSets ?? freshCounts(specs) });
   return situatedView({
     phase: c.phase ?? RACE,
     cars: [us, rival],
     session: { totalLaps: c.flag ?? FLAG },
-    history: { laps: ourLaps({ lap: c.lap, fromLap, fitted }), stints, pitStops, spans: closed },
+    history: { laps: ourLaps({ lap: c.lap, fromLap, fitted, previous }), stints, pitStops, spans: closed },
     spans,
-    outputs: new Map<string, unknown>([[TYRE_LIFE, tyreLifeOut]]),
+    outputs: new Map<string, unknown>([
+      [TYRE_LIFE, tyreLifeOut],
+      [TYRE_MODEL, { [carId(US)]: model, [carId(RIVAL)]: model }],
+    ]),
     sessionTime: (c.lap - 1) * LAP_MS + 30_000,
   });
 }
@@ -211,12 +221,12 @@ const INSUFFICIENT = unknown('insufficientData');
 const NOT_APPLICABLE = unknown('notApplicable');
 
 describe('pit-window calculator', () => {
-  it('is the quick calculator `pit-window` at 4 Hz over tyre-life, tyres, the session, timing and the three sub-machines', () => {
+  it('is the quick calculator `pit-window` at 4 Hz over tyre-life, tyre-model, tyres, the session, timing and the three sub-machines', () => {
     expect(pitWindowCalculator.id).toBe(PIT_WINDOW);
     expect(pitWindowCalculator.kind).toBe('quick');
     expect(pitWindowCalculator.cadence).toEqual({ hz: 4 });
     expect(pitWindowCalculator.reads).toEqual(
-      expect.arrayContaining([{ calculator: TYRE_LIFE }, 'tyres', 'session', 'timing', 'spans:weekend-phase', 'spans:compound-rule', 'spans:car-activity-race']),
+      expect.arrayContaining([{ calculator: TYRE_LIFE }, { calculator: TYRE_MODEL }, 'tyres', 'session', 'timing', 'spans:weekend-phase', 'spans:compound-rule', 'spans:car-activity-race']),
     );
     expect(PIT_WINDOW_CONFIG.defaults).toEqual({ windowLeadLaps: 2 });
   });
@@ -329,7 +339,8 @@ describe('pit-window calculator', () => {
     expect(hard.reaches).toEqual(INSUFFICIENT);
     expect(w.window).toEqual(INSUFFICIENT);
     expect(w.windowCompound).toEqual(INSUFFICIENT);
-    expect(outOf({ lap: 23, tyreSets: unknown('notReceived') })[carId(US)]).toEqual(unknown('notReceived'));
+    // ported (SP4.3c Task 12): the sets not received is tyre-model's freshSets notReceived
+    expect(outOf({ lap: 23, freshSets: unknown('notReceived') })[carId(US)]).toEqual(unknown('notReceived'));
   });
 
   // 8
@@ -391,6 +402,31 @@ describe('pit-window calculator', () => {
       expect(ours({ lap: 23, lapsToLimit: 40 }).stint.stopNeeded).toMatchObject(v(true));
     });
 
+    // SP4.3c Task 7 (B4, O11, C43): whether the rule is met is `shared/compound-rule.ts`' judgement (`owesSecondDryCompound`
+    // over the car's stints and its fitted set), not the `compound-rule` span alone: the span stays `required` all race
+    it('B4: medium then hard (rule required, met): a set reaching the flag needs no stop; one short of it lists a new hard (the fitted compound)', () => {
+      const met: Case = { lap: 30, previous: 'medium', fitted: 'hard', fromLap: 15, rule: 'required' };
+      const runsToFlag = ours({ ...met, lapsToLimit: 40 });
+      expect(runsToFlag.stint.stopNeeded).toMatchObject(v(false));
+      expect(runsToFlag.sets).toEqual([]);
+      expect(runsToFlag.window).toMatchObject(v('none'));
+      // the last lap 40 < 52: a stop is needed, and the fitted compound is an option again
+      const short = ours({ ...met, lapsToLimit: 10 });
+      expect(short.stint.stopNeeded).toMatchObject(v(true));
+      expect(compounds(short)).toContain('hard');
+      expect(compounds(short).sort()).toEqual(['hard', 'medium', 'soft']);
+    });
+
+    it('B4: one dry compound so far (soft then soft, or medium from the start): the rule is still owed, a stop needed and the fitted compound no option', () => {
+      const owed = ours({ lap: 30, previous: 'soft', fitted: 'soft', fromLap: 15, rule: 'required', lapsToLimit: 40 });
+      expect(owed.stint.stopNeeded).toMatchObject(v(true));
+      expect(compounds(owed)).not.toContain('soft');
+      // an inter stint is no dry compound
+      const afterInter = ours({ lap: 30, previous: 'inter', fitted: 'hard', fromLap: 15, rule: 'required', lapsToLimit: 40 });
+      expect(afterInter.stint.stopNeeded).toMatchObject(v(true));
+      expect(compounds(afterInter)).not.toContain('hard');
+    });
+
     it('no stop needed on the last lap (L52, rule waived, the set runs to the flag): pastLimit false', () => {
       expect(ours({ lap: 52, lapsToLimit: 40, rule: 'waived' }).stint.pastLimit).toBe(false);
     });
@@ -404,6 +440,19 @@ describe('pit-window calculator', () => {
       }
       expect(w.stint.stopNeeded).toEqual(INSUFFICIENT);
       expect(w.stint.pastLimit).toBe(false);
+    });
+  });
+
+  // SP4.3c Task 12 row 10b: the compounds offered follow tyre-model's freshSets, never the live state's sets
+  describe("10b: the sets come from tyre-model's freshSets", () => {
+    it('two fresh mediums, one used medium, one unavailable hard (freshSets medium 2, hard 0), rule waived: a medium row, no hard row', () => {
+      const sets: SetSpec[] = [{ compound: 'medium' }, { compound: 'medium' }, { compound: 'medium', wearPct: 30 }, { compound: 'hard', available: false }];
+      expect(compounds(ours({ lap: 23, fitted: 'soft', rule: 'waived', sets }))).toEqual(['medium']);
+    });
+
+    it('the live state listing a new hard changes nothing while tyre-model counts none (no read of the tyres sets, C43)', () => {
+      const liveSets = known({ sets: [tyreSet({ compound: 'medium', fitted: true, wearPct: 25 }), tyreSet({ compound: 'hard' })], fittedIdx: 0 }, 0);
+      expect(compounds(ours({ lap: 23, sets: [{ compound: 'soft' }], liveSets }))).toEqual(['soft']);
     });
   });
 
@@ -471,7 +520,9 @@ describe('pit-window calculator', () => {
           const newSets = new Set<VisualCompound>(r.sets.filter((s) => s.available && s.wearPct === 0).map((s) => s.compound));
           for (const s of w.sets) {
             expect(newSets.has(s.compound)).toBe(true);
-            if (r.rule === 'required') expect(s.compound).not.toBe(r.fitted);
+            // the rule is owed while the car has run one dry compound: the soft before `fromLap` and the fitted set (B4)
+            const owed = r.rule === 'required' && !(r.fromLap > 1 && r.fitted !== 'soft');
+            if (owed) expect(s.compound).not.toBe(r.fitted);
             if (s.lifeEnd.known) expect(s.reaches).toMatchObject(v(s.lifeEnd.value >= r.flag));
             if (!(s.reaches.known && s.reaches.value)) continue;
             if (!(s.earliest.known && w.stint.latest.known)) throw new Error('a reaching set with an unknown lap');

@@ -2,6 +2,7 @@
 // the calculator and the priors entries both use (C43).
 import type { EstimateSource, PassCurve } from '@pitwall/domain';
 import type { EngineView } from '@pitwall/engine/readers';
+import { configOf as sectionConfigOf } from '../shared/config-of.ts';
 import { RACE_INTERACTION_CONFIG, type RaceInteractionConfig } from './config.ts';
 
 /** One band: the AI difficulties it covers, inclusive. */
@@ -32,10 +33,7 @@ export const bandIndexOf = (bands: readonly DifficultyBand[], difficulty: number
   bands.findIndex((b) => b.fromDifficulty <= difficulty && difficulty <= b.toDifficulty);
 
 /** The effective config from a view's or a priors context's config record (C47). */
-export const configOf = (config: EngineView['config']): RaceInteractionConfig => ({
-  ...RACE_INTERACTION_CONFIG.defaults,
-  ...config[RACE_INTERACTION_CONFIG.key],
-});
+export const configOf = (config: EngineView['config']): RaceInteractionConfig => sectionConfigOf(RACE_INTERACTION_CONFIG, { config });
 
 /** The config's default pass curve: every band's prior without a calibration entry. */
 export const defaultCurve = (config: RaceInteractionConfig): PassCurve => ({

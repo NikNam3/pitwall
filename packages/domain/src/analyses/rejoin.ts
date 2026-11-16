@@ -21,8 +21,6 @@ export type RejoinAt = {
   rejoinPosition: Known<number>;
   /** Physical order, `orderAround` cars either side of the ghost, the ghost row included; `insufficientData` before our first crossing. */
   order: Known<CrossingRow[]>;
-  /** Where our car was `lossMs` ago; `notApplicable` without a track file. */
-  mapPoint: Known<MapPoint>;
 };
 
 /** `rejoin.car`: one of our cars, its race position now and the ghost per condition. */
@@ -30,3 +28,6 @@ export type Rejoin = { carId: CarId; position: number; conditions: Record<PitCon
 
 /** `rejoin.ghostLines`: per our car and condition, our gapper line over the last `ghostLaps` laps plus the loss. */
 export type GhostLines = { lines: { carId: CarId; condition: PitCondition; points: { lap: number; gapMs: Ms }[] }[] };
+
+/** `rejoinGhost.car`: per our car and condition, where the car was `rejoin`'s `lossMs` ago, at the frame cadence (SP4.3c §5.7, O18). */
+export type RejoinGhost = { carId: CarId; conditions: Record<PitCondition, { mapPoint: Known<MapPoint> }> };

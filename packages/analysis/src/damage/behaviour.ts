@@ -2,7 +2,9 @@
 // decided the situation; the calculator only looks up the rows of the spans open for a car and merges them, and the
 // rows of the spans, open or closed, that keep a mini-sector out of a jump's estimate (`noSample`). Its pace laps by
 // activity come from the lap records (in and out laps).
+import { RACE_LAP_PHASE_ROWS } from '../lap-classes/index.ts';
 import type { BehaviourTable } from '../shared/behaviour.ts';
+import { IN_SESSION_ROWS } from '../shared/car-status.ts';
 
 /** What the situations open for a car say about its damage; every field absent means "no change". */
 export type DamageEffect = {
@@ -20,8 +22,6 @@ export type DamageEffect = {
   noSample?: true;
 };
 
-const IN: DamageEffect = { inSession: true };
-const TIMED: DamageEffect = { isRace: false, measured: true };
 /** Wherever the car is, its damage is live: a repair in the garage or the pit lane shows at once, as on track. */
 const LIVE: DamageEffect = {};
 /** A pit visit or a garage spell: damage stays live, its mini-sectors are no samples. */
@@ -32,8 +32,14 @@ const NONE: DamageEffect = {};
 const NEUTRALISED: DamageEffect = { noSample: true };
 
 export const DAMAGE_BEHAVIOUR: BehaviourTable<DamageEffect> = {
-  'weekend-phase': { practice: TIMED, qualifying: TIMED, race: { isRace: true, measured: true }, none: { isRace: false, measured: false } },
-  'car-status': { competing: IN, retired: IN, disqualified: IN, absent: { inSession: false } },
+  // `lap-classes`' rows (C43); a jump is measured in every phase but `none`
+  'weekend-phase': {
+    practice: { ...RACE_LAP_PHASE_ROWS.practice, measured: true },
+    qualifying: { ...RACE_LAP_PHASE_ROWS.qualifying, measured: true },
+    race: { ...RACE_LAP_PHASE_ROWS.race, measured: true },
+    none: { ...RACE_LAP_PHASE_ROWS.none, measured: false },
+  },
+  'car-status': IN_SESSION_ROWS,
   'car-location': { garage: OFF_TRACK, pitLane: OFF_TRACK, track: LIVE },
   'session-phase-race': {
     grid: NONE,

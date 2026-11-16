@@ -22,4 +22,10 @@ export const DEGRADATION_CONFIG = defineConfig('degradation', {
   defaultNuSdMs: 100,
   /** A stint with fewer `forPace` laps is no calibration candidate (`candidate`). Source: pitwall estimate. */
   minSourceLaps: 5,
+  /**
+   * A competing car without a completed lap (still on lap 1) takes the leader's newest lap less its fuel term, plus this
+   * (ms), as its base pace (SP4.3c Task 13; moved from `forecast-field`). Source: pitwall estimate (a car on lap 1 runs at
+   * about the leader's pace; final review F4).
+   */
+  noLapStandInOffsetMs: 0,
 });

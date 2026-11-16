@@ -3,13 +3,15 @@
 // colour and our cars in ownCar (both `carColour`'s, our cars being the cars the topic marks `ours`), ours larger; a car
 // in the pit lane hollow; a car shown blue with a flagBlue side bar; a yellow zone's stretch in flagYellow; turn and
 // sector labels in the full size only; incident markers amber (warning) with their kind's wording (kit `incidentKinds`).
-// No car code labels (supervisor ruling): the labels are the turns' and the sector starts' only.
+// The labels in the full size are the turns', the sector starts' and every car's code (SP4.3c §5.7, T14; replaces the
+// SP4.0 ruling of no code labels).
 import { describe, expect, it } from 'vitest';
 import { carId, known, unknown, zoneFlagsSpans } from '@pitwall/domain';
 import type { Known, MapCar, MapIncident, MapPoint, MapZone, TrackCars, TrackGeometry } from '@pitwall/domain';
 import type { TrackDot, TrackScene } from '../../kit/track/types.ts';
 import { incidentKinds } from '../../kit/text.ts';
 import { carColour, role } from '../../theme/index.ts';
+import { labels } from './presentation.ts';
 import { sceneOf } from './scene.ts';
 import * as text from './text.ts';
 
@@ -174,17 +176,22 @@ describe('sceneOf: the marshal zones', () => {
 });
 
 describe('sceneOf: the labels', () => {
-  // Spec 7.2 (supervisor ruling, test fix round): turn labels and sector labels only, no car code labels, no ticks; the
-  // compact size drops both, as the mockup does. Labels compared as sets: the kit layout orders them itself.
+  // Spec 7.2 and SP4.3c §5.7 (live test T14): in the full size the turn labels, the sector labels and every car's
+  // 3-letter code (`MapCar.code`) at the car's point, placed by the kit layout (`kit/track/layout.ts`) and drawn by the
+  // kit's canvas in textFaint like every label; no ticks; the compact size drops all of them, as the mockup does. Which
+  // size shows which labels is the presentation table's `labels` row (C66). Labels compared as sets: the kit layout
+  // orders them itself.
   const sectorLabels = () => geometry().sectorStarts.map((at, i) => ({ text: text.sectorLabels[i] ?? '', at }));
-  const byText = (labels: { text: string; at: MapPoint }[]) => [...labels].sort((a, b) => a.text.localeCompare(b.text));
+  const codeLabels = (field: MapCar[] = FIELD) => field.map((c) => ({ text: c.code, at: c.point }));
+  const byText = (labels: { text: string; at: MapPoint }[]) => [...labels].sort((a, b) => a.text.localeCompare(b.text) || a.at.x - b.at.x);
 
-  it('labels every turn at its point and every sector start in the full size, and nothing else', () => {
+  it('labels every turn at its point, every sector start and every car with its code in the full size, and nothing else', () => {
     expect(text.sectorLabels).toEqual(['S1', 'S2', 'S3']);
     expect(byText(scene().labels)).toEqual(byText([
       { text: 'T1', at: p(0.9, 0.1) },
       { text: 'T2', at: p(0.9, 0.9) },
       ...sectorLabels(),
+      ...codeLabels(),
     ]));
   });
 
@@ -193,18 +200,50 @@ describe('sceneOf: the labels', () => {
     expect(labels).toEqual(sectorLabels());
   });
 
-  it('a track without turns keeps the sector labels', () => {
-    expect(byText(scene({ geometry: geometry({ turns: [] }) }).labels)).toEqual(byText(sectorLabels()));
+  it('a track without turns keeps the sector and code labels', () => {
+    expect(byText(scene({ geometry: geometry({ turns: [] }) }).labels)).toEqual(byText([...sectorLabels(), ...codeLabels()]));
   });
 
-  it('draws no car code labels', () => {
+  it("the full size draws one code label per car, at the car's point: our cars, rivals, a car in the pit lane, a car shown blue", () => {
     const codes = new Set(FIELD.map((c) => c.code));
-    expect(scene().labels.filter((l) => codes.has(l.text))).toEqual([]);
-    expect(scene({ size: COMPACT }).labels.filter((l) => codes.has(l.text))).toEqual([]);
+    const labels = scene().labels.filter((l) => codes.has(l.text));
+    expect(labels).toHaveLength(FIELD.length);
+    expect(byText(labels)).toEqual(byText(codeLabels()));
   });
 
-  it('drops the turn and sector labels in the compact size: no labels at all', () => {
+  it('a car added to the field adds its label; a field of one car has one code label', () => {
+    const one = [PLAYER];
+    const s = scene({ cars: cars(one) });
+    expect(s.labels.filter((l) => l.text === PLAYER.code)).toEqual([{ text: PLAYER.code, at: PLAYER.point }]);
+    expect(s.labels.filter((l) => FIELD.some((c) => c.code === l.text))).toHaveLength(1);
+  });
+
+  it('no code label while the cars are unknown', () => {
+    const codes = new Set(FIELD.map((c) => c.code));
+    expect(scene({ cars: unknown('notReceived') }).labels.filter((l) => codes.has(l.text))).toEqual([]);
+  });
+
+  it('drops the turn, sector and code labels in the compact size: no labels at all', () => {
     expect(scene({ size: COMPACT }).labels).toEqual([]);
+  });
+});
+
+describe('the presentation table: which labels each size shows (C66)', () => {
+  it('the full size shows turns, sectors and car codes; the compact size none', () => {
+    expect(labels).toEqual({ full: { turns: true, sectors: true, codes: true }, compact: { turns: false, sectors: false, codes: false } });
+  });
+
+  it("the scene follows each size's row", () => {
+    const codes = new Set(FIELD.map((c) => c.code));
+    const turns = new Set(geometry().turns.map((t) => t.label));
+    const sectors = new Set<string>(text.sectorLabels);
+    for (const size of [FULL, COMPACT]) {
+      const row = labels[size.mode];
+      const shown = scene({ size }).labels.map((l) => l.text);
+      expect(shown.some((t) => codes.has(t)), `${size.mode} codes`).toBe(row.codes);
+      expect(shown.some((t) => turns.has(t)), `${size.mode} turns`).toBe(row.turns);
+      expect(shown.some((t) => sectors.has(t)), `${size.mode} sectors`).toBe(row.sectors);
+    }
   });
 });
 

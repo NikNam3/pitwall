@@ -94,13 +94,16 @@ describe('race-zandvoort-full-lap: the line times the gapper draws from', () => 
     }
   });
 
-  it('joined after lights out, the gapper draws no line and no live point for any car and says why: the race start is notReceived', () => {
+  it("joined after lights out (the race start is notReceived), the gapper starts at the leader's first line crossing after the join, lap 10, and draws every car's line and live point from there", () => {
     expect(run.last.raceStartAt).toEqual({ known: false, reason: 'notReceived' });
     for (const reference of [{ kind: 'leaderAverage' }, { kind: 'fixed', lapMs: 75_000 }] as const) {
       const lines = gapperLines(run.last, reference);
-      expect(lines.cars.map((c) => c.points), reference.kind).toEqual(lines.cars.map(() => []));
-      expect(lines.cars.filter((c) => c.now.known).map((c) => c.carId), reference.kind).toEqual([]);
+      expect(lines.origin.known && lines.origin.value, reference.kind).toEqual({ kind: 'join', lap: 10 });
+      expect(lines.cars, reference.kind).not.toEqual([]);
+      expect(lines.cars.filter((c) => c.points.length === 0).map((c) => c.carId), reference.kind).toEqual([]);
+      expect(lines.cars.filter((c) => c.points.some((p) => p.lap < 10)).map((c) => c.carId), reference.kind).toEqual([]);
+      expect(lines.cars.filter((c) => !c.now.known).map((c) => c.carId), reference.kind).toEqual([]);
     }
-    expect(gapperLines(run.last, { kind: 'leaderAverage' }).referenceLapMs).toEqual({ known: false, reason: 'notReceived' });
+    expect(gapperLines(run.last, { kind: 'leaderAverage' }).referenceLapMs.known).toBe(true);
   });
 });

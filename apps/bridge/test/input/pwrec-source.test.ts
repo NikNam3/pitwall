@@ -8,7 +8,7 @@ import type { RawPacket } from '../../src/input/packet-source.ts';
 import { PwrecSource } from '../../src/input/pwrec-source.ts';
 import { PwrecFormatError } from '../../src/pwrec/reader.ts';
 import { PwrecWriter } from '../../src/pwrec/writer.ts';
-import { META } from '../pwrec/helpers.ts';
+import { META, concat, pwrecHeader, pwrecRecord, resumeRecord } from '../pwrec/helpers.ts';
 
 const FEED = 'feed-a' as FeedId;
 async function recording(ts: number[]): Promise<string> {
@@ -64,6 +64,20 @@ describe('PwrecSource', () => {
     src.start((p) => { got.push(p); if (got.length === 2) void src.stop(); });
     await src.done;
     expect(got).toHaveLength(2);
+  });
+  // SP4.3c Task 10 (C59): a recording continued across a bridge restart holds the first part (ended by an end record when
+  // the bridge stopped cleanly), a resume record (kind 1) and the second part. The source delivers every datagram of both.
+  it('a file with a resume record mid-way yields every datagram of both parts in order', async () => {
+    const path = join(mkdtempSync(join(tmpdir(), 'src-')), 'continued.pwrec.gz');
+    const restartMs = Date.parse(META.startedAt) + 60_000;
+    writeFileSync(path, gzipSync(concat(pwrecHeader(), pwrecRecord(0, 100, new Uint8Array([0])), pwrecRecord(0, 110, new Uint8Array([1])),
+      pwrecRecord(255, 111), resumeRecord(60_000, restartMs), pwrecRecord(0, 60_000, new Uint8Array([2])), pwrecRecord(0, 60_020, new Uint8Array([3])),
+      pwrecRecord(255, 60_021))));
+    const src = new PwrecSource({ feedId: FEED, path, mode: 'asFastAsPossible' });
+    const got: RawPacket[] = [];
+    src.start((p) => got.push(p));
+    await src.done;
+    expect(got.map((p) => [p.receivedAtMs, [...p.bytes]])).toEqual([[100, [0]], [110, [1]], [60_000, [2]], [60_020, [3]]]);
   });
   it('done rejects with PwrecFormatError for a file with a bad magic', async () => {
     const path = join(mkdtempSync(join(tmpdir(), 'src-')), 'bad.pwrec.gz');

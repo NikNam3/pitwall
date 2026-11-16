@@ -6,6 +6,7 @@
 //    car's filter leaves out gives no zone: a pass caused by a stop or made on lap 1 never counts.
 //  - Its pace advantage is the leader's pace minus its own, each the median of the car's free-air laps' residuals
 //    against the field's median lap (its usable laps' when it never had free air), so the race's fuel and tyre trend cancel.
+//    The residuals are `degradation`'s (`fieldResiduals`, SP4.3c Task 13, O2: a car's pace has one owner).
 //    Which laps are free air is the shared judgement (`freeAirLaps` with `driver-noise`'s `freeAirGapMs`, C43).
 //  - DRS is relative (spec 5.4): the follower is within `drsRangeMs` of the car ahead at the detection point of the DRS
 //    zone that leads into the braking zone, and that car is not itself within range of its own car ahead.
@@ -27,8 +28,11 @@ import {
   type TrackData,
 } from '@pitwall/domain';
 import { membershipOf, type DeepReadonly, type MembershipSource, type Projection } from '@pitwall/engine/readers';
+import { fieldResiduals } from '../degradation/residuals.ts';
 import { DRIVER_NOISE_CONFIG } from '../driver-noise/config.ts';
+import { touchesNeutralisation } from '../lap-classes/index.ts';
 import { freeAirLaps } from '../shared/free-air.ts';
+import { median } from '../shared/stats.ts';
 import { RACE_INTERACTION_BEHAVIOUR } from './behaviour.ts';
 import type { RaceInteractionConfig } from './config.ts';
 
@@ -60,7 +64,7 @@ export function excludedLap(lap: DeepReadonly<LapRecord>, ctx: LapFilterCtx): bo
 
 /** The lap filter's checks on the lap record itself (the cheap ones, so membership runs only for the laps they keep). */
 function excludedByLap(lap: DeepReadonly<LapRecord>, config: RaceInteractionConfig): boolean {
-  if (lap.lapNumber <= 1 || lap.inLap || lap.outLap || lap.scShare > 0 || lap.vscShare > 0) return true;
+  if (lap.lapNumber <= 1 || lap.inLap || lap.outLap || touchesNeutralisation(lap)) return true;
   const damage = lap.damageAtEnd;
   if (!damage.known) return false;
   for (const part of AERO_PARTS) if (damage.value[part] >= config.aeroDamageMaxPct) return true;
@@ -190,13 +194,6 @@ function filterSources(source: MembershipSource): (car: CarId) => MembershipSour
 /** Entry `i` of `xs`, NaN outside it. */
 const nth = (xs: ArrayLike<number>, i: number): number => xs[i] ?? Number.NaN;
 
-/** The median of a non-empty list (sorts it). */
-const median = (values: number[]): number => {
-  const sorted = values.sort((a, b) => a - b);
-  const mid = sorted.length >> 1;
-  return sorted.length % 2 === 1 ? nth(sorted, mid) : (nth(sorted, mid - 1) + nth(sorted, mid)) / 2;
-};
-
 /** The race order at one point of one lap: the cars that passed it by time, their times, and each car's rank (-1 without). */
 type Order = { cars: CarId[]; at: number[]; rank: Int16Array };
 
@@ -325,30 +322,20 @@ export function episodesOf(
     return order;
   };
 
-  // each car's pace: the median residual of its free-air laps (the shared rule) against the field's median lap, else of
-  // its usable laps
-  const fieldMedian = new Float64Array(laps).fill(Number.NaN);
-  for (let lap = 1; lap <= lastLap; lap++) {
-    const lapTimes: number[] = [];
-    for (const car of cars) {
-      const record = lapOf(car, lap);
-      if (record !== undefined && isUsable(car, lap)) lapTimes.push(record.lapTimeMs);
-    }
-    if (lapTimes.length > 0) fieldMedian[lap] = median(lapTimes);
-  }
+  // each car's pace: the median of `degradation`'s residuals against the field (O2, C43) over its free-air laps (the
+  // shared rule), else over its usable laps
+  const residuals = fieldResiduals(current, isUsable);
   const pace = new Float64Array(carSlots).fill(Number.NaN);
   const free = freeAirLaps(history, freeAirGapMs);
   for (const car of cars) {
     const freeAir: number[] = [];
     const all: number[] = [];
-    for (let lap = 1; lap <= lastLap; lap++) {
-      const record = lapOf(car, lap);
-      if (record === undefined || !isUsable(car, lap)) continue;
-      const residual = record.lapTimeMs - nth(fieldMedian, lap);
+    for (const [lap, residual] of residuals.get(car) ?? []) {
       all.push(residual);
       if (free.isFree(car, lap)) freeAir.push(residual);
     }
-    if (all.length > 0) pace[car] = median(freeAir.length > 0 ? freeAir : all);
+    const carPace = median(freeAir.length > 0 ? freeAir : all);
+    if (carPace !== undefined) pace[car] = carPace;
   }
 
   /** Whether `car` has DRS at braking zone `z` of lap `lap` (relative: the car ahead is not itself in range). */

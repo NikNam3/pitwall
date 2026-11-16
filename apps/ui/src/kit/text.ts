@@ -135,6 +135,7 @@ export const commandGroups = {
   calibration: 'Calibration',
   drivers: 'Drivers',
   plan: 'Plan',
+  session: 'Session',
   help: 'Help',
 } as const;
 
@@ -142,6 +143,7 @@ export const commandTitles = {
   workbookOpen: (n: number): string => `Open workbook ${n}`,
   workbookPick: 'Pick a workbook',
   workbookSaveAs: 'Save workbook as',
+  workbookReset: 'Reset workbook to default',
   alertsAckAll: 'Acknowledge all alerts',
   alertAck: (key: string): string => `Acknowledge alert ${key}`,
   devInspect: 'Inspect a widget (dev)',
@@ -166,6 +168,7 @@ export const commandTitles = {
   driversOpen: 'Link the drivers',
   planCommit: (car: number): string => `Commit the plan for car ${car}`,
   planClear: (car: number): string => `Clear the plan for car ${car}`,
+  sessionEnd: 'End session',
 } as const;
 
 /** The session-start calibration prompt and the top bar's calibration segment (SP4.1a spec 3.3). */

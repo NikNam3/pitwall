@@ -10,7 +10,7 @@ import { longRace } from '../../../../test-support/builders/long-race.ts';
 import { UNDERCUT_CONFIG, UNDERCUT_JOB, type UndercutInput } from '../../src/undercut/index.ts';
 import { run } from '../../src/undercut/job.ts';
 import { rejoinOf } from './support.ts';
-import { OURS, viewAt } from '../strategy/support.ts';
+import { LONG_RACE_OURS_SETS, OURS, viewAt } from '../strategy/support.ts';
 
 const CAR_MS = 2_500;
 
@@ -18,7 +18,7 @@ describe('undercut budget', () => {
   // row 11
   it('budget: 12 cases with maxScenarioPolicies 16000 under 2.5 s per car, one DP solve per car included', () => {
     expect(UNDERCUT_CONFIG.defaults.maxScenarioPolicies).toBe(16_000);
-    const raw = viewAt(longRace(), 2, { frameOfLap: 0 });
+    const raw = viewAt(longRace(), 2, { frameOfLap: 0, sets: LONG_RACE_OURS_SETS });
     const at = raw.live.sessionTime;
     const outputs = new Map(raw.outputs);
     outputs.set('rejoin', { cars: Object.fromEntries(OURS.map((c) => [c, rejoinOf(c, at)])), ghost: {} });

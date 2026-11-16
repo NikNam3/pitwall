@@ -1,9 +1,10 @@
 // `undercut`'s cases (SP4.3b spec §9.1; C43): per rival and N = 1 … `maxLapsLater`, the candidate `scoreCalls` scores
 // (rival ahead: we box now, it N laps later on its next compound; rival behind: the mirror), until both have stopped
 // plus one lap; and a case's value from its per-scenario outcomes. Pure (C2).
-import { known, unknown, UNDERCUT_GAIN_BINS, type Known, type Ms, type Policy, type StartingPoint, type Trigger, type UndercutCase } from '@pitwall/domain';
+import { known, unknown, UNDERCUT_GAIN_BINS, type Known, type Ms, type Policy, type StartingPoint, type UndercutCase } from '@pitwall/domain';
 import { hasStopAhead, rivalNextCompound, type CallCandidate, type CallOutcome } from '../race-monte-carlo/index.ts';
 import { binShares } from '../shared/distribution.ts';
+import { lowerMedian } from '../shared/stats.ts';
 import { policyOf } from '../shared/strategy-input/index.ts';
 import { bestWith, type DpSolution } from '../strategy-dp/index.ts';
 import type { UndercutRivalInput } from './prepare.ts';
@@ -33,7 +34,7 @@ export function ownStopsOf(sol: DpSolution): RivalStopsAt {
  * for an N whose gap lap (the later stop's out-lap done) is past the last lap, where the DP has no plan with our stop on
  * that lap (`bestWith` `null`: no set left), or where the rival makes no stop there (`stopsAt`).
  */
-export function casesOf(start: StartingPoint, sol: DpSolution, thresholds: readonly Trigger[], lap: number, rival: UndercutRivalInput, stopsAt: RivalStopsAt, maxLapsLater: number): CaseCall[] {
+export function casesOf(start: StartingPoint, sol: DpSolution, lap: number, rival: UndercutRivalInput, stopsAt: RivalStopsAt, maxLapsLater: number): CaseCall[] {
   const out: CaseCall[] = [];
   for (let n = 1; n <= Math.min(3, maxLapsLater); n++) {
     const later = lap + n;
@@ -47,24 +48,19 @@ export function casesOf(start: StartingPoint, sol: DpSolution, thresholds: reado
     out.push({
       rival,
       n: n as UndercutCase['n'],
-      candidate: { policy: policyOf(plan, thresholds), rival: { carId: rival.carId, policy: { stops, triggers: [] }, gapAtLap }, untilLap: gapAtLap },
+      // our plan with its own triggers (SP4.3c Task 19)
+      candidate: { policy: policyOf(plan), rival: { carId: rival.carId, policy: { stops, triggers: [] }, gapAtLap }, untilLap: gapAtLap },
     });
   }
   return out;
 }
 
-/** The lower median of `values`. */
-function lowerMedian(values: readonly number[]): number {
-  const sorted = [...values].sort((a, b) => a - b);
-  return sorted[Math.floor((sorted.length - 1) / 2)] as number;
-}
-
 /**
  * A case's value from its outcomes (spec §9.1): the mean gap change in our favour, the share ending ahead and the gain
- * bins over the scenarios where both cars ran at the gap lap; the rejoin position `rejoin`'s green one when we box now
- * (C43), else the simulated rejoin's median. Without a scenario: `unknown('insufficientData')` (C3).
+ * bins over the scenarios where both cars ran at the gap lap; the rejoin position the simulated rejoin's median, a
+ * box-now case's too (one model, B8). Without a scenario: `unknown('insufficientData')` (C3).
  */
-export function caseValue(call: CaseCall, outcome: CallOutcome | undefined, greenRejoin: Known<number>, at: Ms): UndercutCase {
+export function caseValue(call: CaseCall, outcome: CallOutcome | undefined, at: Ms): UndercutCase {
   const none = unknown('insufficientData');
   const gains: number[] = [];
   let ahead = 0;
@@ -73,9 +69,10 @@ export function caseValue(call: CaseCall, outcome: CallOutcome | undefined, gree
     gains.push(g - call.rival.signedGapMs);
     if (g > 0) ahead++;
   }
-  const boxNow = call.rival.side === 'ahead';
+  // every case, box now too: the simulated rejoin, the one stop-and-rejoin model's (SP4.3c Task 17, B8)
   const rejoins = Array.from(outcome?.rejoin ?? []).filter((p) => p > 0);
-  const rejoinPosition: Known<number> = boxNow ? greenRejoin : rejoins.length === 0 ? none : known(lowerMedian(rejoins), at);
+  const rejoinMedian = lowerMedian(rejoins);
+  const rejoinPosition: Known<number> = rejoinMedian === undefined ? none : known(rejoinMedian, at);
   if (gains.length === 0) return { n: call.n, gainMs: none, pAhead: none, gainBins: none, rejoinPosition };
   const bins = { from: UNDERCUT_GAIN_BINS.fromMs, step: UNDERCUT_GAIN_BINS.stepMs, count: UNDERCUT_GAIN_BINS.count };
   return {

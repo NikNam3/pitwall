@@ -4,31 +4,21 @@
 import { known, unknown, type Known, type PitSweepRow, type SessionTime } from '@pitwall/domain';
 import { paired, ties, type CallOutcome } from '../race-monte-carlo/index.ts';
 import { placePmf } from '../shared/distribution.ts';
+import { lowerMedian } from '../shared/stats.ts';
 
 /** What every row of one car's table reads besides its outcomes. */
 export type RowContext = {
-  /** The DP's first lap (now): the stop lap whose rejoin is `rejoin`'s. */
-  now: number;
   /** The car's race position at the trigger: a row's gain is a finish ahead of it. */
   position: number;
   /** The field's car count (the pmf's places). */
   cars: number;
   /** `pit-window`'s `stint.latest`: a stop after it runs past the set's life. */
   latest: Known<number>;
-  /** `rejoin`'s green rejoin position (a stop now, C43). */
-  greenRejoin: Known<number>;
   zTie: number;
   tieBand: number;
   /** When the values are known (the starting point's time). */
   at: SessionTime;
 };
-
-/** The lower middle value of `xs` (a median of whole places), `undefined` when empty. */
-function median(xs: ArrayLike<number>): number | undefined {
-  if (xs.length === 0) return undefined;
-  const s = Array.from(xs).sort((a, b) => a - b);
-  return s[Math.floor((s.length - 1) / 2)];
-}
 
 /** The mean of `xs` (non-empty). */
 const mean = (xs: ArrayLike<number>): number => {
@@ -39,7 +29,7 @@ const mean = (xs: ArrayLike<number>): number => {
 
 /** A row's simulated rejoin: the median place after the stop, unknown where it is no place (no stop in most scenarios). */
 function simulatedRejoin(o: CallOutcome, at: SessionTime): Known<number> {
-  const m = median(o.rejoin);
+  const m = lowerMedian(o.rejoin);
   return m === undefined || m < 1 ? unknown('insufficientData') : known(m, at);
 }
 
@@ -55,11 +45,12 @@ export function rowsOf(stopLaps: readonly number[], outcomes: readonly CallOutco
   return kept.map(({ stopLap, o }, i): PitSweepRow => {
     let gain = 0;
     for (const p of o.finish) if (p < ctx.position) gain++;
-    const traffic = median(o.traffic);
+    const traffic = lowerMedian(o.traffic);
     const { latest } = ctx;
     return {
       stopLap,
-      rejoinPosition: stopLap === ctx.now ? ctx.greenRejoin : simulatedRejoin(o, ctx.at),
+      // every stop lap, now too: the simulated rejoin, the one stop-and-rejoin model's (SP4.3c Task 17, B8)
+      rejoinPosition: simulatedRejoin(o, ctx.at),
       traffic: traffic === undefined ? unknown('insufficientData') : known(traffic, ctx.at),
       ePos: ePos[i] as number,
       positionPmf: placePmf(o.finish, ctx.cars),

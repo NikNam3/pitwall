@@ -16,7 +16,7 @@ import { describe, expect, it } from 'vitest';
 import { raceForecast } from '../../src/race-forecast/index.ts';
 import { buildStartingPoint } from '../../src/shared/forecast-field/index.ts';
 import { generated, materialised, PARAMS, plainNoise, TRACK, upstreamOf } from '../shared/forecast-field/support.ts';
-import { drawn, interaction, LAP_MODEL, noStops, PACE_MS, PLAIN, startingPoint, traceAt, type CarSpec } from './start.ts';
+import { drawn, interaction, LAP_MODEL, noStops, PACE_MS, PLAIN, startingPoint, traceAt, withLapsLeftBurn, type CarSpec } from './start.ts';
 
 const run = (start: StartingPoint, policies: readonly Policy[], scenario = PLAIN) => raceForecast(start, policies, scenario, createRng(42), { trace: true });
 
@@ -28,7 +28,8 @@ const LAPS_TOTAL = 20;
 /** The field of `cars` (`cars[0]` leads) with every car's lap fraction set: a fraction above the leader's is the lap before. */
 function field(cars: CarSpec[], fractions: number[], o: Partial<Parameters<typeof startingPoint>[0]> = {}): StartingPoint {
   const start = startingPoint({ lap: LAP, lapsTotal: LAPS_TOTAL, interaction: interaction({ curve: { cap: 0 } }), ...o, cars });
-  return { ...start, lapFraction: Float64Array.from(fractions) };
+  // the burn: the fuel over the laps left from the fractions set here (SP4.3c Task 15: the starting point's burn)
+  return withLapsLeftBurn({ ...start, lapFraction: Float64Array.from(fractions) });
 }
 
 /** Row 2's loss and share (as the F2 rows: 5,590 ms on the in-lap, 15,910 ms on the out-lap). */

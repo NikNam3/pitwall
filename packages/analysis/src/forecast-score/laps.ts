@@ -3,6 +3,7 @@
 // weather crossover). Pure functions of the projection.
 import { currentLaps, NOISE_COMPOUNDS, type CarId, type FrameNumber, type LapRecord, type NoiseCompound, type PitStopRecord, type StintRecord } from '@pitwall/domain';
 import type { DeepReadonly, Projection } from '@pitwall/engine/readers';
+import { touchesNeutralisation } from '../lap-classes/index.ts';
 
 /** The tyre types of the wet: a lap on them is no dry lap. */
 const WET: ReadonlySet<string> = new Set(['inter', 'wet']);
@@ -26,7 +27,7 @@ export type RaceLaps = {
   crossover(car: CarId | number, lap: number): boolean;
   /** Whether car `car`'s laps `from` to `to` are dry and hold no weather crossover. */
   dry(car: CarId | number, from: number, to: number): boolean;
-  /** Whether any of car `car`'s confirmed laps `from` to `to` ran partly under an SC or VSC (`scShare + vscShare > 0`). */
+  /** Whether any of car `car`'s confirmed laps `from` to `to` ran partly under an SC or VSC (`touchesNeutralisation`). */
   neutralised(car: CarId | number, from: number, to: number): boolean;
   /** Whether any of car `car`'s laps `from` to `to` is its own in-lap (a pit stop's lap) or out-lap (the lap after a
    *  stop, the first lap of a later stint), from the projection's pit stops and stints (SP4.3b Task 11e). */
@@ -85,7 +86,7 @@ export function raceLaps(history: DeepReadonly<Projection>): RaceLaps {
     neutralised: (car, from, to) => {
       for (let n = from; n <= to; n++) {
         const l = lap(car, n);
-        if (l !== undefined && l.scShare + l.vscShare > 0) return true;
+        if (l !== undefined && touchesNeutralisation(l)) return true;
       }
       return false;
     },

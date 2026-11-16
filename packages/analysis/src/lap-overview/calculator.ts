@@ -4,10 +4,20 @@
 // crossing) holds a session-phase span whose row is `red` (C44). Stints by `stintLaps` (`shared/stint-laps.ts`).
 import { known, unknown, type CarId, type Known, type LapRecord, type Ratio, type StintRecord } from '@pitwall/domain';
 import { membershipOf, type EngineView, type QuickCalculator } from '@pitwall/engine/readers';
-import { classifyLap, isNeutralisedLap, LAP_CLASSES_CONFIG, type LapClassOptions } from '../lap-classes/index.ts';
+import {
+  classifyLap,
+  isNeutralisedLap,
+  LAP_CLASSES_CONFIG,
+  lapNeutralisationKind,
+  lapPhaseRowOf,
+  RACE_LAP_PHASE_ROWS,
+  type LapClassOptions,
+} from '../lap-classes/index.ts';
+import { bestsOf, sessionBestsOf, type CarBests } from '../lap-times/lap-times.ts';
 import { behaviourFor } from '../shared/behaviour.ts';
+import { NEUTRALISATION_MACHINES } from '../shared/neutralised.ts';
 import { carLaps, stintLaps } from '../shared/stint-laps.ts';
-import { LAP_OVERVIEW_BEHAVIOUR, SESSION_PHASE_MACHINES, type LapOverviewEffect } from './behaviour.ts';
+import { LAP_OVERVIEW_BEHAVIOUR, type LapOverviewEffect } from './behaviour.ts';
 import { LAP_OVERVIEW, type LapOverviewLap, type LapOverviewOutput, type LapStatus } from './index.ts';
 
 /** The weekend-phase rows alone: the session-phase rows apply per lap, by its membership, not by the open spans. */
@@ -47,42 +57,34 @@ function heatsOf(stint: readonly LapRecord[], isPace: (lap: LapRecord) => boolea
   return heats;
 }
 
-/** The faster of two `forBest` laps; the earlier one on a tie. */
-const faster = (a: LapRecord | undefined, b: LapRecord): LapRecord => (a === undefined || b.lapTimeMs < a.lapTimeMs ? b : a);
-
 export const lapOverviewCalculator: QuickCalculator<LapOverviewOutput> = {
   id: LAP_OVERVIEW,
   kind: 'quick',
   reads: ['laps', 'stints', 'spans:weekend-phase', 'spans:session-phase-race', 'spans:session-phase-qualifying', 'spans:session-phase-practice'],
   cadence: 'frame',
   compute: (view: EngineView) => {
-    const session: LapOverviewEffect = Object.assign({}, ...behaviourFor(WEEKEND_PHASE_TABLE, view));
+    // a pending weekend phase has no span yet and reads as the race (C14, `lapPhaseRowOf`)
+    const session: LapOverviewEffect = behaviourFor(WEEKEND_PHASE_TABLE, view)[0] ?? lapPhaseRowOf(RACE_LAP_PHASE_ROWS, 'pending');
     const { maxNeutralisedMs } = LAP_CLASSES_CONFIG.read(view);
-    // a pending weekend phase has no span yet and reads as the race (C14)
-    const classes: LapClassOptions = { isRace: session.isRace ?? true, maxNeutralisedMs };
+    const classes: LapClassOptions = { isRace: session.isRace === true, maxNeutralisedMs };
 
     const cars = [...new Set(view.history.laps.map((l) => l.carId))];
     const lapsByCar = new Map<CarId, LapRecord[]>(cars.map((id) => [id, carLaps(view.history, id)]));
 
-    // bests as of now: each car's fastest `forBest.lap` lap, and the session's among them
-    const personal = new Map<CarId, LapRecord>();
-    let sessionBest: LapRecord | undefined;
-    for (const [id, laps] of lapsByCar) {
-      let best: LapRecord | undefined;
-      for (const l of laps) if (classifyLap(l, classes).forBest.lap) best = faster(best, l);
-      if (best === undefined) continue;
-      personal.set(id, best);
-      sessionBest = faster(sessionBest, best);
-    }
+    // bests as of now: `lap-times`' rule (O14, C43), so the overview and the board agree
+    const bests = new Map<CarId, CarBests>([...lapsByCar].map(([id, laps]) => [id, bestsOf(laps, classes)]));
+    const sessionBest = sessionBestsOf(bests).lap;
+    const bestOf = (id: CarId, l: LapRecord): LapOverviewLap['best'] =>
+      sessionBest?.carId === id && sessionBest.lapNumber === l.lapNumber ? 'session' : bests.get(id)?.lap?.lapNumber === l.lapNumber ? 'personal' : 'none';
 
     const statusOf = (lap: LapRecord): LapStatus => {
       const member = membershipOf({ history: view.history, situation: view.situation }, lap);
-      for (const machine of SESSION_PHASE_MACHINES) {
+      for (const machine of NEUTRALISATION_MACHINES) {
         const span = member[machine];
         if (span !== undefined && LAP_OVERVIEW_BEHAVIOUR[machine]?.[span.kind]?.red === true) return 'red';
       }
       if (!isNeutralisedLap(lap, { maxNeutralisedMs })) return 'green';
-      return lap.scShare > 0 ? 'sc' : 'vsc';
+      return lapNeutralisationKind(lap) ?? 'green';
     };
 
     const out: LapOverviewOutput = {};
@@ -108,7 +110,7 @@ export const lapOverviewCalculator: QuickCalculator<LapOverviewOutput> = {
             stint: stintOf(l),
             compound: l.visualCompound,
             kind: l.inLap ? 'in' : l.outLap ? 'out' : 'normal',
-            best: l === sessionBest ? 'session' : l === personal.get(id) ? 'personal' : 'none',
+            best: bestOf(id, l),
             heat: heats.get(l) ?? unknown('notApplicable'),
             status: statusOf(l),
           }),

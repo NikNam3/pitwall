@@ -1,8 +1,9 @@
 // What `car-bands` does per situation (contract C43, C44): one row per kind of every sub-machine it reads. The machine
 // decided the situation; the calculator only looks up the rows of the spans open for a car and merges them. Its judged
 // lap counts by activity through the lap record (in and out laps) and by the weekend phase's row (lap 1 of a race).
+import { RACE_LAP_PHASE_ROWS } from '../lap-classes/index.ts';
 import type { BehaviourTable } from '../shared/behaviour.ts';
-import { JUDGED_LAP_PHASE_ROWS } from './bands.ts';
+import { IN_SESSION_ROWS } from '../shared/car-status.ts';
 
 /** What the situations open for a car say about its bands; every field absent means "no change". */
 export type CarBandsEffect = {
@@ -13,16 +14,21 @@ export type CarBandsEffect = {
    * judgement (`outForFullLap`) stay.
    */
   bandsOff?: true;
-  /** The session is a race: lap 1 is not judged (`judgedLaps`). */
-  isRace?: true;
+  /** The session is a race: lap 1 is not judged (`judgedLaps`; `lap-classes`' rows, a pending phase the race's). */
+  isRace?: boolean;
+  /**
+   * A human drives the car (car-driver): its tyre channels (surface, carcass, pressure) are judged. Set by the `human`
+   * row only, so an AI car and a car without a car-driver span have `notApplicable` tyre bands (SP4.3c §5.6 D).
+   */
+  tyresJudged?: true;
 };
 
-const IN: CarBandsEffect = { inSession: true };
 const ON: CarBandsEffect = {};
 
 export const CAR_BANDS_BEHAVIOUR: BehaviourTable<CarBandsEffect> = {
-  'weekend-phase': JUDGED_LAP_PHASE_ROWS,
-  'car-status': { competing: IN, retired: IN, disqualified: IN, absent: { inSession: false } },
+  'weekend-phase': RACE_LAP_PHASE_ROWS,
+  'car-status': IN_SESSION_ROWS,
+  'car-driver': { human: { tyresJudged: true }, ai: ON },
   'car-activity-race': {
     racingLap: ON,
     inLap: ON,

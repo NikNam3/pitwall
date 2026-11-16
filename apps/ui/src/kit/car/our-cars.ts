@@ -1,8 +1,7 @@
 import type { SessionInfo } from '@pitwall/contracts';
-import type { CarId } from '@pitwall/domain';
+import { ourCars as domainOurCars, type CarId } from '@pitwall/domain';
 
-/** Our cars from `session.info`: the player, then the teammate when there is one (the ordered set `carColour` expects); none without a session. */
+/** Our cars from `session.info` (the domain's `ourCars`): the player, then the teammate when it is a different car (the ordered set `carColour` expects); none without a session. */
 export function ourCars(session: Pick<SessionInfo, 'playerCar' | 'teammateCar'> | undefined): ReadonlySet<CarId> {
-  if (session === undefined) return new Set();
-  return new Set(session.teammateCar === undefined ? [session.playerCar] : [session.playerCar, session.teammateCar]);
+  return session === undefined ? new Set() : new Set(domainOurCars(session));
 }

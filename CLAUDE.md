@@ -30,7 +30,7 @@ Other docs: `docs/research/README.md` (index of the domain research), `docs/acce
 - `packages/engine`: frame assembly, the four steps (`situations/` is the machine), the log and projection, the scheduler, the runner; pure
 - `packages/analysis`: calculators, analyses, simulators, one folder per unit; `src/shared/` holds pure helpers shared by units
 - `packages/contracts`: topic types and WebSocket messages shared by bridge and UI
-- `apps/bridge`: the imperative shell (input, runner, storage, priors store, jobs, hub, CLI); default workbooks in `src/ui-state/default-workbooks/`, seeded into `PITWALL_DATA_DIR/ui/workbooks/` when missing, never overwritten
+- `apps/bridge`: the imperative shell (input, runner, storage, priors store, jobs, hub, CLI); default workbooks in `src/ui-state/default-workbooks/`, seeded into `PITWALL_DATA_DIR/ui/workbooks/`; a new or changed default replaces the user's copy (kept as `<name>.json.bak-<date>`), an unchanged one keeps the user's edits
 - `apps/ui`: Svelte UI: kit, theme, emphasis, shell, connection, widgets, gallery
 - `apps/desktop`: Electron host (imports nothing from the workspace)
 - `test-support/`: fixtures helper and builders; `fixtures/`: committed `.pwrec` segments and `index.json`

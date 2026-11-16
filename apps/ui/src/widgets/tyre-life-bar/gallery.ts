@@ -11,11 +11,19 @@ const corner = (wearPct: number, rate: number, laps: number) => ({
   lapsToLimit: known(laps, at),
 });
 
-const wear = (fl: ReturnType<typeof corner>, fr: ReturnType<typeof corner>, rl: ReturnType<typeof corner>, rr: ReturnType<typeof corner>): TyreWear => ({
+type Corner = TyreWear['corners']['fl'];
+/** The 22-lap life span the cases share. */
+const LIFE_SPAN = known(22, at);
+/** The marker `tyre-wear` gives a corner (B1): its rate x the life span, or the rate's unknown. Fixture data, not the display's. */
+const markerOf = (c: Corner): TyreWear['wearAtLifeSpanPct']['fl'] =>
+  c.ratePctPerLap.known && LIFE_SPAN.known ? known(c.ratePctPerLap.value * LIFE_SPAN.value, c.ratePctPerLap.at) : c.ratePctPerLap;
+
+const wear = (fl: Corner, fr: Corner, rl: Corner, rr: Corner): TyreWear => ({
   corners: { fl, fr, rl, rr },
   limitPct: 70,
   warnLaps: 3,
-  gameLifeSpanLaps: known(22, at),
+  gameLifeSpanLaps: LIFE_SPAN,
+  wearAtLifeSpanPct: { fl: markerOf(fl), fr: markerOf(fr), rl: markerOf(rl), rr: markerOf(rr) },
 });
 
 // Only the tyres matter to this widget (compound and age in the header).

@@ -1,11 +1,11 @@
 // One scenario (SP4.3b spec §7.1): its neutralisations drawn from `race-hazard`'s tables, and our cars' policies as
 // they play out in it (their triggers fired). Every draw is keyed by (scenario, car, lap, purpose) under the run's base
 // seed (C2, S25), so a scenario is the same for every candidate (common random numbers).
-import type { ForecastResult, NoiseCompound, Policy, Scenario, StartingPoint } from '@pitwall/domain';
+import { tyreIndex, type ForecastResult, type NoiseCompound, type Policy, type Scenario, type StartingPoint } from '@pitwall/domain';
 import type { Rng } from '@pitwall/engine/readers';
 import { drawsInto, normal, PURPOSE, streamKey, uniform, type Draws } from '../race-forecast/draws.ts';
 import { raceForecast } from '../race-forecast/index.ts';
-import { COVER_GAP_MS, MC_PURPOSE } from './constants.ts';
+import { MC_PURPOSE } from './constants.ts';
 import { hasStopAhead, rivalPlan, rivalStops } from './rivals.ts';
 import type { McInput, RivalRules } from './types.ts';
 import { drawWeather, wetnessPath, type WeatherLap } from './weather.ts';
@@ -31,8 +31,9 @@ export const scenarioDraws = (start: StartingPoint, base: number, id: number): D
 
 /**
  * The neutralisations of one scenario. `hazard.byLap[i]` and `vscByLap[i]` are the start chances on lap `start.lap + i`;
- * one lasting d laps from lap n is out on n … n + d − 1 (`scDur[d − 1]`). None starts while one is out or on the lap
- * after it ends (`race-hazard`). One out now (`active`) runs from `start.lap` for its drawn laps left.
+ * one lasting d laps from lap n is out on n … n + d − 1 (`scDur[d − 1]`). None of the drawn ones starts while one drawn
+ * before it is out or on the lap after it ends. One out now (`active`) runs from `start.lap` for its drawn laps left;
+ * when a new one may start after it is `race-hazard`'s `allowed`, already in its chances, so no lap is blocked here.
  */
 export function drawNeutralisations(start: StartingPoint, hazard: McInput['hazard'], draws: Draws): Neutralisation[] {
   const key = streamKey(draws, start.cars, 0);
@@ -42,7 +43,6 @@ export function drawNeutralisations(start: StartingPoint, hazard: McInput['hazar
     const left = pick(hazard.active.remaining, uniform(key, MC_PURPOSE.activeLength, 0));
     const toLap = Math.min(start.lap + left, start.lapsTotal);
     out.push({ kind: hazard.active.condition, fromLap: start.lap, toLap });
-    free = toLap + 2;
   }
   for (let i = 0; i < hazard.byLap.length; i++) {
     const lap = start.lap + i;
@@ -195,11 +195,12 @@ function wearRateOff(run: Run, id: number): Float64Array {
   const out = new Float64Array(start.cars);
   const draws = drawsInto(run.forecastBase, id, new Int32Array(start.cars));
   for (const c of run.ours) {
-    const deg = start.degMsPerLap[c] ?? 0;
-    const sd = start.degSdMs[c] ?? 0;
+    const t = tyreIndex(c, start.compound[c] ?? 0);
+    const deg = start.tyre.degMsPerLap[t] ?? 0;
+    const sd = start.tyre.degSdMs[t] ?? 0;
     if (!(deg > 0) || sd === 0) continue;
     const drawn = deg + sd * normal(streamKey(draws, c, 0), PURPOSE.deg, 0);
-    out[c] = (start.wearRatePct[c] ?? 0) * (drawn / deg - 1);
+    out[c] = (start.tyre.wearRatePct[t] ?? 0) * (drawn / deg - 1);
   }
   return out;
 }
@@ -332,7 +333,7 @@ function rivalPits(run: Run, policies: Policy[], scenario: Scenario, owns: reado
 }
 
 /**
- * The cover rule (spec §7.2 ablation): a rival ahead of our stopping car by at most `COVER_GAP_MS` at the line ending our
+ * The cover rule (spec §7.2 ablation): a rival ahead of our stopping car by at most `rules.coverGapMs` at the line ending our
  * in-lap, with a stop still ahead later than the next lap, stops on the next lap instead. One traced forecast to our
  * last stop finds the gaps.
  */
@@ -351,7 +352,7 @@ function cover(run: Run, policies: Policy[], drawn: ScenarioEntry): void {
       for (let k = 0; k < start.cars; k++) {
         if (run.ours.has(k) || !hasStopAhead(start, k)) continue;
         const pos = entry.position[k] ?? 0;
-        if (pos === 0 || pos >= ourPos || (entry.gapMs[c] ?? 0) - (entry.gapMs[k] ?? 0) > COVER_GAP_MS) continue;
+        if (pos === 0 || pos >= ourPos || (entry.gapMs[c] ?? 0) - (entry.gapMs[k] ?? 0) > run.rules.coverGapMs) continue;
         const planned = rivalLaps[k] ?? -1;
         const now = policies[k]?.stops[0]?.lap ?? planned;
         if (now !== -1 && now <= s.lap + 1) continue;

@@ -10,12 +10,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as mc from '../../src/race-monte-carlo/index.ts';
 import type * as dp from '../../src/strategy-dp/index.ts';
 import { paired, ties } from '../../src/race-monte-carlo/index.ts';
-import { bestWith, dpResult } from '../../src/strategy-dp/index.ts';
+import { bestWith } from '../../src/strategy-dp/index.ts';
 import { PIT_SWEEP_CONFIG, PIT_SWEEP_JOB } from '../../src/pit-sweep/index.ts';
 import { run } from '../../src/pit-sweep/job.ts';
 import { placePmf } from '../../src/shared/distribution.ts';
 import { mcSettingsFrom, policyOf } from '../../src/shared/strategy-input/index.ts';
-import { prepareStrategy, runStrategy } from '../../src/strategy/index.ts';
+import { prepareStrategy, runStrategy, STRATEGY_CONFIG } from '../../src/strategy/index.ts';
 import { viewAt } from '../strategy/support.ts';
 import { json, mean, middles, OURS, pitWindowOf, PLAYER, RACE, seOf, SETS, SWEEP_CAP, sweepViewAt, TEAMMATE, windowOf, type Recorded, type SweepSpec } from './support.ts';
 
@@ -25,8 +25,9 @@ vi.mock('../../src/strategy-dp/index.ts', async (importOriginal) => {
   const real = await importOriginal<typeof dp>();
   return {
     ...real,
-    solveDp: (...args: Parameters<typeof real.solveDp>) => {
-      const solution = real.solveDp(...args);
+    // SP4.3c Task 19: a call solves the first weather world (`solveWorld(input, 0)`) and queries it
+    solveWorld: (...args: Parameters<typeof real.solveWorld>) => {
+      const solution = real.solveWorld(...args);
       rec.dp.push({ input: args[0], solution });
       return solution;
     },
@@ -101,11 +102,11 @@ function callOf(car: CarId, compound: NoiseCompound) {
 /** The stop laps L from `first` (default now) to `last` whose `bestWith` gives a plan, and those plans' policies. */
 function expectedCandidates(car: CarId, compound: NoiseCompound, last: number, first?: number) {
   const { input, solution } = solveOf(car);
-  const thresholds = dpResult(solution).thresholds;
   const out: { lap: number; policy: ReturnType<typeof policyOf> }[] = [];
   for (let lap = first ?? input.fromLap; lap <= last; lap++) {
     const plan = bestWith(solution, { stopLap: lap, compound });
-    if (plan !== null) out.push({ lap, policy: policyOf(plan, thresholds) });
+    // SP4.3c Task 19: each row's plan with its own triggers (no shared thresholds)
+    if (plan !== null) out.push({ lap, policy: policyOf(plan) });
   }
   return out;
 }
@@ -113,6 +114,14 @@ function expectedCandidates(car: CarId, compound: NoiseCompound, last: number, f
 const SWEPT: readonly NoiseCompound[] = ['hard', 'medium', 'soft'];
 
 describe('pit-sweep: the job', () => {
+  it("one traffic gap (SP4.3c Task 3, C43, C47): every call's traffic gap is strategy's trafficGapMs; pit-sweep has none of its own", () => {
+    expect(Object.keys(PIT_SWEEP_CONFIG.defaults)).not.toContain('trafficGapMs');
+    // strategy's section (`config`) at 1,234 ms; a pit-sweep trafficGapMs is not read
+    swept({ window: { compounds: ['hard'] }, config: { trafficGapMs: 1_234 }, sweepConfig: { trafficGapMs: 9_999 } });
+    expect(rec.calls.length).toBeGreaterThan(0);
+    for (const { input } of rec.calls) expect(input.traffic).toEqual({ gapMs: 1_234, laps: PIT_SWEEP_CONFIG.defaults.trafficLaps });
+  });
+
   // row 1
   it('one table per compound with a new set; auto is pit-window\'s windowCompound; a superSoft or unknown set has no table', () => {
     const out = swept({ window: { compounds: ['soft', 'medium', 'hard', 'superSoft', 'unknown'] } });
@@ -166,7 +175,7 @@ describe('pit-sweep: the job', () => {
           const scenarios = Math.floor(SWEEP_CAP / expected.length);
           expect(input.scenarios).toBe(scenarios);
           expect(t.scenarios).toBe(scenarios);
-          expect(input.traffic).toEqual({ gapMs: PIT_SWEEP_CONFIG.defaults.trafficGapMs, laps: PIT_SWEEP_CONFIG.defaults.trafficLaps });
+          expect(input.traffic).toEqual({ gapMs: STRATEGY_CONFIG.defaults.trafficGapMs, laps: PIT_SWEEP_CONFIG.defaults.trafficLaps });
 
           // each row's numbers from its candidate's outcomes
           t.rows.forEach((row, i) => {
@@ -307,22 +316,27 @@ describe('pit-sweep: the job', () => {
   });
 
   // row 6
-  it('the row at L = now takes rejoin\'s green rejoin position (C43)', () => {
+  // SP4.3c Task 17 (O8, B8): one table, one rejoin model; `rejoin`'s green position mixed into the row at L = now is gone
+  it('every row takes its rejoin from one model, the row at L = now too: the simulated rejoin; rejoin\'s output moves no row (B8)', () => {
     const cars = RACE().viewAt(1).live.cars.length;
+    const positions: unknown[] = [];
     for (const green of [1, cars]) {
       rec.calls = [];
       const out = swept({ window: { compounds: ['hard'] }, greenRejoin: { [PLAYER]: green, [TEAMMATE]: green } });
+      const ofRun: unknown[] = [];
       for (const car of OURS) {
         const t = tableOf(carOf(out, car), 'hard');
-        expect(t.rows[0]!.rejoinPosition, `car ${car}, green ${green}`).toMatchObject({ known: true, value: green });
-        // a later stop: the simulated rejoin, the median over the scenarios
+        // every stop, now and later: the simulated rejoin, the median over the scenarios
         const { result } = callOf(car, 'hard');
-        t.rows.slice(1).forEach((row, i) => {
-          const [lo, hi] = middles(result.outcomes[i + 1]!.rejoin);
-          expect(row.rejoinPosition.known && row.rejoinPosition.value >= lo && row.rejoinPosition.value <= hi, `car ${car} L${row.stopLap}: ${json(row.rejoinPosition)}`).toBe(true);
+        t.rows.forEach((row, i) => {
+          const [lo, hi] = middles(result.outcomes[i]!.rejoin);
+          expect(row.rejoinPosition.known && row.rejoinPosition.value >= lo && row.rejoinPosition.value <= hi, `car ${car} L${row.stopLap}, green ${green}: ${json(row.rejoinPosition)}`).toBe(true);
         });
+        ofRun.push(t.rows.map((r) => r.rejoinPosition));
       }
+      positions.push(ofRun);
     }
+    expect(positions[1], "rejoin's green position reaches no row").toEqual(positions[0]);
   });
 
   // row 7

@@ -8,7 +8,7 @@ import { runScenario } from '../support/run.ts';
 // The lap-start and lap-end samples are pinned in lap-start-samples.test.ts and lap-end-samples.test.ts; here they only have to be there.
 const lapEnd = { wearAtStartPct: expect.anything(), ersStoreAtStartJ: expect.anything(), wearAtEndPct: expect.anything(),
   ersStoreAtEndJ: expect.anything(), ersDeployedJ: expect.anything(), ersHarvestedJ: expect.anything(), damageAtEnd: expect.anything(),
-  channelRange: expect.anything() };
+  channelRange: expect.anything(), tyreSets: expect.anything(), carcassMeanC: expect.anything() };
 const car = (d: FrameDraft, id = 0) => d.lapData.lapData[id]!;
 const entry = (lapTimeInMs: number, s1: number, s2: number, s3: number, lapValidBitFlags = 0b1111) => ({
   lapTimeInMs, sector1TimeMs: s1, sector2TimeMs: s2, sector3TimeMs: s3, lapValidBitFlags,

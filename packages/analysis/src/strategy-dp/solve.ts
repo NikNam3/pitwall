@@ -1,12 +1,18 @@
-// `strategy-dp`'s one solve (SP4.3b spec §6, SP4.3b2 Task 5): the plan graph and the adaptive graph of an input, solved
-// together. A caller holds a solution only inside one run (C32): `dpResult` reads the result from it, `bestWith` queries
-// it, neither solves again.
-import { adaptiveGraph, feasibleSequences, layoutOf, planGraph, solveGraph, type DpNode, type GraphSolution, type Layout } from './state.ts';
-import type { DpInput } from './types.ts';
+// `strategy-dp`'s solves (SP4.3b spec §6, SP4.3b2 Task 5; SP4.3c spec §5.4, Task 19): one per weather world, each the
+// plan graph and the adaptive graph of the input with that world alone, solved together. A caller holds a solution only
+// inside one run (C32): `solveDp` reads every world's result from them, `bestWith` queries one, neither solves again
+// (only the degradation-off and rain thresholds re-solve, a changed input).
+import type { Trigger } from '@pitwall/domain';
+import { adaptiveGraph, feasibleSequences, greenPath, layoutOf, nodeAt, planGraph, plansOf, solveGraph, valueAtStart, worldOf, type DpNode, type GraphSolution, type Layout, type Play } from './state.ts';
+import { bestPlanThresholds, neutralisedOf, nodesAlong } from './thresholds.ts';
+import type { DpInput, DpPlan, DpResult, DpTable } from './types.ts';
 
-/** One solve of an input: the plan graph and the adaptive graph, solved together. */
+/** One world's solve: the plan graph and the adaptive graph, solved together. */
 export type DpSolution = {
+  /** The input with the solved world alone (weight 1). */
   input: DpInput;
+  /** The world's index in the caller's input. */
+  world: number;
   layout: Layout;
   graph: GraphSolution;
   /** The plan roots, one per feasible sequence. */
@@ -21,10 +27,106 @@ function joined(plan: readonly DpNode[], adaptive: readonly DpNode[]): DpNode[] 
   return [...plan, ...adaptive.map((d) => ({ ...d, children: d.children.map((c) => ({ compound: c.compound, node: c.node + offset })) }))];
 }
 
-/** Solves `input` once: every plan's and the closed-loop play's values and decisions. */
-export function solveDp(input: DpInput): DpSolution {
+/** `input` with world `w` alone, of weight 1: what a world's solve sees. */
+function aloneIn(input: DpInput, w: number): DpInput {
+  const world = input.worlds[w];
+  if (world === undefined) throw new Error(`strategy-dp: no weather world ${w}`);
+  return { ...input, worlds: [{ ...world, weight: 1 }] };
+}
+
+/** Solves world `w` of `input` once: every plan's and the closed-loop play's values and decisions. */
+export function solveWorld(input: DpInput, w: number): DpSolution {
+  const one = aloneIn(input, w);
+  const layout = layoutOf(one);
+  const plan = planGraph(feasibleSequences(one));
+  // every node keeps its staying-out values (the plans' own triggers), the adaptive nodes their boxing ones (the table)
+  const graph = solveGraph(one, layout, joined(plan.nodes, adaptiveGraph(one, true)), { boxFrom: plan.nodes.length });
+  return { input: one, world: w, layout, graph, planRoots: plan.roots, adaptiveRoot: plan.nodes.length };
+}
+
+/** The best plan of `input` alone (the plan graph only): for the degradation-off and rain re-solves. */
+function bestPlanOf(input: DpInput): Play | null {
   const layout = layoutOf(input);
   const plan = planGraph(feasibleSequences(input));
-  const graph = solveGraph(input, layout, joined(plan.nodes, adaptiveGraph(input, true)), plan.nodes.length);
-  return { input, layout, graph, planRoots: plan.roots, adaptiveRoot: plan.nodes.length };
+  return plansOf(input, layout, solveGraph(input, layout, plan.nodes), plan.roots)[0] ?? null;
+}
+
+/** The closed-loop play from `root` with the first action forced, or `null` where it is infinite. */
+function play(input: DpInput, layout: Layout, graph: GraphSolution, root: number, action: 'box' | 'stay'): Play | null {
+  const expectedMs = valueAtStart(input, layout, nodeAt(graph, root), action);
+  return Number.isFinite(expectedMs) ? { stops: greenPath(input, layout, graph, root, action), expectedMs } : null;
+}
+
+/** The SC table along `stops`' path in the adaptive graph. */
+function tableOf(s: DpSolution, stops: DpPlan['stops']): DpTable {
+  const { input, graph } = s;
+  const n = input.totalLaps - input.fromLap + 1;
+  const along = nodesAlong(graph, s.adaptiveRoot, stops);
+  const boxUnderMs = new Float64Array(n).fill(Infinity);
+  const stayMs = new Float64Array(n).fill(Infinity);
+  let k = 0;
+  let fitted: number | null = null;
+  for (let i = 0; i < n; i++) {
+    const sc = nodeAt(graph, along[k] ?? s.adaptiveRoot).neutral?.sc;
+    const at = i * n + (fitted === null ? i : i - fitted - 1);
+    boxUnderMs[i] = sc?.box?.[at] ?? Infinity;
+    stayMs[i] = sc?.stay[at] ?? Infinity;
+    if (stops[k]?.lap === input.fromLap + i && k < along.length - 1) {
+      k++;
+      fitted = i;
+    }
+  }
+  return { boxUnderMs, stayMs };
+}
+
+/** A play as a plan of world `world` with `triggers`. */
+const planOf = (p: Play, triggers: Trigger[], world: number): DpPlan => ({ stops: p.stops, expectedMs: p.expectedMs, triggers, world });
+
+/** A play of the adaptive graph from `root` as a plan: its own neutralised triggers along its stops. */
+export function adaptivePlan(s: DpSolution, p: Play, graph = s.graph, root = s.adaptiveRoot): DpPlan {
+  return planOf(p, neutralisedOf(s.input, graph, root, p.stops), s.world);
+}
+
+/** One world's result: its plans (best first, each its own triggers), box this lap, continue and the table. */
+function resultOf(s: DpSolution): DpResult {
+  const { input, layout, graph } = s;
+  const plays = plansOf(input, layout, graph, s.planRoots);
+  const boxPlay = play(input, layout, graph, s.adaptiveRoot, 'box');
+  const boxThisLap = boxPlay === null ? null : adaptivePlan(s, boxPlay);
+  let stayOut: DpPlan;
+  const stayPlay = play(input, layout, graph, s.adaptiveRoot, 'stay');
+  if (stayPlay !== null) stayOut = adaptivePlan(s, stayPlay);
+  else {
+    // no play without a stop now meets the rule and the limit: the one that ignores both (always a value, C3)
+    const free = solveGraph(input, layout, adaptiveGraph(input, false), { boxFrom: Infinity }, false);
+    const freePlay = play(input, layout, free, 0, 'stay');
+    // without the rule and the limit every play is finite: a bug otherwise (C3)
+    if (freePlay === null) throw new Error('strategy-dp: no continue play');
+    stayOut = adaptivePlan(s, freePlay, free, 0);
+  }
+  const best = plays[0] ?? stayOut;
+  const extra = bestPlanThresholds({ input, best, boxThisLap, continue: stayOut, bestPlanOf });
+  const plans = plays.map((p, k) => planOf(p, [...neutralisedOf(input, graph, p.root, p.stops), ...(k === 0 ? extra : [])], s.world));
+  return { plans, boxThisLap, continue: stayOut, table: tableOf(s, best.stops) };
+}
+
+/** The index of the heaviest world, the first on equal weights. */
+function heaviest(input: DpInput): number {
+  let at = 0;
+  input.worlds.forEach((w, k) => {
+    if (w.weight > (input.worlds[at]?.weight ?? -Infinity)) at = k;
+  });
+  return at;
+}
+
+/**
+ * The car's plans per weather world (SP4.3c §5.4): each world solved alone, its best plan per stop count and compound
+ * sequence with its own triggers, tagged with the world; `boxThisLap`, `continue` and the table are the heaviest world's.
+ * `solutions`: the worlds' solves when the caller already has them (`strategy`'s job), else solved here.
+ */
+export function solveDp(input: DpInput, solutions: readonly DpSolution[] = input.worlds.map((_, w) => solveWorld(input, w))): DpResult {
+  worldOf(input);
+  const results = solutions.map(resultOf);
+  const main = results[heaviest(input)] as DpResult;
+  return { plans: results.flatMap((r) => r.plans), boxThisLap: main.boxThisLap, continue: main.continue, table: main.table };
 }

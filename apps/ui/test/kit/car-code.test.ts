@@ -46,6 +46,9 @@ describe('ourCars', () => {
   it('is the player alone without a teammate', () => {
     expect([...ourCars({ playerCar: carId(4) })]).toEqual([4]);
   });
+  it('a teammate that is the player car counts once (the domain `ourCars`, SP4.3c Task 1)', () => {
+    expect([...ourCars({ playerCar: carId(4), teammateCar: carId(4) })]).toEqual([4]);
+  });
   it('is empty without a session', () => {
     expect([...ourCars(undefined)]).toEqual([]);
   });

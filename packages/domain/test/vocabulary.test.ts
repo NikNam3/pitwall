@@ -3,7 +3,6 @@ import {
   actualCompoundFromCode,
   carKeyOf,
   carKeyString,
-  cornersFromGameOrder,
   known,
   sessionUidString,
   toSessionTime,
@@ -17,13 +16,6 @@ describe('Known', () => {
     expect(known(42.5, 1200)).toEqual({ known: true, value: 42.5, at: 1200 });
     const r: Known<number> = unknown('restricted');
     expect(r).toEqual({ known: false, reason: 'restricted' });
-  });
-});
-
-describe('cornersFromGameOrder', () => {
-  it('maps game order RL, RR, FL, FR to named corners', () => {
-    expect(cornersFromGameOrder(['rl', 'rr', 'fl', 'fr'] as const)).toEqual({ fl: 'fl', fr: 'fr', rl: 'rl', rr: 'rr' });
-    expect(cornersFromGameOrder([1, 2, 3, 4] as const)).toEqual({ rl: 1, rr: 2, fl: 3, fr: 4 });
   });
 });
 

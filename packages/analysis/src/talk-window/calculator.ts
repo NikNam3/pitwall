@@ -2,7 +2,7 @@
 import { known, unknown, type CarId, type TalkWindow } from '@pitwall/domain';
 import type { EngineView, QuickCalculator } from '@pitwall/engine/readers';
 import { behaviourFor } from '../shared/behaviour.ts';
-import { ourCars } from '../shared/our-cars.ts';
+import { ourCars } from '@pitwall/domain';
 import { brakingAhead, fractionOf } from '../shared/track-lookup.ts';
 import { TALK_WINDOW_BEHAVIOUR } from './behaviour.ts';
 import { TALK_WINDOW_CONFIG } from './config.ts';

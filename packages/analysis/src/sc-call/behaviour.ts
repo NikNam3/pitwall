@@ -38,6 +38,9 @@ export const SC_CALL_BEHAVIOUR: BehaviourTable<ScCallEffect> = {
   },
   // the driver changes the stop's length (the starting point's `human`), never the call
   'car-driver': { ai: 'call', human: 'call' },
+  // read by `driver-noise` inside the starting point (its time-loss exclusion), never whether the call is made; the
+  // pit lane's row is `car-activity-race`'s
+  'car-location': { track: 'call', pitLane: 'call', garage: 'call' },
   // the rule is the DP's (`owesSecondCompound`), never whether the call is made
   'compound-rule': { required: 'call', waived: 'call' },
 };

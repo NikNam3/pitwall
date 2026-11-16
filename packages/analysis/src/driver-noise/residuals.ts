@@ -2,15 +2,17 @@
 // corrected time against `degradation`'s stint line `α + ν · tyreAge`, minus `track-wetness`'s common mode of the lap
 // and its tyre type (C43: both own their part). Each lap counts for the model (AI or human) of the car-driver span it
 // belongs to (C26, through the projection module's `membershipOf`); each model keeps only its own laps.
-import { type CarId, type FrameNumber, type Ms, type NoiseCompound, type OpenSpan, type Span, type StintRecord, type TrackWetness } from '@pitwall/domain';
+import { type CarId, type FrameNumber, type Ms, type OpenSpan, type Span, type StintRecord, type TrackWetness } from '@pitwall/domain';
 import type { AsOfView, DeepReadonly, MembershipSource, Projection } from '@pitwall/engine/readers';
-import { tyreTypeOf } from '../crossover/tyre-type.ts';
+import { tyreTypeOf } from '@pitwall/domain';
 import type { DegradationOutput, StintDegradation } from '../degradation/index.ts';
 import { freeAirLaps } from '../shared/free-air.ts';
+import { timeLossExcludedOf } from '../shared/neutralised.ts';
 import { lapsByCar } from '../shared/stint-laps.ts';
+import { madSigma, median } from '../shared/stats.ts';
 import { membershipByStretch } from '../shared/stretch-membership.ts';
 import { timeLossEvents } from '../shared/time-loss/index.ts';
-import { rowOf } from './behaviour.ts';
+import { isRaceAt, rowOf } from './behaviour.ts';
 import type { SessionEstimate } from './shrink.ts';
 
 /** The thresholds the estimates read (`DRIVER_NOISE_CONFIG`, and the time-loss detection's `incidents`/`damage` config). */
@@ -58,50 +60,12 @@ export type ModelEstimates = {
   at: Ms | undefined;
 };
 
-/** One car's models, its driver at the view's frame, and its own measured wear rates per compound. */
+/** One car's models and its driver at the view's frame (its wear rates are `tyre-model`'s, SP4.3c Task 12). */
 export type CarModels = {
   driver: Model | 'unknown';
   inSession: boolean;
   models: Record<Model, ModelEstimates>;
-  ownWear: Partial<Record<NoiseCompound, { ratePct: number; laps: number; at: Ms }>>;
 };
-
-const NOISE_COMPOUNDS: ReadonlySet<string> = new Set<NoiseCompound>(['soft', 'medium', 'hard', 'inter', 'wet']);
-
-function median(values: readonly number[]): number {
-  const sorted = [...values].sort((a, b) => a - b);
-  const mid = sorted.length >> 1;
-  const upper = sorted[mid] as number;
-  return sorted.length % 2 === 1 ? upper : ((sorted[mid - 1] as number) + upper) / 2;
-}
-
-/** 1.4826 · the median absolute deviation from `centre`: the robust σ of a normal sample. */
-const madSigma = (values: readonly number[], centre: number): number => 1.4826 * median(values.map((x) => Math.abs(x - centre)));
-
-/** The worst corner's known wear rate of a stint, else `undefined`. */
-function worstRate(stint: DeepReadonly<StintDegradation>): { ratePct: number; at: Ms } | undefined {
-  let worst: { ratePct: number; at: Ms } | undefined;
-  for (const k of Object.values(stint.wearRatePctPerLap)) if (k.known && (worst === undefined || k.value > worst.ratePct)) worst = { ratePct: k.value, at: k.at };
-  return worst;
-}
-
-/** Per compound the car's own measured wear rate: its stints' worst-corner rates, weighted by their laps. */
-export function ownWearOf(stints: readonly DeepReadonly<StintDegradation>[]): CarModels['ownWear'] {
-  const sums: Partial<Record<NoiseCompound, { sum: number; laps: number; at: Ms }>> = {};
-  for (const stint of stints) {
-    if (!NOISE_COMPOUNDS.has(stint.visual)) continue;
-    const rate = worstRate(stint);
-    if (rate === undefined) continue;
-    const laps = Math.max(1, stint.laps.length);
-    const slot = (sums[stint.visual as NoiseCompound] ??= { sum: 0, laps: 0, at: 0 });
-    slot.sum += rate.ratePct * laps;
-    slot.laps += laps;
-    slot.at = Math.max(slot.at, rate.at);
-  }
-  const out: CarModels['ownWear'] = {};
-  for (const [c, s] of Object.entries(sums)) out[c as NoiseCompound] = { ratePct: s.sum / s.laps, laps: s.laps, at: s.at };
-  return out;
-}
 
 /**
  * The lag-1 correlation of the residuals over consecutive laps, corrected for its small-sample bias (ruling R32):
@@ -135,10 +99,10 @@ function logNormalOf(sizes: readonly number[]): { median: SessionEstimate; sigma
   const logs = sizes.filter((s) => s > 0).map(Math.log);
   if (logs.length === 0) return { median: undefined, sigmaLog: undefined };
   const mean = logs.reduce((s, x) => s + x, 0) / logs.length;
-  const median = { value: Math.exp(mean), n: logs.length };
-  if (logs.length < 2) return { median, sigmaLog: undefined };
+  const sizeMedian = { value: Math.exp(mean), n: logs.length };
+  if (logs.length < 2) return { median: sizeMedian, sigmaLog: undefined };
   const sd = Math.sqrt(logs.reduce((s, x) => s + (x - mean) ** 2, 0) / (logs.length - 1));
-  return { median, sigmaLog: { value: sd, n: logs.length } };
+  return { median: sizeMedian, sigmaLog: { value: sd, n: logs.length } };
 }
 
 /** One model's estimates from its laps (`samples`), its laps with a time-loss event (`eventLosses`, a human's) and retirements. */
@@ -152,18 +116,19 @@ function estimatesOf(model: Model, samples: readonly LapSample[], eventLosses: R
   // is stable, and a human's laps with a time-loss event never enter it
   const base = free.filter((s) => model === 'ai' || !eventLosses.has(s.lap));
   let clean = base;
-  let centre = clean.length > 0 ? median(clean.map((s) => s.residual as number)) : 0;
-  let sigma = clean.length > 0 ? madSigma(clean.map((s) => s.residual as number), centre) : 0;
+  // without a clean lap the centre and σ stay 0
+  let centre = median(clean.map((s) => s.residual as number)) ?? 0;
+  let sigma = madSigma(clean.map((s) => s.residual as number)) ?? 0;
   for (let i = 0; i < 20 && base.length > 0; i++) {
     const next = base.filter((s) => (s.residual as number) - centre <= config.mistakeSigmas * sigma);
     if (next.length === clean.length || next.length === 0) break;
     clean = next;
     const values = clean.map((s) => s.residual as number);
-    centre = median(values);
-    sigma = madSigma(values, centre);
+    centre = median(values) as number;
+    sigma = madSigma(values) as number;
   }
   const cleanLaps = new Set(clean.map((s) => s.lap));
-  const centreAll = pace.length > 0 && clean.length === 0 ? median(pace.map((s) => s.residual as number)) : centre;
+  const centreAll = clean.length === 0 ? (median(pace.map((s) => s.residual as number)) ?? centre) : centre;
 
   // big events: a pace lap more than `bigEventMs` slow, apart from the mistakes (P5)
   const isBig = (s: LapSample) => !s.retiring && (s.residual as number) - centreAll > config.bigEventMs;
@@ -228,7 +193,7 @@ function pushTo<K, V>(map: Map<K, V[]>, key: K, value: V): void {
 
 /** Every car's models as of `view`'s frame. The cars: those car-status has in the session, else (a stored session) those with laps. */
 export function carModelsOf(view: AsOfView, config: ResidualConfig): Map<CarId, CarModels> {
-  const degradation = (view.outputs.get('degradation') as DegradationOutput | undefined) ?? {};
+  const degradation = (view.outputs.get('degradation') as DegradationOutput | undefined)?.stints ?? {};
   const wetness = view.outputs.get('track-wetness') as TrackWetness | undefined;
   const free = freeAirLaps(view.history, config.freeAirGapMs);
 
@@ -248,12 +213,15 @@ export function carModelsOf(view: AsOfView, config: ResidualConfig): Map<CarId, 
     for (const s of statusOpen) if (s.carId !== undefined && rowOf('car-status', s.kind).inSession === true) cars.add(s.carId);
   } else for (const id of lapsBy.keys()) cars.add(id);
 
-  // the human time-loss events, only where a human model has laps (C45: the shared pure function over the projection)
+  // the human time-loss events, only where a human model has laps (C45: the shared pure function over the projection),
+  // with the one exclusion (`timeLossExcludedOf`: neutralisations, the car's pit visits and garage spells, C26); in the
+  // race only, where the models give values (`isRaceAt`): outside it every value is `notApplicable`
   let events: Map<string, number[]> | undefined;
   const eventsOf = (): Map<string, number[]> => {
     if (events !== undefined) return events;
     events = new Map();
-    for (const e of timeLossEvents(view.history, config.timeLoss, () => false)) pushTo(events, `${e.carId}:${e.lap}`, e.lossMs);
+    if (!isRaceAt(view)) return events;
+    for (const e of timeLossEvents(view.history, config.timeLoss, timeLossExcludedOf(view))) pushTo(events, `${e.carId}:${e.lap}`, e.lossMs);
     return events;
   };
 
@@ -319,7 +287,6 @@ export function carModelsOf(view: AsOfView, config: ResidualConfig): Map<CarId, 
         ai: estimatesOf('ai', samples.ai, new Map(), retirements.ai, config),
         human: estimatesOf('human', samples.human, losses, retirements.human, config),
       },
-      ownWear: ownWearOf(own),
     });
   }
   return out;

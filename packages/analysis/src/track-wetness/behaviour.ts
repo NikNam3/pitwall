@@ -3,6 +3,7 @@
 // its frame. Neutralised laps are no pace laps already (`degradation`'s lap use), so no row needs to drop them.
 import type { MachineId } from '@pitwall/domain';
 import type { AsOfView } from '@pitwall/engine/readers';
+import { lapPhaseRowOf, RACE_LAP_PHASE_ROWS } from '../lap-classes/index.ts';
 import type { BehaviourTable } from '../shared/behaviour.ts';
 
 /** What the session's open spans say about the wetness. */
@@ -13,13 +14,11 @@ export type TrackWetnessEffect = {
   started?: boolean;
 };
 
-const RACE: TrackWetnessEffect = { isRace: true };
-const NOT_RACE: TrackWetnessEffect = { isRace: false };
 const BEFORE_START: TrackWetnessEffect = { started: false };
 const STARTED: TrackWetnessEffect = { started: true };
 
 export const TRACK_WETNESS_BEHAVIOUR: BehaviourTable<TrackWetnessEffect> = {
-  'weekend-phase': { practice: NOT_RACE, qualifying: NOT_RACE, race: RACE, none: NOT_RACE },
+  'weekend-phase': RACE_LAP_PHASE_ROWS,
   'session-phase-race': {
     grid: BEFORE_START,
     formation: BEFORE_START,
@@ -32,8 +31,8 @@ export const TRACK_WETNESS_BEHAVIOUR: BehaviourTable<TrackWetnessEffect> = {
   },
 };
 
-/** Before any span: a pending weekend phase reads as the race's grid (C14). */
-const PENDING: TrackWetnessEffect = { isRace: true, started: false };
+/** Before any span: a pending weekend phase reads as the race's grid (C14, `lapPhaseRowOf`). */
+const PENDING: TrackWetnessEffect = { ...lapPhaseRowOf(RACE_LAP_PHASE_ROWS, 'pending'), ...BEFORE_START };
 
 /**
  * The session's effect at `view`'s frame: the rows of the open spans of the table's machines (C20), over the grid's.

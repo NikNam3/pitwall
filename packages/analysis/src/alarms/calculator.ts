@@ -1,7 +1,7 @@
 // The `alarms` calculator: the conditions that hold now for our cars, as insights (spec 5.6). Stateless; the InsightBook raises and resolves.
 // Band advisories are `car-bands`' judgement of the car's judged lap (see `bandChannels`), so they change at a lap's end only.
 import {
-  sessionPhaseRaceSpans,
+  ourCars,
   type PendingPenaltyDetail,
   type TimePenaltyDetail,
   type WarnedDetail,
@@ -14,7 +14,6 @@ import {
   type InsightCategory,
   type Known,
   type LapRecord,
-  type NeutralisedDetail,
   type Range,
   type TyreWear,
 } from '@pitwall/domain';
@@ -24,8 +23,8 @@ import { bandsFor, judgedLapClasses, judgedLaps, measured, type Band, type Bands
 import { CAR_BANDS, CAR_BANDS_CONFIG } from '../car-bands/index.ts';
 import { DAMAGE } from '../damage/index.ts';
 import { FUEL } from '../fuel/index.ts';
-import { ourCars } from '../shared/our-cars.ts';
 import { behaviourFor } from '../shared/behaviour.ts';
+import { isEnding, openNeutralisation } from '../shared/neutralised.ts';
 import { warningInCycle } from '../shared/penalties.ts';
 import { TYRE_WEAR } from '../tyre-wear/index.ts';
 import { ALARMS, ALARMS_BEHAVIOUR, ALARMS_CONFIG, type AlarmsEffect, type AlarmsOutput } from './index.ts';
@@ -69,9 +68,16 @@ const bandChannels = (bands: CarBands, lap: Lap | undefined, lapBands: Bands | u
   const range = lap?.channelRange;
   const on = (r: DeepReadonly<Known<Range>> | undefined, band: Band | undefined) =>
     lap && r && band ? { lap: { lapNumber: lap.lapNumber, range: r, band } } : {};
-  /** The pressure band is the car's setup, not the compound's: `car-bands`' band, which is unknown without the setup. */
-  const lapBand = (kind: (typeof TYRE_CHANNELS)[number][1], reading: BandReading): Band | undefined =>
-    kind === 'pressure' ? (reading.band.known ? reading.band.value : undefined) : lapBands?.[kind];
+  /**
+   * The judged lap's band of a tyre channel, as `car-bands` judges it: the carcass band is unknown for a compound without
+   * a reference temperature, the pressure band (the car's setup on that compound) without the setup.
+   */
+  const lapBand = (kind: (typeof TYRE_CHANNELS)[number][1], corner: (typeof CORNERS)[number]): Band | undefined => {
+    if (lapBands === undefined) return undefined;
+    if (kind === 'surface') return lapBands.surface;
+    if (kind === 'carcass') return lapBands.carcass.known ? lapBands.carcass.value : undefined;
+    return lapBands.pressure.known ? lapBands.pressure.value[corner] : undefined;
+  };
   return [
     ...CORNERS.flatMap((c) =>
       TYRE_CHANNELS.map(([t, kind]): BandChannel => ({
@@ -79,7 +85,7 @@ const bandChannels = (bands: CarBands, lap: Lap | undefined, lapBands: Bands | u
         category: 'tyres',
         measure: 'midRange',
         reading: bands.tyres[c][t],
-        ...on(range?.tyres[c][t], lapBand(kind, bands.tyres[c][t])),
+        ...on(range?.tyres[c][t], lapBand(kind, c)),
       })),
     ),
     ...CORNERS.map((c): BandChannel => ({
@@ -170,14 +176,14 @@ const penaltyAlarms = (view: EngineView, id: CarId, effect: AlarmsEffect, make: 
 };
 
 /**
- * Whether the band alarms are hidden now: a row asks for it (`neutralised`) and the neutralisation has not reached its
- * `returning` stage yet.
+ * Whether the band alarms are hidden now: a row asks for it (`neutralised`) and the open neutralisation is not ending
+ * yet (`isEnding`, the one owner's).
  */
-const bandsHidden = (view: EngineView, effect: AlarmsEffect): boolean =>
-  effect.bandsHidden === true &&
-  !openSpansOf(view, sessionPhaseRaceSpans.machine).some(
-    (span) => span.kind === 'neutralised' && (span.detail as NeutralisedDetail).stages.some((s) => s.stage === 'returning'),
-  );
+const bandsHidden = (view: EngineView, effect: AlarmsEffect): boolean => {
+  if (effect.bandsHidden !== true) return false;
+  const now = openNeutralisation(view);
+  return now === null || !isEnding(now.span);
+};
 
 const alarmsOf = (view: EngineView, id: CarId, judged: Lap | undefined, config: Config): Insight[] => {
   const make: Make = (kind, severity, category, channel, params) => ({
@@ -199,7 +205,7 @@ const alarmsOf = (view: EngineView, id: CarId, judged: Lap | undefined, config: 
   const damage = pick<DamageState>(DAMAGE);
   // the rows of the car's spans and the session's, merged
   const effect: AlarmsEffect = Object.assign({}, ...behaviourFor<AlarmsEffect>(ALARMS_BEHAVIOUR, view, id));
-  const lapBands = judged && bandsFor(judged.visualCompound, CAR_BANDS_CONFIG.read(view));
+  const lapBands = judged && bandsFor(car, judged, CAR_BANDS_CONFIG.read(view), view.live.sessionTime);
   return [
     ...(bands && !bandsHidden(view, effect) ? bandAlarms(bands, judged, lapBands, make) : []),
     ...(wear ? wearAlarms(wear, config, make) : []),
@@ -221,6 +227,7 @@ export const alarmsCalculator: QuickCalculator<AlarmsOutput> = {
     { calculator: DAMAGE },
     'timing',
     'identity',
+    'ownCar',
     'spans:warnings',
     'spans:penalties',
     'spans:session-phase-race',

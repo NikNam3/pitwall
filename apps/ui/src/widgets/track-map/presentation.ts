@@ -21,6 +21,15 @@ export const presentation: PresentationTable & { situations: { 'zone-flags': Rea
   },
 };
 
+/**
+ * Which labels each size shows (SP4.3c §5.7): the full size the turns, the sector starts and every car's code; the
+ * compact size none, as the mockup does.
+ */
+export const labels = {
+  full: { turns: true, sectors: true, codes: true },
+  compact: { turns: false, sectors: false, codes: false },
+} as const satisfies Readonly<Record<'full' | 'compact', { turns: boolean; sectors: boolean; codes: boolean }>>;
+
 /** The roles of the map's parts: the outline, and an incident marker (amber). */
 export const parts = { outline: 'textFaint', marker: 'warning' } as const satisfies Readonly<Record<string, Role>>;
 

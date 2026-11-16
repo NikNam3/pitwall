@@ -1,14 +1,13 @@
 // `driver-noise`'s driver-profile entries (contract C62c; SP4.3a spec 4, 5.2): each an aggregate weighted by laps over
 // the person's linked sessions' human-span laps, each session's values from `runAsOf([degradation, track-wetness,
 // driver-noise], asOfStored(session, ctx))` (plan review P2): the linked car's entry with its human model's values,
-// weighted by the laps it rests on. A wear rate enters only where the car's own wear was measured on the compound.
-import { known, unknown, type CarNoise, type Known, type NoiseCompound } from '@pitwall/domain';
-import { asOfStored, defineProfiles, runAsOf, type AsOfUnit, type AsOfView, type ProfileCtx, type ProfileEntryDecl, type StoredDriverSession } from '@pitwall/engine/readers';
+// weighted by the laps it rests on. The wear factor is `tyre-model`'s entry (SP4.3c Task 12).
+import { carDriverSpans, currentLaps, known, unknown, type CarNoise, type Known, type LapRecord } from '@pitwall/domain';
+import { asOfStored, defineProfiles, membershipOf, runAsOf, type AsOfUnit, type AsOfView, type ProfileCtx, type ProfileEntryDecl, type StoredDriverSession } from '@pitwall/engine/readers';
 import { degradationAsOf, degradationCalculator } from '../degradation/calculator.ts';
 import { trackWetnessAsOf } from '../track-wetness/asof.ts';
 import { trackWetnessCalculator } from '../track-wetness/calculator.ts';
 import { humanNoiseAsOf, PROFILE_KEYS } from './asof.ts';
-import type { CarModels } from './residuals.ts';
 
 /** The upstream units of one stored session's run (P2): `driver-noise`'s own form runs on their outputs. */
 const UPSTREAM: readonly AsOfUnit[] = [
@@ -16,12 +15,13 @@ const UPSTREAM: readonly AsOfUnit[] = [
   { id: trackWetnessCalculator.id, reads: trackWetnessCalculator.reads, asOf: trackWetnessAsOf },
 ];
 
-type SessionNoise = { noise: CarNoise; ownWear: CarModels['ownWear'] } | undefined;
+type SessionNoise = { noise: CarNoise } | undefined;
 
-/** The linked car's human entry in one stored session, with its own wear rates. */
+/** The linked car's human entry in one stored session. */
 function sessionNoiseOf(session: StoredDriverSession, ctx: ProfileCtx): SessionNoise {
   const base: AsOfView = asOfStored(session, ctx);
-  return humanNoiseAsOf({ ...base, outputs: runAsOf(UPSTREAM, base) }, session.carId);
+  const noise = humanNoiseAsOf({ ...base, outputs: runAsOf(UPSTREAM, base) }, session.carId);
+  return noise === undefined ? undefined : { noise };
 }
 
 /** One session's value of an entry and the laps it is weighted by. */
@@ -56,25 +56,27 @@ const modelEntry = (value: (n: CarNoise) => Known<number>, range: readonly [numb
     return v.known ? { value: v.value, laps: noise.laps, at: v.at } : undefined;
   }, range);
 
-/** A compound's wear rate weighted by the car's laps on it, in sessions where its own wear was measured. */
-const wearEntry = (compound: NoiseCompound): ProfileEntryDecl =>
-  aggregateOf(({ ownWear }) => {
-    const own = ownWear[compound];
-    return own === undefined ? undefined : { value: own.ratePct, laps: own.laps, at: own.at };
-  }, [0, 100]);
-
-const COMPOUNDS: readonly NoiseCompound[] = ['soft', 'medium', 'hard', 'inter', 'wet'];
-
 const sizeOf = (pick: (s: { medianMs: number; sigmaLog: number }) => number) => (n: CarNoise): Known<number> =>
   n.mistakeSize.known ? known(pick(n.mistakeSize.value), n.mistakeSize.at) : n.mistakeSize;
 
+const CAR_DRIVER = carDriverSpans.machine;
+
+/**
+ * The samples one linked session gives the person's profile (B2; C25, C26, C28): the linked car's current laps whose
+ * described frame the projection module's membership puts in one of the car's `human` car-driver spans.
+ */
+function humanLapSamples(session: StoredDriverSession): number {
+  const source = { history: session.projection };
+  return currentLaps(session.projection.laps as readonly LapRecord[]).filter((l) => l.carId === session.carId && membershipOf(source, l)[CAR_DRIVER]?.kind === 'human').length;
+}
+
 export const DRIVER_NOISE_PROFILES = defineProfiles('driver-noise', {
+  samples: humanLapSamples,
   entries: {
     [PROFILE_KEYS.sigmaMs]: modelEntry((n) => n.sigmaMs, [0, 10_000]),
     [PROFILE_KEYS.rho]: modelEntry((n) => n.rho, [-1, 1]),
     [PROFILE_KEYS.mistakeRate]: modelEntry((n) => n.mistakeRatePerLap, [0, 1]),
     [PROFILE_KEYS.mistakeMedianMs]: modelEntry(sizeOf((s) => s.medianMs), [0, 60_000]),
     [PROFILE_KEYS.mistakeSigmaLog]: modelEntry(sizeOf((s) => s.sigmaLog), [0, 5]),
-    ...Object.fromEntries(COMPOUNDS.map((c) => [PROFILE_KEYS.wearRatePct(c), wearEntry(c)])),
   },
 });

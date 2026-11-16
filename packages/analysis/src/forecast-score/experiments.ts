@@ -3,12 +3,15 @@
 // inter or wet tyres, or around a weather crossover (a stop from slicks to inter or wet tyres, or back), is no case.
 import { currentCrossings, known, unknown, type CarId, type FrameNumber, type Known, type LapRecord, type PitStopRecord, type Policy, type SessionTime } from '@pitwall/domain';
 import type { DeepReadonly, Projection, Situation } from '@pitwall/engine/readers';
-import { isClosed, neutralisedSpans, type Neutralisation } from '../shared/neutralised.ts';
+import { isClosed, neutralisationKind, neutralisationsOverlapping, type Neutralisation } from '../shared/neutralised.ts';
 import type { FORECAST_SCORE_CONFIG } from './config.ts';
 import { raceLaps, type RaceLaps } from './laps.ts';
 
 /** The effective config of `forecast-score`. */
 export type ForecastScoreConfig = typeof FORECAST_SCORE_CONFIG.defaults;
+
+/** The natural experiments' config: `forecast-score`'s and the one close gap, `race-interaction`'s `closeGapMs` (C43). */
+export type ExperimentsConfig = ForecastScoreConfig & { closeGapMs: number };
 
 export type CaseKind = 'rejoin' | 'undercut' | 'scStop';
 
@@ -75,18 +78,16 @@ export function actualStops(history: DeepReadonly<Projection>, race: RaceLaps, f
   return policies;
 }
 
-/** Whether `span` covers any frame of `[from, to]` (C26: frames, never times). */
-const overlaps = (span: Neutralisation, from: FrameNumber, to: FrameNumber): boolean =>
-  span.startFrame <= to && (!isClosed(span) || span.endFrame > from);
-
 /**
  * The natural experiments of `history` (and the open spans of `situation`, for a running session). Rejoin: every green
  * stop, but a repair (stationary longer than `repairStationaryMs`) and a penalty stop (`penaltyServed`). Every kind:
  * dry laps only, weather crossovers excluded; the undercut and the SC stop leave repairs and penalty stops out too.
  */
-export function naturalExperiments(history: Projection, config: ForecastScoreConfig, situation?: Situation): Experiments {
+export function naturalExperiments(history: Projection, config: ExperimentsConfig, situation?: Situation): Experiments {
   const race = raceLaps(history);
-  const neutralisations = neutralisedSpans(history, situation ?? { weekendPhase: { kind: 'pending' }, byMachine: {} });
+  // the neutralisations covering any frame of `[from, to]`, both frames included (C26: by the projection module's query)
+  const source = situation === undefined ? { history } : { history, situation };
+  const neutralisedOver = (from: FrameNumber, to: FrameNumber): ReadonlyArray<Neutralisation> => neutralisationsOverlapping(source, from, to + 1);
   const usable = (s: DeepReadonly<PitStopRecord>) => !s.penaltyServed && s.stationaryTimeMs <= config.repairStationaryMs && !race.crossover(s.carId, s.lap);
   const green = history.pitStops.filter((s) => s.flag === 'green' && usable(s));
   const base = (kind: CaseKind, car: CarId, lap: number, targetLap: number) => {
@@ -115,7 +116,7 @@ export function naturalExperiments(history: Projection, config: ForecastScoreCon
       if (!race.dry(a, s1 - 1, s2 + 1) || !race.dry(b, s1 - 1, s2 + 1)) continue;
       const from = Math.min(a0.frame, b0.frame);
       const to = Math.max(a2.frame, b2.frame);
-      if (neutralisations.some((n) => overlaps(n, from, to))) continue;
+      if (neutralisedOver(from, to).length > 0) continue;
       const c = base('undercut', a, s1, s2 + 1);
       if (c !== undefined) undercut.push({ ...c, otherCarId: b, measure: gapChange(a, b, s1 - 1, s2 + 1) });
     }
@@ -126,14 +127,14 @@ export function naturalExperiments(history: Projection, config: ForecastScoreCon
     if (stop.flag === 'green' || !usable(stop)) continue;
     const x = stop.carId;
     const s = stop.lap;
-    const span = neutralisations.find((n) => n.kind === 'neutralised' && overlaps(n, race.inLapFrame(stop), stop.frame));
+    const span = neutralisedOver(race.inLapFrame(stop), stop.frame).find((n) => neutralisationKind(n) !== 'red');
     const before = race.lap(x, s - 1);
     if (span === undefined || !isClosed(span) || before === undefined) continue;
     const n = race.lapsOf(x).find((l) => l.frame >= span.endFrame)?.lapNumber;
     if (n === undefined) continue;
     const k = n + config.scSettleLaps;
     if (race.lap(x, k) === undefined || !race.dry(x, s - 1, k)) continue;
-    const stayedOut = (o: number) => !history.pitStops.some((p) => p.carId === o && overlaps(span, race.inLapFrame(p), p.frame));
+    const stayedOut = (o: number) => !history.pitStops.some((p) => p.carId === o && neutralisedOver(race.inLapFrame(p), p.frame).includes(span));
     for (let o = 0; o < race.cars; o++) {
       const other = race.lap(o, s - 1);
       if (o === x || other === undefined || Math.abs(other.positionAtEnd - before.positionAtEnd) > config.scPlaces) continue;

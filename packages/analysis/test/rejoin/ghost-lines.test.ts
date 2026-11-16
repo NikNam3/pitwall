@@ -3,7 +3,7 @@
 // gapper's own `lap` values, and its `now` point; a condition whose loss is unknown has no line (C3). Budgets on the
 // long-race builder (20 cars × 70 laps): `ghostLinesOf` under 1 ms per reference, `rejoin`'s compute under 1 ms per
 // crossing of our car; the median of 50 warm runs, no raised timeout.
-import { known, MINI_SECTORS, unknown, type CarId, type GapperReference, type GhostLines, type Known, type Ms, type PitCondition } from '@pitwall/domain';
+import { known, MINI_SECTORS, ourCars, unknown, type CarId, type GapperReference, type GhostLines, type Known, type Ms, type PitCondition } from '@pitwall/domain';
 import { CalculatorRegistry, type Calculator, type CalculatorId, type EngineView } from '@pitwall/engine/readers';
 import { describe, expect, it } from 'vitest';
 import { longRace } from '../../../../test-support/builders/long-race.ts';
@@ -11,7 +11,6 @@ import { rejoinCalculator } from '../../src/rejoin/calculator.ts';
 import { ghostLinesOf } from '../../src/rejoin/ghost-lines.ts';
 import { REJOIN, REJOIN_CONFIG, type GhostLinesInput } from '../../src/rejoin/index.ts';
 import { gapperLines } from '../../src/shared/gapper-lines.ts';
-import { ourCars } from '../../src/shared/our-cars.ts';
 import { CALCULATORS } from '../units.ts';
 import { rejoinCase, SEGMENT_MS, US } from './field.ts';
 

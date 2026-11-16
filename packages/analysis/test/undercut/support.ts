@@ -34,7 +34,6 @@ export function rejoinOf(car: CarId, at: number): Rejoin {
     lossSource: { kind: 'default', note: 'track file', sessionShare: 0, parts: 'default' },
     rejoinPosition: known(position, at),
     order: { known: false, reason: 'insufficientData' },
-    mapPoint: { known: false, reason: 'notApplicable' },
   });
   return { carId: car, position: 3, conditions: { green: row('green', green), sc: row('sc', green - 2), vsc: row('vsc', green - 1) } };
 }
@@ -49,6 +48,8 @@ export const UNDERCUT_TEST_CAP = 800;
 export type UndercutViewSpec = ViewSpec & {
   /** `undercut`'s config section, over `{ maxScenarioPolicies: UNDERCUT_TEST_CAP }`. */
   undercut?: Record<string, string | number | boolean>;
+  /** `race-interaction`'s config section (the one close gap, `closeGapMs`, SP4.3c Task 3); absent: none. */
+  raceInteraction?: Record<string, string | number | boolean>;
   /** `rejoin`'s output; default `rejoinOf` for each of our cars; `null`: absent. */
   rejoin?: RejoinOutput | null;
   /** The kind of the race's open session-phase span (default as recorded). */
@@ -81,7 +82,11 @@ export function undercutView(lap: number = LAP, spec: UndercutViewSpec = {}): En
   return {
     ...view,
     situation: { ...view.situation, byMachine } as EngineView['situation'],
-    config: { ...view.config, undercut: { maxScenarioPolicies: UNDERCUT_TEST_CAP, ...spec.undercut } },
+    config: {
+      ...view.config,
+      undercut: { maxScenarioPolicies: UNDERCUT_TEST_CAP, ...spec.undercut },
+      ...(spec.raceInteraction === undefined ? {} : { 'race-interaction': spec.raceInteraction }),
+    },
     outputs,
   };
 }

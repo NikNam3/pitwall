@@ -1,15 +1,13 @@
-import { TYRE_LIFE_CONFIG, TYRE_LIFE_PRIORS, tyreLifeCalculator } from '@pitwall/analysis';
+import { tyreLifeCalculator } from '@pitwall/analysis';
 import { defineFeature } from '../feature.ts';
 
 /**
- * `tyre-life` (spec 4.2): the laps until each car's set reaches its limit and the fresh-set life per compound, a
- * calculator other units read (no topic), and the calibration priors (`tyreLife.*`, C62a) the priors store runs over
- * calibration sets.
+ * `tyre-life` (spec 4.2; SP4.3c Task 12): per car its set's wear, rate and laps to the limit per corner, from
+ * `tyre-model`; a calculator other units read (no topic). It declares no config and no priors (the limit is
+ * `tyre-model.limitPct`, C43).
  */
 export default defineFeature({
   name: 'tyre-life',
   calculators: [tyreLifeCalculator],
   topics: [],
-  config: [TYRE_LIFE_CONFIG],
-  priors: [TYRE_LIFE_PRIORS],
 });

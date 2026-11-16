@@ -1,35 +1,52 @@
-// Shared pieces of the `strategy-dp` tests (SP4.3b spec §6, plan 4.3b1 Task 18): a `DpInput` builder, the hazard by
-// ruling R22, a deterministic race time for a fixed list of stops, and a closed-loop brute force over every action and
-// every neutralisation outcome, written independently of the simulator.
+// Shared pieces of the `strategy-dp` tests (SP4.3b spec §6, plan 4.3b1 Task 18; SP4.3c Task 19): a `DpInput` builder,
+// the hazard by ruling R22, a deterministic race time for a fixed list of stops, and a closed-loop brute force over every
+// action and every neutralisation outcome, written independently of the simulator.
 //
-// The model these tests read `DpInput` and `DpResult` by (the test agent's decisions, Task 18 report):
+// The model these tests read `DpInput` and `DpResult` by (the test agents' decisions, Task 18 and SP4.3c Task 19 reports):
 // - `fromLap` is the next lap the car drives in full: it is on the line at its start, `carParams` as there. The race
 //   runs to the end of lap `totalLaps`. Every per-lap array has `totalLaps − fromLap + 1` entries, index 0 = `fromLap`.
+// - The weather worlds (SP4.3c §5.4a, O3b): `input.worlds` holds one or more worlds (`weatherWorlds`' `u` and weight,
+//   the weights summing to 1), each with its own wetness per lap (`wetnessByLap`) and its own traffic cost of a rejoin
+//   per lap (`trafficMsByLap`, from that world's plain road). `solveDp` solves each world alone, as if it were certain:
+//   world w's plans are exactly the plans of the same input with `worlds` = `[worlds[w]]` (weight 1), tagged
+//   `world: w`. Nothing mixes worlds. `boxThisLap`, `continue` and `table` are the first world's (`worlds[0]`): the
+//   builder puts the world it plans the immediate call on first.
 // - A stop `{ lap: L, compound }` boxes at the end of lap L (in lap L, out lap L + 1), as `race-forecast` reads a
 //   policy's stop; `fromLap ≤ L < totalLaps`, laps ascending and distinct; at most 3 stops (`maxStops`); each fits a
 //   new set of its compound (`sets`), at wear 0 and lap on set 1.
 // - A lap's time is `lap-model`'s `lapTimeMs` with no scatter and no mistake: the wear and fuel at the lap's start,
-//   `lapOnSet` = laps already run on the set + 1, the lap's neutralisation, the lap's `wetnessByLap`. After the lap the
-//   set's wear grows by `wearRatePct[compound]` (× the neutralised `wearFactor` on a neutralised lap) and fuel falls by
-//   `fuelKg / (totalLaps − fromLap + 1)` (× `fuelFactor`); this burn runs the fuel to empty at the flag.
+//   `lapOnSet` = laps already run on the set + 1, the lap's neutralisation, the world's wetness of the lap, and the tyre
+//   terms of the compound on the car (SP4.3c Task 19, B5): `degMsPerLap[compound]` and `wearRatePct[compound]`, so after
+//   a stop to mediums the medium's own rate and ν. After the lap the set's wear grows by `wearRatePct[compound]` (× the
+//   neutralised `wearFactor` on a neutralised lap) and fuel falls by `carParams.fuelBurnKgPerLap` (× `fuelFactor`), never
+//   below 0 (SP4.3c Task 15: the starting point's burn; by default here `fuelKg / (totalLaps − fromLap + 1)`).
 // - A stop at the end of lap L costs `pitLossMs[c]` with c the condition of lap L (green, VSC, SC), less
-//   `HUMAN_STOP_SAVING_MS` for a human car, plus `trafficMsByLap` of lap L. The in-lap share only splits it in time.
+//   `HUMAN_STOP_SAVING_MS` for a human car, plus the world's `trafficMsByLap` of lap L.
+// - The 70 % limit (SP4.3c §5.2, `tyre-model`'s laps to it): the fitted set may run at most `max(1,
+//   carParams.fittedLapsToLimit)` laps from `fromLap` (the car is on it for lap `fromLap` whatever its wear), a new set of
+//   compound c at most `carParams.lapsToLimit[c]` laps (≥ 1); `null`: no limit known. A play that would start a lap on a
+//   set past its laps is infeasible (the flag ends the race: a set may reach the flag on its last allowed lap). So a car
+//   at or past the limit (`fittedLapsToLimit` 0) boxes at the end of `fromLap` in every play.
 // - Neutralisations: a green lap n may start an SC with chance `byLap` of lap n, else a VSC with `vscByLap`'s (the two
 //   exclusive), lasting d laps with chance `scDur[d − 1]` (`vscDur`); laps n … n + d − 1 are neutralised. None starts on
 //   the lap after a neutralisation's last lap. With `active`, lap `fromLap` is neutralised by it and its last lap is
 //   `fromLap + k` with chance `remaining[k]`. A start and its length are known from the lap it starts on: the decision
 //   at the end of a lap knows that lap's condition and the laps left of a neutralisation out.
 // - The compound rule (`owesSecondCompound`): a plan must fit a dry compound other than the car's current one.
-// - `DpResult.plans` holds one plan per compound sequence (the compounds of its stops in order) that can meet the rule
-//   and the sets with at most 3 stops; its `expectedMs` is the expected remaining race time of the best closed-loop play
-//   that makes exactly that sequence's stops; its `stops` are that play's stops where no neutralisation comes (the
-//   green path). `plans` are sorted by `expectedMs`, the best first. `boxNow` and `stayOut` are the best closed-loop play
-//   with a stop at the end of `fromLap` and without one; `boxNow` is `null` where no play boxing now can meet the rule
-//   and the sets; `stayOut`, where no play without a stop now meets the rule, is the play that ignores it.
-import { carId, NOISE_COMPOUNDS, type LapInput, type LapModelParams, type NoiseCompound, type TrackHazard } from '@pitwall/domain';
+// - Per world, `DpResult.plans` holds one plan per compound sequence (the compounds of its stops in order) that can meet
+//   the rule, the sets and the limit with at most 3 stops, so the best of each stop count 0–3 whenever one is feasible;
+//   its `expectedMs` is the expected remaining race time of the best closed-loop play that makes exactly that sequence's
+//   stops; its `stops` are that play's stops where no neutralisation comes (the green path). Within a world `plans` are
+//   sorted by `expectedMs`, the best first. `boxThisLap` and `continue` are the best closed-loop play with a stop at the
+//   end of `fromLap` and without one; `boxThisLap` is `null` where no play boxing now can meet the rule, the sets and the
+//   limit; `continue`, where no play without a stop now meets the rule and the limit, is the best such play that ignores
+//   both (always a value, C3).
+// - Every plan carries its own triggers (SP4.3c §5.4): its `neutralised` triggers are its own sequence's (a box under a
+//   neutralisation onto the compound its sequence fits next; a no-stop plan has none), never another plan's.
+import { carId, NOISE_COMPOUNDS, type LapInput, type LapModelParams, type NoiseCompound, type TrackHazard, type Trigger } from '@pitwall/domain';
 import { lapTimeMs } from '../../src/lap-model/index.ts';
 import { HUMAN_STOP_SAVING_MS } from '../../src/race-forecast/constants.ts';
-import type { DpCarParams, DpInput, DpPlan } from '../../src/strategy-dp/index.ts';
+import type { DpCarParams, DpInput, DpPlan, DpWorld } from '../../src/strategy-dp/index.ts';
 import { chanceOn } from '../race-hazard/support.ts';
 
 export const PACE_MS = 90_000;
@@ -54,12 +71,22 @@ export const LAP: LapModelParams = {
 
 export const NO_SETS: Record<NoiseCompound, number> = { soft: 0, medium: 0, hard: 0, inter: 0, wet: 0 };
 export const WEAR_RATES: Record<NoiseCompound, number> = { soft: 3, medium: 2, hard: 1.5, inter: 2, wet: 2 };
+export const NO_LIMITS: Record<NoiseCompound, number | null> = { soft: null, medium: null, hard: null, inter: null, wet: null };
+
+/** One world of a spec: per lap (index 0 = `fromLap`, missing laps 0) its wetness and traffic; `u` 0.5, weight 1 ÷ worlds by default. */
+export type WorldSpec = { u?: number; weight?: number; wetnessByLap?: readonly number[] | undefined; trafficMsByLap?: readonly number[] | undefined };
+
+/** The car of a spec: `degMsPerLap` a number for every compound or per compound (the rest 0); `lapsToLimit` per compound (the rest `null`). */
+export type CarSpec = Partial<Omit<DpCarParams, 'degMsPerLap' | 'lapsToLimit'>> & {
+  degMsPerLap?: number | Partial<Record<NoiseCompound, number>>;
+  lapsToLimit?: Partial<Record<NoiseCompound, number | null>>;
+};
 
 export type DpSpec = {
   fromLap?: number;
   totalLaps?: number;
   lap?: LapModelParams;
-  car?: Partial<DpCarParams>;
+  car?: CarSpec;
   sets?: Partial<Record<NoiseCompound, number>>;
   owesSecondCompound?: boolean;
   pitLossMs?: DpInput['pitLossMs'];
@@ -69,32 +96,69 @@ export type DpSpec = {
   scDur?: readonly number[];
   vscDur?: readonly number[];
   active?: DpInput['active'];
+  /** One world's wetness and traffic (ignored where `worlds` is given). */
   wetnessByLap?: readonly number[];
   trafficMsByLap?: readonly number[];
+  /** Several worlds, in order. */
+  worlds?: readonly WorldSpec[];
 };
 
 const perLap = (n: number, of: readonly number[] = []): Float64Array => Float64Array.from({ length: n }, (_, i) => of[i] ?? 0);
 
-/** A `DpInput`: a medium-shod AI car on new tyres, no hazard, no traffic, no wetness, unless `spec` says otherwise. */
+/** Every compound's term: `x` for every compound where it is a number, else its entries over `fill`. */
+export function perCompound<T>(x: T | Partial<Record<NoiseCompound, T>> | undefined, fill: T): Record<NoiseCompound, T> {
+  if (x !== undefined && (typeof x !== 'object' || x === null)) return Object.fromEntries(NOISE_COMPOUNDS.map((c) => [c, x])) as Record<NoiseCompound, T>;
+  const given = (x ?? {}) as Partial<Record<NoiseCompound, T>>;
+  return Object.fromEntries(NOISE_COMPOUNDS.map((c) => [c, given[c] ?? fill])) as Record<NoiseCompound, T>;
+}
+
+/** A `DpInput`: a medium-shod AI car on new tyres, no hazard, no traffic, no wetness, no limit, one world, unless `spec` says otherwise. */
 export function dpInput(spec: DpSpec = {}): DpInput {
   const fromLap = spec.fromLap ?? 1;
   const totalLaps = spec.totalLaps ?? 30;
   const n = totalLaps - fromLap + 1;
+  const worldSpecs: readonly WorldSpec[] = spec.worlds ?? [{ u: 0.5, weight: 1, wetnessByLap: spec.wetnessByLap, trafficMsByLap: spec.trafficMsByLap }];
+  const worlds: DpWorld[] = worldSpecs.map((w) => ({
+    u: w.u ?? 0.5,
+    weight: w.weight ?? 1 / worldSpecs.length,
+    wetnessByLap: perLap(n, w.wetnessByLap),
+    trafficMsByLap: perLap(n, w.trafficMsByLap),
+  }));
+  const { degMsPerLap, lapsToLimit, ...car } = spec.car ?? {};
   return {
     car: carId(0),
     fromLap,
     totalLaps,
     lap: spec.lap ?? LAP,
-    carParams: { compound: 'medium', tyreAge: 0, wearPct: 0, fuelKg: 0, paceMs: PACE_MS, degMsPerLap: 0, wearRatePct: { ...WEAR_RATES }, human: false, ...spec.car },
+    // the burn (SP4.3c Task 15, O15): the starting point's; by default the fuel over the laps left, as the DP computed it before
+    carParams: {
+      compound: 'medium',
+      tyreAge: 0,
+      wearPct: 0,
+      fuelKg: 0,
+      paceMs: PACE_MS,
+      wearRatePct: { ...WEAR_RATES },
+      human: false,
+      fuelBurnKgPerLap: (car.fuelKg ?? 0) / n,
+      fittedLapsToLimit: null,
+      ...car,
+      degMsPerLap: perCompound(degMsPerLap, 0),
+      lapsToLimit: { ...NO_LIMITS, ...lapsToLimit },
+    },
     sets: { ...NO_SETS, ...spec.sets },
     owesSecondCompound: spec.owesSecondCompound ?? false,
     pitLossMs: spec.pitLossMs ?? { green: 22_000, vsc: 15_000, sc: 11_000, inLapShare: 0.3 },
     hazard: { byLap: perLap(n, spec.scByLap), vscByLap: perLap(n, spec.vscByLap), scDur: Float64Array.from(spec.scDur ?? [1]), vscDur: Float64Array.from(spec.vscDur ?? [1]) },
     active: spec.active ?? null,
-    wetnessByLap: perLap(n, spec.wetnessByLap),
-    trafficMsByLap: perLap(n, spec.trafficMsByLap),
+    worlds,
   };
 }
+
+/** `input` with world `w` alone (weight 1): what `solveDp` solves for that world. */
+export const worldOf = (input: DpInput, w: number): DpInput => ({ ...input, worlds: [{ ...input.worlds[w]!, weight: 1 }] });
+
+/** The plans of world `w`, in the result's order. */
+export const plansOf = (plans: readonly DpPlan[], w: number): DpPlan[] => plans.filter((p) => p.world === w);
 
 /** Per lap `fromLap … totalLaps` the start chance of `kind` from a track's hazard table, by ruling R22 ((n − 0.5) / totalLaps). */
 export function chancesFrom(hazard: TrackHazard, fromLap: number, totalLaps: number, kind: 'sc' | 'vsc'): number[] {
@@ -103,50 +167,87 @@ export function chancesFrom(hazard: TrackHazard, fromLap: number, totalLaps: num
 
 type Neutral = 'none' | 'sc' | 'vsc';
 
-type Car = { compound: NoiseCompound; onSet: number; wearPct: number; fuelKg: number };
+/** The car between laps: its compound, laps run on the set, laps run on it since `fromLap` or its fitting, wear and fuel. */
+type Car = { compound: NoiseCompound; onSet: number; stint: number; fitted: boolean; wearPct: number; fuelKg: number };
 
-const lapInput: LapInput = { paceMs: 0, degMsPerLap: 0, wearPct: 0, fuelKg: 0, compound: 'medium', lapOnSet: 1, neutralised: 'none', wetnessMs: 0, scatterMs: 0, mistakeMs: 0 };
+const lapInput: LapInput = { paceMs: 0, degMsPerLap: 0, wearPct: 0, fuelKg: 0, compound: 'medium', lapOnSet: 1, neutralised: 'none', wetnessMs: 0, wet: false, scatterMs: 0, mistakeMs: 0 };
 
-const burnOf = (input: DpInput): number => input.carParams.fuelKg / (input.totalLaps - input.fromLap + 1);
+/** The burn per lap: the car's (`carParams.fuelBurnKgPerLap`, the starting point's, SP4.3c Task 15). */
+const burnOf = (input: DpInput): number => input.carParams.fuelBurnKgPerLap;
+
+/** The first world's (the only one of a `worldOf` input) per-lap value of lap `lap`. */
+const worldAt = (input: DpInput, key: 'wetnessByLap' | 'trafficMsByLap', lap: number): number => input.worlds[0]?.[key][lap - input.fromLap] ?? 0;
+
+/** The laps the car's set may run (the 70 % limit): the fitted set's from `fromLap`, a new set's from its fitting; `Infinity` without one. */
+function stintMax(input: DpInput, car: Car): number {
+  const p = input.carParams;
+  if (car.fitted) return p.fittedLapsToLimit === null ? Infinity : Math.max(1, p.fittedLapsToLimit);
+  const f = p.lapsToLimit[car.compound];
+  return f === null ? Infinity : f;
+}
+
+/** Whether the car may start another lap on its set (the 70 % limit). */
+export const mayRun = (input: DpInput, car: Car): boolean => car.stint < stintMax(input, car);
 
 /** Lap `lap` of `car` under `neutral`: its time, and the car after it. */
 function driveLap(input: DpInput, car: Car, lap: number, neutral: Neutral): { ms: number; after: Car } {
   const p = input.carParams;
   Object.assign(lapInput, {
     paceMs: p.paceMs,
-    degMsPerLap: p.degMsPerLap,
+    degMsPerLap: p.degMsPerLap[car.compound],
     wearPct: car.wearPct,
     fuelKg: car.fuelKg,
     compound: car.compound,
     lapOnSet: car.onSet + 1,
     neutralised: neutral,
-    wetnessMs: input.wetnessByLap[lap - input.fromLap] ?? 0,
+    wetnessMs: worldAt(input, 'wetnessByLap', lap),
   });
   const ms = lapTimeMs(input.lap, lapInput);
   const factors = neutral === 'none' ? { wearFactor: 1, fuelFactor: 1 } : input.lap.neutralised[neutral];
   const rate = p.wearRatePct?.[car.compound] ?? 0;
   return {
     ms,
-    after: { compound: car.compound, onSet: car.onSet + 1, wearPct: car.wearPct + rate * factors.wearFactor, fuelKg: Math.max(0, car.fuelKg - burnOf(input) * factors.fuelFactor) },
+    after: { ...car, onSet: car.onSet + 1, stint: car.stint + 1, wearPct: car.wearPct + rate * factors.wearFactor, fuelKg: Math.max(0, car.fuelKg - burnOf(input) * factors.fuelFactor) },
   };
 }
 
 /** A stop at the end of lap `lap` under `neutral`: its cost. */
 function stopMs(input: DpInput, lap: number, neutral: Neutral): number {
   const condition = neutral === 'none' ? 'green' : neutral;
-  return input.pitLossMs[condition] - (input.carParams.human ? HUMAN_STOP_SAVING_MS : 0) + (input.trafficMsByLap[lap - input.fromLap] ?? 0);
+  return input.pitLossMs[condition] - (input.carParams.human ? HUMAN_STOP_SAVING_MS : 0) + worldAt(input, 'trafficMsByLap', lap);
 }
 
-const startCar = (input: DpInput): Car => ({ compound: input.carParams.compound, onSet: input.carParams.tyreAge, wearPct: input.carParams.wearPct, fuelKg: input.carParams.fuelKg });
+const startCar = (input: DpInput): Car => ({ compound: input.carParams.compound, onSet: input.carParams.tyreAge, stint: 0, fitted: true, wearPct: input.carParams.wearPct, fuelKg: input.carParams.fuelKg });
 
-const fitted = (compound: NoiseCompound): Car => ({ compound, onSet: 0, wearPct: 0, fuelKg: 0 });
+const fittedSet = (compound: NoiseCompound, fuelKg: number): Car => ({ compound, onSet: 0, stint: 0, fitted: false, wearPct: 0, fuelKg });
 
 /** Whether `stops` meet the compound rule for a car that starts on `start`. */
 export function meetsRule(input: DpInput, stops: readonly { compound: NoiseCompound }[]): boolean {
   return !input.owesSecondCompound || stops.some((s) => DRY.includes(s.compound) && s.compound !== input.carParams.compound);
 }
 
-/** The race time from `fromLap` to the flag with `stops` and the neutralisation of each lap (`neutralOf`, default green). */
+/** Every stint's laps of `stops` from `fromLap` to the flag: the fitted set's first, then each new set's. */
+export function stintsOf(input: DpInput, stops: readonly { lap: number; compound: NoiseCompound }[]): { compound: NoiseCompound; fitted: boolean; laps: number }[] {
+  const out: { compound: NoiseCompound; fitted: boolean; laps: number }[] = [];
+  let from = input.fromLap;
+  let compound = input.carParams.compound;
+  let fitted = true;
+  for (const s of stops) {
+    out.push({ compound, fitted, laps: s.lap - from + 1 });
+    from = s.lap + 1;
+    compound = s.compound;
+    fitted = false;
+  }
+  out.push({ compound, fitted, laps: input.totalLaps - from + 1 });
+  return out;
+}
+
+/** Whether no stint of `stops` passes its laps to the limit (where no neutralisation comes). */
+export function meetsLimit(input: DpInput, stops: readonly { lap: number; compound: NoiseCompound }[]): boolean {
+  return stintsOf(input, stops).every((s) => s.laps <= stintMax(input, { compound: s.compound, fitted: s.fitted, onSet: 0, stint: 0, wearPct: 0, fuelKg: 0 }));
+}
+
+/** The race time from `fromLap` to the flag with `stops` and the neutralisation of each lap (`neutralOf`, default green), in the first world. */
 export function raceTimeMs(input: DpInput, stops: readonly { lap: number; compound: NoiseCompound }[], neutralOf: (lap: number) => Neutral = () => 'none'): number {
   let car = startCar(input);
   let total = 0;
@@ -158,7 +259,7 @@ export function raceTimeMs(input: DpInput, stops: readonly { lap: number; compou
     const stop = stops.find((s) => s.lap === lap);
     if (stop !== undefined) {
       total += stopMs(input, lap, neutral);
-      car = { ...fitted(stop.compound), fuelKg: car.fuelKg };
+      car = fittedSet(stop.compound, car.fuelKg);
     }
   }
   return total;
@@ -186,12 +287,12 @@ export function everyStopList(input: DpInput, maxStops = MAX_STOPS): { lap: numb
   return out;
 }
 
-/** The best deterministic plan (no neutralisation) by enumeration, with the runner-up's time. */
+/** The best deterministic plan (no neutralisation) by enumeration, rule and limit kept, with the runner-up's time; first world. */
 export function bestDeterministic(input: DpInput): { stops: { lap: number; compound: NoiseCompound }[]; ms: number; runnerUpMs: number } {
   let best = { stops: [] as { lap: number; compound: NoiseCompound }[], ms: Infinity };
   let runnerUpMs = Infinity;
   for (const stops of everyStopList(input)) {
-    if (!meetsRule(input, stops)) continue;
+    if (!meetsRule(input, stops) || !meetsLimit(input, stops)) continue;
     const ms = raceTimeMs(input, stops);
     if (ms < best.ms) {
       runnerUpMs = best.ms;
@@ -207,12 +308,13 @@ export const sequenceOf = (stops: readonly { compound: NoiseCompound }[]): strin
 type Neutralisation = { kind: Neutral; left: number };
 
 /**
- * The closed-loop brute force: the expected remaining race time of the best play, every action and every outcome
- * walked, no table. `sequence` fixes the stops' compounds (exactly those, in order); `root` forces the action at the end
- * of `fromLap`; `rule: false` drops the compound rule.
+ * The closed-loop brute force in the first world: the expected remaining race time of the best play, every action and
+ * every outcome walked, no table. `sequence` fixes the stops' compounds (exactly those, in order); `root` forces the
+ * action at the end of `fromLap`; `rule: false` drops the compound rule, `limit: false` the 70 % limit.
  */
-function expectedMs(input: DpInput, o: { sequence?: readonly NoiseCompound[]; root?: 'box' | 'stay'; rule?: boolean }): number {
+function expectedMs(input: DpInput, o: { sequence?: readonly NoiseCompound[]; root?: 'box' | 'stay'; rule?: boolean; limit?: boolean }): number {
   const rule = o.rule ?? true;
+  const limit = o.limit ?? true;
   const sets = { ...input.sets };
   const { scDur, vscDur, byLap, vscByLap } = input.hazard;
 
@@ -223,6 +325,7 @@ function expectedMs(input: DpInput, o: { sequence?: readonly NoiseCompound[]; ro
       if (rule && !meetsRule(input, stops.map((compound) => ({ compound })))) return Infinity;
       return 0;
     }
+    if (limit && !mayRun(input, car)) return Infinity;
     if (out !== null) return driveAndDecide(lap, car, stops, out.kind, out.left);
     if (noStart) return driveAndDecide(lap, car, stops, 'none', 0);
     const i = lap - input.fromLap;
@@ -253,7 +356,7 @@ function expectedMs(input: DpInput, o: { sequence?: readonly NoiseCompound[]; ro
         if (sets[compound] <= 0) continue;
         sets[compound]--;
         stops.push(compound);
-        const v = stopMs(input, lap, neutral) + fromLapStart(lap + 1, { ...fitted(compound), fuelKg: after.fuelKg }, stops, next, endsHere);
+        const v = stopMs(input, lap, neutral) + fromLapStart(lap + 1, fittedSet(compound, after.fuelKg), stops, next, endsHere);
         stops.pop();
         sets[compound]++;
         if (v < best) best = v;
@@ -291,17 +394,22 @@ export function everySequence(input: DpInput): NoiseCompound[][] {
   return out;
 }
 
-/** The brute force's answer: per feasible sequence its expected time, and the box-now and stay-out values. */
-export function bruteForce(input: DpInput): { bySequence: Map<string, number>; boxNow: number | null; stayOut: number } {
+/** The brute force's answer in world `w` (default the first): per feasible sequence its expected time, and the box-this-lap and continue values. */
+export function bruteForce(input: DpInput, w = 0): { bySequence: Map<string, number>; boxThisLap: number | null; continue: number } {
+  const one = worldOf(input, w);
   const bySequence = new Map<string, number>();
-  for (const sequence of everySequence(input)) {
-    const v = expectedMs(input, { sequence });
+  for (const sequence of everySequence(one)) {
+    const v = expectedMs(one, { sequence });
     if (Number.isFinite(v)) bySequence.set(sequence.join('-'), v);
   }
-  const box = expectedMs(input, { root: 'box' });
-  const stay = expectedMs(input, { root: 'stay' });
-  return { bySequence, boxNow: Number.isFinite(box) ? box : null, stayOut: Number.isFinite(stay) ? stay : expectedMs(input, { root: 'stay', rule: false }) };
+  const box = expectedMs(one, { root: 'box' });
+  const stay = expectedMs(one, { root: 'stay' });
+  return { bySequence, boxThisLap: Number.isFinite(box) ? box : null, continue: Number.isFinite(stay) ? stay : expectedMs(one, { root: 'stay', rule: false, limit: false }) };
 }
 
-/** The plans of a result by their sequence key. */
+/** The plans of a result by their sequence key (of one world's plans). */
 export const plansBySequence = (plans: readonly DpPlan[]): Map<string, DpPlan> => new Map(plans.map((p) => [sequenceOf(p.stops), p]));
+
+/** A plan's `neutralised` triggers that box (not `stayOut`). */
+export const neutralBoxes = (plan: Pick<DpPlan, 'triggers'>): Extract<Trigger, { kind: 'neutralised' }>[] =>
+  plan.triggers.filter((t): t is Extract<Trigger, { kind: 'neutralised' }> => t.kind === 'neutralised' && t.action !== 'stayOut');

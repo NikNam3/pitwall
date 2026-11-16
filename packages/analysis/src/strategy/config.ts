@@ -11,14 +11,11 @@ export const STRATEGY_CONFIG = defineConfig('strategy', {
   maxStops: 3,
   /** The most DP plans a car's candidates keep, the best by expected time (box-now and stay-out besides). Source: SP4.3b Task 23: 98–136 candidates left 8–15 scenarios each at the cap; 8 keeps ~50–60. */
   dpPlansMax: 8,
-  /** Inter and wet plans are candidates once the forecast's highest rain chance over the remaining laps reaches this (%), or the track's wetness the DP's rain threshold. Source: research 19 wetness: the game shows light rain from about 25 % rain chance. */
-  rainCandidatePct: 25,
-  /** The rule candidates' gap: the cover rule's car within this of ours (ms). Source: `forecast-score`'s `closeGapMs`, research 12 §8. */
-  ruleGapMs: 3000,
   /**
-   * The DP's traffic term (spec §6): a rejoin within this of a car ahead (on the plain forecast's road at that lap's
-   * line) costs the shortfall. Source: spec §11.1 (`pit-sweep`'s `trafficGapMs`); a pitwall estimate, approximate
-   * (research 13 §10): the neighbours and the Monte Carlo choose (spec §6).
+   * The one traffic gap (C43): the DP's traffic term (spec §6), a rejoin within this of a car ahead (on the plain
+   * forecast's road at that lap's line) costs the shortfall; `pit-sweep`'s and `sc-call`'s traffic, a car within this of
+   * ours at a line crossing. Source: spec §9.2, §11.1 (the DRS line that decides an undercut, Aguad fn. 15); a pitwall
+   * estimate, approximate (research 13 §10): the neighbours and the Monte Carlo choose (spec §6).
    */
   trafficGapMs: 1000,
   // race-monte-carlo (spec §7.3, §11.1)

@@ -4,8 +4,8 @@
 import { carCode, known, unknown, zoneFlagsSpans, type MapCar, type MapPoint, type MapZone, type TrackData, type ZoneFlagDetail } from '@pitwall/domain';
 import { openSpansOf, type DeepReadonly, type EngineView, type QuickCalculator } from '@pitwall/engine/readers';
 import { behaviourByCar } from '../shared/behaviour.ts';
-import { ourCars } from '../shared/our-cars.ts';
-import { fractionOf, pointAt } from '../shared/track-lookup.ts';
+import { ourCars, pointAt } from '@pitwall/domain';
+import { fractionOf } from '../shared/track-lookup.ts';
 import { TRACK_POSITIONS_CAR_ROWS, TRACK_POSITIONS_ZONE_ROWS, type TrackPositionsEffect } from './behaviour.ts';
 import { TRACK_POSITIONS, type TrackPositionsOutput } from './index.ts';
 

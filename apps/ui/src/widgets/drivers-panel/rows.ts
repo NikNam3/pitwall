@@ -39,9 +39,9 @@ const SPECS: Readonly<Record<string, Omit<EntrySpec, 'key' | 'label'>>> = {
   'driverNoise.mistakeRate': { seconds: false, decimals: 3 },
   'driverNoise.mistakeMedianMs': { seconds: true, decimals: 1 },
   'driverNoise.mistakeSigmaLog': { seconds: false, decimals: 2 },
-  'driverNoise.wearRatePct.soft': { seconds: false, decimals: 1 },
-  'driverNoise.wearRatePct.medium': { seconds: false, decimals: 1 },
-  'driverNoise.wearRatePct.hard': { seconds: false, decimals: 1 },
+  'tyreModel.wearFactor.soft': { seconds: false, decimals: 2 },
+  'tyreModel.wearFactor.medium': { seconds: false, decimals: 2 },
+  'tyreModel.wearFactor.hard': { seconds: false, decimals: 2 },
 };
 const OTHER: Omit<EntrySpec, 'key' | 'label'> = { seconds: false, decimals: 2 };
 

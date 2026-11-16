@@ -17,6 +17,22 @@ import { TYRE_LIFE } from '../../src/tyre-life/index.ts';
 import { tyreLifeCalculator } from '../../src/tyre-life/calculator.ts';
 import { TYRE_WEAR } from '../../src/tyre-wear/index.ts';
 import { tyreWearCalculator } from '../../src/tyre-wear/calculator.ts';
+import { DEGRADATION } from '../../src/degradation/index.ts';
+import { degradationCalculator } from '../../src/degradation/calculator.ts';
+import { TRACK_WETNESS } from '../../src/track-wetness/index.ts';
+import { trackWetnessCalculator } from '../../src/track-wetness/calculator.ts';
+import { TYRE_MODEL, tyreModelCalculator } from '../../src/tyre-model/index.ts';
+
+/**
+ * `view`'s outputs with `tyre-model`'s on it (on `degradation`'s and `track-wetness`'s): the upstream `tyre-life` reads
+ * (ported in SP4.3c Task 12: tyre-life is a reader of tyre-model).
+ */
+const withTyreModel = (view: EngineView): Map<string, unknown> => {
+  const outputs = new Map<string, unknown>(view.outputs);
+  outputs.set(DEGRADATION, degradationCalculator.compute({ ...view, outputs }));
+  outputs.set(TRACK_WETNESS, trackWetnessCalculator.compute({ ...view, outputs }));
+  return new Map([...view.outputs, [TYRE_MODEL, tyreModelCalculator.compute({ ...view, outputs })]]);
+};
 import { NONE, openSpan, PRACTICE, QUALIFYING, RACE, situatedView } from '../situated.ts';
 import { withSetup } from '../own-car.ts';
 import { scheduled } from '../scheduled.ts';
@@ -32,14 +48,17 @@ import { carState, engineView, event, lap, RACING, realismHidden, telemetryRestr
 const perCorner = <T>(make: () => T) => ({ fl: make(), fr: make(), rl: make(), rr: make() });
 /**
  * The `car-bands` config of every `viewWith` view (the defaults before 2026-10-30), so the band cases below don't
- * depend on the defaults: dry surface 85-105, dry carcass 85-110, inter surface 60-90, inter carcass 55-75,
- * pressure setup - 1.5 to setup + 1.0 psi (car 0's setup is 25 psi on every corner: 23.5-26), brakes 300-1000, engine 0-125.
+ * depend on those defaults: dry surface 85-105, inter surface 60-90, brakes 300-1000, engine 0-125. The carcass and
+ * pressure bands are the defaults (SP4.3c §5.6): the builder's laps run C3, carcass 70-105 °C (inter 45-80); the
+ * pressure band is the setup on that carcass band by the gas law (car 0's setup is 25 psi on every corner: on C3
+ * 25 x 343.15 / 363.15 ... 25 x 378.15 / 363.15 = 23.62-26.03 psi, `P25`).
  */
 const TEST_BANDS = {
   surfaceDryLo: 85, surfaceDryHi: 105, surfaceInterLo: 60, surfaceInterHi: 90, surfaceWetLo: 50, surfaceWetHi: 80,
-  carcassDryLo: 85, carcassDryHi: 110, carcassInterLo: 55, carcassInterHi: 75, carcassWetLo: 45, carcassWetHi: 65,
-  pressureBelowSetupPsi: 1.5, pressureAboveSetupPsi: 1.0, brakeLo: 300, brakeHi: 1000, engineHi: 125,
+  brakeLo: 300, brakeHi: 1000, engineHi: 125,
 };
+/** Car 0's pressure band on its 25 psi setup on C3, as `car-bands` gives it. */
+const P25 = { lo: (25 * 343.15) / 363.15, hi: (25 * 378.15) / 363.15 };
 const CORNER_IDS = ['fl', 'fr', 'rl', 'rr'] as const;
 const NOW = 12_345;
 
@@ -66,6 +85,7 @@ const wearOk = (): TyreWear => ({
   limitPct: 80,
   warnLaps: 3,
   gameLifeSpanLaps: known(30, 0),
+  wearAtLifeSpanPct: perCorner(() => known(60, 0)),
 });
 const fuelOk = (): FuelState => ({
   kg: known(50, 0),
@@ -181,7 +201,9 @@ const mapCorners = <T, U>(c: { fl: T; fr: T; rl: T; rr: T }, f: (t: T, corner: (
  * readings stays, so a lap case judges its lap through `car-bands` while the live state and `outForFullLap` stay stubs.
  */
 const withJudgedLaps = (bands: CarBands, view: EngineView): CarBands => {
-  const byMachine = { ...view.situation.byMachine, 'car-status': [openSpan('car-status', 'competing', { car: 0 })] };
+  // car 0 is human-driven (its tyre bands are judged, SP4.3c §5.6 D) unless the view says who drives it
+  const driver = view.situation.byMachine['car-driver'] ?? [openSpan('car-driver', 'human', { car: 0 })];
+  const byMachine = { ...view.situation.byMachine, 'car-status': [openSpan('car-status', 'competing', { car: 0 })], 'car-driver': driver };
   const judged = carBandsCalculator.compute({ ...view, situation: { ...view.situation, byMachine } })[carId(0)];
   if (judged === undefined) throw new Error('car-bands gave car 0 no entry');
   const lapOf = (r: BandReading, j: BandReading): BandReading => ({ ...r, lapState: j.lapState });
@@ -282,7 +304,7 @@ describe('alarms calculator', () => {
     });
 
     it('a tyre channel out of band on the mid-range of the last lap: advisory, tyres, bandOut with state, value, band, lap and measure', () => {
-      // the pressure band is car 0's setup band (25 psi: 23.5-26)
+      // the pressure band is car 0's setup band (25 psi on C3: 23.62-26.03)
       const [a, ...rest] = run(lapsView([lapWith({ 'tyre.pressurePsi.rr': [26, 28] }, { lapNumber: 4 })]));
       expect(rest).toEqual([]);
       expect(a).toMatchObject({
@@ -290,7 +312,7 @@ describe('alarms calculator', () => {
         severity: 'advisory',
         category: 'tyres',
         key: 'bandOut:0:tyre.pressurePsi.rr',
-        params: { channel: 'tyre.pressurePsi.rr', state: 'above', value: 27, lo: 23.5, hi: 26, lap: 4, measure: 'midRange' },
+        params: { channel: 'tyre.pressurePsi.rr', state: 'above', value: 27, lo: expect.closeTo(P25.lo, 9), hi: expect.closeTo(P25.hi, 9), lap: 4, measure: 'midRange' },
       });
     });
 
@@ -328,7 +350,8 @@ describe('alarms calculator', () => {
       const corners = perCorner(() => ({ wearPct: known(76, 0) }));
       const wearParts = { cars: [carState({ tyres: { corners } })], history: { laps: [64, 68, 72].map((w, i) => lap({ lapNumber: i + 1, wearAtEndPct: perCorner(() => known(w, 0)) })) } };
       // tyre-wear publishes from tyre-life's output (spec 4.2): tyre-life computes on the view first
-      const tyreLife = tyreLifeCalculator.compute(situatedView(wearParts));
+      const base = situatedView(wearParts);
+      const tyreLife = tyreLifeCalculator.compute({ ...base, outputs: withTyreModel(base) });
       const wear = tyreWearCalculator.compute(situatedView({ ...wearParts, outputs: new Map([[TYRE_LIFE, tyreLife]]) }))[carId(0)]!;
       expect(wear.corners.fl.lapsToLimit).toMatchObject({ known: true, value: 0 });
       expect(only(viewWith({ wear }), 'wearLimitNear').map((i) => i.key)).toEqual(['wearLimitNear:0:wear.fl', 'wearLimitNear:0:wear.fr', 'wearLimitNear:0:wear.rl', 'wearLimitNear:0:wear.rr']);
@@ -481,19 +504,19 @@ describe('alarms calculator', () => {
       set(bands);
       return run(lapsView(laps, { bands }, { ownLapStates: true })).filter((i) => i.kind === 'bandOut');
     };
-    // lap 2: the FL brake peaks at 290 °C (below 300-1000), the engine at 130 °C (above 0-125), the RL carcass at 112 °C mid-range (above 85-110)
+    // lap 2: the FL brake peaks at 290 °C (below 300-1000), the engine at 130 °C (above 0-125), the RL carcass at 112 °C mid-range (above the C3 band 70-105)
     const outLap = lapWith({ 'brakesC.fl': [180, 290], engineC: [120, 130], 'tyre.carcassC.rl': [110, 114] });
 
     it("raised from the reading's lapState, with today's params from the same judged lap: value, band, lap number and measure", () => {
       const found = given([outLap], (b) => {
         b.brakesC.fl = reading('in', { lapState: 'below', band: { lo: 300, hi: 1000 } });
         b.engineC = reading('in', { lapState: 'above', band: { lo: 0, hi: 125 } });
-        b.tyres.rl.carcassC = reading('in', { lapState: 'above', band: { lo: 85, hi: 110 } });
+        b.tyres.rl.carcassC = reading('in', { lapState: 'above', band: { lo: 70, hi: 105 } });
       });
       expect(found.map((i) => [i.key, i.severity, i.category, i.params]).sort()).toEqual([
         ['bandOut:0:brakesC.fl', 'advisory', 'car', { channel: 'brakesC.fl', state: 'below', value: 290, lo: 300, hi: 1000, lap: 2, measure: 'peak' }],
         ['bandOut:0:engineC', 'advisory', 'car', { channel: 'engineC', state: 'above', value: 130, lo: 0, hi: 125, lap: 2, measure: 'peak' }],
-        ['bandOut:0:tyre.carcassC.rl', 'advisory', 'tyres', { channel: 'tyre.carcassC.rl', state: 'above', value: 112, lo: 85, hi: 110, lap: 2, measure: 'midRange' }],
+        ['bandOut:0:tyre.carcassC.rl', 'advisory', 'tyres', { channel: 'tyre.carcassC.rl', state: 'above', value: 112, lo: 70, hi: 105, lap: 2, measure: 'midRange' }],
       ]);
     });
 
@@ -781,6 +804,59 @@ describe('alarms calculator', () => {
   });
 });
 
+describe('band alarms on human-driven cars only (SP4.3c §5.6, C43)', () => {
+  // car 0 the human player, car 5 the teammate; both with every tyre channel above its band now and all their last lap
+  const TEAMMATE = 5;
+  const hotTyres = { corners: perCorner(() => ({ surfaceTempC: known(120, 0), carcassTempC: known(120, 0), pressurePsi: known(32, 0) })) };
+  const hotLap = (car: number) =>
+    lapWith(
+      Object.fromEntries(CORNER_IDS.flatMap((c) => [[`tyre.surfaceC.${c}`, [110, 120]], [`tyre.carcassC.${c}`, [115, 125]], [`tyre.pressurePsi.${c}`, [27, 29]]])) as Record<string, [number, number]>,
+      { carId: carId(car), lapNumber: 3 },
+    );
+  /** The view with `car-bands`' own output for both cars (C43: the one judgement), the teammate driven by `teammate`. */
+  const teamView = (teammate: 'ai' | 'human'): EngineView => {
+    const base = engineView({
+      cars: [withSetup(carState({ tyres: hotTyres }), 25), carState({ id: carId(TEAMMATE), tyres: hotTyres })],
+      history: { laps: [hotLap(0), hotLap(TEAMMATE)] },
+      sessionTime: NOW,
+      config: { [CAR_BANDS_CONFIG.key]: TEST_BANDS },
+      situation: situationOf([
+        openSpan('car-status', 'competing', { car: 0 }),
+        openSpan('car-status', 'competing', { car: TEAMMATE }),
+        openSpan('car-driver', 'human', { car: 0 }),
+        openSpan('car-driver', teammate, { car: TEAMMATE }),
+      ]),
+    });
+    const view: EngineView = { ...base, live: { ...base.live, teammateCar: carId(TEAMMATE) } };
+    const bands = carBandsCalculator.compute(view);
+    return { ...view, outputs: outputsOf([outputsFor(0, { bands: bands[carId(0)]! }), outputsFor(TEAMMATE, { bands: bands[carId(TEAMMATE)]! })]) };
+  };
+  const tyreAlarms = (view: EngineView, car: number) => run(view).filter((i) => i.carId === carId(car) && i.category === 'tyres');
+
+  it('alarms raises no tyre band alarm for an AI car: the AI teammate with every tyre channel out of band raises none', () => {
+    expect(tyreAlarms(teamView('ai'), TEAMMATE)).toEqual([]);
+  });
+
+  it('the human player beside it, with the same values, raises its full-lap alarms', () => {
+    const keys = tyreAlarms(teamView('ai'), 0).map((i) => i.key);
+    expect(keys).toEqual(expect.arrayContaining(['bandOutLap:0:tyre.carcassC.fl', 'bandOutLap:0:tyre.pressurePsi.rr', 'bandOutLap:0:tyre.surfaceC.rl']));
+  });
+
+  it('a human teammate with the same values raises its carcass alarms', () => {
+    const keys = tyreAlarms(teamView('human'), TEAMMATE).map((i) => i.key);
+    expect(keys).toEqual(expect.arrayContaining(CORNER_IDS.map((c) => `bandOutLap:${TEAMMATE}:tyre.carcassC.${c}`)));
+  });
+
+  it("an inter lap at 80-82 °C carcass (81) is out of band: car 0's advisory names the inter band 45-80", () => {
+    const inter = { visualCompound: 'inter' as const, actualCompound: 'inter' as const };
+    const over = Object.fromEntries(CORNER_IDS.flatMap((c) => [[`tyre.surfaceC.${c}`, [65, 75]], [`tyre.carcassC.${c}`, [80, 82]]])) as Record<string, [number, number]>;
+    const found = run(lapsView([lapWith(over, inter)])).filter((i) => i.kind === 'bandOut');
+    expect(found.map((i) => [i.key, i.severity, i.params['state'], i.params['value'], i.params['lo'], i.params['hi']]).sort()).toEqual(
+      CORNER_IDS.map((c) => [`bandOut:0:tyre.carcassC.${c}`, 'advisory', 'above', 81, 45, 80]).sort(),
+    );
+  });
+});
+
 describe('hidden data of one of our cars (Review Focus 5)', () => {
   const TEAMMATE = carId(4);
   const restricted = unknown('restricted');
@@ -820,7 +896,7 @@ describe('hidden data of one of our cars (Review Focus 5)', () => {
     const remaining: SessionRemaining = { basis: 'laps', lapsLeft: known(10, 0), timeLeftMs: unknown('notApplicable') };
     const base = situatedView({ cars: [carState(), car], history: { laps }, sessionTime: NOW, outputs: new Map([[SESSION_REMAINING, remaining]]) });
     const view: EngineView = { ...base, live: { ...base.live, teammateCar: TEAMMATE } };
-    const tyreLife = tyreLifeCalculator.compute(view);
+    const tyreLife = tyreLifeCalculator.compute({ ...view, outputs: withTyreModel(view) });
     const outputs = new Map<string, unknown>([
       [SESSION_REMAINING, remaining],
       [TYRE_WEAR, tyreWearCalculator.compute({ ...view, outputs: new Map([[TYRE_LIFE, tyreLife]]) })],
@@ -840,7 +916,11 @@ describe('hidden data of one of our cars (Review Focus 5)', () => {
   it("a teammate whose driver withholds the telemetry: wear, fuel and ERS stay unknown('restricted') and raise no alarm", () => {
     const { outputs, alarms } = chain(telemetryRestricted(teammate()), hiddenLaps());
     const wear = (outputs.get(TYRE_WEAR) as Record<number, TyreWear>)[TEAMMATE]!;
-    for (const corner of CORNER_IDS) expect(wear.corners[corner]).toEqual({ wearPct: restricted, ratePctPerLap: restricted, lapsToLimit: restricted });
+    // the rate is tyre-model's (SP4.3c Task 12): unknown with tyre-model's reason; the wear and laps to the limit restricted
+    for (const corner of CORNER_IDS) {
+      expect(wear.corners[corner]).toMatchObject({ wearPct: restricted, lapsToLimit: restricted });
+      expect(wear.corners[corner].ratePctPerLap.known, corner).toBe(false);
+    }
     const fuel = (outputs.get(FUEL) as Record<number, FuelState>)[TEAMMATE]!;
     expect([fuel.kg, fuel.burnKgPerLap, fuel.lapsOfFuel, fuel.marginLaps, fuel.saveTargetKgPerLap]).toEqual([restricted, restricted, restricted, restricted, restricted]);
     const ers = (outputs.get(ERS) as Record<number, ErsState>)[TEAMMATE]!;
@@ -868,12 +948,12 @@ describe('alarms behaviour table (C44)', () => {
 
   it('weekend phase: only race asks for the lap-1 rule and counts corner-cutting warnings; practice, qualifying and none ask for nothing', () => {
     const table: BehaviourTable<AlarmsEffect> = ALARMS_BEHAVIOUR;
-    expect(table['weekend-phase']).toEqual({ practice: {}, qualifying: {}, race: { isRace: true, warningCount: 'cornerCutting' }, none: {} });
+    expect(table['weekend-phase']).toEqual({ practice: { isRace: false }, qualifying: { isRace: false }, race: { isRace: true, warningCount: 'cornerCutting' }, none: { isRace: false } });
   });
 
   it("weekend phase: the lap-1 rule is car-bands' row, so both judge the same lap (C43); car-bands counts no warnings", () => {
     const table: BehaviourTable<AlarmsEffect> = ALARMS_BEHAVIOUR;
-    expect(CAR_BANDS_BEHAVIOUR['weekend-phase']).toEqual({ practice: {}, qualifying: {}, race: { isRace: true }, none: {} });
+    expect(CAR_BANDS_BEHAVIOUR['weekend-phase']).toEqual({ practice: { isRace: false }, qualifying: { isRace: false }, race: { isRace: true }, none: { isRace: false } });
     for (const [kind, row] of Object.entries(CAR_BANDS_BEHAVIOUR['weekend-phase']!)) {
       expect(table['weekend-phase']![kind], kind).toMatchObject(row);
       expect(table['weekend-phase']![kind]!.isRace, kind).toBe(row.isRace);

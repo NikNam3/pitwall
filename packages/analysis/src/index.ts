@@ -23,8 +23,6 @@ export { lapOverviewCalculator } from './lap-overview/calculator.ts';
 export * from './lap-times/index.ts';
 export { lapTimesCalculator } from './lap-times/calculator.ts';
 export { boardFor } from './lap-times/lap-times.ts';
-export * from './pace/index.ts';
-export { paceCalculator } from './pace/calculator.ts';
 export { fuelCalculator } from './fuel/calculator.ts';
 export * from './pace-delta/index.ts';
 export * from './per-lap-rate/index.ts';
@@ -50,6 +48,7 @@ export * from './track-positions/index.ts';
 export { trackPositionsCalculator } from './track-positions/calculator.ts';
 export * from './tyre-life/index.ts';
 export { tyreLifeCalculator } from './tyre-life/calculator.ts';
+export * from './tyre-model/index.ts';
 export * from './tyre-wear/index.ts';
 export * from './weather/index.ts';
 export { weatherCalculator } from './weather/calculator.ts';
@@ -62,6 +61,8 @@ export { pitWindowCalculator } from './pit-window/calculator.ts';
 export * from './rejoin/index.ts';
 export { rejoinCalculator } from './rejoin/calculator.ts';
 export { ghostLinesOf } from './rejoin/ghost-lines.ts';
+export * from './rejoin-ghost/index.ts';
+export { rejoinGhostCalculator } from './rejoin-ghost/calculator.ts';
 export * from './sc-call/index.ts';
 export { SIMULATOR as LAP_MODEL_SIMULATOR, lapTimeMs } from './lap-model/index.ts';
 export * from './track-wetness/index.ts';
@@ -78,9 +79,9 @@ export * from './race-hazard/index.ts';
 export {
   SIMULATOR as STRATEGY_DP_SIMULATOR,
   bestWith,
-  dpResult,
   solveDp,
-  strategyDp,
+  solveWorld,
+  STRATEGY_DP_CONFIG,
   type DpCarParams,
   type DpFirst,
   type DpInput,
@@ -89,6 +90,7 @@ export {
   type DpSolution,
   type DpTable,
   type DpUnder,
+  type DpWorld,
 } from './strategy-dp/index.ts';
 export {
   SIMULATOR as RACE_MONTE_CARLO_SIMULATOR,
