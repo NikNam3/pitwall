@@ -39,28 +39,32 @@ export type LabelRing = 'inner' | 'outer' | 'dot';
 export type CarLabel = { carId: CarId; code: string; ring: LabelRing; label: Point | null };
 
 /**
- * The label rule: cars are sorted by `behindMs`; neighbours closer than `labelWidth` on the inner ring form a group.
+ * The label rule: cars are sorted by position from the top (cars just ahead of us, nearly a lap behind, come first, so
+ * groups wrap around the top); neighbours closer than `labelWidth` on the inner ring form a group.
  * A single car takes the inner ring. A group fans out alternately (inner, outer, inner, ...) unless it is too tight:
  * three or more cars spanning under two label widths. A tight group keeps one code, the teammate's, else the car
  * closest to our car on the circle, and the others are dots. Our car is skipped. The result is in the sorted order.
+ * Our car's own label (drawn at the top by the widget) is not part of a group.
  */
 export function placeCircleLabels(cars: readonly LabelCar[], opts: LabelOptions): CarLabel[] {
   const { lapMs, innerRadius, outerRadius, labelWidth } = opts;
-  const arc = (a: number, b: number): number => (Math.abs(a - b) / lapMs) * 2 * Math.PI * innerRadius;
-  const sorted = cars.filter((c) => c.carId !== opts.ourCar).sort((a, b) => a.behindMs - b.behindMs);
+  // Position on the circle as a signed time from the top: cars just ahead of us are negative, so the top is no seam.
+  const offset = (c: LabelCar): number => (c.behindMs > lapMs / 2 ? c.behindMs - lapMs : c.behindMs);
+  const arc = (a: LabelCar, b: LabelCar): number => (Math.abs(offset(a) - offset(b)) / lapMs) * 2 * Math.PI * innerRadius;
+  const sorted = cars.filter((c) => c.carId !== opts.ourCar).sort((a, b) => offset(a) - offset(b));
   const groups: LabelCar[][] = [];
   for (const c of sorted) {
     const g = groups.at(-1);
     const last = g?.at(-1);
-    if (g && last && arc(last.behindMs, c.behindMs) < labelWidth) g.push(c);
+    if (g && last && arc(last, c) < labelWidth) g.push(c);
     else groups.push([c]);
   }
-  const near = (c: LabelCar): number => Math.min(c.behindMs, lapMs - c.behindMs);
+  const near = (c: LabelCar): number => Math.abs(offset(c));
   const rings = new Map<CarId, LabelRing>();
   for (const g of groups) {
     const first = g[0];
     const last = g.at(-1);
-    const tight = g.length >= 3 && first && last && arc(first.behindMs, last.behindMs) < 2 * labelWidth;
+    const tight = g.length >= 3 && first && last && arc(first, last) < 2 * labelWidth;
     if (!tight || !first) {
       g.forEach((c, i) => rings.set(c.carId, i % 2 === 0 ? 'inner' : 'outer'));
       continue;

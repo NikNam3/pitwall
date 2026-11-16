@@ -1,10 +1,10 @@
 // The circle's geometry (kit/circle; spec §6.5, P28): polarOf, and the label rule of the mockup's gen.mjs labelPlaces.
 import { carId } from '@pitwall/domain';
 import { describe, expect, it } from 'vitest';
-import { placeCircleLabels, polarOf, type LabelCar } from '../../src/kit/circle/index.ts';
+import { placeCircleLabels, polarOf, type LabelCar, type LabelOptions } from '../../src/kit/circle/index.ts';
 
 const LAP = 106_000;
-const opts = { lapMs: LAP, innerRadius: 173, outerRadius: 191, labelWidth: 26, ourCar: carId(0) };
+const opts: LabelOptions = { lapMs: LAP, innerRadius: 173, outerRadius: 191, labelWidth: 26, ourCar: carId(0) };
 const car = (id: number, code: string, behindMs: number): LabelCar => ({ carId: carId(id), code, behindMs });
 const ringsOf = (cars: LabelCar[], o = opts) => Object.fromEntries(placeCircleLabels(cars, o).map((c) => [c.code, c.ring]));
 
@@ -29,7 +29,7 @@ describe('polarOf', () => {
 describe('placeCircleLabels', () => {
   it('gives cars far apart the inner ring, and skips our car', () => {
     const out = placeCircleLabels([car(0, 'KUH', 0), car(1, 'RUS', 1_400), car(2, 'SAI', 6_000), car(3, 'PIA', 102_900)], opts);
-    expect(out.map((c) => c.code)).toEqual(['RUS', 'SAI', 'PIA']);
+    expect(out.map((c) => c.code)).toEqual(['PIA', 'RUS', 'SAI']);
     expect(out.every((c) => c.ring === 'inner' && c.label !== null)).toBe(true);
   });
 
@@ -53,6 +53,17 @@ describe('placeCircleLabels', () => {
     expect(ringsOf(cars)).toEqual({ RUS: 'inner', SAI: 'dot', PIA: 'dot' });
     const ahead = [car(1, 'RUS', 104_000), car(2, 'SAI', 104_300), car(3, 'PIA', 104_600)];
     expect(ringsOf(ahead)).toEqual({ RUS: 'dot', SAI: 'dot', PIA: 'inner' });
+  });
+
+  it('groups two cars either side of the top and fans them out', () => {
+    const out = placeCircleLabels([car(1, 'RUS', 300), car(2, 'PIA', LAP - 300)], opts);
+    expect(out.map((c) => [c.code, c.ring])).toEqual([['PIA', 'inner'], ['RUS', 'outer']]);
+  });
+
+  it('applies the tight-group rule to three cars straddling the top', () => {
+    const cars = [car(1, 'RUS', 300), car(2, 'LIN', LAP - 100), car(3, 'PIA', LAP - 500)];
+    expect(ringsOf(cars)).toEqual({ RUS: 'dot', LIN: 'inner', PIA: 'dot' });
+    expect(ringsOf(cars, { ...opts, teammate: carId(3) })).toEqual({ RUS: 'dot', LIN: 'dot', PIA: 'inner' });
   });
 
   it('fans a chain of four that is wide enough, alternating rings', () => {
