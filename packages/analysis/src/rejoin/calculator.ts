@@ -25,7 +25,7 @@ import { RACE_INTERACTION_CONFIG } from '../race-interaction/config.ts';
 import { rejoinOnRoad, stopCostOfLoss, type RoadAtLine } from '../race-forecast/index.ts';
 import { behaviourByCar, behaviourFor } from '../shared/behaviour.ts';
 import { FORECAST_FIELD_CONFIG } from '../shared/forecast-field/config.ts';
-import { timeAtProgress } from '../shared/crossing-history.ts';
+import { liveProgress, timeAtProgress } from '../shared/crossing-history.ts';
 import { latestOf, latestTime } from '../shared/gapper-lines.ts';
 import { isHumanDriver } from '../shared/human-driver.ts';
 import { ourCars } from '@pitwall/domain';
@@ -36,6 +36,7 @@ import { REJOIN, type Rejoin, type RejoinOutput } from './index.ts';
 const CONDITIONS: readonly PitCondition[] = ['green', 'vsc', 'sc'];
 const NOT_APPLICABLE = unknown('notApplicable');
 const INSUFFICIENT = unknown('insufficientData');
+const NOT_RECEIVED = unknown('notReceived');
 
 const WEEKEND_PHASE = { 'weekend-phase': REJOIN_BEHAVIOUR['weekend-phase'] ?? {} };
 const CAR_ROWS = { 'car-activity-race': REJOIN_BEHAVIOUR['car-activity-race'] ?? {}, 'car-status': REJOIN_BEHAVIOUR['car-status'] ?? {} };
@@ -109,40 +110,40 @@ function liveGaps(view: EngineView, gaps: GapsOutput, carId: CarId, now: Session
   const newestTime = latestTime(ours);
   if (newestTime === undefined) return undefined;
   const lengthM = view.live.session.trackLengthM;
-  const progressOf = (id: CarId): number => {
+  const liveOf = (id: CarId): Known<number> => {
     const timing = view.live.cars[id]?.timing;
-    return timing === undefined || !(lengthM > 0) ? NaN : (timing.lap - 1) * MINI_SECTORS + (timing.lapDistanceM / lengthM) * MINI_SECTORS;
+    return timing === undefined ? NOT_RECEIVED : liveProgress(timing.lap, timing.lapDistanceM, lengthM, now);
   };
   const newest = latestOf(ours);
-  const live = progressOf(carId);
+  const live = liveOf(carId);
   // where we are now: our live progress, never before our newest crossing
-  const here = Number.isFinite(live) && live > newest ? live : newest;
-  // when we were at `p`: our crossing history, and between our newest crossing and here at our pace since it
-  const whenAt = (p: number): Known<SessionTime> =>
-    p > newest ? (p <= here ? known(newestTime + ((p - newest) * (now - newestTime)) / (here - newest), now) : INSUFFICIENT) : timeAtProgress(ours, p);
+  const here = live.known && live.value > newest ? live.value : newest;
+  // when we were at `p`: our crossing history, up to our live point (the helper's tail, C43)
+  const livePoint = { t: now, progress: here };
   const sinceThere = (p: number): Known<Ms> => {
-    const t = whenAt(p);
+    const t = timeAtProgress(ours, p, livePoint);
     return t.known ? known(Math.round(now - t.value), now) : t;
   };
-  const lapAgo = whenAt(here - MINI_SECTORS);
+  const lapAgo = timeAtProgress(ours, here - MINI_SECTORS, livePoint);
   const rows: GapToCar[] = [];
   for (const i of gaps.intervals) {
     if (i.carId === carId) {
       rows.push({ carId, gapMs: NOT_APPLICABLE, lapsDown: 0 });
       continue;
     }
-    const p = progressOf(i.carId);
-    if (gaps.recent[i.carId] === undefined || !Number.isFinite(p)) {
-      rows.push({ carId: i.carId, gapMs: unknown('notReceived'), lapsDown: 0 });
+    const progress = liveOf(i.carId);
+    if (gaps.recent[i.carId] === undefined || !progress.known) {
+      rows.push({ carId: i.carId, gapMs: NOT_RECEIVED, lapsDown: 0 });
       continue;
     }
+    const p = progress.value;
     if (p <= here) {
       const down = Math.floor((here - p) / MINI_SECTORS);
       rows.push({ carId: i.carId, gapMs: sinceThere(p + down * MINI_SECTORS), lapsDown: down });
       continue;
     }
     const up = Math.floor((p - here) / MINI_SECTORS);
-    const there = whenAt(p - (up + 1) * MINI_SECTORS);
+    const there = timeAtProgress(ours, p - (up + 1) * MINI_SECTORS, livePoint);
     const gapMs = there.known && lapAgo.known ? known(Math.round(lapAgo.value - there.value), now) : there.known ? lapAgo : there;
     rows.push({ carId: i.carId, gapMs, lapsDown: 0 - up });
   }
