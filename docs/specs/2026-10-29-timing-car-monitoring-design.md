@@ -610,18 +610,20 @@ type PhaseBand = { from: number; to: number; kind: 'sc' | 'vsc' | 'red' };
 
 Every key is declared with `defineConfig` (ADR 0008) by the unit named in the first column, with a source note in the declaration. In W0 the supervisor checks each default against a community source for F1 25 (or F1 24 where F1 25 has none), adjusts it if that source differs, and records the source. Values without one keep "pitwall estimate" as the source. Sub-project 5 calibrates all of them in training.
 
-Config fields are flat primitives: a band is one `lo`/`hi` pair per field (`surfaceDryLo`, `surfaceDryHi`, …, `engineHi`; the pressure band is the player's setup per corner minus `pressureBelowSetupPsi` to plus `pressureAboveSetupPsi`, unknown for every other car, live-test fixes 2026-11-05), the quali parts are `eliminatedQ1`, `eliminatedQ2`, and the major incident kinds are one boolean per kind (`collisionMajor`, …). The sources are in each unit's `packages/analysis/src/<unit>/config.ts`.
+Config fields are flat primitives: a band is one `lo`/`hi` pair per field (`surfaceDryLo`, `surfaceDryHi`, …, `engineHi`), or a reference with offsets (the carcass and pressure bands, below; changed in SP4.3c §5.6), the quali parts are `eliminatedQ1`, `eliminatedQ2`, and the major incident kinds are one boolean per kind (`collisionMajor`, …). The sources are in each unit's `packages/analysis/src/<unit>/config.ts`.
 
 | Unit | Key | Default | Initial source |
 |---|---|---|---|
 | `per-lap-rate` | `window`, `minSamples` | 5, 3 | pitwall estimate |
 | `pace` | `window` | 3 laps | pitwall estimate |
-| `tyre-wear` | `limitPct` | 70 % | community (performance drops sharply beyond it) |
-| `car-bands` | `tyreSurfaceC` | dry 85–105, inter 60–90, wet 50–80 | community |
-| `car-bands` | `tyreCarcassC` | dry 85–110, inter 55–75, wet 45–65 | community F1 24 inner-temperature windows (C2–C3 85–105, C1 95–115, inter 55–75, wet 45–65), dry upper bound pitwall estimate |
-| `car-bands` | `tyrePressurePsi` | 20.0–31.0 | community F1 25 setups run up to 29.5 psi front / 26.5 rear cold and down to about 20.2 rear; the live value is higher (time trial 30.16 psi); headroom pitwall estimate; per-axle bands open (questions Q1) |
-| `car-bands` | `brakeC` | 300–1000 | community |
-| `car-bands` | `engineC` | up to 125 | community |
+| `tyre-model` | `limitPct` | 70 % | the user's hard rule (SP4.3c §5.2); the game's own life runs to 70 % (research 22 §1.1); moved from `tyre-wear` in SP4.3c |
+| `car-bands` | `surfaceDryLo`/`Hi`, `surfaceInterLo`/`Hi` | slick 55–100, inter 30–85 °C | pitwall recordings 2026-10-29/30, p5–p95 of the player's racing laps (changed in SP4.3c §5.6) |
+| `car-bands` | `surfaceWetLo`/`Hi` | 30–55 °C | research 20 §7.1 C, SP4.3c §5.6 |
+| `car-bands` | `refTempC1C` … `refTempC5C`, `refTempInterC`, `refTempWetC` | C1 105, C2 95, C3 90, C4 85, C5 80, inter 65, wet 55 °C | the game's reference carcass temperatures, research 20 §1 and §7.1 A (changed in SP4.3c §5.6) |
+| `car-bands` | `carcassBelowRefC`, `carcassAboveRefC` | 20, 15 °C | the carcass band is the actual compound's reference − 20 to + 15 °C; research 20 §7.1 A–B, SP4.3c §5.6 |
+| `car-bands` | pressure band (no own key) | the player's setup pressure per corner taken by the gas law to the carcass band's two ends; unknown for every other car | research 20 §7.1 A–B, SP4.3c §5.6 |
+| `car-bands` | `brakeLo`, `brakeHi` | 300–1000 °C | low: pitwall estimate (our racing laps run 278–920 °C, p5–p95); high: real F1 discs up to about 1000 °C (flowracers.com) |
+| `car-bands` | `engineHi` | up to 135 °C | pitwall recordings 2026-10-29/30, p5–p95 of the player's racing laps |
 | `ers` | `deployLimitJ`, `capacityJ` | 4 000 000, 4 000 000 | real F1 regulation (2014–2025), used by F1 25 |
 | `ers` | `attackLevelJ` | 2 400 000 | Avella et al. 40 % margin (research 07), pitwall estimate |
 | `damage` | `jumpPct`, `jumpWindowMs` | 5 %, 2000 | pitwall estimate |
