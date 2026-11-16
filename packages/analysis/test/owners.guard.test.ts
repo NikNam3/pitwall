@@ -116,6 +116,59 @@ const STOP_MODEL_TERMS = ['HUMAN_STOP_SAVING_MS', 'DOUBLE_STACK_MS', 'passedBy']
 const RIVAL_PLAN_NAMES = ['stopLow', 'stopMid', 'stopHigh', 'nextOdds', 'typeSwitch', 'midLap', 'switchLap'];
 const RIVAL_ODDS_READ = /\bnextCompound\s*\.\s*value\b/;
 
+/**
+ * Decoding a neutralisation's kind itself (SP4.3c Task 4, O6): the detail of a `neutralised` span (`NeutralisedDetail`:
+ * its car, SC or VSC, and its stages), a span's kind compared with `'neutralised'` or a kind with `'suspended'`, or an own
+ * table of the neutralising kinds per session-phase sub-machine (`'session-phase-race': [ … ]`). An incident's or a
+ * trigger's kind `'neutralised'` (`c.kind`, `t.kind`) is no span kind.
+ */
+const NEUTRALISATION_DECODE =
+  /\bNeutralisedDetail\b|\bspans?\w*\s*\.\s*kind\s*[!=]==?\s*'(?:neutralised|suspended)'|\bkind\s*[!=]==?\s*'suspended'|'suspended'\s*[!=]==?\s*[\w.]*\bkind\b|'session-phase-(?:race|qualifying|practice)'\s*:\s*\[/;
+
+/**
+ * A time-loss exclusion built by a unit itself (SP4.3c Task 4, O6, B6): a function returning a `TimeLossExcluded`, a
+ * lambda handed to `timeLossEvents` in place of `timeLossExcludedOf`, or the car-location kinds of no time loss
+ * (`'pitLane'`, `'garage'`).
+ */
+const TIME_LOSS_EXCLUSION = /\)\s*:\s*TimeLossExcluded\b|\btimeLossEvents\s*\([^;]*=>|'(?:pitLane|garage)'/;
+
+/**
+ * "Owes a second dry compound" judged by a unit itself (SP4.3c Task 7, O11, B4): the count of distinct dry compounds
+ * held against two (`.size < 2`), or the compound-rule span's `required` / `waived` held against a rule.
+ */
+const SECOND_DRY_COMPOUND = /\.size\s*(?:<=?|>=?)\s*2(?![\d.])|\brule\w*\s*[!=]==?\s*'(?:required|waived)'/;
+
+/**
+ * The reference pace before an event taken by a unit itself (SP4.3c Task 7, O12, B11): the last laps of a window before
+ * a lap (`.filter((l) => l.lapNumber < lap).slice(-window)`), or `pit-loss`'s deleted `referenceLaps` window.
+ */
+const REFERENCE_PACE = /\blapNumber\s*<\s*[\w.]+\s*\)\s*\.slice\(\s*-|\breferenceLaps\b/;
+
+/** Personal and session bests (SP4.3c Task 7, O14): a lap's class for a best read (`lap-classes`' `forBest`). */
+const BEST_NAMES = ['forBest'];
+
+/**
+ * The wear at the game's life span computed (SP4.3c Task 8, O16, B1): a rate times the life span, either way round
+ * (`rate * lifeSpan`, `gameLifeSpanLaps * …`).
+ */
+const WEAR_AT_LIFE_SPAN = /\b\w*[Ll]ifeSpan\w*(?:\s*\.\s*value)?\s*\*|\*\s*[\w.]*\b\w*[Ll]ifeSpan\w*\b/;
+
+/**
+ * The rejoin ghost's map point (SP4.3c O18): where a car was its stop cost ago (`now - lossMs`, `sessionTime - …lossMs`)
+ * or a ghost's `mapPoint`.
+ */
+const GHOST_POINT = /\b(?:now|sessionTime)\s*-\s*[\w.]*\blossMs\b/;
+const GHOST_NAMES = ['mapPoint'];
+
+/**
+ * The worst-corner pick of `tyre-model`'s wear rates (SP4.3c Task 25g, ruling R64): a compound term's corner rates
+ * destructured (`{ fl, fr, rl, rr } = terms.wearRatePct`) or read by corner name (`wearRatePct.fl`) to pick from them.
+ */
+const WORST_CORNER_RATE = /\{\s*fl\s*,\s*fr\s*,\s*rl\s*,\s*rr\s*\}\s*=\s*[\w?.]*\bwearRatePct\b|\bwearRatePct\s*\.\s*(?:fl|fr|rl|rr)\b/;
+
+/** `gaps`' leader lap re-exported by a unit other than its owner (SP4.3c Task 25g: `shared/neutralised.ts`' re-export is deleted). */
+const LEADER_LAP_REEXPORT = /\bexport\s*\{[^}]*\bleaderLapAt\b[^}]*\}\s*from\b/;
+
 /** `code` without its string and template literals (a note that quotes "70" is no literal of the limit). */
 const withoutStrings = (code: string): string => code.replace(/'(?:[^'\\\n]|\\.)*'|"(?:[^"\\\n]|\\.)*"|`(?:[^`\\]|\\.)*`/g, "''");
 
@@ -206,6 +259,44 @@ const OWNERS: OwnerRow[] = [
     source: (u) => codeNames(u, RIVAL_PLAN_NAMES) || codeMatches(u, RIVAL_ODDS_READ),
     allowed: ['rival-stops', 'shared/forecast-field', 'strategy'],
   },
+  // SP4.3c Task 18 (O5): a car's tyre-type switch is `rival-stops`' (`switchLap`, `switchTo`), read from `tyre-model`'s
+  // per-type delta (`typeDeltaMs`, which `tyre-model` writes); no other unit reads the delta (`race-monte-carlo/rivals`'
+  // first-faster rule is the lap model's fallback, not the delta). Expressed by name.
+  { judgement: 'the tyre-type switch', owner: 'rival-stops', source: (u) => codeNames(u, ['typeDeltaMs']), allowed: ['tyre-model'] },
+  // SP4.3c Task 4 (O6): decoding the neutralisation kinds from the session-phase spans is `shared/neutralised.ts`'
+  // (`isNeutralisation`, `neutralisationKind`, `isEnding`, `openNeutralisation`, `lastNeutralisation`); no other unit
+  // matches these span kinds or reads their detail itself. `incidents`' behaviour table maps the kinds (C44: a row per
+  // kind, keyed, never compared) and is no match.
+  { judgement: 'neutralisation kind', owner: 'shared/neutralised.ts', source: (u) => codeMatches(u, NEUTRALISATION_DECODE), allowed: [] },
+  // SP4.3c Task 4 (O6, B6): the time-loss exclusion is `shared/neutralised.ts`' `timeLossExcludedOf` (membership through
+  // the projection module, C26); every caller of `timeLossEvents` passes it, none builds its own.
+  { judgement: 'the time-loss exclusion', owner: 'shared/neutralised.ts', source: (u) => codeMatches(u, TIME_LOSS_EXCLUSION), allowed: [] },
+  // SP4.3c Task 7 (O11, B4): whether a car owes a second dry compound is `shared/compound-rule.ts`'
+  // (`owesSecondDryCompound`); `pit-window` and `rival-stops` call it.
+  { judgement: 'owes a second dry compound', owner: 'shared/compound-rule.ts', source: (u) => codeMatches(u, SECOND_DRY_COMPOUND), allowed: [] },
+  // SP4.3c Task 7 (O12, B11): the reference pace before an event (its window of pace laps) is `pace-delta`'s
+  // (`referencePaceMs`, `paceDeltaAround`); `pit-loss/loss.ts`' own median reference is deleted, it calls `referencePaceMs`.
+  { judgement: 'the reference pace before an event', owner: 'pace-delta', source: (u) => codeMatches(u, REFERENCE_PACE), allowed: [] },
+  // SP4.3c Task 7 (O14): personal and session bests are `lap-times`' (`bestsOf`, `sessionBestsOf`); `lap-overview` calls
+  // them. `lap-classes` writes `forBest` (which laps count, O7).
+  { judgement: 'personal and session bests', owner: 'lap-times', source: (u) => codeNames(u, BEST_NAMES), allowed: ['lap-classes'] },
+  // SP4.3c Task 8 (O16, B1): the wear a corner reaches at the game's life span is `tyre-wear`'s (`wearAtLifeSpanPct`); no
+  // other analysis unit multiplies a rate by the life span (the display's multiplication is deleted, C65; the UI is
+  // outside this guard).
+  { judgement: 'wear at the life span', owner: 'tyre-wear', source: (u) => codeMatches(u, WEAR_AT_LIFE_SPAN), allowed: [] },
+  // SP4.3c O18 (spec §5.7): the rejoin ghost's map point ("now − loss" every frame, the loss `rejoin`'s stop cost) is
+  // `rejoin-ghost`'s; `rejoin` keeps its order on crossings and has no map point.
+  { judgement: "the rejoin ghost's map point", owner: 'rejoin-ghost', source: (u) => codeMatches(u, GHOST_POINT) || codeNames(u, GHOST_NAMES), allowed: [] },
+  // SP4.3c Task 25g (ruling R64, C43): the wear rate at a compound's worst corner is `tyre-model`'s pick (`worstWearRate`
+  // from its index); `forecast-field` calls it, its own `worstRateOf` is deleted. `tyre-life` reads each corner's rate
+  // by a corner variable (its corners), which is no pick.
+  { judgement: 'the worst-corner wear rate', owner: 'tyre-model', source: (u) => codeMatches(u, WORST_CORNER_RATE), allowed: [] },
+  // SP4.3c Task 25g: the leader's lap at a frame is `gaps`' (`leaderLapAt`, O10); no other unit re-exports it
+  // (`shared/neutralised.ts`' re-export "only for the tests" is deleted; the tests import it from `gaps`).
+  { judgement: "the leader's lap at a frame (re-export)", owner: 'gaps', source: (u) => codeMatches(u, LEADER_LAP_REEXPORT), allowed: [] },
+  // Out of this guard's scope (it sees the analysis units only): O1a, the lap record's tyre fields, is the engine
+  // recorder's (`engine/src/recorders`, step 3, its own tests); O17's bridge side (the bridge's `humanLapCount` deleted,
+  // the bridge shows `driver-noise`'s `samples`) is `apps/bridge`'s (`bridge/test/drivers`).
 ];
 
 /** A path as the guard shows it: repo-relative with forward slashes. */
@@ -415,6 +506,64 @@ describe('owners guard (spec §5.8)', () => {
         expect(u?.imports, name).toContain(PRIOR);
         expect(u !== undefined && codeNames(u, ['lapsToLimitOf']), `${name} calls lapsToLimitOf`).toBe(true);
       }
+    });
+
+    it('Task 25g patterns: each finds its copy in code only and leaves the readers that call the owner', () => {
+      expect(NEUTRALISATION_DECODE.test(codeOf("const k = span.kind === 'neutralised' ? (span.detail as NeutralisedDetail).car : 'red';"))).toBe(true);
+      expect(NEUTRALISATION_DECODE.test(codeOf("if (s.kind === 'suspended') x();"))).toBe(true);
+      expect(NEUTRALISATION_DECODE.test(codeOf("const K = { 'session-phase-race': ['neutralised', 'suspended'] };"))).toBe(true);
+      expect(NEUTRALISATION_DECODE.test(codeOf("if (t.kind !== 'neutralised') return; // span.kind === 'suspended'"))).toBe(false);
+      expect(NEUTRALISATION_DECODE.test(codeOf("const rows = { 'session-phase-race': { neutralised: 'neutralised', suspended: 'neutralised' } };"))).toBe(false);
+      expect(TIME_LOSS_EXCLUSION.test(codeOf('function own(view: V): TimeLossExcluded { return () => false; }'))).toBe(true);
+      expect(TIME_LOSS_EXCLUSION.test(codeOf('timeLossEvents(view.history, config.timeLoss, (c, f, t) => false)'))).toBe(true);
+      expect(TIME_LOSS_EXCLUSION.test(codeOf("const away = ['pitLane', 'garage'];"))).toBe(true);
+      expect(TIME_LOSS_EXCLUSION.test(codeOf('timeLossEvents(view.history, config.timeLoss, timeLossExcludedOf(view))'))).toBe(false);
+      expect(TIME_LOSS_EXCLUSION.test(codeOf('type Acc = { excluded: TimeLossExcluded };'))).toBe(false);
+      expect(SECOND_DRY_COMPOUND.test(codeOf("return rule === 'required' && used.size < 2;"))).toBe(true);
+      expect(SECOND_DRY_COMPOUND.test(codeOf('const met = dry.size >= 2;'))).toBe(true);
+      expect(SECOND_DRY_COMPOUND.test(codeOf("owesSecondDryCompound(effect.ruleRequired === true ? 'required' : 'waived', h, car)"))).toBe(false);
+      expect(SECOND_DRY_COMPOUND.test(codeOf('const big = s.size < 20;'))).toBe(false);
+      expect(REFERENCE_PACE.test(codeOf('const before = pace.filter((l) => l.lapNumber < lap).slice(-opts.window);'))).toBe(true);
+      expect(REFERENCE_PACE.test(codeOf('for (let n = stop.lap - opts.referenceLaps; n < stop.lap; n++) x();'))).toBe(true);
+      expect(REFERENCE_PACE.test(codeOf('const used = samples.length > opts.window ? samples.slice(-opts.window) : samples;'))).toBe(false);
+      expect(WEAR_AT_LIFE_SPAN.test(codeOf('known(rate.value * lifeSpan.value, rate.at)'))).toBe(true);
+      expect(WEAR_AT_LIFE_SPAN.test(codeOf('const m = car.gameLifeSpanLaps.value * r;'))).toBe(true);
+      expect(WEAR_AT_LIFE_SPAN.test(codeOf('const span = life.gameLifeSpanLaps; // rate * lifeSpan'))).toBe(false);
+      expect(GHOST_POINT.test(codeOf('mapPointAt(ours, now - lossMs.value, outline, now)'))).toBe(true);
+      expect(GHOST_POINT.test(codeOf('const t = view.live.sessionTime - r.lossMs;'))).toBe(true);
+      expect(GHOST_POINT.test(codeOf('const d = now - lastAt;'))).toBe(false);
+      expect(WORST_CORNER_RATE.test(codeOf('const { fl, fr, rl, rr } = terms.wearRatePct;'))).toBe(true);
+      expect(WORST_CORNER_RATE.test(codeOf('const m = Math.max(t.wearRatePct.fl.value.value, 0);'))).toBe(true);
+      expect(WORST_CORNER_RATE.test(codeOf('const rate = terms?.wearRatePct[c].value;'))).toBe(false);
+      expect(WORST_CORNER_RATE.test(codeOf('const r = need.of(worstWearRate(terms));'))).toBe(false);
+      expect(LEADER_LAP_REEXPORT.test(codeOf("export { leaderLapAt } from '../gaps/leader.ts';"))).toBe(true);
+      expect(LEADER_LAP_REEXPORT.test(codeOf("import { leaderLapAt } from '../gaps/index.ts';"))).toBe(false);
+      // the readers call the owners
+      const forecastField = unit('shared/forecast-field');
+      expect(forecastField !== undefined && codeNames(forecastField, ['worstWearRate']), 'forecast-field calls worstWearRate').toBe(true);
+      expect(forecastField?.imports).toContain('packages/analysis/src/tyre-model/index.ts');
+      const pitLoss = unit('pit-loss');
+      expect(pitLoss !== undefined && codeNames(pitLoss, ['referencePaceMs']), 'pit-loss calls referencePaceMs').toBe(true);
+      const lapOverview = unit('lap-overview');
+      expect(lapOverview !== undefined && codeNames(lapOverview, ['bestsOf', 'sessionBestsOf']), 'lap-overview calls the bests').toBe(true);
+      for (const name of ['pit-window', 'rival-stops']) {
+        const u = unit(name);
+        expect(u !== undefined && codeNames(u, ['owesSecondDryCompound']), `${name} calls owesSecondDryCompound`).toBe(true);
+      }
+      for (const name of ['driver-noise', 'incidents', 'damage']) {
+        const u = unit(name);
+        expect(u !== undefined && codeNames(u, ['timeLossExcludedOf']), `${name} calls timeLossExcludedOf`).toBe(true);
+      }
+    });
+
+    it("no file of the analysis package (sources and tests) imports gaps' leaderLapAt from shared/neutralised.ts", () => {
+      const pkg = join(ROOT, 'packages', 'analysis');
+      const NEUTRALISED = 'packages/analysis/src/shared/neutralised.ts';
+      const importsFromNeutralised = /import\s*\{[^}]*\bleaderLapAt\b[^}]*\}\s*from\s*['"]([^'"]*shared\/neutralised\.ts)['"]/g;
+      const offenders = [...sourceFiles(join(pkg, 'src')), ...sourceFiles(join(pkg, 'test'))].filter((file) =>
+        [...codeOf(readFileSync(file, 'utf8')).matchAll(importsFromNeutralised)].some((m) => shown(resolve(dirname(file), m[1] as string)) === NEUTRALISED),
+      );
+      expect(offenders.map(shown)).toEqual([]);
     });
 
     it('a row names every unit but the owner and the allowed ones that reads its source, by reads or by import', () => {

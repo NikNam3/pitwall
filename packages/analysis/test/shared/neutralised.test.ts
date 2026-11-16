@@ -2,12 +2,13 @@
 // `race-moment`) take the session-phase spans instead (C20, C43). `neutralisedSpans` gives the closed `neutralised`
 // and `suspended` spans of the session-phase sub-machines from the projection plus the open one from the situation; a
 // `neutralised` span closed with `confirmed: false` is no neutralisation (C18), an open one still waiting for its
-// confirmation is one (ruling 2). `leaderLapAt` gives the leader's lap at a frame from the projection's laps (ruling 3,
-// C26, C45).
+// confirmation is one (ruling 2). `leaderLapAt` (`gaps`', O10, imported from its owner) gives the leader's lap
+// at a frame from the projection's laps (ruling 3, C26, C45).
 import { carId, type LapRecord, type OpenSpan, type Span } from '@pitwall/domain';
 import { describe, expect, it } from 'vitest';
 import { engineView, lap, neutralisation, openNeutralisation, phaseSpans } from '../../../../test-support/builders/index.ts';
 import { gapsCalculator } from '../../src/gaps/calculator.ts';
+import { leaderLapAt } from '../../src/gaps/index.ts';
 import { incidentsCalculator } from '../../src/incidents/calculator.ts';
 import { raceMomentCalculator } from '../../src/race-moment/calculator.ts';
 import { readdirSync, readFileSync } from 'node:fs';
@@ -16,7 +17,6 @@ import { fileURLToPath } from 'node:url';
 import {
   isEnding,
   lastNeutralisation,
-  leaderLapAt,
   neutralisedSpans,
   openNeutralisation as openNeutralisationOf,
   timeLossExcludedOf,
