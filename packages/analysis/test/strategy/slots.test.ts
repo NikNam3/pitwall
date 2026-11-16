@@ -11,6 +11,8 @@
 // - A call's slot candidate carries its `slot` (`McCandidate.slot`); its policy is the slot's as far as it can be
 //   followed (a passed stop boxes this lap), as for a committed plan (`strategy.test.ts` row 13).
 // - A row's stop count is `row.policy.stops.length`; "the best row" of a stop count is the first in the rows' order.
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type { CarId, McRow, Policy, StrategyOutput } from '@pitwall/domain';
 import { createRng } from '@pitwall/engine/readers';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -182,5 +184,55 @@ describe('strategy: plan slots in the job', () => {
       expect(twins).toHaveLength(1);
       expect(twins[0]!.slot).toBe('A');
     }
+  });
+});
+
+// SP4.3d1 Task 5 F1, ruling R32 (C43): the active plan and its slot are `activePlan`'s (domain), the one answer the job,
+// `strategy-overview` and the plan board share; the job keeps no own matching.
+describe('strategy: the active plan is activePlan (R32)', () => {
+  const committedAlone = (policy: Policy, carId: CarId = PLAYER) => ({ kind: 'planCommitted' as const, carId, policy });
+
+  it('slot A saved, activated, then saved again with another policy → the committed policy (source committed, no slot) and slot A\'s new policy are two rows; ΔPOS and ΔTIME against the committed row', () => {
+    const view = viewAt(RACE(), LAP);
+    const first = stopIn(view, PLAYER, 4, 'hard');
+    const again = stopIn(view, PLAYER, 7, 'medium');
+    const { rows } = entryOf(planned({ decisions: [saved('A', first), activated('A', first), saved('A', again)] }), PLAYER);
+    const active = rows.filter((r) => r.committed);
+    expect(active, 'one active row').toHaveLength(1);
+    expect(active[0]).toMatchObject({ policy: first, source: 'committed', slot: null, committed: true });
+    const a = rows.filter((r) => r.slot === 'A');
+    expect(a, "slot A's row").toHaveLength(1);
+    expect(a[0]).toMatchObject({ policy: again, source: 'plan', committed: false });
+    // ΔPOS and ΔTIME are taken against the committed row
+    expect(active[0]!.diffPlan.known, 'the active row has no ΔPOS').toBe(false);
+    expect(active[0]!.deltaPlanMs).toBe(0);
+    expect(a[0]!.diffPlan.known, "slot A's ΔPOS").toBe(true);
+    expect(a[0]!.deltaPlanMs).toBeCloseTo(a[0]!.meanMs - active[0]!.meanMs, 6);
+    for (const cands of candidatesIn(PLAYER)) expect(cands[0]?.policy, 'the active plan first').toEqual(first);
+  });
+
+  it("a plan committed without a slot equal to slot B's policy → one row, slot B, committed", () => {
+    const view = viewAt(RACE(), LAP);
+    const a = stopIn(view, PLAYER, 4, 'hard');
+    const b = stopIn(view, PLAYER, 7, 'medium');
+    const { rows } = entryOf(planned({ decisions: [saved('A', a), saved('B', b), committedAlone(b)] }), PLAYER);
+    const active = rows.filter((r) => r.committed);
+    expect(active).toHaveLength(1);
+    expect(active[0]).toMatchObject({ slot: 'B', source: 'plan', policy: b });
+    expect(rows.filter((r) => same(r.policy, b)), "one row for slot B's plan").toHaveLength(1);
+    expect(rows.filter((r) => r.source === 'committed')).toEqual([]);
+    expect(rows.filter((r) => r.slot === 'A')).toMatchObject([{ policy: a, committed: false }]);
+  });
+
+  it('source: the job reads activePlan and keeps no own matching of the active plan to a slot', () => {
+    const src = (path: string): string => readFileSync(join(import.meta.dirname, '../../src', path), 'utf8');
+    const job = src('strategy/job.ts');
+    const input = src('shared/strategy-input/input.ts');
+    for (const call of ['activeSlot(', 'latestPlan(']) {
+      expect(job, `job.ts calls ${call}`).not.toContain(call);
+      expect(input, `strategy-input calls ${call}`).not.toContain(call);
+    }
+    expect(job + input, 'the job reads activePlan').toContain('activePlan(');
+    expect(job, "job.ts matches the active plan to a slot itself (`PLAN_SLOTS.find`)").not.toContain('PLAN_SLOTS.find(');
   });
 });

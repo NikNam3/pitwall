@@ -4,6 +4,8 @@
 // (A = the active slot). Built races (the `rejoin` field: every car laps at one pace from its own start offset, so the
 // gap of any two cars at the same point of the road is the difference of their offsets, exact to the ms); `gaps` runs
 // on the crossings; every case runs through the guarded view (C41).
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { carId, known, unknown, type CarId, type DecisionRecord, type Ms, type OverviewRow, type Policy, type RivalStop, type RivalStops, type StrategyOverview } from '@pitwall/domain';
 import type { EngineView } from '@pitwall/engine/readers';
 import { describe, expect, it } from 'vitest';
@@ -61,12 +63,12 @@ const DECISIONS: DecisionRecord[] = [
 ];
 
 /** The view the overview sees: the field's crossings, car 6 retired, `gaps` over them, the loss, `rival-stops`, our decisions. */
-function overviewView(o: { status?: Record<number, StatusKind> } = {}): EngineView {
+function overviewView(o: { status?: Record<number, StatusKind>; decisions?: DecisionRecord[] } = {}): EngineView {
   const ms = fieldCrossings(FIELD, NOW);
   const base = viewOf(ms, { cars: carsFor(ms), playerCar: US, teammateCar: TEAMMATE, status: o.status ?? { [RETIRED]: 'retired' } });
   return {
     ...base,
-    history: { ...base.history, decisions: DECISIONS },
+    history: { ...base.history, decisions: o.decisions ?? DECISIONS },
     outputs: new Map<string, unknown>([
       [GAPS, run(base)],
       [PIT_LOSS, pitLosses({ green: LOSS })],
@@ -160,5 +162,37 @@ describe('strategy-overview analysis', () => {
     expect(ours.plan).not.toBeNull();
     expect(ours.plan?.a).toEqual(PLAN_B);
     expect(rowOf(rows, 3).plan).toBeNull();
+  });
+});
+
+// SP4.3d1 Task 5 F1, ruling R32 (C43): plan A is `activePlan`'s policy and B the first saved slot other than its slot
+// (R4), the same answer the strategy job gives; the overview keeps no own matching.
+describe('strategy-overview: plan A is activePlan (R32)', () => {
+  const us = carId(US);
+  const planOf = (decisions: DecisionRecord[]): OverviewRow['plan'] => rowOf(overviewOf(calc.compute(overviewView({ decisions }))).rows, US).plan;
+
+  it("slot A saved, activated, then saved again with another policy → A is the committed policy, B is slot A's new one", () => {
+    const plan = planOf([
+      { kind: 'planSaved', carId: us, slot: 'A', policy: PLAN_A, frame: 1 },
+      { kind: 'planCommitted', carId: us, slot: 'A', policy: PLAN_A, frame: 2 },
+      { kind: 'planSaved', carId: us, slot: 'A', policy: PLAN_B, frame: 3 },
+    ]);
+    expect(plan).toEqual({ a: PLAN_A, b: PLAN_B });
+  });
+
+  it("a plan committed without a slot equal to slot B's policy → A is it, in slot B; B is not slot B (slot A)", () => {
+    const plan = planOf([
+      { kind: 'planSaved', carId: us, slot: 'A', policy: PLAN_A, frame: 1 },
+      { kind: 'planSaved', carId: us, slot: 'B', policy: PLAN_B, frame: 2 },
+      { kind: 'planCommitted', carId: us, policy: PLAN_B, frame: 3 },
+    ]);
+    expect(plan).toEqual({ a: PLAN_B, b: PLAN_A });
+  });
+
+  it('source: the calculator reads activePlan, never activeSlot or latestPlan', () => {
+    const src = readFileSync(join(import.meta.dirname, '../../src/strategy-overview/calculator.ts'), 'utf8');
+    expect(src).not.toContain('activeSlot(');
+    expect(src).not.toContain('latestPlan(');
+    expect(src).toContain('activePlan(');
   });
 });
