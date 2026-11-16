@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 import * as mc from '../../src/race-monte-carlo/index.ts';
 import { fieldPositions, raceMonteCarlo, scoreAll, SIMULATOR, type FieldInput } from '../../src/race-monte-carlo/index.ts';
 import { raceForecast } from '../../src/race-forecast/index.ts';
+import { drawNeutralisations, scenarioDraws } from '../../src/race-monte-carlo/scenarios.ts';
 import { drawn, interaction, NOISY, PLAIN, startingPoint, type CarSpec } from '../race-forecast/start.ts';
 import { byCar, candidate, carOf, hazard, mcInput, NO_STOP, pmfOf, RIVAL_RULES, rowOf, rowsOf, shareSe, stopAt, type Row } from './support.ts';
 
@@ -52,8 +53,8 @@ describe('race-monte-carlo: the simulator marker', () => {
 
 describe('race-monte-carlo: scenarios (spec §7.1)', () => {
   // row 1
-  // ported (SP4.3d1 Task 3): the start laps were read from fired triggers (deleted); the counts stay
-  it("SC counts match race-hazard's table within 3 SE", () => {
+  // ported (SP4.3d1 Task 3): the start laps were read from fired triggers (deleted); now drawn neutralisations' own start laps
+  it("SC counts and start laps match race-hazard's table within 3 SE", () => {
     // one car alone, quiet: its race time moves only with the neutralisations; SC on laps 3 and 9, a VSC on lap 7
     const start = startingPoint({ lapsTotal: 10, cars: [{}], ours: [0] });
     const p = { sc3: 0.3, vsc7: 0.25, sc9: 0.2 };
@@ -69,6 +70,18 @@ describe('race-monte-carlo: scenarios (spec §7.1)', () => {
       vsc7: time([{ kind: 'vsc', fromLap: 7, toLap: 7 }]) - green,
       sc9: time([{ kind: 'sc', fromLap: 9, toLap: 9 }]) - green,
     };
+    // start laps and kinds: the share of scenarios whose drawn neutralisations start on each lap
+    const startsOn = (kind: 'sc' | 'vsc', lap: number): number => {
+      let k = 0;
+      for (let id = 0; id < n; id++) if (drawNeutralisations(start, hz, scenarioDraws(start, 7, id)).some((x) => x.kind === kind && x.fromLap === lap)) k++;
+      return k / n;
+    };
+    expect(Math.abs(startsOn('sc', 3) - p.sc3)).toBeLessThanOrEqual(3 * shareSe(p.sc3, n));
+    expect(Math.abs(startsOn('vsc', 7) - p.vsc7)).toBeLessThanOrEqual(3 * shareSe(p.vsc7, n));
+    expect(Math.abs(startsOn('sc', 9) - p.sc9)).toBeLessThanOrEqual(3 * shareSe(p.sc9, n));
+    expect(startsOn('sc', 5) + startsOn('vsc', 5)).toBe(0);
+    expect(startsOn('vsc', 3) + startsOn('sc', 7)).toBe(0);
+
     const mean = green + p.sc3 * cost.sc3 + p.vsc7 * cost.vsc7 + p.sc9 * cost.sc9;
     const variance = cost.sc3 ** 2 * p.sc3 * (1 - p.sc3) + cost.vsc7 ** 2 * p.vsc7 * (1 - p.vsc7) + cost.sc9 ** 2 * p.sc9 * (1 - p.sc9);
     expect(Math.abs(rowOf(rows, NO_STOP).meanMs - mean)).toBeLessThanOrEqual(3 * Math.sqrt(variance / n));
