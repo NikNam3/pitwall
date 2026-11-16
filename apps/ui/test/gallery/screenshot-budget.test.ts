@@ -5,20 +5,38 @@ import { hasBaseline, type CellSource, type WidgetCell } from '../../src/gallery
 import { DEFAULT_THEME, THEMES } from '../../src/theme/index.ts';
 
 /**
- * At most this many baselines for the whole app: about two per display (its first case at compact and at full, default
- * theme) plus the frame states, the kit parts and the shell cells. Raising it is a deliberate decision, not a fix for a
- * failing check: prefer fewer cells.
+ * The baseline budget (user ruling 2026-11-16, SP4.3d1 Task 15; replaces the fixed 58): at most 2 baselines per
+ * registered display (its first case at compact and at full, default theme) plus 5 misc (top bar, shell, kit, frame
+ * states). Raising it is a deliberate decision, not a fix for a failing check: prefer fewer cells.
  */
-// 52: 50 plus the two track-map baselines (supervisor ruling, SP4.0 Task 10).
-const SCREENSHOT_BUDGET = 58;
+const PER_DISPLAY = 2;
+const MISC = 5;
 
-/** The baseline files, by path (listed, not loaded). */
-const baselines = Object.keys(import.meta.glob('../../e2e/__screenshots__/*.png'));
+/** The registered displays, by their folder name (each has a `register.ts`). */
+const displays = Object.keys(import.meta.glob('../../src/widgets/*/register.ts')).map((p) => p.split('/').at(-2) ?? '');
+const SCREENSHOT_BUDGET = PER_DISPLAY * displays.length + MISC;
+
+/** The baseline files, by name (listed, not loaded). */
+const baselines = Object.keys(import.meta.glob('../../e2e/__screenshots__/*.png')).map((p) => p.split('/').at(-1) ?? '');
+/** The display a baseline belongs to: its name starts with the display's folder and a mode; else misc. */
+const displayOf = (file: string): string | undefined =>
+  displays.filter((d) => file.startsWith(`${d}-compact-`) || file.startsWith(`${d}-full-`)).sort((a, b) => b.length - a.length)[0];
 
 describe('screenshot baselines', () => {
-  it(`there are at most ${SCREENSHOT_BUDGET}`, () => {
+  it(`there are at most ${PER_DISPLAY} per registered display plus ${MISC} misc`, () => {
     expect(baselines.length).toBeGreaterThan(0);
     expect(baselines.length).toBeLessThanOrEqual(SCREENSHOT_BUDGET);
+  });
+  it(`no display has more than ${PER_DISPLAY}`, () => {
+    const per = new Map<string, number>();
+    for (const f of baselines) {
+      const d = displayOf(f);
+      if (d !== undefined) per.set(d, (per.get(d) ?? 0) + 1);
+    }
+    expect([...per].filter(([, n]) => n > PER_DISPLAY)).toEqual([]);
+  });
+  it(`at most ${MISC} misc baselines`, () => {
+    expect(baselines.filter((f) => displayOf(f) === undefined).length).toBeLessThanOrEqual(MISC);
   });
 });
 
