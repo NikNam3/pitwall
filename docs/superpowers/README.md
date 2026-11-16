@@ -10,4 +10,4 @@ Since then 4.1a, 4.1b, 4.2, 4.3a, 4.3b and 4.3c were built; their specs are in `
 
 Done 2026-11-16: **SP4.3c, one owner per judgement** (consolidation, strategy fixes, live-test fixes), merged to main 446600e1: spec `docs/specs/2026-11-14-sp4.3c-consolidation-design.md`; plan, triage questions (answered), strategy-fixes draft, consolidation map and run rulings in `docs/history/` (`plans/2026-11-14-sp4.3c-consolidation.md`, `plans/2026-11-14-live-test-triage-questions.md`, `specs/2026-11-14-strategy-fixes-DRAFT.md`, `specs/2026-11-14-consolidation-map.md`, `notes/2026-11-16-sp4.3c-run-rulings.md`).
 
-Next: SP4.3d, the planning displays (V17 plan board, V06 strategy overview, V01 circle of doom), moved out of 4.3c (its spec §9); not yet specified.
+Current: **SP4.3d, planning**: spec `specs/2026-11-16-sp4.3d-planning-design.md`, approved by the user 2026-11-16 (contract texts §9.1, §9.2 included); mockups next (`docs/design/2026-11-16-sp4.3d/`), then the 4.3d1 plan. After 4.3d (user, 2026-11-16): the car workbook for two drivers (its own follow-up), then the qualifying part of the weekend (SP5: driver coaching and car tweaks), then the practice part.
