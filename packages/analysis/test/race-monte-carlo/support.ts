@@ -50,7 +50,7 @@ export const candidate = (policy: Policy, source: McCandidate['source'] = 'dp'):
 export function mcInput(
   start: StartingPoint,
   candidates: Record<number, Policy[] | McCandidate[]>,
-  o: { hazard?: Hazard; committed?: Record<number, Policy | null>; rivalRules?: Partial<RivalRules>; config?: Partial<McConfig> } = {},
+  o: { hazard?: Hazard; committed?: Record<number, Policy | null>; rivalRules?: Partial<RivalRules>; config?: Partial<McConfig>; reactions?: McInput['reactions'] } = {},
 ): McInput {
   const cands: Record<CarId, McCandidate[]> = {};
   for (const [car, list] of Object.entries(candidates)) cands[Number(car) as CarId] = list.map((c) => ('policy' in c && 'source' in c ? c : candidate(c)));
@@ -63,6 +63,8 @@ export function mcInput(
     hazard: o.hazard ?? ZERO_HAZARD(start.lapsTotal - start.lap + 1),
     rivalRules: { ...RIVAL_RULES, ...o.rivalRules },
     config: { ...CONFIG, ...o.config },
+    // per our car slot its SC/VSC reaction table (SP4.3d1 Task 4); none: the car plays its plan's stops as listed
+    reactions: o.reactions ?? {},
   };
 }
 

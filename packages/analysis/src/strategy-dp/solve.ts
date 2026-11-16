@@ -106,8 +106,8 @@ function resultOf(s: DpSolution): DpResult {
   return { plans, boxThisLap, continue: stayOut, table: tableOf(s, best.stops) };
 }
 
-/** The index of the heaviest world, the first on equal weights. */
-function heaviest(input: DpInput): number {
+/** The index of the heaviest world, the first on equal weights: whose solve gives `boxThisLap`, the table and the reaction table. */
+export function heaviest(input: DpInput): number {
   let at = 0;
   input.worlds.forEach((w, k) => {
     if (w.weight > (input.worlds[at]?.weight ?? -Infinity)) at = k;

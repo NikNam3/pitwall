@@ -1,5 +1,5 @@
 // One scenario (SP4.3b spec §7.1): its neutralisations drawn from `race-hazard`'s tables, and every car's policy in it
-// (our cars' stop lists as planned, SP4.3d spec §5.1). Every draw is keyed by (scenario, car, lap, purpose) under the
+// (our cars' stop lists, SP4.3d spec §5.1, with their SC/VSC reaction, §5.2, `reaction.ts`). Every draw is keyed by (scenario, car, lap, purpose) under the
 // run's base seed (C2, S25), so a scenario is the same for every candidate (common random numbers).
 import type { ForecastResult, Policy, Scenario, StartingPoint } from '@pitwall/domain';
 import type { Rng } from '@pitwall/engine/readers';
@@ -7,7 +7,8 @@ import { drawsInto, streamKey, uniform, type Draws } from '../race-forecast/draw
 import { raceForecast } from '../race-forecast/index.ts';
 import { MC_PURPOSE } from './constants.ts';
 import { hasStopAhead, rivalPlan, rivalStops } from './rivals.ts';
-import type { McInput, RivalRules } from './types.ts';
+import { reactedPolicy } from './reaction.ts';
+import type { McInput, Reactions, RivalRules } from './types.ts';
 import { drawWeather, wetnessPath, type WeatherLap } from './weather.ts';
 
 type Neutralisation = Scenario['neutralisations'][number];
@@ -89,11 +90,13 @@ export type Run = {
   calls: number;
   /** The `raceForecast` calls one evaluation may take: 2 with the rivals' cover rule (a traced run to our stop first). */
   cost: number;
+  /** Our cars' SC/VSC reaction tables (spec §5.2, `reaction.ts`); a car without one plays its stops as listed. */
+  reactions: Reactions;
 };
 
 const NONE: Policy = { stops: [] };
 
-export function createRun(start: StartingPoint, hazard: McInput['hazard'], rules: RivalRules, fixed: Record<number, Policy | null>, rng: Rng): Run {
+export function createRun(start: StartingPoint, hazard: McInput['hazard'], rules: RivalRules, fixed: Record<number, Policy | null>, rng: Rng, reactions: Reactions = {}): Run {
   const forecastBase = rng.int(0, 2_147_483_647);
   const mcBase = rng.int(0, 2_147_483_647);
   const ours = new Set(Object.keys(start.sets).map(Number));
@@ -109,6 +112,7 @@ export function createRun(start: StartingPoint, hazard: McInput['hazard'], rules
     scenarios: new Map(),
     calls: 0,
     cost: rules.coverRule ? 2 : 1,
+    reactions,
   };
 }
 
@@ -146,14 +150,19 @@ export function forecast(run: Run, policies: readonly Policy[], scenario: Scenar
 
 /**
  * Every car's policy in scenario `id`: our car `car` following `policy` and our other cars their fixed plans (`car` -1:
- * all of them), each a stop list played as planned; the rivals their drawn stops (and covers).
+ * all of them), each a stop list played with its reaction table's SC/VSC reaction (as listed without one); the rivals their drawn stops (and covers).
  */
 export function policiesIn(run: Run, id: number, car: number, policy: Policy | null): Policy[] {
   const entry = scenarioOf(run, id);
   const policies = entry.rivals.slice();
+  const { neutralisations } = entry.scenario;
+  // one out at the run's start is drawn first and brings no choice: the plan scored is the call made under it
+  const skip = run.hazard.active === null ? 0 : 1;
   for (const c of run.ours) {
     const own = c === car && policy !== null ? policy : (run.fixed[c] ?? NONE);
-    policies[c] = { stops: own.stops.map((s) => ({ lap: s.lap, compound: s.compound })) };
+    const table = run.reactions[c];
+    const played = table === undefined || neutralisations.length <= skip ? own : reactedPolicy(table, run.start, c, own, neutralisations, skip);
+    policies[c] = { stops: played.stops.map((s) => ({ lap: s.lap, compound: s.compound })) };
   }
   if (run.rules.coverRule) cover(run, policies, entry);
   return policies;

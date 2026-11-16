@@ -202,22 +202,8 @@ describe('race-monte-carlo: the search and the rivals (spec §7.2, §7.3)', () =
     expect(boxed(owes, 'vsc')).toBe(0);
   });
 
-  // SP4.3d1 Task 3 row 2 (spec §5.1): a plan is a stop list, played as it stands
-  it("MC play: a scenario with an SC plays a plan's stops unchanged", () => {
-    // our car alone ahead of a rival far behind; quiet; an SC out on laps 3–4 in every scenario
-    const start = startingPoint({ lapsTotal: 8, cars: [{ gapMs: 0 }, { gapMs: 60_000 }], ours: [0] });
-    const sc = hazard(8, { sc: { 2: 1 }, scDur: [0, 1] });
-    const scenario = drawn(1, [{ kind: 'sc', fromLap: 3, toLap: 4 }]);
-    const underSc = stopAt(3, 'hard');
-    const after = stopAt(5, 'hard');
-    const twoStops: Policy = { stops: [{ lap: 2, compound: 'medium' }, { lap: 4, compound: 'hard' }] };
-    const rows = carOf(scoreAll(mcInput(start, { 0: [underSc, after, twoStops] }, { hazard: sc }), createRng(23), 50), 0).rows;
-    for (const plan of [underSc, after, twoStops]) {
-      const forecast = raceForecast(start, [plan, NO_STOP], scenario, createRng(1));
-      expect(Math.abs(rowOf(rows, plan).meanMs - forecast.raceTimeMs[0]!), JSON.stringify(plan.stops)).toBeLessThanOrEqual(1e-6);
-    }
-    expect(Math.abs(rowOf(rows, underSc).meanMs - rowOf(rows, after).meanMs), 'the stops are played where they are').toBeGreaterThan(1_000);
-  });
+  // SP4.3d1 Task 3 row 2 (a plan's stops played unchanged under an SC) is replaced by Task 4's reaction rows
+  // (`reaction.test.ts`, spec §5.2); without a reaction table the plan is still played as listed (its row 1)
 
   it("rivals: rivalNextCompound and hasStopAhead are the one source of a rival's next compound and stop ahead", () => {
     const rivalNextCompound = exported<(start: StartingPoint, k: number) => string | null>('rivalNextCompound');

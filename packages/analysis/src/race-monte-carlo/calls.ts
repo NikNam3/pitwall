@@ -49,7 +49,7 @@ export function scoreCalls(input: CallInput, rng: Rng): CallResult {
   const car = input.car as number;
   const fixed: Record<number, Policy | null> = {};
   for (const key of Object.keys(start.sets)) fixed[Number(key)] = input.committed[Number(key) as CarId] ?? null;
-  const run = createRun(start, input.hazard, input.rivalRules, fixed, rng);
+  const run = createRun(start, input.hazard, input.rivalRules, fixed, rng, input.reactions);
   const cars = start.cars;
   const outcomes = input.candidates.map((c): CallOutcome => {
     const out: CallOutcome = {
