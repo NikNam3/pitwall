@@ -1,8 +1,9 @@
 // The rules version (Task 28; C61, C90): a hash of the source of every module that can change the log, computed, never
 // kept by hand. Its sources are every `.ts` file the dependency-cruiser walk reaches from the entries (the step, the
 // runner, the frame assembler, the session tracker and the bridge's decision placement, which decides the frame a
-// decision fact records: Task a1, F7, ruling R28), through `@pitwall/protocol` and `@pitwall/domain`, the gitignored
-// generated indexes the walk reaches included. The version rows change files in a scratch copy of the tree
+// decision fact records: Task a1, F7, ruling R28; and the bridge's decision sidecars, whose decoder shapes every
+// decision fact's policy: SP4.3d1 Task 3, spec §5.1), through `@pitwall/protocol`, `@pitwall/domain` and the decoder
+// of `@pitwall/contracts`, the gitignored generated indexes the walk reaches included. The version rows change files in a scratch copy of the tree
 // in a temp dir, never in the worktree (C84). Every computation runs on a scratch tree with an empty `node_modules` of its
 // own, so the walk's cache (`<root>/node_modules/.cache/pitwall/`) is never the worktree's and never shared by two trees.
 import { appendFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
@@ -22,8 +23,12 @@ const ENTRIES = [
   'packages/engine/src/frame/session-tracker.ts',
 ];
 
-/** The bridge's one module that can change the log: where a committed decision lands, by record index (F7, ruling R28). */
+/** The bridge's module that decides where a committed decision lands, by record index (F7, ruling R28). */
 const PLACEMENT = 'apps/bridge/src/pipeline/decision-placement.ts';
+
+/** The bridge's decisions sidecars and their decoder: they shape every replayed decision fact's policy (SP4.3d1 Task 3). */
+const SIDECARS = 'apps/bridge/src/pipeline/decision-sidecars.ts';
+const DECODE = 'packages/contracts/src/ui/decode.ts';
 
 /** The gitignored generated indexes the walk reaches (M2 N7). */
 const GENERATED = [
@@ -61,16 +66,19 @@ const OUTSIDE = [
   'packages/engine/src/util/rng.ts',
   'packages/engine/src/readers.ts',
   'packages/analysis/src/index.ts',
-  'packages/contracts/src/index.ts',
   'apps/bridge/src/cli/serve.ts',
   'packages/engine/test/builders/scenario.ts',
 ];
 
 /** What the scratch copy holds: the root configs, every package and the bridge's source. */
-const COPIED = ['package.json', 'pnpm-workspace.yaml', 'tsconfig.json', 'tsconfig.base.json', '.dependency-cruiser.cjs', 'packages', 'apps/bridge/package.json', 'apps/bridge/src'];
+const COPIED = ['package.json', 'pnpm-workspace.yaml', 'tsconfig.json', 'tsconfig.base.json', '.dependency-cruiser.cjs', 'packages', 'apps/bridge/package.json', 'apps/bridge/node_modules', 'apps/bridge/src'];
 
-/** A package's workspace links (`packages/<pkg>/node_modules/@pitwall/<name>`), kept as the relative links they are. */
-const WORKSPACE_LINK = /^packages\/[^/]+\/node_modules(\/@pitwall(\/[^/]+)?)?$/;
+/**
+ * A package's and the bridge's workspace links (`packages/<pkg>/node_modules/@pitwall/<name>`,
+ * `apps/bridge/node_modules/@pitwall/<name>`: the decision sidecars import `@pitwall/contracts`), kept as the relative
+ * links they are.
+ */
+const WORKSPACE_LINK = /^(packages\/[^/]+|apps\/bridge)\/node_modules(\/@pitwall(\/[^/]+)?)?$/;
 
 const copied = (src: string): boolean => {
   const rel = relative(REPO, src).split(sep).join('/');
@@ -113,10 +121,11 @@ describe('rulesSources: the files of every module that can change the log (C61)'
     sources = await rulesSources(root);
   });
 
-  it('holds the four entries, `packages/domain/src/ids.ts` and `packages/engine/src/util/deep-readonly.ts`, no file of `packages/analysis` and of `apps/` only the decision placement', () => {
+  it('holds the four entries, `packages/domain/src/ids.ts` and `packages/engine/src/util/deep-readonly.ts`, no file of `packages/analysis` and of `apps/` the decision placement and the decision sidecars', () => {
     expect(sources).toEqual(expect.arrayContaining([...ENTRIES, 'packages/domain/src/ids.ts', 'packages/engine/src/util/deep-readonly.ts']));
     expect(sources.filter((path) => path.startsWith('packages/analysis/'))).toEqual([]);
-    expect(sources.filter((path) => path.startsWith('apps/'))).toEqual([PLACEMENT]);
+    expect(sources.filter((path) => path.startsWith('apps/'))).toEqual(expect.arrayContaining([PLACEMENT, SIDECARS]));
+    expect(sources.filter((path) => path.startsWith('apps/') && !path.startsWith('apps/bridge/src/'))).toEqual([]);
   });
 
   it('holds the three generated indexes', () => {
@@ -125,7 +134,7 @@ describe('rulesSources: the files of every module that can change the log (C61)'
 
   it('is the repo-relative paths of `.ts` source files, sorted, each once; no test file and no node_modules', () => {
     expect(sources).toEqual([...new Set(sources)].sort());
-    expect(sources.filter((path) => path !== PLACEMENT && !/^packages\/[a-z-]+\/src\/.+\.ts$/.test(path))).toEqual([]);
+    expect(sources.filter((path) => !/^(packages\/[a-z-]+|apps\/bridge)\/src\/.+\.ts$/.test(path))).toEqual([]);
     expect(sources.filter((path) => path.includes('node_modules') || path.endsWith('.test.ts'))).toEqual([]);
     expect(sources.filter((path) => !existsSync(join(root, path)))).toEqual([]);
   });
@@ -171,6 +180,14 @@ describe('rulesVersion: a sha256 over the sorted paths and contents of rulesSour
     expect(await walkRulesSources(root)).toContain(PLACEMENT);
     expect(await rulesSources(root)).toContain(PLACEMENT);
     expect(await versionWith(root, PLACEMENT, appendComment)).not.toBe(base);
+    expect(await rulesVersion(root)).toBe(base);
+  });
+
+  // SP4.3d1 Task 3 row 7 (C61, C90): the decisions decoder can change the log (it shapes every decision fact's policy)
+  it.each([SIDECARS, DECODE])('rules version: %s is in the walk, and changing it changes the rules version', async (path) => {
+    expect(await walkRulesSources(root)).toContain(path);
+    expect(await rulesSources(root)).toContain(path);
+    expect(await versionWith(root, path, appendComment)).not.toBe(base);
     expect(await rulesVersion(root)).toBe(base);
   });
 

@@ -6,6 +6,8 @@
 // two crossings the ghost moves on every frame instead of jumping once per crossing. Quick (C31), cadence `frame`, its
 // output bound to `rejoinGhost.car` (C42). Built races (`../rejoin/field.ts`); every case runs through the guarded view
 // (C41), `rejoin` itself through its own.
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { carId, known, pointAt, unknown, type CarId, type Known, type MapPoint, type PitCondition, type TrackData } from '@pitwall/domain';
 import type { EngineView } from '@pitwall/engine/readers';
 import fc from 'fast-check';
@@ -180,5 +182,30 @@ describe('rejoin-ghost', () => {
     expect(pointOf(early, 'green')).toEqual(INSUFFICIENT);
     const none = outputOf({ race: { without: [US] } });
     for (const c of CONDITIONS) expect(pointOf(none, c), c).toEqual(INSUFFICIENT);
+  });
+
+  // SP4.3d1 Task 7 row 2: the interpolation moved to `shared/crossing-history.ts` (C43); the outputs above are unchanged
+  it("the map point is the shared crossing history's: `pointAt` of `progressAt(ours, now − lossMs)`'s part within its lap", async () => {
+    // imported here so the ported cases above run on their own
+    const { progressAt } = await import('../../src/shared/crossing-history.ts');
+    const { view, gaps } = rejoinCase();
+    const out = rejoin.compute(view);
+    const ours = gaps.recent[carId(US)];
+    if (ours === undefined) throw new Error('our crossings');
+    for (const x of [0, 333, 1_234]) {
+      const got = outputOf({ sessionTime: NOW + x, rejoin: () => out });
+      for (const c of CONDITIONS) {
+        const lossMs = valueOf(out.cars[carId(US)]!.conditions[c].lossMs);
+        const progress = valueOf(progressAt(ours, NOW + x - lossMs));
+        near(valueOf(pointOf(got, c)), pointAt(OUTLINE, (progress % 50) / 50), `${c} at +${x}`);
+      }
+    }
+  });
+
+  it('keeps no copy of the interpolation: its calculator imports the shared crossing history and defines no `mapPointAt` (C43)', () => {
+    const source = readFileSync(join(import.meta.dirname, '../../src/rejoin-ghost/calculator.ts'), 'utf8');
+    expect(source).toContain("from '../shared/crossing-history.ts'");
+    expect(source).not.toMatch(/function\s+mapPointAt\b/);
+    expect(source).not.toMatch(/fromProgress/);
   });
 });

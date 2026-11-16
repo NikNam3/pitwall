@@ -38,7 +38,7 @@ const SHARE = 0.26;
 const IN_LAP_MS = SHARE * LOSS_MS;
 const PIT_LOSS = { green: LOSS_MS, vsc: 13_000, sc: 11_000, inLapShare: SHARE };
 
-const stopAtEndOf = (lap: number): Policy => ({ stops: [{ lap, compound: 'hard' }], triggers: [] });
+const stopAtEndOf = (lap: number): Policy => ({ stops: [{ lap, compound: 'hard' }] });
 
 describe('race-forecast: a car just past its line (SP4.3b Task 11a, F8 cause 1)', () => {
   // row 1
@@ -88,7 +88,7 @@ describe('race-forecast: a car just past its line (SP4.3b Task 11a, F8 cause 1)'
 
     // the same when the stopper leads
     const leading = field([{ gapMs: 0 }, { gapMs: 2_000 }], [JUST_PAST, 1 - 2_000 / PACE_MS], { pitLossMs: PIT_LOSS });
-    const leads = run(leading, [stopAtEndOf(LAP), { stops: [], triggers: [] }]);
+    const leads = run(leading, [stopAtEndOf(LAP), { stops: [] }]);
     const leadsWithout = run(leading, noStops(2));
     expect(Math.abs(leads.raceTimeMs[0]! - leadsWithout.raceTimeMs[0]! - LOSS_MS)).toBeLessThanOrEqual(1);
   });

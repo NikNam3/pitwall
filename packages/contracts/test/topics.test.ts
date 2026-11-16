@@ -74,6 +74,7 @@ describe('TOPICS', () => {
     expect(table).toEqual([
       ['battle.cards', 'battle', 'feed', 'state', 4],
       ['carBands.car', 'car-bands', 'feed', 'state', 4],
+      ['circle.car', 'circle', 'feed', 'state', 10],
       ['crossover.car', 'crossover', 'feed', 'state', 1],
       ['damage.car', 'damage', 'feed', 'state', 4],
       ['ers.car', 'ers', 'feed', 'state', 4],
@@ -101,6 +102,7 @@ describe('TOPICS', () => {
       ['stintAnalysis.car', 'stint-analysis', 'feed', 'state', 1],
       ['strategy.car', 'strategy', 'feed', 'state', 1],
       ['strategy.plans', 'strategy', 'feed', 'state', 1],
+      ['strategyOverview.car', 'strategy-overview', 'feed', 'state', 4],
       ['talkWindow.car', 'talk-window', 'feed', 'state', 10],
       ['trackPositions.cars', 'track-positions', 'feed', 'state', 10],
       ['trackPositions.geometry', 'track-positions', 'feed', 'state', 1],
@@ -165,7 +167,7 @@ describe('topic types', () => {
       | 'raisingAverage.field' | 'lapOverview.car' | 'weather.forecast' | 'crossover.car'
       | 'rejoin.car' | 'rejoin.ghostLines' | 'rejoinGhost.car' | 'scCall.car' | 'pitWindow.car'
       | 'calibration.sets' | 'calibration.values' | 'calibration.candidates' | 'calibration.active'
-      | 'drivers.profiles' | 'drivers.links' | 'forecastScore.report' | 'config.effective' | 'strategy.plans'
+      | 'drivers.profiles' | 'drivers.links' | 'forecastScore.report' | 'config.effective' | 'strategy.plans' | 'strategyOverview.car' | 'circle.car'
       | 'strategy.car' | 'undercut.car' | 'pitSweep.car'
       | 'situation.carActivityPractice' | 'situation.carActivityQualifying' | 'situation.carActivityRace' | 'situation.carFlags'
       | 'situation.carDriver' | 'situation.carLocation' | 'situation.carStatus' | 'situation.clock' | 'situation.compoundRule' | 'situation.lapValidity'

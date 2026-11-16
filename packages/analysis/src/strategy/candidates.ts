@@ -1,17 +1,15 @@
-// `strategy`'s candidates from named sources (SP4.3c Task 20, spec §5.4, supervisor rulings R59, R60; C43): per car
+// `strategy`'s candidates from named sources (SP4.3c Task 20, spec §5.4, supervisor rulings R59, R60; C43; SP4.3d spec
+// §5.1: every candidate a stop list): per car
 // - base (`dp`): per weather world and stop count the best `dpPlansMax` DP plans by `expectedMs` (the bound applies
-//   within a stop count, never across), box this lap and continue besides; each with its own neutralised triggers, the
-//   overall best plan twice: with every trigger of its own, and without degradation-off and rain (Task 23a);
+//   within a stop count, never across), box this lap and continue besides;
 // - neighbours (`neighbour`): the best plan's first stop moved by `neighbourMinLaps`–`neighbourMaxLaps` laps either way
-//   on its compound, `strategy-dp`'s `bestWith` on the best plan's world, so with the DP's own triggers for that plan;
+//   on its compound, `strategy-dp`'s `bestWith` on the best plan's world;
 // - rules (`rule`): mirror the nearest rival ahead and behind not of ours (the first stop on the lap and compound of
 //   `race-monte-carlo`'s one rival policy, `rivalPlainPolicy`, as a `bestWith` query of the first world that gives
-//   one), cover the car behind and extend past the car ahead (the best plan as its base candidate, plus one `rivalPits`
-//   trigger within `race-interaction`'s `closeGapMs`, the one close gap, C43).
-// No candidate copies another's triggers; a `bestWith` query that gives `null` gives no candidate. Inter and wet plans
-// only where rain can come (Task 23a; SP4.3c O3a). Every policy is `policyOf(plan, extra)`; no policy twice. The
-// committed row is the job's.
-import type { CarId, Policy, StartingPoint, Trigger } from '@pitwall/domain';
+//   one).
+// A `bestWith` query that gives `null` gives no candidate. Inter and wet plans only where rain can come (Task 23a;
+// SP4.3c O3a). Every policy is `policyOf(plan)`; no policy twice. The committed row is the job's.
+import type { CarId, Policy, StartingPoint } from '@pitwall/domain';
 import { rivalPlainPolicy, type McCandidate } from '../race-monte-carlo/index.ts';
 import { startLapOf } from '../race-forecast/index.ts';
 import { RAIN_OUTLOOK_CONFIG, rainComing } from '../rain-outlook/index.ts';
@@ -21,11 +19,8 @@ import type { StrategyConfig } from './config.ts';
 
 export { policyOf };
 
-/**
- * The candidates' config: `strategy`'s, the cover and extend rules' gap (`race-interaction`'s `closeGapMs`, C43) and
- * the rain threshold, `rain-outlook`'s `rainPct` (its effective config, C47; its default where not handed over).
- */
-export type CandidatesConfig = StrategyConfig & { closeGapMs: number; rainPct?: number };
+/** The candidates' config: `strategy`'s and the rain threshold, `rain-outlook`'s `rainPct` (its effective config, C47; its default where not handed over). */
+export type CandidatesConfig = StrategyConfig & { rainPct?: number };
 
 type Stop = DpPlan['stops'][number];
 
@@ -45,13 +40,12 @@ function rivalNext(start: StartingPoint, car: CarId, step: -1 | 1): CarId | unde
 const WET: ReadonlySet<string> = new Set(['inter', 'wet']);
 
 /**
- * Whether rain can come for inter and wet plans (Task 23a; SP4.3c O3a): the track's wetness at the DP's rain threshold
- * (without a rain threshold, `track-wetness`'s `wet`), or rain coming over the starting point's remaining laps by
- * `rain-outlook`'s rule and threshold (`rainComing`, `rainPct`); no forecast counts as no rain.
+ * Whether rain can come for inter and wet plans (Task 23a; SP4.3c O3a): the track is wet by `track-wetness`'s `wet`, or
+ * rain is coming over the starting point's remaining laps by `rain-outlook`'s rule and threshold (`rainComing`,
+ * `rainPct`); no forecast counts as no rain.
  */
-function rainCanCome(start: StartingPoint, fromLap: number, thresholds: readonly Trigger[], rainPct: number): boolean {
-  const rain = thresholds.find((t) => t.kind === 'rain');
-  if (rain === undefined ? start.wetness.wet : start.wetness.wetnessMs >= rain.wetnessMs) return true;
+function rainCanCome(start: StartingPoint, fromLap: number, rainPct: number): boolean {
+  if (start.wetness.wet) return true;
   return start.weather.known && rainComing(start.weather.value.byLap, fromLap, start.lapsTotal, rainPct);
 }
 
@@ -64,9 +58,6 @@ function perStopCount(plans: readonly DpPlan[], max: number): DpPlan[] {
   }
   return [...groups.values()].flatMap((g) => g.sort((a, b) => a.expectedMs - b.expectedMs).slice(0, max));
 }
-
-/** A plan with its own neutralised triggers only. */
-const neutralisedOf = (p: Pick<DpPlan, 'stops' | 'triggers'>): Policy => policyOf({ stops: p.stops, triggers: p.triggers.filter((t) => t.kind === 'neutralised') });
 
 /**
  * Car `car`'s candidates from its DP result and its weather worlds' solves (`solutions[w]` world w's `solveWorld`, a
@@ -83,19 +74,14 @@ export function candidatesOf(start: StartingPoint, car: CarId, dp: DpResult, sol
   };
   const fromLap = startLapOf(start, car);
   const ranked = [...dp.plans].sort((a, b) => a.expectedMs - b.expectedMs);
-  // the rain threshold: the DP's best plan's own (SP4.3c Task 19)
-  const top = ranked[0] ?? dp.continue;
-  const rain = rainCanCome(start, fromLap, top.triggers, config.rainPct ?? RAIN_OUTLOOK_CONFIG.defaults.rainPct);
+  const rain = rainCanCome(start, fromLap, config.rainPct ?? RAIN_OUTLOOK_CONFIG.defaults.rainPct);
   const allowed = (p: Pick<DpPlan, 'stops'>): boolean => rain || !p.stops.some((s) => WET.has(s.compound));
   const best = ranked.find(allowed) ?? dp.continue;
 
-  // base: the best plan's own sequence with every trigger of its own, and without degradation-off and rain
-  const bestBase = policyOf(best);
-  add(bestBase, 'dp');
-  add(policyOf({ stops: best.stops, triggers: best.triggers.filter((t) => t.kind !== 'degradationOff' && t.kind !== 'rain') }), 'dp');
-  // every other base plan of each world and stop count, box this lap and continue: each its own neutralised triggers
+  // base: the best plan first, then every other base plan of each world and stop count, box this lap and continue
+  add(policyOf(best), 'dp');
   for (const plan of [...perStopCount(dp.plans.filter(allowed), config.dpPlansMax), ...(dp.boxThisLap === null ? [] : [dp.boxThisLap]), dp.continue]) {
-    if (plan !== best && allowed(plan)) add(neutralisedOf(plan), 'dp');
+    if (plan !== best && allowed(plan)) add(policyOf(plan), 'dp');
   }
 
   /** `bestWith`'s plan of world `w` whose first stop is `stop`, where it is one and allowed. */
@@ -117,9 +103,7 @@ export function candidatesOf(start: StartingPoint, car: CarId, dp: DpResult, sol
   }
 
   // mirrors: the rival's plain first stop, lap and compound, in the first world that gives a plan
-  const ahead = rivalNext(start, car, -1);
-  const behind = rivalNext(start, car, 1);
-  const mirrors: [CarId | undefined, 'mirrorAhead' | 'mirrorBehind'][] = [[ahead, 'mirrorAhead'], [behind, 'mirrorBehind']];
+  const mirrors: [CarId | undefined, 'mirrorAhead' | 'mirrorBehind'][] = [[rivalNext(start, car, -1), 'mirrorAhead'], [rivalNext(start, car, 1), 'mirrorBehind']];
   for (const [rival, rule] of mirrors) {
     const stop = rival === undefined ? undefined : rivalPlainPolicy(start, rival, null).stops[0];
     if (stop === undefined) continue;
@@ -129,13 +113,6 @@ export function candidatesOf(start: StartingPoint, car: CarId, dp: DpResult, sol
       add(policyOf(q), 'rule', rule);
       break;
     }
-  }
-
-  // cover and extend: the best plan's base candidate as it is, plus its one rivalPits trigger
-  if (best.stops.length > 0) {
-    const rivalPits = (carId: CarId, action: 'cover' | 'extend'): Trigger => ({ kind: 'rivalPits', carId, withinMs: config.closeGapMs, action });
-    if (behind !== undefined) add(policyOf(bestBase, [rivalPits(behind, 'cover')]), 'rule', 'cover');
-    if (ahead !== undefined) add(policyOf(bestBase, [rivalPits(ahead, 'extend')]), 'rule', 'extend');
   }
   return out;
 }

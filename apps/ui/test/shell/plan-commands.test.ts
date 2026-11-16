@@ -5,7 +5,7 @@
 // policy whole; `feedId` is the window's feed (`ctx.feedId`, as `calibrationCommands` takes it). Each command has a title and a group from `kit/text.ts` (C68). The window keeps no copy (C73): the plan takes
 // effect when the bridge records it. The strategy table's buttons that invoke them come in 4.3b2.
 import type { UiAction } from '@pitwall/contracts';
-import { carId, feedId, type CarId, type FeedId, type Policy } from '@pitwall/domain';
+import { PLAN_SLOTS, carId, feedId, type CarId, type FeedId, type Policy } from '@pitwall/domain';
 import { describe, expect, it, vi } from 'vitest';
 import * as defaults from '../../src/shell/commands/default-commands.ts';
 import { CommandRegistry, type Command } from '../../src/shell/commands/registry.ts';
@@ -21,7 +21,6 @@ const { planCommitId, planClearId, planCommands } = defaults as unknown as PlanS
 
 const POLICY: Policy = {
   stops: [{ lap: 18, compound: 'hard' }],
-  triggers: [{ kind: 'neutralised', condition: 'sc', fromLap: 8, toLap: 30, action: { box: 'medium' } }],
 };
 
 describe('the plan commands (C72)', () => {
@@ -42,5 +41,32 @@ describe('the plan commands (C72)', () => {
     registry.run('plan.clear.1');
     expect(send).toHaveBeenLastCalledWith({ kind: 'plan.clear', feedId: FEED, carId: 1 });
     expect(send).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('the plan slot commands (C72, C73)', () => {
+  it('save, activate, remove send their uiActions; edit sends nothing and calls the supplied run', () => {
+    const send = vi.fn();
+    const edit = vi.fn();
+    const cars = [{ carId: carId(0), policy: POLICY }, { carId: carId(1), policy: null }];
+    const commands = defaults.planSlotCommands(cars, { send, feedId: FEED }, edit);
+    expect(commands.length).toBe(PLAN_SLOTS.length * 7);
+    for (const c of commands) {
+      expect(c.title, c.id).toMatch(/\S/);
+      expect(c.group, c.id).toMatch(/\S/);
+    }
+    const registry = new CommandRegistry();
+    for (const c of commands) registry.register(c);
+    expect(defaults.planSlotId('save', carId(0), 'G1')).toBe('plan.save.0.G1');
+    expect(commands.some((c) => c.id === 'plan.save.1.A')).toBe(false);
+    registry.run('plan.save.0.B');
+    expect(send).toHaveBeenLastCalledWith({ kind: 'plan.save', feedId: FEED, carId: 0, slot: 'B', policy: POLICY });
+    registry.run('plan.activate.1.A');
+    expect(send).toHaveBeenLastCalledWith({ kind: 'plan.activate', feedId: FEED, carId: 1, slot: 'A' });
+    registry.run('plan.remove.0.C');
+    expect(send).toHaveBeenLastCalledWith({ kind: 'plan.remove', feedId: FEED, carId: 0, slot: 'C' });
+    registry.run('plan.edit.1.G2');
+    expect(edit).toHaveBeenCalledWith(1, 'G2');
+    expect(send).toHaveBeenCalledTimes(3);
   });
 });

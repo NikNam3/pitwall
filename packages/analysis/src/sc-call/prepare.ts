@@ -1,8 +1,7 @@
-// `sc-call`'s job input (SP4.3b spec §9.3; SP4.3b2 Task 9): the shared strategy input (`shared/strategy-input/`, C43)
-// and, per our car, `rejoin`'s loss and loss source per condition (as the 4.2 calculator took them),
-// whether the car already boxed under the neutralisation out now, and its behaviour row (C44). Structured-cloneable
-// (C51).
-import { unknown, type CarId, type EstimateSource, type Known, type Ms, type Rejoin } from '@pitwall/domain';
+// `sc-call`'s job input (SP4.3d spec §6.3; SP4.3b2 Task 9): the shared strategy input (`shared/strategy-input/`, C43)
+// and, per our car, `rejoin`'s loss, loss source and rejoin position per condition and its position now (C43), whether
+// the car already boxed under the neutralisation out now, and its behaviour row (C44). Structured-cloneable (C51).
+import { unknown, type CarId, type EstimateSource, type Known, type Ms, type PitCondition, type Rejoin } from '@pitwall/domain';
 import { spansOverlapping, type CalculatorId, type EngineView } from '@pitwall/engine/readers';
 import { openNeutralisation } from '../shared/neutralised.ts';
 import { RACE_HAZARD } from '../race-hazard/id.ts';
@@ -11,11 +10,11 @@ import { behaviourFor } from '../shared/behaviour.ts';
 import { strategyInputFrom, type StrategyInput } from '../shared/strategy-input/index.ts';
 import { effectOf, SC_CALL_BEHAVIOUR, type ScCallEffect } from './behaviour.ts';
 
-/** A neutralising condition: the call's rows. */
+/** A neutralising condition: the one out now. */
 export type ScCondition = 'sc' | 'vsc';
 
-/** `rejoin`'s loss for one condition, with its source (C43); the row's rejoin position is the box run's (one model, B8). */
-export type ScRejoin = { lossMs: Known<Ms>; lossSource: EstimateSource };
+/** `rejoin`'s answer for one condition (C43): the stop's loss with its source, and our rejoin position after it. */
+export type ScRejoin = { lossMs: Known<Ms>; lossSource: EstimateSource; rejoinPosition: Known<number> };
 
 /** One of our cars as the job reads it. */
 export type ScCallCar = {
@@ -25,23 +24,25 @@ export type ScCallCar = {
   boxedUnder: boolean;
   /** Its lap now (live timing): the call's lap where no starting point is known. */
   lap: number;
-  rejoin: Record<ScCondition, ScRejoin>;
+  /** `rejoin`'s race position of the car now (`Rejoin.position`): staying out's; `null` without a `rejoin` answer. */
+  position: number | null;
+  rejoin: Record<PitCondition, ScRejoin>;
 };
 
 /** The job's input: the shared strategy input, the neutralisation out now (its condition) and per our car its part. */
 export type ScCallInput = { strategy: StrategyInput; neutralised: ScCondition | null; cars: Record<CarId, ScCallCar> };
 
 /**
- * The source of a loss `rejoin` gave none for (its car absent): a row without a loss shows no source; the type wants
+ * The source of a loss `rejoin` gave none for (its car absent): a block without a loss shows no source; the type wants
  * one. Never read beside a known loss.
  */
 const NO_SOURCE: EstimateSource = { kind: 'default', note: 'no rejoin answer', sessionShare: 0, parts: 'default' };
 
-/** `rejoin`'s answer for `condition`, its reason passed through where unknown; without one, `insufficientData`. */
-function rejoinAt(rejoin: Rejoin | undefined, condition: ScCondition): ScRejoin {
+/** `rejoin`'s answer for `condition`, its reasons passed through where unknown; without one, `insufficientData`. */
+function rejoinAt(rejoin: Rejoin | undefined, condition: PitCondition): ScRejoin {
   const at = rejoin?.conditions[condition];
-  if (at === undefined) return { lossMs: unknown('insufficientData'), lossSource: NO_SOURCE };
-  return { lossMs: at.lossMs, lossSource: at.lossSource };
+  if (at === undefined) return { lossMs: unknown('insufficientData'), lossSource: NO_SOURCE, rejoinPosition: unknown('insufficientData') };
+  return { lossMs: at.lossMs, lossSource: at.lossSource, rejoinPosition: at.rejoinPosition };
 }
 
 /** The job's input from the view (C41: through what `SC_CALL_JOB` reads). */
@@ -68,7 +69,8 @@ export function prepareScCall(view: EngineView): ScCallInput {
       boxedUnder,
       // a car not in the live state yet: lap 1, the race's first
       lap: view.live.cars.find((c) => c.id === car)?.timing.lap ?? 1,
-      rejoin: { sc: structuredClone(rejoinAt(own, 'sc')), vsc: structuredClone(rejoinAt(own, 'vsc')) },
+      position: own?.position ?? null,
+      rejoin: structuredClone({ green: rejoinAt(own, 'green'), sc: rejoinAt(own, 'sc'), vsc: rejoinAt(own, 'vsc') }),
     };
   }
   return { strategy, neutralised, cars };

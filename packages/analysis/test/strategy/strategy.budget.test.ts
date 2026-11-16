@@ -24,7 +24,8 @@ import { REFERENCE_FILE, strategyReferenceHash, strategyReferenceInputs, type St
 import { longRace } from '../../../../test-support/builders/long-race.ts';
 import { raceMonteCarlo } from '../../src/race-monte-carlo/index.ts';
 import { prepareStrategy, runStrategy, STRATEGY_CONFIG } from '../../src/strategy/index.ts';
-import { jobParts, OURS, viewAt } from './support.ts';
+import type { CarId, Policy } from '@pitwall/domain';
+import { currentLapOf, jobParts, OURS, viewAt } from './support.ts';
 
 /** The stored reference; a missing or stale one fails with "regenerate the reference". */
 function reference(): StrategyReference {
@@ -87,6 +88,46 @@ describe('strategy budget', () => {
       expect(out?.[car]?.known, `car ${car}`).toBe(true);
       console.info(`[strategy budget] car ${car}'s part ${partBest.toFixed(0)} ms at cap ${cap} (long race, lap 1)`);
       expect(partBest, `car ${car}'s part`).toBeLessThan(JOB_MS);
+    }
+  }, 180_000);
+
+  // SP4.3d1 Task 5 row 7: five saved slots per car (A, B, C, G1, G2; always re-scored on top of the leaders, spec
+  // §5.3) within the same per-part limit at the same cap
+  it('budget: one car\'s part with five slots per car at lap 1 on the long-race builder within 7 s', () => {
+    const cap = STRATEGY_CONFIG.defaults.maxScenarioPolicies;
+    const raw = viewAt(longRace(), 2, { frameOfLap: 0 });
+    const slotsOf = (car: CarId) => {
+      const lap = currentLapOf(raw, car);
+      const plans: Record<'A' | 'B' | 'C' | 'G1' | 'G2', Policy> = {
+        A: { stops: [{ lap: lap + 18, compound: 'hard' }] },
+        B: { stops: [{ lap: lap + 24, compound: 'hard' }] },
+        C: { stops: [{ lap: lap + 15, compound: 'medium' }, { lap: lap + 40, compound: 'hard' }] },
+        G1: { stops: [{ lap: lap + 20, compound: 'hard' }, { lap: lap + 45, compound: 'soft' }] },
+        G2: { stops: [{ lap: lap + 12, compound: 'medium' }, { lap: lap + 30, compound: 'hard' }, { lap: lap + 50, compound: 'soft' }] },
+      };
+      return Object.entries(plans).map(([slot, policy]) => ({ kind: 'planSaved' as const, carId: car, slot: slot as keyof typeof plans, policy }));
+    };
+    const view = viewAt(longRace(), 2, { frameOfLap: 0, config: { maxScenarioPolicies: cap }, decisions: OURS.flatMap(slotsOf) });
+    const input = structuredClone(prepareStrategy(view));
+    expect(input.start.known).toBe(true);
+    const parts = jobParts().split(input);
+    expect(parts.map((p) => p.planCar), 'one part per our car').toEqual([...OURS]);
+    for (const part of parts) {
+      const car = part.planCar!;
+      let partBest = Infinity;
+      let out: ReturnType<typeof runStrategy> | undefined;
+      for (let k = 0; k < 3; k++) {
+        const t0 = performance.now();
+        out = runStrategy(structuredClone(part), createRng(7));
+        // the first pass warms
+        if (k > 0) partBest = Math.min(partBest, performance.now() - t0);
+      }
+      const entry = out?.[car];
+      expect(entry?.known, `car ${car}`).toBe(true);
+      const rows = entry?.known ? entry.value.rows : [];
+      expect(rows.filter((r) => r.slot !== null).map((r) => r.slot).sort(), `car ${car}: its five slots are rows`).toEqual(['A', 'B', 'C', 'G1', 'G2']);
+      console.info(`[strategy budget] car ${car}'s part with five slots ${partBest.toFixed(0)} ms at cap ${cap} (long race, lap 1)`);
+      expect(partBest, `car ${car}'s part with five slots`).toBeLessThan(JOB_MS);
     }
   }, 180_000);
 

@@ -7,8 +7,6 @@
 //   the leader's current lap, as `race-hazard`'s `byLap` starts at it); `scDur[d]` and `vscDur[d]` the chance one lasts
 //   `d + 1` laps. A neutralisation starting on lap n and lasting d laps is out on laps n … n + d − 1 (a scenario's
 //   `{ fromLap: n, toLap: n + d − 1 }`); no start while one is out or on the lap after it ends (`race-hazard`).
-// - A row's `triggers[i]` belongs to `policy.triggers[i]`; `fired` is the share of the row's scenarios (0–1) in which
-//   that trigger's condition held and the car did its action.
 // - `positionPmf[p]` is P(position p + 1) at the flag; `meanMs` the mean race time from the starting point to the flag
 //   (`race-forecast`'s `raceTimeMs`); `scenarios` per car the most scenarios any of its rows ran.
 // - `fieldPositions`: `plans` holds our cars' plans (the cars of `start.sets`); the rivals' stops are drawn as in
@@ -42,9 +40,9 @@ export function hazard(
 /** No SC or VSC on any lap. */
 export const ZERO_HAZARD = (laps: number): Hazard => hazard(laps);
 
-export const NO_STOP: Policy = { stops: [], triggers: [] };
+export const NO_STOP: Policy = { stops: [] };
 
-export const stopAt = (lap: number, compound: Policy['stops'][number]['compound'] = 'hard'): Policy => ({ stops: [{ lap, compound }], triggers: [] });
+export const stopAt = (lap: number, compound: Policy['stops'][number]['compound'] = 'hard'): Policy => ({ stops: [{ lap, compound }] });
 
 export const candidate = (policy: Policy, source: McCandidate['source'] = 'dp'): McCandidate => ({ policy, source, rule: null });
 
@@ -52,7 +50,7 @@ export const candidate = (policy: Policy, source: McCandidate['source'] = 'dp'):
 export function mcInput(
   start: StartingPoint,
   candidates: Record<number, Policy[] | McCandidate[]>,
-  o: { hazard?: Hazard; committed?: Record<number, Policy | null>; rivalRules?: Partial<RivalRules>; config?: Partial<McConfig> } = {},
+  o: { hazard?: Hazard; committed?: Record<number, Policy | null>; rivalRules?: Partial<RivalRules>; config?: Partial<McConfig>; reactions?: McInput['reactions'] } = {},
 ): McInput {
   const cands: Record<CarId, McCandidate[]> = {};
   for (const [car, list] of Object.entries(candidates)) cands[Number(car) as CarId] = list.map((c) => ('policy' in c && 'source' in c ? c : candidate(c)));
@@ -65,6 +63,8 @@ export function mcInput(
     hazard: o.hazard ?? ZERO_HAZARD(start.lapsTotal - start.lap + 1),
     rivalRules: { ...RIVAL_RULES, ...o.rivalRules },
     config: { ...CONFIG, ...o.config },
+    // per our car slot its SC/VSC reaction table (SP4.3d1 Task 4); none: the car plays its plan's stops as listed
+    reactions: o.reactions ?? {},
   };
 }
 

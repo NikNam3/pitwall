@@ -314,14 +314,25 @@ export const formatGapTick = (plotted: number): string => {
 /** An expected place to two decimals, `7.523` -> `7.52`. */
 export const formatExpectedPlace = (x: number): string => fixed(x, 2);
 
-/** Places gained, signed, one decimal, `1.43` -> `+1.4`, `-0.6` -> `−0.6`; zero (and what rounds to it) is `+0.0`. */
-export const formatPlacesGained = (x: number): string => {
-  const text = fixed(x, 1);
+/** An expected place with its SE, two decimals, the SE without its leading zero: `8.03`, `0.07` -> `8.03±.07`. */
+export const formatExpectedPlaceSe = (x: number, se: number): string => {
+  const place = fixed(x, 2);
+  const err = fixed(se, 2);
+  if (place === '' || err === '') return place;
+  return `${place}±${err.startsWith('0') ? err.slice(1) : err}`;
+};
+
+/** Places gained, signed, `decimals` places (default one), `1.43` -> `+1.4`, `-0.6` -> `−0.6`; zero (and what rounds to it) is `+0.0`. */
+export const formatPlacesGained = (x: number, decimals = 1): string => {
+  const text = fixed(x, decimals);
   return text === '' || text.startsWith(MINUS) ? text : `+${text}`;
 };
 
+/** A share 0…1 as a whole percent without the sign, `0.75` -> `75` (for compact cells such as `H80`). */
+export const formatShareNumber = (p: number): string => (Number.isFinite(p) ? whole(p * 100) : '');
+
 /** A share 0…1 as a whole percent, `0.75` -> `75%`. */
-export const formatShare = (p: number): string => (Number.isFinite(p) ? `${whole(p * 100)}%` : '');
+export const formatShare = (p: number): string => (Number.isFinite(p) ? `${formatShareNumber(p)}%` : '');
 
 /** Points to one decimal, `6.25` -> `6.3`. */
 export const formatPoints = (x: number): string => fixed(x, 1);

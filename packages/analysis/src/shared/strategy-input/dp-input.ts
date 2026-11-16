@@ -2,12 +2,13 @@
 // Task 19): the field the job plans (our cars not planned modelled like rivals), `race-hazard`'s tables per lap, the
 // weather worlds (`weather-paths`' `weatherWorlds`, `strategy-dp`'s config `worlds`, O3b), per world the plain
 // forecast's road and the traffic cost of a rejoin per lap, and the car's tyre terms and laps to the 70 % limit per
-// compound (`StartingPoint.tyre`, B5). Pure (C2).
+// compound (`StartingPoint.tyre`, B5); and per car of ours its SC/VSC reaction table from its heaviest world's solve
+// (SP4.3d spec §5.2), which every job that builds a Monte Carlo input passes. Pure (C2).
 import { NOISE_COMPOUNDS, tyreIndex, type CarId, type NoiseCompound, type Policy, type RaceHazard, type Scenario, type StartingPoint } from '@pitwall/domain';
 import { createRng, type Rng } from '@pitwall/engine/readers';
 import { raceForecast, rejoinOnRoad, startLapOf, stopCostMs } from '../../race-forecast/index.ts';
-import { rivalPlainPolicy, type McInput } from '../../race-monte-carlo/index.ts';
-import { STRATEGY_DP_CONFIG, type DpInput, type DpWorld } from '../../strategy-dp/index.ts';
+import { rivalPlainPolicy, type McInput, type Reactions } from '../../race-monte-carlo/index.ts';
+import { heaviest, reactionTable, solveWorld, STRATEGY_DP_CONFIG, type DpInput, type DpSolution, type DpWorld, type ReactionTable } from '../../strategy-dp/index.ts';
 import { weatherPath, weatherWorlds, type WeatherLap, type WeatherWorld } from '../../weather-paths/index.ts';
 import { configOf } from '../config-of.ts';
 import type { StrategyInput } from './input.ts';
@@ -56,7 +57,7 @@ export type PlainRoad = Map<number, { gapMs: Float64Array; position: Int8Array }
 export function plainRoad(start: StartingPoint, rng: Rng, weather: readonly WeatherLap[] | null = null): PlainRoad {
   const ours = new Set(Object.keys(start.sets).map(Number));
   // the rivals on their plain policy in the world (race-monte-carlo's one rival policy, O9); our cars without a stop
-  const policies: Policy[] = Array.from({ length: start.cars }, (_, k): Policy => (ours.has(k) ? { stops: [], triggers: [] } : rivalPlainPolicy(start, k, weather)));
+  const policies: Policy[] = Array.from({ length: start.cars }, (_, k): Policy => (ours.has(k) ? { stops: [] } : rivalPlainPolicy(start, k, weather)));
   const scenario: Scenario = { id: 0, plain: true, neutralisations: [] };
   if (weather !== null) scenario.wetnessByLap = Float64Array.from(weather, (w) => w.wetnessMs);
   const result = raceForecast(start, policies, scenario, rng, { trace: true });
@@ -160,4 +161,34 @@ export function toDpInput(input: StrategyInput, car: CarId): DpInput {
   if (!input.start.known) throw new Error(`toDpInput: car ${car} has no starting point (${input.start.reason})`);
   const field = plannedField(input.start.value, plannedCars(input, input.start.value));
   return dpInputOn(field, car, hazardOf(field, input.hazard), roadWorlds(field, createRng(0), worldsOf(input)), strategyConfigOf(input.config).trafficGapMs);
+}
+
+/**
+ * A car's SC/VSC reaction table (SP4.3d spec §5.2): its DP input's heaviest weather world's solve (`boxThisLap`'s);
+ * `solutions` the worlds' solves in the input's order.
+ */
+export function reactionOf(dp: DpInput, solutions: readonly DpSolution[]): ReactionTable {
+  const solution = solutions[heaviest(dp)];
+  if (solution === undefined) throw new Error(`reactionOf: no solve of car ${dp.car}'s heaviest world`);
+  return reactionTable(solution);
+}
+
+/**
+ * The reaction tables of a call's cars of ours (`cars`: its field's `sets`, spec §5.2): each car's heaviest world's
+ * solve, `solved(car)` where the job already holds it (its first world's, the heaviest in `toDpInput`'s order), else
+ * solved here on `toDpInput`. A car the job does not plan has none.
+ */
+export function reactionsOf(input: StrategyInput, start: StartingPoint, cars: Iterable<CarId>, solved: (car: CarId) => DpSolution | null = () => null): Reactions {
+  const out: Reactions = {};
+  for (const car of cars) {
+    if (notPlannedWhy(input, start, car) !== null) continue;
+    const held = solved(car);
+    if (held !== null) {
+      out[car] = reactionTable(held);
+      continue;
+    }
+    const dp = toDpInput(input, car);
+    out[car] = reactionTable(solveWorld(dp, heaviest(dp)));
+  }
+  return out;
 }

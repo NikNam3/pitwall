@@ -13,15 +13,9 @@ const CAR = carId(0);
 /** `latestPlan` over the runner's read-only projection (the domain helper takes plain records, as `currentLaps` does). */
 const latestPlan = (history: { readonly decisions: readonly unknown[] }, car: typeof CAR): Policy | null =>
   latestPlanOf(history as { decisions: readonly DecisionRecord[] }, car);
-const POLICY: Policy = {
-  stops: [{ lap: 18, compound: 'hard' }],
-  triggers: [
-    { kind: 'neutralised', condition: 'vsc', fromLap: 8, toLap: 30, action: 'stayOut' },
-    { kind: 'rivalPits', carId: carId(1), withinMs: 1_500, action: 'extend' },
-    { kind: 'degradationOff', wearRateDeltaPct: 20, action: { switchTo: [{ lap: 24, compound: 'medium' }] } },
-  ],
-};
-const TWO_STOP: Policy = { stops: [{ lap: 12, compound: 'medium' }, { lap: 30, compound: 'soft' }], triggers: [] };
+/** A policy with every field (a stop list, SP4.3d spec §5.1). */
+const POLICY: Policy = { startCompound: 'soft', stops: [{ lap: 18, compound: 'hard' }] };
+const TWO_STOP: Policy = { stops: [{ lap: 12, compound: 'medium' }, { lap: 30, compound: 'soft' }] };
 const commit = (policy: Policy): GivenDecision => ({ kind: 'planCommitted', carId: CAR, policy });
 const CLEAR: GivenDecision = { kind: 'planCleared', carId: CAR };
 

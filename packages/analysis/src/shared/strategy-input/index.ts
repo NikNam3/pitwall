@@ -2,11 +2,11 @@
 // copy each: the input from the view, the DP's input per car, the Monte Carlo hazard and settings, a candidate's policy.
 import type { DpPlan } from '../../strategy-dp/index.ts';
 import type { McInput } from '../../race-monte-carlo/index.ts';
-import type { Policy, RaceHazard, StartingPoint, Trigger } from '@pitwall/domain';
+import type { Policy, RaceHazard, StartingPoint } from '@pitwall/domain';
 import { hazardOf } from './dp-input.ts';
 
 export { committedField, followable } from './committed-field.ts';
-export { dpInputOn, hazardOf, notPlannedWhy, plainRoad, plannedCars, plannedField, roadWorlds, toDpInput, worldsOf, type PlainRoad, type RoadWorld } from './dp-input.ts';
+export { dpInputOn, hazardOf, notPlannedWhy, plainRoad, plannedCars, plannedField, reactionOf, reactionsOf, roadWorlds, toDpInput, worldsOf, type PlainRoad, type RoadWorld } from './dp-input.ts';
 export { STRATEGY_INPUT_READS, strategyInputFrom, type StrategyInput } from './input.ts';
 export { mcSettingsFrom, pointsOf, strategyConfigOf } from './settings.ts';
 
@@ -22,10 +22,7 @@ export function toMcHazard(hazard: RaceHazard, start?: Pick<StartingPoint, 'lap'
   return hazardOf({ lap: first, lapsTotal: last }, hazard);
 }
 
-/**
- * A plan's stops with the triggers that change them inside a scenario: its own (SP4.3c Task 19), then `extra` (a rule's
- * `rivalPits`, a call's stay-out); the one builder of a candidate's policy.
- */
-export function policyOf(plan: Pick<DpPlan, 'stops' | 'triggers'>, extra: readonly Trigger[] = []): Policy {
-  return { stops: plan.stops.map((s) => ({ lap: s.lap, compound: s.compound })), triggers: [...plan.triggers, ...extra].map((t) => structuredClone(t)) };
+/** A plan's stops as a policy (a stop list, SP4.3d spec §5.1); the one builder of a candidate's policy. */
+export function policyOf(plan: Pick<DpPlan, 'stops'>): Policy {
+  return { stops: plan.stops.map((s) => ({ lap: s.lap, compound: s.compound })) };
 }

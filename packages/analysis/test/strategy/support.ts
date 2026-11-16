@@ -11,9 +11,7 @@
 //   plan, `boxNow` (where not `null`) and `stayOut`, source `dp`; the stop-lap neighbours, source `neighbour`: a DP
 //   plan with one stop moved by 1–3 laps (`neighbourMinLaps`–`neighbourMaxLaps`), the rest kept; the rule candidates,
 //   source `rule`, on the best plan (`plans[0]`): mirror ahead and mirror behind (its first stop moved to the rival's
-//   likeliest stop lap, `start.stopMid`), cover (a `rivalPits` trigger on the rival directly behind, action `cover`,
-//   within `closeGapMs`) and extend (the same on the rival directly ahead, action `extend`). Every policy is
-//   `policyOf(plan, thresholds)`: the DP's thresholds, plus the rule's own `rivalPits` trigger for cover and extend.
+//   likeliest stop lap, `start.stopMid`). Every policy is `policyOf(plan)`: a stop list (SP4.3d spec §5.1).
 // - A `race-monte-carlo` call plans car `c` when `input.candidates[c]` is not empty. While it scores one car, our other
 //   car follows `committed[other] ?? candidates[other][0]` (race-monte-carlo's rule, `search.ts`); our other car is
 //   "modelled like a rival" when it is not one of the call's cars (`input.start.sets` has no entry for it).
@@ -24,6 +22,7 @@ import {
   type CarId,
   type DecisionRecord,
   type FrameNumber,
+  type GivenDecision,
   type LapRecord,
   type Policy,
   type RaceHazard,
@@ -118,7 +117,7 @@ export type ViewSpec = {
    * Plan decisions, recorded on frame `frame` (absolute: a decision after the view's frame is not in it yet), else on
    * the view's frame minus `framesBefore` (default 1).
    */
-  decisions?: ({ frame?: FrameNumber; framesBefore?: number } & ({ kind: 'planCommitted'; carId: CarId; policy: Policy } | { kind: 'planCleared'; carId: CarId }))[];
+  decisions?: ({ frame?: FrameNumber; framesBefore?: number } & GivenDecision)[];
   /** `strategy`'s config section, over `{ maxScenarioPolicies: TEST_CAP }`. */
   config?: Record<string, unknown>;
   /** `race-hazard`'s output; default its calculator's on the view. */
@@ -216,7 +215,6 @@ export const fixedIn = (input: McInput, car: CarId): Policy | null => input.comm
 /** A valid one-stop plan from the view's lap: a stop `inLaps` laps ahead onto `compound`. */
 export const stopIn = (view: EngineView, car: CarId, inLaps: number, compound: Policy['stops'][number]['compound'] = 'hard'): Policy => ({
   stops: [{ lap: currentLapOf(view, car) + inLaps, compound }],
-  triggers: [],
 });
 
 export const json = (x: unknown): string => JSON.stringify(x);

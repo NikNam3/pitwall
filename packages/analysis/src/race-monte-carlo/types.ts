@@ -1,10 +1,20 @@
 // `race-monte-carlo`'s plain inputs and outputs (SP4.3b spec §7, C50): candidate policies per car scored over common
 // scenarios, adaptive under a scenario-policy cap. Structured-cloneable; not in `domain`, whose types are JSON-safe.
-import type { CarId, McRow, McSource, Ms, Policy, StartingPoint } from '@pitwall/domain';
+import type { CarId, McRow, McSource, Ms, Policy, Slot, StartingPoint } from '@pitwall/domain';
+import type { ReactionTable } from '../strategy-dp/reaction.ts';
 import type { DpInput } from '../strategy-dp/types.ts';
 
-/** One candidate policy for one of our cars, where it came from and, for a rule candidate, its rule (else `null`). */
-export type McCandidate = { policy: Policy; source: McSource; rule: McRow['rule'] };
+/**
+ * Per our car slot its SC/VSC reaction table (SP4.3d spec §5.2): `strategy-dp`'s heaviest world's solve. A car without
+ * one plays its plan's stops as listed.
+ */
+export type Reactions = Record<number, ReactionTable>;
+
+/**
+ * One candidate policy for one of our cars, where it came from and, for a rule candidate, its rule (else `null`); a
+ * saved plan's candidate names its slot (SP4.3d spec §5.3; absent or `null`: no slot).
+ */
+export type McCandidate = { policy: Policy; source: McSource; rule: McRow['rule']; slot?: Slot | null };
 
 /**
  * The rivals' reaction rules (spec §7.2): under an SC a rival owing a stop with tyres ≥ `aMin` laps boxes with `q`; with
@@ -31,6 +41,8 @@ export type McInput = {
   hazard: DpInput['hazard'] & { active: DpInput['active'] };
   rivalRules: RivalRules;
   config: McConfig;
+  /** Our cars' SC/VSC reaction tables (spec §5.2). */
+  reactions: Reactions;
 };
 
 /** Per our car its ranked rows, the scenarios run, whether the cap was hit and whether a near-tie stayed unresolved. */
@@ -64,6 +76,8 @@ export type CallInput = {
   rivalRules: RivalRules;
   scenarios: number;
   traffic: { gapMs: Ms; laps: number };
+  /** Our cars' SC/VSC reaction tables (spec §5.2); absent: every car plays its stops as listed. */
+  reactions?: Reactions;
 };
 
 /** One candidate's per-scenario outcomes. */

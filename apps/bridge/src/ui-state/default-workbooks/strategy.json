@@ -12,58 +12,18 @@
                 "type": "branch",
                 "data": [
                   {
-                    "type": "leaf",
-                    "data": {
-                      "views": [
-                        "strategy-table-1"
-                      ],
-                      "activeView": "strategy-table-1",
-                      "id": "gstrategy-table-1"
-                    },
+                    "type": "branch",
+                    "data": [
+                      { "type": "leaf", "data": { "views": ["sc-card-1"], "activeView": "sc-card-1", "id": "gsc-card-1" }, "size": 520 },
+                      { "type": "leaf", "data": { "views": ["circle-of-doom-1"], "activeView": "circle-of-doom-1", "id": "gcircle-of-doom-1" }, "size": 440 }
+                    ],
                     "size": 480
                   },
                   {
                     "type": "branch",
                     "data": [
-                      {
-                        "type": "leaf",
-                        "data": {
-                          "views": [
-                            "pit-sweep-table-1"
-                          ],
-                          "activeView": "pit-sweep-table-1",
-                          "id": "gpit-sweep-table-1"
-                        },
-                        "size": 505
-                      },
-                      {
-                        "type": "branch",
-                        "data": [
-                          {
-                            "type": "leaf",
-                            "data": {
-                              "views": [
-                                "undercut-card-1"
-                              ],
-                              "activeView": "undercut-card-1",
-                              "id": "gundercut-card-1"
-                            },
-                            "size": 400
-                          },
-                          {
-                            "type": "leaf",
-                            "data": {
-                              "views": [
-                                "sc-card-1"
-                              ],
-                              "activeView": "sc-card-1",
-                              "id": "gsc-card-1"
-                            },
-                            "size": 120
-                          }
-                        ],
-                        "size": 455
-                      }
+                      { "type": "leaf", "data": { "views": ["pit-sweep-table-1"], "activeView": "pit-sweep-table-1", "id": "gpit-sweep-table-1" }, "size": 505 },
+                      { "type": "leaf", "data": { "views": ["undercut-card-1"], "activeView": "undercut-card-1", "id": "gundercut-card-1" }, "size": 455 }
                     ],
                     "size": 520
                   }
@@ -74,58 +34,18 @@
                 "type": "branch",
                 "data": [
                   {
-                    "type": "leaf",
-                    "data": {
-                      "views": [
-                        "strategy-table-2"
-                      ],
-                      "activeView": "strategy-table-2",
-                      "id": "gstrategy-table-2"
-                    },
+                    "type": "branch",
+                    "data": [
+                      { "type": "leaf", "data": { "views": ["sc-card-2"], "activeView": "sc-card-2", "id": "gsc-card-2" }, "size": 520 },
+                      { "type": "leaf", "data": { "views": ["circle-of-doom-2"], "activeView": "circle-of-doom-2", "id": "gcircle-of-doom-2" }, "size": 440 }
+                    ],
                     "size": 480
                   },
                   {
                     "type": "branch",
                     "data": [
-                      {
-                        "type": "leaf",
-                        "data": {
-                          "views": [
-                            "pit-sweep-table-2"
-                          ],
-                          "activeView": "pit-sweep-table-2",
-                          "id": "gpit-sweep-table-2"
-                        },
-                        "size": 505
-                      },
-                      {
-                        "type": "branch",
-                        "data": [
-                          {
-                            "type": "leaf",
-                            "data": {
-                              "views": [
-                                "undercut-card-2"
-                              ],
-                              "activeView": "undercut-card-2",
-                              "id": "gundercut-card-2"
-                            },
-                            "size": 400
-                          },
-                          {
-                            "type": "leaf",
-                            "data": {
-                              "views": [
-                                "sc-card-2"
-                              ],
-                              "activeView": "sc-card-2",
-                              "id": "gsc-card-2"
-                            },
-                            "size": 120
-                          }
-                        ],
-                        "size": 455
-                      }
+                      { "type": "leaf", "data": { "views": ["pit-sweep-table-2"], "activeView": "pit-sweep-table-2", "id": "gpit-sweep-table-2" }, "size": 505 },
+                      { "type": "leaf", "data": { "views": ["undercut-card-2"], "activeView": "undercut-card-2", "id": "gundercut-card-2" }, "size": 455 }
                     ],
                     "size": 520
                   }
@@ -140,90 +60,26 @@
           "orientation": "HORIZONTAL"
         },
         "panels": {
-          "strategy-table-1": {
-            "id": "strategy-table-1",
-            "contentComponent": "panel",
-            "title": "strategy-table-1"
-          },
-          "pit-sweep-table-1": {
-            "id": "pit-sweep-table-1",
-            "contentComponent": "panel",
-            "title": "pit-sweep-table-1"
-          },
-          "undercut-card-1": {
-            "id": "undercut-card-1",
-            "contentComponent": "panel",
-            "title": "undercut-card-1"
-          },
-          "sc-card-1": {
-            "id": "sc-card-1",
-            "contentComponent": "panel",
-            "title": "sc-card-1"
-          },
-          "strategy-table-2": {
-            "id": "strategy-table-2",
-            "contentComponent": "panel",
-            "title": "strategy-table-2"
-          },
-          "pit-sweep-table-2": {
-            "id": "pit-sweep-table-2",
-            "contentComponent": "panel",
-            "title": "pit-sweep-table-2"
-          },
-          "undercut-card-2": {
-            "id": "undercut-card-2",
-            "contentComponent": "panel",
-            "title": "undercut-card-2"
-          },
-          "sc-card-2": {
-            "id": "sc-card-2",
-            "contentComponent": "panel",
-            "title": "sc-card-2"
-          }
+          "sc-card-1": { "id": "sc-card-1", "contentComponent": "panel", "title": "sc-card-1" },
+          "circle-of-doom-1": { "id": "circle-of-doom-1", "contentComponent": "panel", "title": "circle-of-doom-1" },
+          "pit-sweep-table-1": { "id": "pit-sweep-table-1", "contentComponent": "panel", "title": "pit-sweep-table-1" },
+          "undercut-card-1": { "id": "undercut-card-1", "contentComponent": "panel", "title": "undercut-card-1" },
+          "sc-card-2": { "id": "sc-card-2", "contentComponent": "panel", "title": "sc-card-2" },
+          "circle-of-doom-2": { "id": "circle-of-doom-2", "contentComponent": "panel", "title": "circle-of-doom-2" },
+          "pit-sweep-table-2": { "id": "pit-sweep-table-2", "contentComponent": "panel", "title": "pit-sweep-table-2" },
+          "undercut-card-2": { "id": "undercut-card-2", "contentComponent": "panel", "title": "undercut-card-2" }
         },
-        "activeGroup": "gstrategy-table-1"
+        "activeGroup": "gsc-card-1"
       },
       "panels": {
-        "strategy-table-1": {
-          "widget": "strategy-table",
-          "options": {},
-          "linkGroup": 1
-        },
-        "pit-sweep-table-1": {
-          "widget": "pit-sweep-table",
-          "options": {},
-          "linkGroup": 1
-        },
-        "undercut-card-1": {
-          "widget": "undercut-card",
-          "options": {},
-          "linkGroup": 1
-        },
-        "sc-card-1": {
-          "widget": "sc-card",
-          "options": {},
-          "linkGroup": 1
-        },
-        "strategy-table-2": {
-          "widget": "strategy-table",
-          "options": {},
-          "linkGroup": 2
-        },
-        "pit-sweep-table-2": {
-          "widget": "pit-sweep-table",
-          "options": {},
-          "linkGroup": 2
-        },
-        "undercut-card-2": {
-          "widget": "undercut-card",
-          "options": {},
-          "linkGroup": 2
-        },
-        "sc-card-2": {
-          "widget": "sc-card",
-          "options": {},
-          "linkGroup": 2
-        }
+        "sc-card-1": { "widget": "sc-card", "options": {}, "linkGroup": 1 },
+        "circle-of-doom-1": { "widget": "circle-of-doom", "options": {}, "linkGroup": 1 },
+        "pit-sweep-table-1": { "widget": "pit-sweep-table", "options": {}, "linkGroup": 1 },
+        "undercut-card-1": { "widget": "undercut-card", "options": {}, "linkGroup": 1 },
+        "sc-card-2": { "widget": "sc-card", "options": {}, "linkGroup": 2 },
+        "circle-of-doom-2": { "widget": "circle-of-doom", "options": {}, "linkGroup": 2 },
+        "pit-sweep-table-2": { "widget": "pit-sweep-table", "options": {}, "linkGroup": 2 },
+        "undercut-card-2": { "widget": "undercut-card", "options": {}, "linkGroup": 2 }
       }
     }
   ]

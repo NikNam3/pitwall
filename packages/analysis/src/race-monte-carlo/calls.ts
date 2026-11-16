@@ -1,6 +1,6 @@
 // `scoreCalls` (SP4.3b2 Task 4, spec §9): a call's cases scored on common scenarios, no search, nothing dropped. Each
 // scenario is `raceMonteCarlo`'s (`scenarios.ts`: its neutralisations, weather, the rivals' drawn stops and SC rule, our
-// cars' policies played out, a committed teammate's plan); a candidate's `rival` replaces that rival's drawn stops by its
+// cars' stop lists, a committed teammate's plan); a candidate's `rival` replaces that rival's drawn stops by its
 // policy in that candidate only. Draws only from the injected generator (C2, C50).
 import type { CarId, ForecastResult, ForecastTrace, Policy } from '@pitwall/domain';
 import type { Rng } from '@pitwall/engine/readers';
@@ -49,7 +49,7 @@ export function scoreCalls(input: CallInput, rng: Rng): CallResult {
   const car = input.car as number;
   const fixed: Record<number, Policy | null> = {};
   for (const key of Object.keys(start.sets)) fixed[Number(key)] = input.committed[Number(key) as CarId] ?? null;
-  const run = createRun(start, input.hazard, input.rivalRules, fixed, rng);
+  const run = createRun(start, input.hazard, input.rivalRules, fixed, rng, input.reactions);
   const cars = start.cars;
   const outcomes = input.candidates.map((c): CallOutcome => {
     const out: CallOutcome = {
@@ -59,11 +59,10 @@ export function scoreCalls(input: CallInput, rng: Rng): CallResult {
       gapMs: c.rival === null ? null : new Float64Array(n),
       raceMs: new Float64Array(n),
     };
-    const fired = new Uint8Array(c.policy.triggers.length);
     const untilLap = c.untilLap === null ? undefined : Math.max(c.untilLap, start.lap);
     for (let i = 0; i < n; i++) {
       const id = i + 1;
-      const policies = policiesIn(run, id, car, c.policy, fired);
+      const policies = policiesIn(run, id, car, c.policy);
       if (c.rival !== null) policies[c.rival.carId as number] = c.rival.policy;
       const { scenario } = scenarioOf(run, id);
       const stop = firstStopLap(run, policies[car]);

@@ -203,33 +203,6 @@
             "lap": 12,
             "compound": "hard"
           }
-        ],
-        "triggers": [
-          {
-            "kind": "neutralised",
-            "condition": "sc",
-            "fromLap": 11,
-            "toLap": 19,
-            "action": {
-              "box": "hard"
-            }
-          },
-          {
-            "kind": "neutralised",
-            "condition": "vsc",
-            "fromLap": 10,
-            "toLap": 19,
-            "action": {
-              "box": "hard"
-            }
-          },
-          {
-            "kind": "damage",
-            "lossMsPerLap": 935.3685185185427,
-            "action": {
-              "box": "hard"
-            }
-          }
         ]
       }
     },
@@ -435,42 +408,6 @@
           {
             "lap": 12,
             "compound": "hard"
-          }
-        ],
-        "triggers": [
-          {
-            "kind": "neutralised",
-            "condition": "sc",
-            "fromLap": 12,
-            "toLap": 19,
-            "action": {
-              "box": "hard"
-            }
-          },
-          {
-            "kind": "neutralised",
-            "condition": "vsc",
-            "fromLap": 10,
-            "toLap": 10,
-            "action": {
-              "box": "hard"
-            }
-          },
-          {
-            "kind": "neutralised",
-            "condition": "vsc",
-            "fromLap": 12,
-            "toLap": 19,
-            "action": {
-              "box": "hard"
-            }
-          },
-          {
-            "kind": "damage",
-            "lossMsPerLap": 935.3685185185427,
-            "action": {
-              "box": "hard"
-            }
           }
         ]
       }

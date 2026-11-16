@@ -1,5 +1,5 @@
 {
-  "sourceHash": "276e98d60bd242966fcfd107ce11e76e8089d551a6f998c2a6eacae432327896",
+  "sourceHash": "bd828ac710016cc2cf37b31ac1f58ce6079d58d30aed937af116de9024fb8399",
   "generatorParams": {
     "base": "GENERATOR_DEFAULTS",
     "seed": 1,
@@ -424,132 +424,6 @@
               "lap": 33,
               "compound": "hard"
             }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 16,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 33,
-              "toLap": 49,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 33,
-              "toLap": 49,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "damage",
-              "lossMsPerLap": 1758.1282407407416,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "degradationOff",
-              "wearRateDeltaPct": 1.0451388888888888,
-              "action": {
-                "switchTo": [
-                  {
-                    "lap": 14,
-                    "compound": "hard"
-                  },
-                  {
-                    "lap": 28,
-                    "compound": "soft"
-                  },
-                  {
-                    "lap": 37,
-                    "compound": "medium"
-                  }
-                ]
-              }
-            }
-          ]
-        },
-        "source": "dp",
-        "rule": null
-      },
-      {
-        "policy": {
-          "stops": [
-            {
-              "lap": 17,
-              "compound": "medium"
-            },
-            {
-              "lap": 33,
-              "compound": "hard"
-            }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 16,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 33,
-              "toLap": 49,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 33,
-              "toLap": 49,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "damage",
-              "lossMsPerLap": 1758.1282407407416,
-              "action": {
-                "box": "medium"
-              }
-            }
           ]
         },
         "source": "dp",
@@ -566,44 +440,6 @@
               "lap": 34,
               "compound": "medium"
             }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 16,
-              "toLap": 48,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 16,
-              "toLap": 48,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 33,
-              "toLap": 49,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 32,
-              "toLap": 49,
-              "action": {
-                "box": "medium"
-              }
-            }
           ]
         },
         "source": "dp",
@@ -619,44 +455,6 @@
             {
               "lap": 32,
               "compound": "medium"
-            }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 17,
-              "toLap": 48,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 17,
-              "toLap": 48,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 31,
-              "toLap": 49,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 31,
-              "toLap": 49,
-              "action": {
-                "box": "medium"
-              }
             }
           ]
         },
@@ -674,44 +472,6 @@
               "lap": 36,
               "compound": "soft"
             }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 17,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 17,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 35,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 35,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            }
           ]
         },
         "source": "dp",
@@ -728,44 +488,6 @@
               "lap": 32,
               "compound": "hard"
             }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 17,
-              "toLap": 48,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 17,
-              "toLap": 48,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 31,
-              "toLap": 49,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 31,
-              "toLap": 49,
-              "action": {
-                "box": "hard"
-              }
-            }
           ]
         },
         "source": "dp",
@@ -781,44 +503,6 @@
             {
               "lap": 36,
               "compound": "soft"
-            }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 17,
-              "toLap": 48,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 17,
-              "toLap": 48,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 36,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 35,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
             }
           ]
         },
@@ -839,62 +523,6 @@
             {
               "lap": 36,
               "compound": "hard"
-            }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 14,
-              "toLap": 47,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 13,
-              "toLap": 47,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 27,
-              "toLap": 48,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 28,
-              "toLap": 48,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 36,
-              "toLap": 49,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 35,
-              "toLap": 49,
-              "action": {
-                "box": "hard"
-              }
             }
           ]
         },
@@ -916,62 +544,6 @@
               "lap": 43,
               "compound": "soft"
             }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 14,
-              "toLap": 47,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 13,
-              "toLap": 47,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 29,
-              "toLap": 48,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 28,
-              "toLap": 48,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 42,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 41,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            }
           ]
         },
         "source": "dp",
@@ -991,62 +563,6 @@
             {
               "lap": 36,
               "compound": "medium"
-            }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 14,
-              "toLap": 47,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 13,
-              "toLap": 47,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 27,
-              "toLap": 48,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 26,
-              "toLap": 48,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 35,
-              "toLap": 49,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 35,
-              "toLap": 49,
-              "action": {
-                "box": "medium"
-              }
             }
           ]
         },
@@ -1068,62 +584,6 @@
               "lap": 43,
               "compound": "soft"
             }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 14,
-              "toLap": 47,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 13,
-              "toLap": 47,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 28,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 26,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 42,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 42,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            }
           ]
         },
         "source": "dp",
@@ -1143,62 +603,6 @@
             {
               "lap": 36,
               "compound": "hard"
-            }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 11,
-              "toLap": 47,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 12,
-              "toLap": 47,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 20,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 20,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 36,
-              "toLap": 49,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 35,
-              "toLap": 49,
-              "action": {
-                "box": "hard"
-              }
             }
           ]
         },
@@ -1220,62 +624,6 @@
               "lap": 36,
               "compound": "medium"
             }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 11,
-              "toLap": 47,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 12,
-              "toLap": 47,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 21,
-              "toLap": 48,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 20,
-              "toLap": 48,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 35,
-              "toLap": 49,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 34,
-              "toLap": 49,
-              "action": {
-                "box": "medium"
-              }
-            }
           ]
         },
         "source": "dp",
@@ -1288,26 +636,6 @@
               "lap": 30,
               "compound": "hard"
             }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 30,
-              "toLap": 49,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 30,
-              "toLap": 49,
-              "action": {
-                "box": "hard"
-              }
-            }
           ]
         },
         "source": "dp",
@@ -1319,26 +647,6 @@
             {
               "lap": 30,
               "compound": "soft"
-            }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 30,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 30,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
             }
           ]
         },
@@ -1360,116 +668,6 @@
               "lap": 32,
               "compound": "hard"
             }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 16,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 18,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 18,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 31,
-              "toLap": 49,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 31,
-              "toLap": 49,
-              "action": {
-                "box": "hard"
-              }
-            }
-          ]
-        },
-        "source": "dp",
-        "rule": null
-      },
-      {
-        "policy": {
-          "stops": [
-            {
-              "lap": 17,
-              "compound": "medium"
-            },
-            {
-              "lap": 33,
-              "compound": "hard"
-            }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 16,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 33,
-              "toLap": 49,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 33,
-              "toLap": 49,
-              "action": {
-                "box": "hard"
-              }
-            }
           ]
         },
         "source": "dp",
@@ -1485,44 +683,6 @@
             {
               "lap": 33,
               "compound": "hard"
-            }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 16,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 32,
-              "toLap": 49,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 32,
-              "toLap": 49,
-              "action": {
-                "box": "hard"
-              }
             }
           ]
         },
@@ -1540,44 +700,6 @@
               "lap": 34,
               "compound": "hard"
             }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 16,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 33,
-              "toLap": 49,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 33,
-              "toLap": 49,
-              "action": {
-                "box": "hard"
-              }
-            }
           ]
         },
         "source": "neighbour",
@@ -1593,44 +715,6 @@
             {
               "lap": 32,
               "compound": "hard"
-            }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 16,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 32,
-              "toLap": 49,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 32,
-              "toLap": 49,
-              "action": {
-                "box": "hard"
-              }
             }
           ]
         },
@@ -1648,44 +732,6 @@
               "lap": 35,
               "compound": "hard"
             }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 16,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 34,
-              "toLap": 49,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 34,
-              "toLap": 49,
-              "action": {
-                "box": "hard"
-              }
-            }
           ]
         },
         "source": "neighbour",
@@ -1701,44 +747,6 @@
             {
               "lap": 32,
               "compound": "hard"
-            }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 16,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 31,
-              "toLap": 49,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 31,
-              "toLap": 49,
-              "action": {
-                "box": "hard"
-              }
             }
           ]
         },
@@ -1756,44 +764,6 @@
               "lap": 35,
               "compound": "hard"
             }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 16,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 35,
-              "toLap": 49,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 34,
-              "toLap": 49,
-              "action": {
-                "box": "hard"
-              }
-            }
           ]
         },
         "source": "neighbour",
@@ -1810,222 +780,10 @@
               "lap": 37,
               "compound": "medium"
             }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 17,
-              "toLap": 49,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 16,
-              "toLap": 49,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 36,
-              "toLap": 49,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 35,
-              "toLap": 49,
-              "action": {
-                "box": "medium"
-              }
-            }
           ]
         },
         "source": "rule",
         "rule": "mirrorAhead"
-      },
-      {
-        "policy": {
-          "stops": [
-            {
-              "lap": 17,
-              "compound": "medium"
-            },
-            {
-              "lap": 33,
-              "compound": "hard"
-            }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 16,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 33,
-              "toLap": 49,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 33,
-              "toLap": 49,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "damage",
-              "lossMsPerLap": 1758.1282407407416,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "degradationOff",
-              "wearRateDeltaPct": 1.0451388888888888,
-              "action": {
-                "switchTo": [
-                  {
-                    "lap": 14,
-                    "compound": "hard"
-                  },
-                  {
-                    "lap": 28,
-                    "compound": "soft"
-                  },
-                  {
-                    "lap": 37,
-                    "compound": "medium"
-                  }
-                ]
-              }
-            },
-            {
-              "kind": "rivalPits",
-              "carId": 3,
-              "withinMs": 3000,
-              "action": "cover"
-            }
-          ]
-        },
-        "source": "rule",
-        "rule": "cover"
-      },
-      {
-        "policy": {
-          "stops": [
-            {
-              "lap": 17,
-              "compound": "medium"
-            },
-            {
-              "lap": 33,
-              "compound": "hard"
-            }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 16,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 33,
-              "toLap": 49,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 33,
-              "toLap": 49,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "damage",
-              "lossMsPerLap": 1758.1282407407416,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "degradationOff",
-              "wearRateDeltaPct": 1.0451388888888888,
-              "action": {
-                "switchTo": [
-                  {
-                    "lap": 14,
-                    "compound": "hard"
-                  },
-                  {
-                    "lap": 28,
-                    "compound": "soft"
-                  },
-                  {
-                    "lap": 37,
-                    "compound": "medium"
-                  }
-                ]
-              }
-            },
-            {
-              "kind": "rivalPits",
-              "carId": 1,
-              "withinMs": 3000,
-              "action": "extend"
-            }
-          ]
-        },
-        "source": "rule",
-        "rule": "extend"
       }
     ],
     "5": [
@@ -2040,132 +798,6 @@
               "lap": 33,
               "compound": "hard"
             }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 16,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 33,
-              "toLap": 49,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 33,
-              "toLap": 49,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "damage",
-              "lossMsPerLap": 1758.1282407407416,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "degradationOff",
-              "wearRateDeltaPct": 1.0451388888888888,
-              "action": {
-                "switchTo": [
-                  {
-                    "lap": 13,
-                    "compound": "soft"
-                  },
-                  {
-                    "lap": 23,
-                    "compound": "hard"
-                  },
-                  {
-                    "lap": 37,
-                    "compound": "medium"
-                  }
-                ]
-              }
-            }
-          ]
-        },
-        "source": "dp",
-        "rule": null
-      },
-      {
-        "policy": {
-          "stops": [
-            {
-              "lap": 17,
-              "compound": "medium"
-            },
-            {
-              "lap": 33,
-              "compound": "hard"
-            }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 16,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 33,
-              "toLap": 49,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 33,
-              "toLap": 49,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "damage",
-              "lossMsPerLap": 1758.1282407407416,
-              "action": {
-                "box": "medium"
-              }
-            }
           ]
         },
         "source": "dp",
@@ -2182,44 +814,6 @@
               "lap": 34,
               "compound": "medium"
             }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 16,
-              "toLap": 48,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 16,
-              "toLap": 48,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 33,
-              "toLap": 49,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 32,
-              "toLap": 49,
-              "action": {
-                "box": "medium"
-              }
-            }
           ]
         },
         "source": "dp",
@@ -2235,44 +829,6 @@
             {
               "lap": 32,
               "compound": "medium"
-            }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 17,
-              "toLap": 48,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 17,
-              "toLap": 48,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 31,
-              "toLap": 49,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 31,
-              "toLap": 49,
-              "action": {
-                "box": "medium"
-              }
             }
           ]
         },
@@ -2290,44 +846,6 @@
               "lap": 36,
               "compound": "soft"
             }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 17,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 17,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 35,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 35,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            }
           ]
         },
         "source": "dp",
@@ -2344,44 +862,6 @@
               "lap": 32,
               "compound": "hard"
             }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 17,
-              "toLap": 48,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 17,
-              "toLap": 48,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 31,
-              "toLap": 49,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 31,
-              "toLap": 49,
-              "action": {
-                "box": "hard"
-              }
-            }
           ]
         },
         "source": "dp",
@@ -2397,44 +877,6 @@
             {
               "lap": 36,
               "compound": "soft"
-            }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 17,
-              "toLap": 48,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 17,
-              "toLap": 48,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 36,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 35,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
             }
           ]
         },
@@ -2455,71 +897,6 @@
             {
               "lap": 36,
               "compound": "hard"
-            }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 14,
-              "toLap": 47,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 13,
-              "toLap": 47,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 28,
-              "toLap": 48,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 26,
-              "toLap": 26,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 48,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 36,
-              "toLap": 49,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 35,
-              "toLap": 49,
-              "action": {
-                "box": "hard"
-              }
             }
           ]
         },
@@ -2541,71 +918,6 @@
               "lap": 43,
               "compound": "soft"
             }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 14,
-              "toLap": 47,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 13,
-              "toLap": 47,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 29,
-              "toLap": 48,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 26,
-              "toLap": 26,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 48,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 42,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 41,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            }
           ]
         },
         "source": "dp",
@@ -2625,80 +937,6 @@
             {
               "lap": 36,
               "compound": "medium"
-            }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 14,
-              "toLap": 47,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 14,
-              "toLap": 47,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 26,
-              "toLap": 26,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 28,
-              "toLap": 48,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 26,
-              "toLap": 26,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 28,
-              "toLap": 48,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 35,
-              "toLap": 49,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 35,
-              "toLap": 49,
-              "action": {
-                "box": "medium"
-              }
             }
           ]
         },
@@ -2720,71 +958,6 @@
               "lap": 43,
               "compound": "soft"
             }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 14,
-              "toLap": 47,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 14,
-              "toLap": 47,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 29,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 26,
-              "toLap": 26,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 28,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 42,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 42,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            }
           ]
         },
         "source": "dp",
@@ -2804,62 +977,6 @@
             {
               "lap": 36,
               "compound": "hard"
-            }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 11,
-              "toLap": 47,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 12,
-              "toLap": 47,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 20,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 20,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 36,
-              "toLap": 49,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 35,
-              "toLap": 49,
-              "action": {
-                "box": "hard"
-              }
             }
           ]
         },
@@ -2881,62 +998,6 @@
               "lap": 36,
               "compound": "medium"
             }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 11,
-              "toLap": 47,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 12,
-              "toLap": 47,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 21,
-              "toLap": 48,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 20,
-              "toLap": 48,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 35,
-              "toLap": 49,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 34,
-              "toLap": 49,
-              "action": {
-                "box": "medium"
-              }
-            }
           ]
         },
         "source": "dp",
@@ -2949,26 +1010,6 @@
               "lap": 30,
               "compound": "hard"
             }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 30,
-              "toLap": 49,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 30,
-              "toLap": 49,
-              "action": {
-                "box": "hard"
-              }
-            }
           ]
         },
         "source": "dp",
@@ -2980,26 +1021,6 @@
             {
               "lap": 30,
               "compound": "soft"
-            }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 30,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 30,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
             }
           ]
         },
@@ -3021,116 +1042,6 @@
               "lap": 32,
               "compound": "hard"
             }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 16,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 18,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 18,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 31,
-              "toLap": 49,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 31,
-              "toLap": 49,
-              "action": {
-                "box": "hard"
-              }
-            }
-          ]
-        },
-        "source": "dp",
-        "rule": null
-      },
-      {
-        "policy": {
-          "stops": [
-            {
-              "lap": 17,
-              "compound": "medium"
-            },
-            {
-              "lap": 33,
-              "compound": "hard"
-            }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 16,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 33,
-              "toLap": 49,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 33,
-              "toLap": 49,
-              "action": {
-                "box": "hard"
-              }
-            }
           ]
         },
         "source": "dp",
@@ -3146,44 +1057,6 @@
             {
               "lap": 33,
               "compound": "hard"
-            }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 16,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 32,
-              "toLap": 49,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 32,
-              "toLap": 49,
-              "action": {
-                "box": "hard"
-              }
             }
           ]
         },
@@ -3201,44 +1074,6 @@
               "lap": 34,
               "compound": "hard"
             }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 16,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 33,
-              "toLap": 49,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 33,
-              "toLap": 49,
-              "action": {
-                "box": "hard"
-              }
-            }
           ]
         },
         "source": "neighbour",
@@ -3254,44 +1089,6 @@
             {
               "lap": 32,
               "compound": "hard"
-            }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 16,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 32,
-              "toLap": 49,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 32,
-              "toLap": 49,
-              "action": {
-                "box": "hard"
-              }
             }
           ]
         },
@@ -3309,44 +1106,6 @@
               "lap": 35,
               "compound": "hard"
             }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 16,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 34,
-              "toLap": 49,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 34,
-              "toLap": 49,
-              "action": {
-                "box": "hard"
-              }
-            }
           ]
         },
         "source": "neighbour",
@@ -3362,44 +1121,6 @@
             {
               "lap": 32,
               "compound": "hard"
-            }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 16,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 31,
-              "toLap": 49,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 31,
-              "toLap": 49,
-              "action": {
-                "box": "hard"
-              }
             }
           ]
         },
@@ -3417,44 +1138,6 @@
               "lap": 35,
               "compound": "hard"
             }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 16,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 35,
-              "toLap": 49,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 34,
-              "toLap": 49,
-              "action": {
-                "box": "hard"
-              }
-            }
           ]
         },
         "source": "neighbour",
@@ -3471,285 +1154,65 @@
               "lap": 37,
               "compound": "medium"
             }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 17,
-              "toLap": 49,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 16,
-              "toLap": 49,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 36,
-              "toLap": 49,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 35,
-              "toLap": 49,
-              "action": {
-                "box": "medium"
-              }
-            }
           ]
         },
         "source": "rule",
         "rule": "mirrorAhead"
-      },
-      {
-        "policy": {
-          "stops": [
-            {
-              "lap": 17,
-              "compound": "medium"
-            },
-            {
-              "lap": 33,
-              "compound": "hard"
-            }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 16,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 33,
-              "toLap": 49,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 33,
-              "toLap": 49,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "damage",
-              "lossMsPerLap": 1758.1282407407416,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "degradationOff",
-              "wearRateDeltaPct": 1.0451388888888888,
-              "action": {
-                "switchTo": [
-                  {
-                    "lap": 13,
-                    "compound": "soft"
-                  },
-                  {
-                    "lap": 23,
-                    "compound": "hard"
-                  },
-                  {
-                    "lap": 37,
-                    "compound": "medium"
-                  }
-                ]
-              }
-            },
-            {
-              "kind": "rivalPits",
-              "carId": 6,
-              "withinMs": 3000,
-              "action": "cover"
-            }
-          ]
-        },
-        "source": "rule",
-        "rule": "cover"
-      },
-      {
-        "policy": {
-          "stops": [
-            {
-              "lap": 17,
-              "compound": "medium"
-            },
-            {
-              "lap": 33,
-              "compound": "hard"
-            }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 16,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 33,
-              "toLap": 49,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 33,
-              "toLap": 49,
-              "action": {
-                "box": "hard"
-              }
-            },
-            {
-              "kind": "damage",
-              "lossMsPerLap": 1758.1282407407416,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "degradationOff",
-              "wearRateDeltaPct": 1.0451388888888888,
-              "action": {
-                "switchTo": [
-                  {
-                    "lap": 13,
-                    "compound": "soft"
-                  },
-                  {
-                    "lap": 23,
-                    "compound": "hard"
-                  },
-                  {
-                    "lap": 37,
-                    "compound": "medium"
-                  }
-                ]
-              }
-            },
-            {
-              "kind": "rivalPits",
-              "carId": 4,
-              "withinMs": 3000,
-              "action": "extend"
-            }
-          ]
-        },
-        "source": "rule",
-        "rule": "extend"
       }
     ]
   },
   "ePos": {
     "2": [
-      4.44348,
-      4.33976,
-      4.36778,
-      4.71426,
-      4.66136,
-      4.95364,
-      4.90876,
-      4.77986,
-      4.77906,
-      4.82764,
-      4.80836,
-      4.86898,
-      4.88004,
-      7.63294,
-      8.34776,
-      6.09116,
-      4.33976,
-      4.34268,
-      4.38734,
-      4.3653,
-      4.45018,
-      4.4123,
-      4.53788,
-      5.95838,
-      4.52284,
-      4.65476
+      4.34034,
+      4.37698,
+      4.71864,
+      4.66828,
+      4.95776,
+      4.9136,
+      4.79246,
+      4.78996,
+      4.83894,
+      4.81912,
+      4.88708,
+      4.89654,
+      7.64222,
+      8.3499,
+      6.10826,
+      4.3472,
+      4.39396,
+      4.37204,
+      4.45926,
+      4.41902,
+      4.54636,
+      5.95548
     ],
     "5": [
-      4.82266,
-      4.70734,
-      4.74758,
-      5.04574,
-      4.98966,
-      5.29472,
-      5.24538,
-      5.16286,
-      5.15904,
-      5.21322,
-      5.19032,
-      5.26774,
-      5.27846,
-      7.9595,
-      8.66714,
-      6.4558,
-      4.70734,
-      4.6574,
-      4.69346,
-      4.68114,
-      4.76384,
-      4.72192,
-      4.85634,
-      6.30276,
-      4.90254,
-      4.98976
+      4.65856,
+      4.70188,
+      5.07008,
+      5.01154,
+      5.31064,
+      5.25934,
+      5.15916,
+      5.15576,
+      5.21044,
+      5.1852,
+      5.26578,
+      5.27638,
+      7.96176,
+      8.66654,
+      6.4529,
+      4.65188,
+      4.7505,
+      4.67868,
+      4.76186,
+      4.7223,
+      4.85582,
+      6.29724
     ]
   },
   "winner": {
-    "2": 1,
-    "5": 17
+    "2": 0,
+    "5": 15
   }
 }

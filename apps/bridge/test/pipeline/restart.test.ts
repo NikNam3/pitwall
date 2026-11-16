@@ -348,7 +348,7 @@ describe('decisions sent while a restarted run restores its recording (C76, C38,
       { trackId: ZANDVOORT, id: 'wet', name: 'Wet', sources: 1, entries: { 'pitLoss.ms.green': known(25_000, 0) } },
     ];
     const player = carId(peekHeader(segment.rest[0]!.bytes)!.playerCarIndex);
-    const plan: PlanDecision = { kind: 'planCommitted', carId: player, policy: { stops: [{ lap: 30, compound: 'hard' }], triggers: [] } };
+    const plan: PlanDecision = { kind: 'planCommitted', carId: player, policy: { stops: [{ lap: 30, compound: 'hard' }] } };
     /** What the user and a teammate send, in this order: an edit of the set the run uses, a plan, a pick. */
     const send = (pipeline: FeedPipeline, cal: ReturnType<typeof fakeCalibration>): DecisionResult[] => {
       cal.edit(ZANDVOORT, 'dry', { 'pitLoss.ms.green': known(22_000, 0) });

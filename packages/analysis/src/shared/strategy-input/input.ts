@@ -1,7 +1,7 @@
 // The strategy input (SP4.3b spec §8.1; moved from `strategy/prepare.ts`, SP4.3b2 Task 6): the starting point
-// (`forecast-field`), `race-hazard`'s tables, the newest plan decision per our car, our cars' race positions and the
+// (`forecast-field`), `race-hazard`'s tables, the newest plan decision and the saved plan slots per our car, our cars' race positions and the
 // config from the view; structured-cloneable (C51). `strategy` and the calls read the same input (C43).
-import { latestPlan, unknown, type CarId, type DecisionRecord, type Known, type Policy, type RaceHazard, type StartingPoint } from '@pitwall/domain';
+import { activePlan, planSlots, unknown, type CarId, type DecisionRecord, type Known, type Policy, type RaceHazard, type Slot, type StartingPoint } from '@pitwall/domain';
 import { asOfNow, runAsOf, type Dependency, type EngineView } from '@pitwall/engine/readers';
 import { GAPS } from '../../gaps/index.ts';
 import { RACE_HAZARD } from '../../race-hazard/id.ts';
@@ -22,6 +22,11 @@ export type StrategyInput = {
   ourCars: CarId[];
   planned: CarId[];
   committed: Record<CarId, Policy | null>;
+  /**
+   * Per our car its saved plans (`planSlots`, SP4.3d spec §5.3) and the slot its active plan stands in (`activePlan`,
+   * R32: `null` without one or in no slot); absent: no slot saved.
+   */
+  slots?: Record<CarId, { saved: Partial<Record<Slot, Policy>>; active: Slot | null }>;
   positions: Record<CarId, number>;
   config: EngineView['config'];
   /** The one car of ours a part plans (SP4.3b Q4 D, Task 25); absent: every car planned, one after another. */
@@ -67,12 +72,15 @@ export function strategyInputFrom(view: EngineView): StrategyInput {
   const positions: Record<CarId, number> = {};
   // the decisions are facts, never changed (C24): read as the plain records they are
   const history = view.history as { readonly decisions: readonly DecisionRecord[] };
+  const slots: NonNullable<StrategyInput['slots']> = {};
   for (const car of cars) {
-    committed[car] = latestPlan(history, car);
+    const active = activePlan(history, car);
+    committed[car] = active?.policy ?? null;
+    slots[car] = { saved: planSlots(history, car), active: active?.slot ?? null };
     const position = live.cars.find((c) => c.id === car)?.timing.position;
     if (position !== undefined) positions[car] = position;
   }
   const hazard = (view.outputs.get(RACE_HAZARD) as RaceHazard | undefined) ?? unknown('insufficientData');
   const planned = cars.filter((car) => behaviourFor(STRATEGY_BEHAVIOUR, view, car).every((row) => row === 'plan'));
-  return { start: startOf(view), hazard, ourCars: cars, planned, committed, positions, config: view.config };
+  return { start: startOf(view), hazard, ourCars: cars, planned, committed, slots, positions, config: view.config };
 }

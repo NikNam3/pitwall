@@ -118,7 +118,7 @@ A speed target on a segment is a `*.budget.test.ts` file. `pnpm test` and `pnpm 
 
 **The acceptance gate's budget:** `pnpm test:acceptance` runs its files in parallel, each heavy recording in a file of its own (`apps/bridge/test/acceptance/groups.ts`). The reporter `vitest.acceptance.budget.ts` fails the run when one file or the whole run takes over 10 minutes. It measures wall time: an idle run takes about 4 minutes (2026-11-11), and the budget leaves room for normal load. A failure is profiled and fixed; the budget is not raised again.
 
-**Screenshots:** one baseline per display size (its first gallery case, default theme), under the total budget. The gallery and `fit.spec` cover every case and theme without images.
+**Screenshots:** one baseline per display size (its first gallery case, default theme): at most 2 per registered display plus 5 misc (top bar, shell, kit, frame states), computed from the widget registry (user ruling 2026-11-16). The gallery and `fit.spec` cover every case and theme without images.
 
 ## 7. Workflow
 

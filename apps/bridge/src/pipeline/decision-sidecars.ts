@@ -4,7 +4,7 @@
 // `<file>.decisions.json`. A replay or reprocess feeds both back (`recordingDecisions`); a recording without them runs
 // on no priors (`notApplicable`) and no decisions. A sidecar that cannot be read is treated as absent, with one warning.
 import { readFileSync, writeFileSync } from 'node:fs';
-import { decodeUiAction } from '@pitwall/contracts';
+import { decodeUiAction } from '@pitwall/contracts/ui/decode';
 import type { GivenDecision, PriorsSnapshot, RunPriors } from '@pitwall/domain';
 import type { Logger } from '../log.ts';
 
@@ -95,8 +95,9 @@ function decodeDecision(json: unknown): RecordedDecision | undefined {
 }
 
 /**
- * A decision of the sidecar: `calibrationChosen`, or a plan decision, whose car and policy follow the shape rules of
- * the plan uiActions (the contracts package's decoder, C73).
+ * A decision of the sidecar: `calibrationChosen`, or a plan decision (`planCommitted` with its optional slot,
+ * `planCleared`, `planSaved`, `planRemoved`), whose car, slot and policy follow the shape rules of the plan uiActions
+ * (the contracts package's decoder, C73).
  */
 function decodeGivenDecision(decision: unknown): GivenDecision | undefined {
   if (!isObject(decision)) return undefined;
@@ -107,11 +108,23 @@ function decodeGivenDecision(decision: unknown): GivenDecision | undefined {
         : undefined;
     case 'planCommitted': {
       const action = decodeUiAction({ kind: 'plan.commit', feedId: '', carId: decision['carId'], policy: decision['policy'] });
-      return action?.kind === 'plan.commit' ? { kind: 'planCommitted', carId: action.carId, policy: action.policy } : undefined;
+      if (action?.kind !== 'plan.commit') return undefined;
+      if (decision['slot'] === undefined) return { kind: 'planCommitted', carId: action.carId, policy: action.policy };
+      // the slot an activation names, by the shape rule of `plan.activate`
+      const slotted = decodeUiAction({ kind: 'plan.activate', feedId: '', carId: decision['carId'], slot: decision['slot'] });
+      return slotted?.kind === 'plan.activate' ? { kind: 'planCommitted', carId: action.carId, policy: action.policy, slot: slotted.slot } : undefined;
     }
     case 'planCleared': {
       const action = decodeUiAction({ kind: 'plan.clear', feedId: '', carId: decision['carId'] });
       return action?.kind === 'plan.clear' ? { kind: 'planCleared', carId: action.carId } : undefined;
+    }
+    case 'planSaved': {
+      const action = decodeUiAction({ kind: 'plan.save', feedId: '', carId: decision['carId'], slot: decision['slot'], policy: decision['policy'] });
+      return action?.kind === 'plan.save' ? { kind: 'planSaved', carId: action.carId, slot: action.slot, policy: action.policy } : undefined;
+    }
+    case 'planRemoved': {
+      const action = decodeUiAction({ kind: 'plan.remove', feedId: '', carId: decision['carId'], slot: decision['slot'] });
+      return action?.kind === 'plan.remove' ? { kind: 'planRemoved', carId: action.carId, slot: action.slot } : undefined;
     }
     default:
       return undefined;

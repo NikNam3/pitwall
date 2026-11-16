@@ -43,7 +43,7 @@ export const RACE_INTERACTION_CONFIG = defineConfig('race-interaction', {
   drsFromLap: 3,
   /**
    * Two cars within this gap are close (ms): the one close gap (C43) of the undercut and overcut experiments
-   * (`forecast-score`), `undercut`'s rivals, `strategy`'s cover and extend rules and `race-monte-carlo`'s cover rule.
+   * (`forecast-score`), `undercut`'s rivals and `race-monte-carlo`'s cover rule.
    * Source: research 12 §8.
    */
   closeGapMs: 3000,

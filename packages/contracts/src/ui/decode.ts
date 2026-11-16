@@ -1,6 +1,6 @@
 // Structural validation of UI state (spec 7.2). Input is untrusted: decoders return `undefined`, never throw,
 // and rebuild values from the known fields only. Widget names and option values are the UI's business.
-import { NOISE_COMPOUNDS, type CalibrationSource, type CarId, type FeedId, type InsightCategory, type NoiseCompound, type Policy, type SessionRef, type SessionUid, type Trigger } from '@pitwall/domain';
+import { NOISE_COMPOUNDS, PLAN_SLOTS, type Slot, type CalibrationSource, type CarId, type FeedId, type InsightCategory, type NoiseCompound, type Policy, type SessionRef, type SessionUid } from '@pitwall/domain';
 import type { CarRef, Geometry, LinkGroup, PanelSpec, TimeWindow, UiAction, Workbook, WorkbookWindow } from './types.ts';
 
 type Json = Record<string, unknown>;
@@ -185,6 +185,17 @@ export const decodeUiAction = (raw: unknown): UiAction | undefined => {
     }
     case 'plan.clear':
       return isString(raw.feedId) && isCarSlot(raw.carId) ? { kind: raw.kind, feedId: raw.feedId as FeedId, carId: raw.carId as CarId } : undefined;
+    case 'plan.save': {
+      const policy = decodePolicy(raw.policy);
+      return isString(raw.feedId) && isCarSlot(raw.carId) && isSlot(raw.slot) && policy !== undefined
+        ? { kind: raw.kind, feedId: raw.feedId as FeedId, carId: raw.carId as CarId, slot: raw.slot, policy }
+        : undefined;
+    }
+    case 'plan.remove':
+    case 'plan.activate':
+      return isString(raw.feedId) && isCarSlot(raw.carId) && isSlot(raw.slot)
+        ? { kind: raw.kind, feedId: raw.feedId as FeedId, carId: raw.carId as CarId, slot: raw.slot }
+        : undefined;
     case 'session.end':
       return isString(raw.feedId) ? { kind: raw.kind, feedId: raw.feedId as FeedId } : undefined;
     default:
@@ -221,50 +232,17 @@ const decodeStops = (raw: unknown): Policy['stops'] | undefined => {
   return stops.every((stop, i) => i === 0 || stop.lap > (stops[i - 1]?.lap ?? 0)) ? stops : undefined;
 };
 
-const decodeBox = (raw: unknown): { box: NoiseCompound } | undefined => {
-  if (!isObject(raw)) return undefined;
-  const box = decodeCompound(raw.box);
-  return box === undefined ? undefined : { box };
-};
+/** A plan slot of `PLAN_SLOTS`. */
+const isSlot = (value: unknown): value is Slot => (PLAN_SLOTS as readonly unknown[]).includes(value);
 
-/** A trigger of the closed kinds (`Trigger`), with its fields. */
-const decodeTrigger = (raw: unknown): Trigger | undefined => {
-  if (!isObject(raw)) return undefined;
-  switch (raw.kind) {
-    case 'neutralised': {
-      if ((raw.condition !== 'sc' && raw.condition !== 'vsc') || !isInteger(raw.fromLap) || !isInteger(raw.toLap)) return undefined;
-      const action = raw.action === 'stayOut' ? 'stayOut' : decodeBox(raw.action);
-      return action === undefined ? undefined : { kind: 'neutralised', condition: raw.condition, fromLap: raw.fromLap, toLap: raw.toLap, action };
-    }
-    case 'rain': {
-      const action = decodeBox(raw.action);
-      return isNumber(raw.wetnessMs) && action !== undefined ? { kind: 'rain', wetnessMs: raw.wetnessMs, action } : undefined;
-    }
-    case 'rivalPits':
-      return isCarSlot(raw.carId) && isNumber(raw.withinMs) && (raw.action === 'cover' || raw.action === 'extend')
-        ? { kind: 'rivalPits', carId: raw.carId as CarId, withinMs: raw.withinMs, action: raw.action }
-        : undefined;
-    case 'degradationOff': {
-      const switchTo = isObject(raw.action) ? decodeStops(raw.action.switchTo) : undefined;
-      return isNumber(raw.wearRateDeltaPct) && switchTo !== undefined
-        ? { kind: 'degradationOff', wearRateDeltaPct: raw.wearRateDeltaPct, action: { switchTo } }
-        : undefined;
-    }
-    case 'damage': {
-      const action = decodeBox(raw.action);
-      return isNumber(raw.lossMsPerLap) && action !== undefined ? { kind: 'damage', lossMsPerLap: raw.lossMsPerLap, action } : undefined;
-    }
-    default:
-      return undefined;
-  }
-};
-
-/** A plan's policy (SP4.3b spec §8.2): its stops and its triggers, rebuilt from the known fields. */
+/**
+ * A plan's policy (SP4.3d spec §5.1): its stops, rebuilt from the known fields. An old client's or sidecar's `triggers`
+ * field is accepted and dropped: old recordings replay, their triggers ignored.
+ */
 const decodePolicy = (raw: unknown): Policy | undefined => {
   if (!isObject(raw)) return undefined;
   const stops = decodeStops(raw.stops);
-  const triggers = mapAll(raw.triggers, decodeTrigger);
-  return stops === undefined || triggers === undefined ? undefined : { stops, triggers };
+  return stops === undefined ? undefined : { stops };
 };
 
 const decodeCalibrationSource = (raw: unknown): CalibrationSource | undefined => {

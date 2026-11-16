@@ -3,10 +3,10 @@
 // progress interpolated between our two crossings around that time (from the gaps `rejoin` computed with), on the track
 // file's outline (C62b). It reads only `rejoin`, never `pit-loss`: one stop cost (O8, C43). Quick (C31), on every frame,
 // so the ghost moves between two crossings instead of jumping once per crossing.
-import { known, MINI_SECTORS, pointAt, unknown, type CarId, type Known, type MapPoint, type PitCondition, type RejoinGhost, type SessionTime } from '@pitwall/domain';
+import { known, MINI_SECTORS, pointAt, unknown, type CarId, type Known, type MapPoint, type PitCondition, type RejoinGhost } from '@pitwall/domain';
 import type { DeepReadonly, EngineView, QuickCalculator } from '@pitwall/engine/readers';
 import { REJOIN, type RejoinOutput } from '../rejoin/index.ts';
-import type { CarCrossings } from '../shared/gapper-lines.ts';
+import { progressAt } from '../shared/crossing-history.ts';
 import { REJOIN_GHOST, type RejoinGhostOutput } from './index.ts';
 
 const CONDITIONS: readonly PitCondition[] = ['green', 'vsc', 'sc'];
@@ -20,27 +20,6 @@ function outlineOf(view: EngineView): Outline {
   if (!view.track.known) return NOT_APPLICABLE;
   const outline = view.track.value.outline;
   return outline.known && outline.value.length > 0 ? known(outline.value, view.track.at) : NOT_APPLICABLE;
-}
-
-/**
- * Where our car was at `t`, as an outline point: our progress interpolated between our two crossings around `t`, its
- * part within its lap over 50 as the lap fraction. `insufficientData` when our kept crossings begin after `t`.
- */
-function mapPointAt(ours: DeepReadonly<CarCrossings>, t: SessionTime, outline: readonly DeepReadonly<MapPoint>[], at: SessionTime): Known<MapPoint> {
-  const first = ours.at.findIndex((x) => x !== undefined);
-  if (first < 0 || (ours.at[first] as SessionTime) > t) return INSUFFICIENT;
-  let i = first;
-  for (let j = first + 1; j < ours.at.length; j++) {
-    const x = ours.at[j];
-    if (x === undefined) continue;
-    if (x > t) {
-      const from = ours.at[i] as SessionTime;
-      const progress = ours.fromProgress + i + ((j - i) * (t - from)) / (x - from);
-      return known(pointAt(outline, (progress % MINI_SECTORS) / MINI_SECTORS), at);
-    }
-    i = j;
-  }
-  return known(pointAt(outline, ((ours.fromProgress + i) % MINI_SECTORS) / MINI_SECTORS), at);
 }
 
 export const rejoinGhostCalculator: QuickCalculator<RejoinGhostOutput> = {
@@ -61,7 +40,9 @@ export const rejoinGhostCalculator: QuickCalculator<RejoinGhostOutput> = {
         if (!lossMs.known) return { mapPoint: lossMs };
         if (ours === undefined) return { mapPoint: INSUFFICIENT };
         if (!outline.known) return { mapPoint: outline };
-        return { mapPoint: mapPointAt(ours, now - lossMs.value, outline.value, now) };
+        // our progress then (the shared crossing history, C43), its part within its lap over 50 as the lap fraction
+        const progress = progressAt(ours, now - lossMs.value);
+        return { mapPoint: progress.known ? known(pointAt(outline.value, (progress.value % MINI_SECTORS) / MINI_SECTORS), now) : progress };
       };
       cars[r.carId] = { carId: r.carId, conditions: Object.fromEntries(CONDITIONS.map((c) => [c, at(c)])) as RejoinGhost['conditions'] };
     }

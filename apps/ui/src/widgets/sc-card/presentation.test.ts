@@ -1,6 +1,7 @@
-// The sc-card's presentation table (C66; plan Task 12, "as Task 11's"): `presentation.ts` maps every kind of
-// `session-phase-race` to `{ active }`: `neutralised` → `{ active: 'span' }` (the condition that is out is the span's
-// `detail.car`), every other kind → `{ active: 'none' }`. Contract assumed of `presentation.ts`:
+// The Box call's presentation table (C66; SP4.3d1 Task 12, kept from 4.3b: the out condition's block is labelled amber
+// with its laps left): `presentation.ts` maps every kind of `session-phase-race` to `{ active }`: `neutralised` →
+// `{ active: 'span' }` (the condition that is out is the span's `detail.car`), every other kind → `{ active: 'none' }`.
+// GREEN is never out: it is the block of no neutralisation. Contract assumed of `presentation.ts`:
 //  - `presentation`: `{ situations: { 'session-phase-race': Record<kind, { active: 'span' | 'none' }> } }`;
 //  - `activeCondition(spans: MachineSpans | undefined): 'sc' | 'vsc' | undefined`: the condition the session's open span
 //    names through its row (`span`: its `detail.car`, SC → `sc`, VSC → `vsc`), `undefined` for a `none` row, no open span

@@ -43,9 +43,9 @@ async function workbookNamesServed(uiDir: string): Promise<string[]> {
 }
 
 describe('serve seeds the default workbooks', { timeout: 20_000 }, () => {
-  it('a fresh UI dir lists the shipped car, garage, quali, race and strategy, not the fallback the UI state writes when it finds none', async () => {
+  it('a fresh UI dir lists the shipped car, garage, plan, quali, race and strategy, not the fallback the UI state writes when it finds none', async () => {
     const uiDir = join(mkdtempSync(join(tmpdir(), 'serve-seed-')), 'ui');
-    expect(await workbookNamesServed(uiDir)).toEqual(['car', 'garage', 'quali', 'race', 'strategy']);
+    expect(await workbookNamesServed(uiDir)).toEqual(['car', 'garage', 'plan', 'quali', 'race', 'strategy']);
   });
 
   it('an edited workbook of a default not yet seeded is replaced by the default and kept as a dated .bak', async () => {
@@ -53,7 +53,7 @@ describe('serve seeds the default workbooks', { timeout: 20_000 }, () => {
     mkdirSync(join(uiDir, 'workbooks'), { recursive: true });
     const mine = '{"name":"car","windows":[],"edited":"by hand"}\n';
     writeFileSync(join(uiDir, 'workbooks', 'car.json'), mine);
-    expect(await workbookNamesServed(uiDir)).toEqual(['car', 'garage', 'quali', 'race', 'strategy']);
+    expect(await workbookNamesServed(uiDir)).toEqual(['car', 'garage', 'plan', 'quali', 'race', 'strategy']);
     expect(readFileSync(join(uiDir, 'workbooks', 'car.json'), 'utf8')).not.toBe(mine);
     const backups = readdirSync(join(uiDir, 'workbooks')).filter((f) => /^car\.json\.bak-\d{4}-\d{2}-\d{2}$/.test(f));
     expect(backups).toHaveLength(1);

@@ -1,18 +1,17 @@
 <script lang="ts">
-  // The SC / VSC call (SP4.3b spec §10, V18; mockup docs/design/2026-11-12-sp4.3b/sc-card.html; Q5 B): per condition the
-  // Monte Carlo's places gained by a stop now, its chance of a gain and its places-gained strip on one shared scale, our
-  // rejoin position, the stop's loss badged with its source, and the trigger range. The condition that is out comes from
-  // the race's session phase through the presentation table (C66); the display maps, it computes nothing (C65).
-  import { SC_CALL_GAIN_BINS, type EstimateSource } from '@pitwall/domain';
-  import type { WidgetProps } from '../../kit/types.ts';
+  // The Box call (SP4.3d spec §6.3; mockup docs/design/2026-11-16-sp4.3d/sc-card.html): per condition block the six
+  // answers stay, box S, M, H, I, W with E[pos] and its SE, ΔPOS against stay, P(gain), the rejoin position and the
+  // position distribution on the block's one scale; compact, per condition the box option with the highest ΔPOS. The
+  // condition that is out comes from the race's session phase through the presentation table (C66); the display maps
+  // and formats, it computes nothing (C65).
   import DistStrip from '../../kit/dist/DistStrip.svelte';
-  import { fitCell, type CellPart } from '../../kit/grid/grid.ts';
-  import SourceBadge from '../../kit/values/SourceBadge.svelte';
+  import { placesHeader } from '../../kit/dist/places.ts';
+  import type { WidgetProps } from '../../kit/types.ts';
   import TextCell from '../../kit/values/TextCell.svelte';
   import { role, roleOrUndefined } from '../../theme/index.ts';
-  import { rowRole, stateRole } from './emphasis.ts';
+  import { bestRole, headerRole, noSetRole, outRole } from './emphasis.ts';
   import { activeCondition } from './presentation.ts';
-  import { buildRows, isDrawn, scaleOf, type ScRow } from './rows.ts';
+  import { buildBlocks, buildCompact, isDrawn, type BlockView, type CompactRow, type OptionRow } from './rows.ts';
   import * as text from './text.ts';
   import type { widget } from './widget.ts';
 
@@ -23,83 +22,81 @@
   /** The cell between two columns. */
   const GAP = ' ';
   /** Column widths (the mockup's). */
-  const COND = 3;
-  const DPOS = 4;
-  const PGAIN_FULL = 7;
-  const PGAIN_COMPACT = 4;
-  const REJ = 3;
-  const LOSS = 5;
-  const RANGE = 6;
-  /** The strip: one cell per bin (−4 … +4); zero is the fifth bin, its tick under the bin's centre. */
-  const STRIP = SC_CALL_GAIN_BINS.count;
-  const ZERO_BIN = 4;
-  /** A known loss: its value in LOSS − 1 cells, then the badge cell, blank for a session value. */
-  const LOSS_VALUE = LOSS - 1;
-  const NO_BADGE = ' ';
-  /** The strip's header: −4 over its first bin, 0 over the zero bin, +4 ending over its last. */
-  const STRIP_HEADER =
-    fitCell(text.stripLabels.low, ZERO_BIN) +
-    fitCell(text.stripLabels.zero, STRIP - ZERO_BIN - text.stripLabels.high.length) +
-    text.stripLabels.high;
+  const LABEL = 6;
+  const OPTION = 6;
+  const EPOS = 9;
+  const DPOS = 6;
+  const PGAIN = 7;
+  const REJ = 4;
 
   const full = $derived(size.mode === 'full');
-  const active = $derived(activeCondition(data.phase));
-  const rows = $derived(buildRows(data.call.value, active));
-  const scale = $derived(scaleOf(rows));
+  const out = $derived(activeCondition(data.phase));
+  const blocks = $derived(full ? buildBlocks(data.call.value, out) : []);
+  const compact = $derived(full ? [] : buildCompact(data.call.value, out));
+  const none = $derived(data.call.value.blocks.length === 0);
 </script>
 
-{#snippet loss(part: CellPart, source: EstimateSource)}{#if part.reason === undefined}<TextCell
-      {...part}
-      width={LOSS_VALUE}
-      align="right"
-    />{#if source.kind !== 'session'}<SourceBadge {source} />{:else}{NO_BADGE}{/if}{:else}<TextCell
-      {...part}
-      width={LOSS}
-      align="right"
-    />{/if}{/snippet}
+{#snippet label(name: string, isOut: boolean)}<TextCell text={name} width={LABEL} role={isOut ? outRole() : undefined} />{/snippet}
 
-{#snippet strip(r: ScRow)}{#if isDrawn(r.strip)}<DistStrip
-      form="gain"
-      bins={r.strip.bins}
-      {scale}
-      zero={{ underBin: ZERO_BIN }}
-      lit={r.active}
-    />{:else}<TextCell {...r.strip} width={STRIP} />{/if}{/snippet}
-
-{#snippet cells(r: ScRow)}{LEAD}<TextCell text={text.conditions[r.condition]} width={COND} />{GAP}<TextCell
-    {...r.dPos}
-    width={DPOS}
+{#snippet header(b: BlockView)}{LEAD}{@render label(b.label, b.out)}{GAP}<TextCell
+    text={text.headers.ePos}
+    width={EPOS}
     align="right"
-  />{GAP}<TextCell {...r.pGain} width={full ? PGAIN_FULL : PGAIN_COMPACT} align="right" />{#if full}{GAP}{@render strip(
-      r,
-    )}{/if}{GAP}<TextCell {...r.rejoin} width={REJ} align="right" />{#if full}{GAP}{@render loss(
-      r.loss,
-      r.source,
-    )}{GAP}<TextCell {...r.range} width={RANGE} align="right" />{/if}{/snippet}
+  />{GAP}<TextCell text={text.headers.dPos} width={DPOS} align="right" />{GAP}<TextCell
+    text={text.headers.pGain}
+    width={PGAIN}
+    align="right"
+  />{GAP}<TextCell text={text.headers.rejoin} width={REJ} align="right" />{GAP}<TextCell
+    text={placesHeader(b.places)}
+  />{/snippet}
+
+{#snippet cells(b: BlockView, r: OptionRow)}{LEAD}<TextCell text={r.label} width={LABEL} />{GAP}<TextCell
+    {...r.ePos}
+    width={EPOS}
+    align="right"
+  />{GAP}<TextCell {...r.dPos} width={DPOS} align="right" role={r.dPosRole} />{GAP}<TextCell
+    {...r.pGain}
+    width={PGAIN}
+    align="right"
+  />{GAP}<TextCell {...r.rejoin} width={REJ} align="right" />{GAP}{#if isDrawn(r.strip)}<DistStrip
+      form="places"
+      pmf={r.strip.pmf}
+      scale={b.scale}
+      ourPlace={b.ourPlace}
+      lit={r.best}
+    />{:else}<TextCell {...r.strip} width={b.places} />{/if}{/snippet}
+
+<!-- Compact: the option follows the label's column directly (the mockup's); a label that fills it (`VSC ~2`) keeps a gap. -->
+{#snippet compactCells(r: CompactRow)}{LEAD}{@render label(r.label, r.out)}{#if [...r.label].length >= LABEL}{GAP}{/if}<TextCell
+    text={r.option}
+    width={OPTION}
+  />{GAP}<TextCell {...r.dPos} width={DPOS} align="right" />{GAP}<TextCell
+    {...r.rejoin}
+    width={REJ}
+    align="right"
+  />{/snippet}
 
 <div class="block">
-  {#if full}
-    <div class="line faint">{LEAD}<TextCell
-        text={active === undefined ? '' : text.conditions[active]}
-        width={COND}
-        role={active === undefined ? undefined : stateRole()}
-      />{GAP}{fitCell(text.headers.dPos, DPOS, 'right')}{GAP}{fitCell(
-        text.headers.pGain,
-        PGAIN_FULL,
-        'right',
-      )}{GAP}{STRIP_HEADER}{GAP}{fitCell(text.headers.rejoin, REJ, 'right')}{GAP}{fitCell(
-        text.headers.loss,
-        LOSS,
-        'right',
-      )}{GAP}{fitCell(text.headers.range, RANGE, 'right')}</div>
+  {#if none}
+    <div class="line"><TextCell text="" reason="notApplicable" /></div>
+  {:else if full}
+    {#each blocks as b, i (b.condition)}
+      {#if i > 0}<div class="line"></div>{/if}
+      <div class="line" style:color={role(headerRole)}>{@render header(b)}</div>
+      {#each b.rows as r (r.answer)}
+        <div
+          class="line"
+          style:color={roleOrUndefined(r.noSet ? noSetRole() : bestRole(r.best))}
+        >{#if r.best}<strong>{@render cells(b, r)}</strong>{:else}{@render cells(b, r)}{/if}</div>
+      {/each}
+    {/each}
+  {:else}
+    {#each compact as r (r.condition)}
+      <div class="line" style:color={roleOrUndefined(bestRole(r.lit))}>{#if r.lit}<strong
+          >{@render compactCells(r)}</strong
+        >{:else}{@render compactCells(r)}{/if}</div>
+    {/each}
   {/if}
-  {#each rows as r, i (r.condition)}
-    <div
-      class="line"
-      style:color={roleOrUndefined(rowRole(r.active))}
-      style:background-color={full && i % 2 === 1 && !r.active ? role('bgRowBand') : undefined}
-    >{#if r.active}<strong>{@render cells(r)}</strong>{:else}{@render cells(r)}{/if}</div>
-  {/each}
 </div>
 
 <style>
@@ -108,8 +105,5 @@
   }
   .line {
     white-space: pre;
-  }
-  .faint {
-    color: var(--pw-textFaint);
   }
 </style>

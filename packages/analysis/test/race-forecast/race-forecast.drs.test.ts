@@ -122,7 +122,7 @@ describe('race-forecast: the fitted DRS factor, rewind (SP4.3b Task 10b R1)', ()
     const rewound = buildAt(rewoundView);
     const fresh = buildAt(g.viewAt(target));
     expect(rewound).toEqual(fresh);
-    const policies: Policy[] = Array.from({ length: rewound.cars }, (_, k) => ({ stops: [{ lap: 12 + (k % 3), compound: 'hard' as const }], triggers: [] }));
+    const policies: Policy[] = Array.from({ length: rewound.cars }, (_, k) => ({ stops: [{ lap: 12 + (k % 3), compound: 'hard' as const }] }));
     for (const s of [PLAIN, ...range(1, 10).map((id) => drawn(id))]) {
       expect(raceForecast(rewound, policies, s, createRng(s.id))).toEqual(raceForecast(fresh, policies, s, createRng(s.id)));
     }

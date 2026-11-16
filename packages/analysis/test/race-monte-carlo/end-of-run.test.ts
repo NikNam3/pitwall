@@ -1,24 +1,22 @@
-// `race-monte-carlo`'s end-of-run defects (SP4.3b1 Task 23b; spec §7.1, §7.3, §7.4; C2, C50): the rain draw, the rain
-// action, the cap's charge and the first batch. Starting points are built by hand (`../race-forecast/start.ts`); how
+// `race-monte-carlo`'s end-of-run defects (SP4.3b1 Task 23b; spec §7.1, §7.3, §7.4; C2, C50): the rain draw, the cap's
+// charge and the first batch. Starting points are built by hand (`../race-forecast/start.ts`); how
 // these tests read the inputs and outputs is stated in `support.ts`, `weather.test.ts` and here.
 //
 // What these tests take as the simulator's model (supervisor rulings, 2026-11-13):
 // - The rain of a scenario is one uniform `u` per scenario: it rains on lap L when `u` is below the forecast's chance
 //   on L, so the chance that a scenario sees any rain is the forecast's highest chance, not one less the product of
 //   the dry chances.
-// - A `rain` trigger boxes for its compound at the end of the lap it fires on and keeps the plan's later stops: the car
-//   returns to slicks as planned.
-// - The cap counts `raceForecast` calls: an evaluation that runs a `rivalPits` trigger's traced forecast costs 2, every
-//   other 1. Below the cap, the run uses it (no evaluation budget of cap / 2 for the whole run).
+// - The cap counts `raceForecast` calls: an evaluation costs 1 (a plan is a stop list, SP4.3d spec §5.1). Below the
+//   cap, the run uses it (no evaluation budget of cap / 2 for the whole run).
 // - No candidate is judged (dropped, tied, settled) before it has `n0` scenarios; a first batch under `n0` means the cap
 //   stopped the run (`capHit`).
-import { known, type CarId, type LapModelParams, type NoiseCompound, type Policy, type StartingPoint, type Trigger } from '@pitwall/domain';
+import { known, type LapModelParams, type Policy, type StartingPoint } from '@pitwall/domain';
 import { createRng } from '@pitwall/engine/readers';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as forecastModule from '../../src/race-forecast/index.ts';
-import { drawnScenario, raceMonteCarlo, scoreAll } from '../../src/race-monte-carlo/index.ts';
+import { drawnScenario, raceMonteCarlo } from '../../src/race-monte-carlo/index.ts';
 import { LAP_MODEL, NOISY, startingPoint, type CarSpec } from '../race-forecast/start.ts';
-import { carOf, CONFIG, hazard, mcInput, NO_STOP, rowOf, shareSe, stopAt } from './support.ts';
+import { carOf, CONFIG, hazard, mcInput, NO_STOP, shareSe, stopAt } from './support.ts';
 
 const runs = vi.hoisted(() => ({ n: 0 }));
 
@@ -58,10 +56,6 @@ function withWeather(spec: Parameters<typeof startingPoint>[0], weather: Startin
   return start;
 }
 
-const rainBox = (wetnessMs: number, box: NoiseCompound = 'inter'): Trigger => ({ kind: 'rain', wetnessMs, action: { box } });
-
-const cover = (carId: number, withinMs: number, stops: Policy['stops']): Policy => ({ stops, triggers: [{ kind: 'rivalPits', carId: carId as CarId, withinMs, action: 'cover' }] });
-
 describe('race-monte-carlo: the rain draw (Task 23b)', () => {
   // row 1
   it('rain is drawn once per scenario: with rainPct 4 % on every lap, about 4 % of scenarios get rain (within 3 SE over 2,000), not 1 − 0.96^laps', () => {
@@ -81,29 +75,6 @@ describe('race-monte-carlo: the rain draw (Task 23b)', () => {
   });
 });
 
-describe('race-monte-carlo: the rain action (Task 23b)', () => {
-  // row 2
-  it('the rain action boxes onto inter/wet at the trigger and keeps the plan\'s later stops (the car returns to slicks)', () => {
-    // certain rain on laps 3–5, dry after; our car alone ahead of a rival a minute behind
-    const start = withWeather({ lapsTotal: 14, cars: [{ gapMs: 0 }, { gapMs: 60_000 }], ours: [0], lapModel: WET_MODEL }, forecast(1, 14, (lap) => (lap >= 3 && lap <= 5 ? 100 : 0)));
-    const probe = drawnScenario(mcInput(start, { 0: [NO_STOP] }), createRng(61), 1).weather;
-    const threshold = probe.find((w) => w.lap === 4)!.wetnessMs;
-    expect(threshold).toBeGreaterThan(0);
-    const L = probe.find((w) => w.wetnessMs >= threshold)!.lap;
-    expect(L).toBe(4);
-    for (const box of ['inter', 'wet'] as const) {
-      // planned: one stop for mediums at the end of lap 9; the rain trigger boxes for `box` at the end of lap L first
-      const onRain: Policy = { stops: [{ lap: 9, compound: 'medium' }], triggers: [rainBox(threshold, box)] };
-      const kept: Policy = { stops: [{ lap: L, compound: box }, { lap: 9, compound: 'medium' }], triggers: [] };
-      const replaced = stopAt(L, box);
-      const rows = carOf(scoreAll(mcInput(start, { 0: [onRain, kept, replaced] }), createRng(61), 20), 0).rows;
-      expect(rowOf(rows, onRain).triggers).toEqual([{ kind: 'rain', fired: 1, worthPos: 0 }]);
-      expect(Math.abs(rowOf(rows, onRain).meanMs - rowOf(rows, kept).meanMs), `${box}: the later stop kept`).toBeLessThanOrEqual(1e-6);
-      expect(Math.abs(rowOf(rows, kept).meanMs - rowOf(rows, replaced).meanMs), `${box}: keeping the stop changes the race`).toBeGreaterThan(100);
-    }
-  });
-});
-
 describe('race-monte-carlo: the cap and the first batch (Task 23b)', () => {
   /** A six-car noisy field, our car slot 2; the rival ahead (slot 1) boxes at the end of lap 4. */
   function coverField(): StartingPoint {
@@ -115,24 +86,18 @@ describe('race-monte-carlo: the cap and the first batch (Task 23b)', () => {
   }
 
   // row 3
-  it('the cap is charged per forecast call: with a rivalPits candidate only the evaluations that call it cost 2', () => {
+  // ported (SP4.3d1 Task 3): plans are stop lists, every evaluation is one forecast call
+  it('the cap is charged per forecast call: five stop lists under the cap spend it call by call', () => {
     // five candidates under a cap of 190: the first batch is under n0 for every candidate, so the cap is spent
     const cap = 190;
     expect(cap / 5).toBeLessThan(CONFIG.n0);
-    const plain = [stopAt(3), stopAt(4), stopAt(5), stopAt(4, 'medium')];
-    const withCover = [...plain, cover(1, 3_000, [{ lap: 6, compound: 'hard' }])];
-    const withoutCover = [...plain, stopAt(6)];
-    for (const [what, candidates] of [
-      ['one rivalPits candidate', withCover],
-      ['no rivalPits candidate', withoutCover],
-    ] as const) {
-      runs.n = 0;
-      const result = carOf(raceMonteCarlo(mcInput(coverField(), { 2: candidates }, { config: { maxScenarioPolicies: cap } }), createRng(67), cap), 2);
-      expect(runs.n, `${what}: never above the cap`).toBeLessThanOrEqual(cap);
-      // one candidate in five costs 2: charging every evaluation 2 spends about 60 % of the cap
-      expect(runs.n, `${what}: the cap is spent call by call`).toBeGreaterThan(0.85 * cap);
-      expect(result.capHit, what).toBe(true);
-    }
+    const candidates = [stopAt(3), stopAt(4), stopAt(5), stopAt(4, 'medium'), stopAt(6)];
+    runs.n = 0;
+    const result = carOf(raceMonteCarlo(mcInput(coverField(), { 2: candidates }, { config: { maxScenarioPolicies: cap } }), createRng(67), cap), 2);
+    expect(runs.n, 'never above the cap').toBeLessThanOrEqual(cap);
+    // charging an evaluation 2 would spend about half of the cap
+    expect(runs.n, 'the cap is spent call by call').toBeGreaterThan(0.85 * cap);
+    expect(result.capHit).toBe(true);
   });
 
   /** Our car (slot 0) a minute ahead of the field on worn tyres (30 %, 50 ms per % wear): it wins every scenario with one stop. */
@@ -166,14 +131,14 @@ describe('race-monte-carlo: the cap and the first batch (Task 23b)', () => {
 
   // row 5
   it('a seeded run stays bit-identical', () => {
-    // two cars, an approximate rain forecast, a rain trigger, a rivalPits candidate, SC and VSC chances
+    // two cars, an approximate rain forecast, SC and VSC chances
     const cars: CarSpec[] = Array.from({ length: 6 }, (_, i) => ({ ...NOISY, retireRate: 0, gapMs: 1_500 * i, paceMs: 90_000 + 60 * i }));
     const start = withWeather({ lapsTotal: 10, cars, ours: [2, 3], lapModel: WET_MODEL }, forecast(1, 10, (lap) => (lap >= 4 ? 30 : 5), 'approximate'));
     [start.stopLow[1], start.stopMid[1], start.stopHigh[1]] = [4, 4, 4];
     start.owesStop[1] = 1;
     const hz = hazard(10, { sc: { 2: 0.2 }, vsc: { 3: 0.1 } });
     const candidates = () => ({
-      2: [NO_STOP, stopAt(4), { stops: [{ lap: 7, compound: 'hard' as const }], triggers: [rainBox(1_500)] }, cover(1, 3_000, [{ lap: 6, compound: 'hard' }])],
+      2: [NO_STOP, stopAt(4), stopAt(7, 'inter'), { stops: [{ lap: 6, compound: 'hard' as const }, { lap: 8, compound: 'medium' as const }] }],
       3: [NO_STOP, stopAt(5, 'medium')],
     });
     for (const cap of [300, 2_000]) {

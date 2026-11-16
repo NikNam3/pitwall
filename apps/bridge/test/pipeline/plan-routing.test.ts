@@ -7,7 +7,9 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { carId, feedId, known, latestPlan, toSessionTime, type DecisionRecord, type FeedId, type Policy } from '@pitwall/domain';
+import {
+  activePlan, activeSlot, carId, feedId, known, latestPlan, planSlots, toSessionTime, type DecisionRecord, type FeedId, type NoiseCompound, type Policy, type Slot,
+} from '@pitwall/domain';
 import type { QuickCalculator } from '@pitwall/engine';
 import { PacketId } from '@pitwall/protocol';
 import { ScenarioBuilder, packetBytes } from '../../../../packages/engine/test/builders/index.ts';
@@ -16,7 +18,8 @@ import { TopicHub } from '../../src/hub/topic-hub.ts';
 import { PwrecSource } from '../../src/input/pwrec-source.ts';
 import { createLogger } from '../../src/log.ts';
 import { recordingDecisions } from '../../src/pipeline/decision-sidecars.ts';
-import { FeedPipeline } from '../../src/pipeline/feed-pipeline.ts';
+import { FeedPipeline, type DecisionResult } from '../../src/pipeline/feed-pipeline.ts';
+import { isPlanAction } from '../../src/pipeline/plan-routing.ts';
 import { TeamFeeds } from '../../src/pipeline/team-feeds.ts';
 import { openDatabase } from '../../src/storage/db.ts';
 import { fakeCalibration } from '../helpers/fake-calibration.ts';
@@ -37,14 +40,8 @@ const decisionsSidecar = (file: string): string => `${file}.decisions.json`;
 type SidecarEntry = { recordIndex: number; decision: { kind: string } & Record<string, unknown> };
 const sidecarOf = (file: string): SidecarEntry[] => (existsSync(decisionsSidecar(file)) ? (JSON.parse(readFileSync(decisionsSidecar(file), 'utf8')) as SidecarEntry[]) : []);
 
-/** A plan with one stop on lap `lap` (the builder's race has 10) and its triggers, thresholds included. */
-const policyAt = (lap: number): Policy => ({
-  stops: [{ lap, compound: 'hard' }],
-  triggers: [
-    { kind: 'neutralised', condition: 'sc', fromLap: 1, toLap: lap, action: { box: 'medium' } },
-    { kind: 'rivalPits', carId: carId(2), withinMs: 1_500, action: 'cover' },
-  ],
-});
+/** A plan with one stop on lap `lap` (the builder's race has 10), a stop list (SP4.3d spec §5.1). */
+const policyAt = (lap: number): Policy => ({ stops: [{ lap, compound: 'hard' }] });
 const commit = (from: FeedId, car: number, lap: number): PlanAction => ({ kind: 'plan.commit', feedId: from, carId: carId(car), policy: policyAt(lap) });
 
 /** What the probe saw on one frame: the race clock, the decisions in the projection and the plans of cars 0 and 1. */
@@ -277,5 +274,208 @@ describe('plan routing to the team\'s feeds (C1a, C76)', () => {
     expect(sidecarOf(fileB).map((e) => [e.decision.kind, e.decision['carId']]).sort()).toEqual([['planCommitted', 0], ['planCommitted', 1]]);
     const replayB = await replay(fileB, B);
     expect(plansPerFrame(replayB)).toEqual(plansPerFrame(bb.seen));
+  });
+});
+
+// SP4.3d1 Task 10: plan slots across the team's feeds (C1a, C27a, C73, C76; SP4.3d spec §6.1). The flashback row is in
+// `plan-decisions.test.ts` (a real flashback segment).
+const save = (from: FeedId, car: number, slot: Slot, lap: number, compound: NoiseCompound = 'hard'): PlanAction =>
+  ({ kind: 'plan.save', feedId: from, carId: carId(car), slot, policy: { stops: [{ lap, compound }] } });
+const activate = (from: FeedId, car: number, slot: Slot): PlanAction => ({ kind: 'plan.activate', feedId: from, carId: carId(car), slot });
+const remove = (from: FeedId, car: number, slot: Slot): PlanAction => ({ kind: 'plan.remove', feedId: from, carId: carId(car), slot });
+const rejected = { ok: false, reason: 'invalid', message: expect.stringMatching(/\S/) };
+/** The decisions per frame, by race-clock time: what a replay must agree with its live run on. */
+const decisionsPerFrame = (seen: readonly Seen[]) => seen.map((s) => [s.at, JSON.stringify(s.decisions)]);
+/** A sidecar's decisions without their record index. */
+const sidecarDecisions = (file: string) => sidecarOf(file).map((e) => e.decision);
+
+/**
+ * Feeds A (player car 0) and B (player car 1) of team 3: A runs 8 frames, B 5; then feed A sends each of `actions` in
+ * turn, both feeds running 2 frames after each, and 4 more at the end.
+ */
+async function twoFeedsWith(actions: readonly PlanAction[]) {
+  const b = await bridge();
+  const a = b.feed(A);
+  const bb = b.feed(B);
+  const packetsA = builder(0).frames(40, () => {}).packets();
+  const packetsB = builder(1).frames(40, () => {}).packets();
+  a.push(slice(packetsA, 0, 8));
+  bb.push(slice(packetsB, 0, 5));
+  expect([...b.teams.teamOf(A)].sort()).toEqual([A, B]);
+  const answers: DecisionResult[] = [];
+  let [atA, atB] = [8, 5];
+  for (const action of actions) {
+    answers.push(b.routing.commit(action));
+    a.push(slice(packetsA, atA, atA + 2));
+    bb.push(slice(packetsB, atB, atB + 2));
+    [atA, atB] = [atA + 2, atB + 2];
+  }
+  a.push(slice(packetsA, atA, atA + 4));
+  bb.push(slice(packetsB, atB, atB + 4));
+  return { answers, a, bb, fileA: await a.end(), fileB: await bb.end() };
+}
+
+describe('plan slots across the team\'s feeds (SP4.3d1 Task 10; C1a, C73, C76)', () => {
+  it('the slot actions are plan actions: the routing takes them', () => {
+    for (const action of [save(A, 0, 'A', 6), remove(A, 0, 'A'), activate(A, 0, 'A')]) expect(isPlanAction(action), action.kind).toBe(true);
+  });
+
+  it('save A on feed 1: both feeds\' logs and sidecars hold the planSaved, each at its engine\'s current frame', async () => {
+    const { answers, a, bb, fileA, fileB } = await twoFeedsWith([save(A, 0, 'A', 6)]);
+    expect(answers).toEqual([{ ok: true }]);
+    const decision = { kind: 'planSaved', carId: 0, slot: 'A', policy: policyAt(6) };
+    expect(last(a.seen).decisions).toEqual([{ ...decision, frame: expect.any(Number) }]);
+    expect(last(bb.seen).decisions).toEqual([{ ...decision, frame: expect.any(Number) }]);
+    expect(last(a.seen).decisions[0]!.frame - last(bb.seen).decisions[0]!.frame).toBe(3);
+    for (const feed of [a, bb]) {
+      const decisions = last(feed.seen).decisions;
+      expect(planSlots({ decisions }, carId(0))).toEqual({ A: policyAt(6) });
+      // saving is no activation
+      expect(latestPlan({ decisions }, carId(0))).toBeNull();
+    }
+    expect(sidecarDecisions(fileA)).toEqual([decision]);
+    expect(sidecarDecisions(fileB)).toEqual([decision]);
+  });
+
+  it('activate a saved slot: both logs get planCommitted with the slot\'s policy and the slot named', async () => {
+    const { answers, a, bb, fileA, fileB } = await twoFeedsWith([save(A, 0, 'A', 6), activate(A, 0, 'A')]);
+    expect(answers).toEqual([{ ok: true }, { ok: true }]);
+    const committed = { kind: 'planCommitted', carId: 0, policy: policyAt(6), slot: 'A' };
+    for (const feed of [a, bb]) {
+      const decisions = last(feed.seen).decisions;
+      expect(decisions.at(-1)).toEqual({ ...committed, frame: expect.any(Number) });
+      expect(latestPlan({ decisions }, carId(0))).toEqual(policyAt(6));
+      expect(activeSlot({ decisions }, carId(0))).toBe('A');
+    }
+    for (const file of [fileA, fileB]) expect(sidecarDecisions(file).map((d) => d.kind)).toEqual(['planSaved', 'planCommitted']);
+    expect(sidecarDecisions(fileA)[1]).toEqual(committed);
+  });
+
+  it('activate an empty slot: rejected, nothing stored', async () => {
+    const { answers, a, bb, fileA, fileB } = await twoFeedsWith([activate(A, 0, 'C')]);
+    expect(answers).toEqual([rejected]);
+    for (const feed of [a, bb]) for (const s of feed.seen) expect(s.decisions).toEqual([]);
+    expect(sidecarOf(fileA)).toEqual([]);
+    expect(sidecarOf(fileB)).toEqual([]);
+  });
+
+  it('remove of the active slot: rejected; a slot that is not active is removed', async () => {
+    const { answers, a, bb, fileA, fileB } = await twoFeedsWith([
+      save(A, 0, 'A', 4), save(A, 0, 'B', 7), activate(A, 0, 'A'), remove(A, 0, 'A'), remove(A, 0, 'B'),
+    ]);
+    expect(answers).toEqual([{ ok: true }, { ok: true }, { ok: true }, rejected, { ok: true }]);
+    const kinds = ['planSaved', 'planSaved', 'planCommitted', 'planRemoved'];
+    for (const feed of [a, bb]) {
+      const decisions = last(feed.seen).decisions;
+      expect(decisions.map((d) => d.kind)).toEqual(kinds);
+      expect(decisions.at(-1)).toMatchObject({ kind: 'planRemoved', carId: 0, slot: 'B' });
+      expect(planSlots({ decisions }, carId(0))).toEqual({ A: policyAt(4) });
+      expect(activeSlot({ decisions }, carId(0))).toBe('A');
+    }
+    for (const file of [fileA, fileB]) expect(sidecarDecisions(file).map((d) => d.kind)).toEqual(kinds);
+  });
+
+  // SP4.3d1 final review F1 (C43, R32): the active slot is `activePlan(...)?.slot`, the one answer the board shows.
+  it('slot A activated, then saved again with another policy: remove A is accepted, the committed policy stays active in no slot', async () => {
+    const { answers, a, bb, fileA, fileB } = await twoFeedsWith([save(A, 0, 'A', 4), activate(A, 0, 'A'), save(A, 0, 'A', 9), remove(A, 0, 'A')]);
+    expect(answers).toEqual([{ ok: true }, { ok: true }, { ok: true }, { ok: true }]);
+    const kinds = ['planSaved', 'planCommitted', 'planSaved', 'planRemoved'];
+    for (const feed of [a, bb]) {
+      const decisions = last(feed.seen).decisions;
+      expect(decisions.map((d) => d.kind)).toEqual(kinds);
+      expect(decisions.at(-1)).toMatchObject({ kind: 'planRemoved', carId: 0, slot: 'A' });
+      expect(planSlots({ decisions }, carId(0))).toEqual({});
+      expect(activePlan({ decisions }, carId(0))).toEqual({ policy: policyAt(4), slot: null });
+    }
+    for (const file of [fileA, fileB]) expect(sidecarDecisions(file).map((d) => d.kind)).toEqual(kinds);
+  });
+
+  it('slot B saved, then plan.commit without a slot with B\'s policy: remove B is rejected with a reason, nothing stored', async () => {
+    const { answers, a, bb, fileA, fileB } = await twoFeedsWith([save(A, 0, 'B', 7), commit(A, 0, 7), remove(A, 0, 'B')]);
+    expect(answers).toEqual([{ ok: true }, { ok: true }, rejected]);
+    const kinds = ['planSaved', 'planCommitted'];
+    for (const feed of [a, bb]) {
+      const decisions = last(feed.seen).decisions;
+      expect(decisions.map((d) => d.kind)).toEqual(kinds);
+      expect(activePlan({ decisions }, carId(0))).toEqual({ policy: policyAt(7), slot: 'B' });
+    }
+    for (const file of [fileA, fileB]) expect(sidecarDecisions(file).map((d) => d.kind)).toEqual(kinds);
+  });
+
+  it('a feed joining after saves of A, B and activate B receives planSaved A, B and planCommitted B on one frame', async () => {
+    const b = await bridge();
+    const a = b.feed(A);
+    const packetsA = builder(0).frames(30, () => {}).packets();
+    a.push(slice(packetsA, 0, 6));
+    // A alone saves A, saves it again (the newest per slot is handed on), saves B and activates B
+    let at = 6;
+    for (const action of [save(A, 0, 'A', 3), save(A, 0, 'A', 4), save(A, 0, 'B', 7), activate(A, 0, 'B')]) {
+      expect(b.routing.commit(action)).toEqual({ ok: true });
+      a.push(slice(packetsA, at, at + 2));
+      at += 2;
+    }
+    expect(last(a.seen).decisions).toHaveLength(4);
+
+    // B's session starts without Participants (the builder's leading one is dropped); they arrive with its frame 5
+    const bb = b.feed(B);
+    const later = builder(1).frames(5, () => {}).participants({ participants: TEAMS.map((teamId) => ({ teamId })) }).frames(5, () => {}).packets();
+    const firstParticipants = later.findIndex(({ packet }) => packet.packetId === PacketId.participants);
+    const secondParticipants = later.findIndex(({ packet }, i) => i > firstParticipants && packet.packetId === PacketId.participants);
+    bb.push(later.slice(0, secondParticipants).filter((_, i) => i !== firstParticipants));
+    expect([...b.teams.teamOf(B)]).toEqual([B]);
+    expect(bb.seen.every((s) => s.decisions.length === 0)).toBe(true);
+    const before = bb.seen.length;
+
+    bb.push(later.slice(secondParticipants));
+    expect([...b.teams.teamOf(B)].sort()).toEqual([A, B]);
+    const joinedAt = bb.seen.findIndex((s, i) => i >= before && s.decisions.length > 0);
+    expect(joinedAt).toBeGreaterThanOrEqual(before);
+    const joined = bb.seen[joinedAt]!.decisions;
+    expect(joined.map((d) => [d.kind, 'slot' in d ? d.slot : undefined]).sort()).toEqual([['planCommitted', 'B'], ['planSaved', 'A'], ['planSaved', 'B']]);
+    expect(new Set(joined.map((d) => d.frame)).size).toBe(1);
+    expect(planSlots({ decisions: joined }, carId(0))).toEqual({ A: policyAt(4), B: policyAt(7) });
+    expect(activeSlot({ decisions: joined }, carId(0))).toBe('B');
+    expect(latestPlan({ decisions: joined }, carId(0))).toEqual(policyAt(7));
+    // A's log is unchanged by B joining
+    expect(last(a.seen).decisions).toHaveLength(4);
+    // and B's sidecar holds them, so its recording replays alone
+    const fileB = await bb.end();
+    expect(sidecarDecisions(fileB).map((d) => d.kind).sort()).toEqual(['planCommitted', 'planSaved', 'planSaved']);
+    const replayB = await replay(fileB, B);
+    expect(decisionsPerFrame(replayB)).toEqual(decisionsPerFrame(bb.seen));
+  });
+
+  it('each sidecar replayed alone gives the same decisions per frame as its live run (C76)', async () => {
+    const { answers, a, bb, fileA, fileB } = await twoFeedsWith([
+      save(A, 0, 'A', 4), save(A, 0, 'B', 7, 'medium'), activate(A, 0, 'B'), remove(A, 0, 'A'), save(A, 1, 'G1', 5),
+    ]);
+    expect(answers.every((x) => x.ok)).toBe(true);
+    const kinds = ['planSaved', 'planSaved', 'planCommitted', 'planRemoved', 'planSaved'];
+    expect(last(a.seen).decisions.map((d) => d.kind)).toEqual(kinds);
+    expect(last(bb.seen).decisions.map((d) => d.kind)).toEqual(kinds);
+    // each sidecar decodes every slot decision
+    expect(recordingDecisions(fileA).decisions.map((e) => e.decision.kind)).toEqual(kinds);
+    expect(recordingDecisions(fileB).decisions.map((e) => e.decision.kind)).toEqual(kinds);
+    const replayA = await replay(fileA, A);
+    const replayB = await replay(fileB, B);
+    expect(decisionsPerFrame(replayA)).toEqual(decisionsPerFrame(a.seen));
+    expect(decisionsPerFrame(replayB)).toEqual(decisionsPerFrame(bb.seen));
+  });
+
+  // the range check the decoder cannot make, and the closed lists again (C73): nothing stored or handed on
+  const invalid: Array<[string, PlanAction]> = [
+    ['a stop lap past the race\'s laps', save(A, 0, 'A', 11)],
+    ['an unknown compound', save(A, 0, 'A', 5, 'ultrasoft' as NoiseCompound)],
+    ['an unknown compound in a commit', { kind: 'plan.commit', feedId: A, carId: carId(0), policy: { stops: [{ lap: 5, compound: 'ultrasoft' as NoiseCompound }] } }],
+    ['an unknown slot (save)', save(A, 0, 'D' as Slot, 5)],
+    ['an unknown slot (remove)', remove(A, 0, 'D' as Slot)],
+    ['an unknown slot (activate)', activate(A, 0, 'D' as Slot)],
+  ];
+  it.each(invalid)('the range check: %s → rejected with a reason, nothing stored', async (_name, action) => {
+    const { answers, a, bb, fileA, fileB } = await twoFeedsWith([action]);
+    expect(answers).toEqual([rejected]);
+    for (const feed of [a, bb]) for (const s of feed.seen) expect(s.decisions).toEqual([]);
+    expect(sidecarOf(fileA)).toEqual([]);
+    expect(sidecarOf(fileB)).toEqual([]);
   });
 });

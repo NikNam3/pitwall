@@ -148,7 +148,10 @@ export class UiState {
         return INVALID;
       case 'plan.commit':
       case 'plan.clear':
-        // The team's feed pipelines' decisions (C76, SP4.3b Task 17), not UI state.
+      case 'plan.save':
+      case 'plan.remove':
+      case 'plan.activate':
+        // The team's feed pipelines' decisions, routed by `PlanRouting` (C76, SP4.3b Task 17, SP4.3d1 Task 10), not UI state.
         return INVALID;
     }
   }

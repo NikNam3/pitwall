@@ -3,7 +3,7 @@
 // beyond `zDrop` SEs of the paired difference), the top `rescoreTop` scored again together up to a common count. The cap
 // is a count of `raceForecast` calls (C2: no clock), shared by our cars and charged per call made (Task 23b); `scoreAll`
 // scores every candidate on the same scenarios, nothing merged or dropped.
-import { NOISE_COMPOUNDS, type CarId, type McRow, type Policy } from '@pitwall/domain';
+import { known, NOISE_COMPOUNDS, type CarId, type McRow, type Policy, unknown } from '@pitwall/domain';
 import type { Rng } from '@pitwall/engine/readers';
 import { RESCORE_SHARE } from './constants.ts';
 import { paired, rank, ties, type Scored } from './rank.ts';
@@ -19,9 +19,6 @@ type Cand = {
   points: Float64Array;
   /** Race time; NaN where the car retired. */
   time: Float64Array;
-  /** Per trigger: the scenarios it fired in, and the positions summed over them. */
-  fired: Float64Array;
-  firedPos: Float64Array;
 };
 
 /** The first scenario id of the re-scoring (spec §7.3 step 5): fresh scenarios, none of the search's. */
@@ -37,8 +34,6 @@ const newCand = (c: McCandidate, capacity: number, from = 0): Cand => ({
   pos: new Float64Array(Math.min(capacity, FIRST_CAPACITY)),
   points: new Float64Array(Math.min(capacity, FIRST_CAPACITY)),
   time: new Float64Array(Math.min(capacity, FIRST_CAPACITY)),
-  fired: new Float64Array(c.policy.triggers.length),
-  firedPos: new Float64Array(c.policy.triggers.length),
 });
 
 const grown = (a: Float64Array, size: number): Float64Array => {
@@ -55,22 +50,14 @@ function extend(run: Run, config: McConfig, car: number, x: Cand, to: number): v
     x.points = grown(x.points, size);
     x.time = grown(x.time, size);
   }
-  const fired = new Uint8Array(x.c.policy.triggers.length);
   const cars = run.start.cars;
   for (let i = x.n; i < to; i++) {
     const id = x.from + i + 1;
-    const policies = policiesIn(run, id, car, x.c.policy, fired);
-    const r = forecast(run, policies, scenarioOf(run, id).scenario);
+    const r = forecast(run, policiesIn(run, id, car, x.c.policy), scenarioOf(run, id).scenario);
     const p = r.position[car] ?? 0;
-    const pos = p === 0 ? cars : p;
-    x.pos[i] = pos;
+    x.pos[i] = p === 0 ? cars : p;
     x.points[i] = p === 0 ? 0 : (config.points[p - 1] ?? 0);
     x.time[i] = p === 0 ? Number.NaN : (r.raceTimeMs[car] ?? 0);
-    for (let t = 0; t < fired.length; t++) {
-      if (fired[t] !== 1) continue;
-      x.fired[t] = (x.fired[t] ?? 0) + 1;
-      x.firedPos[t] = (x.firedPos[t] ?? 0) + pos;
-    }
   }
   x.n = Math.max(x.n, to);
 }
@@ -138,12 +125,25 @@ function quantile(pmf: number[], q: number): number {
   return pmf.length;
 }
 
+/** Whether candidate `x` is never dropped or merged away: a saved plan's (its slot) or the active plan (SP4.3d spec §5.3). */
+const kept = (x: Cand, active: Policy | null): boolean => (x.c.slot ?? null) !== null || same(active, x.c.policy);
+
+/**
+ * The candidate the rows' ΔPOS is against (SP4.3d spec §5.3): the active plan's, else slot A's; `undefined` without
+ * either.
+ */
+function planOf(cands: readonly McCandidate[], active: Policy | null): McCandidate | undefined {
+  return active !== null ? cands.find((c) => same(active, c.policy)) : cands.find((c) => c.slot === 'A');
+}
+
 /**
  * The ranked rows of car `car`'s candidates (spec §7.4), each over its own scenarios (a common prefix). With `ref`
  * (the leader over these scenarios, ranked above them) the rows keep the order of `cands`, and each row's difference,
- * SE and tie are against `ref`.
+ * SE and tie are against `ref`. With `plan` (the reference plan over these scenarios, SP4.3d spec §5.3) each other
+ * row's `diffPlan` and `sePlan` are the plan's position minus the row's, paired (positive = the row finishes ahead);
+ * their `at` is 0: the job stamps them with the trigger's time.
  */
-function rowsOf(run: Run, input: McInput, car: number, cands: readonly Cand[], ref?: Cand): McRow[] {
+function rowsOf(run: Run, input: McInput, car: number, cands: readonly Cand[], ref?: Cand, plan?: Cand): McRow[] {
   const { zTie, tieBand } = input.config;
   const scored = cands.map(scoredOf);
   const ranking = rank(scored, zTie, tieBand);
@@ -173,6 +173,7 @@ function rowsOf(run: Run, input: McInput, car: number, cands: readonly Cand[], r
     const positionPmf = counts.map((c) => c / x.n);
     const isCommitted = same(committed, x.c.policy);
     const diff = ranking.diff[i] ?? { mean: 0, se: 0 };
+    const vsPlan = plan === undefined || plan.c === x.c ? null : paired(s.pos, scoredOf(plan).pos);
     return {
       policy: x.c.policy,
       source: x.c.source,
@@ -182,18 +183,13 @@ function rowsOf(run: Run, input: McInput, car: number, cands: readonly Cand[], r
       meanMs: s.meanMs,
       quantiles: { p10: quantile(positionPmf, 0.1), p50: quantile(positionPmf, 0.5), p90: quantile(positionPmf, 0.9) },
       pGain: gain / x.n,
-      triggers: x.c.policy.triggers.map((t, k) => {
-        const n = x.fired[k] ?? 0;
-        // what it was worth: E[position] where it did not fire less E[position] where it fired (0 where either is empty)
-        const posFired = x.firedPos[k] ?? 0;
-        const posAll = s.ePos * x.n;
-        const worthPos = n === 0 || n === x.n ? 0 : (posAll - posFired) / (x.n - n) - posFired / n;
-        return { kind: t.kind, fired: n / x.n, worthPos };
-      }),
       diff: diff.mean,
       se: diff.se,
       tie: ranking.tie[i] ?? false,
       committed: isCommitted,
+      slot: x.c.slot ?? null,
+      diffPlan: vsPlan === null ? unknown('notApplicable') : known(vsPlan.mean, 0),
+      sePlan: vsPlan === null ? unknown('notApplicable') : known(vsPlan.se, 0),
       infeasible: isCommitted ? infeasible(run, car, x.c.policy) : null,
       // placeholders until SP4.3b2 Task 6: the rank by place, no deltas
       rank: index + 1,
@@ -211,7 +207,7 @@ function setup(input: McInput, rng: Rng): { run: Run; cars: number[] } {
     const c = Number(key);
     fixed[c] = input.committed[c as CarId] ?? input.candidates[c as CarId]?.[0]?.policy ?? null;
   }
-  const run = createRun(input.start, input.hazard, input.rivalRules, fixed, rng);
+  const run = createRun(input.start, input.hazard, input.rivalRules, fixed, rng, input.reactions);
   const cars = Object.keys(input.candidates)
     .map(Number)
     .filter((c) => (input.candidates[c as CarId]?.length ?? 0) > 0);
@@ -224,42 +220,42 @@ export function scoreAll(input: McInput, rng: Rng, scenarios: number): McResult 
   for (const car of cars) {
     const cands = (input.candidates[car as CarId] ?? []).map((c) => newCand(c, scenarios));
     for (const x of cands) extend(run, input.config, car, x, scenarios);
-    out[car as CarId] = { rows: rowsOf(run, input, car, cands), scenarios, capHit: false, unresolvedTie: false };
+    const planC = planOf(input.candidates[car as CarId] ?? [], input.committed[car as CarId] ?? null);
+    const plan = cands.find((x) => x.c === planC);
+    out[car as CarId] = { rows: rowsOf(run, input, car, cands, undefined, plan), scenarios, capHit: false, unresolvedTie: false };
   }
   return out;
 }
 
-/** Removes from `alive` (and `all`) every candidate identical to an earlier one; a committed one is kept in its place. */
+/**
+ * Removes from `alive` (and `all`) every candidate identical to an earlier one; a slot's or the active plan's (`kept`)
+ * is kept in its place, and two of them are both kept.
+ */
 function merge(alive: Cand[], all: Cand[], committed: Policy | null): void {
-  const kept: Cand[] = [];
+  const out: Cand[] = [];
   for (const x of alive) {
-    const twin = kept.findIndex((y) => identical(x, y));
+    const twin = out.findIndex((y) => identical(x, y));
     if (twin === -1) {
-      kept.push(x);
+      out.push(x);
       continue;
     }
-    const y = kept[twin] as Cand;
-    const keepX = same(committed, x.c.policy) && !same(committed, y.c.policy);
-    kept[twin] = keepX ? x : y;
+    const y = out[twin] as Cand;
+    const keepX = kept(x, committed);
+    if (keepX && kept(y, committed)) {
+      out.push(x);
+      continue;
+    }
+    out[twin] = keepX ? x : y;
     all.splice(all.indexOf(keepX ? y : x), 1);
   }
-  alive.splice(0, alive.length, ...kept);
+  alive.splice(0, alive.length, ...out);
 }
-
-const hasRivalPits = (p: Policy | null | undefined): boolean => p?.triggers.some((t) => t.kind === 'rivalPits') === true;
 
 /**
- * The most `raceForecast` calls one evaluation of `x` for car `car` takes: the run's (the cover rule's traced run), one
- * more where a `rivalPits` trigger is played (`x`'s or another of our cars' fixed plan: the field's gaps, a traced run).
- * The cap is charged the calls made (Task 23b); this bounds a batch so it never passes the cap.
+ * The most `raceForecast` calls one evaluation of each of `group` takes: the run's (`Run.cost`, the cover rule's traced
+ * run). The cap is charged the calls made (Task 23b); this bounds a batch so it never passes the cap.
  */
-function costOf(run: Run, car: number, x: Cand): number {
-  let rival = hasRivalPits(x.c.policy);
-  for (const c of run.ours) if (c !== car && hasRivalPits(run.fixed[c])) rival = true;
-  return run.cost + (rival ? 1 : 0);
-}
-
-const costSum = (run: Run, car: number, group: readonly Cand[]): number => group.reduce((s, x) => s + costOf(run, car, x), 0);
+const costSum = (run: Run, group: readonly Cand[]): number => run.cost * group.length;
 
 /** Against the leader `lead`: clearly worse (beyond `zDrop` SEs), clearly within the tie band, or still open. */
 function verdict(lead: Scored, x: Scored, zDrop: number, tieBand: number): 'worse' | 'tie' | 'open' {
@@ -278,7 +274,7 @@ const leaderOf = (xs: readonly Cand[]): Cand => xs.reduce((best, x) => (scoredOf
 function batches(run: Run, input: McInput, car: number, group: Cand[], budget: number, done: () => boolean, after?: () => void): { spent: number; capHit: boolean } {
   const before = run.calls;
   while (!done()) {
-    const step = Math.min(input.config.n0, Math.floor((budget - (run.calls - before)) / costSum(run, car, group)));
+    const step = Math.min(input.config.n0, Math.floor((budget - (run.calls - before)) / costSum(run, group)));
     if (step < 1) return { spent: run.calls - before, capHit: true };
     const to = (group[0] as Cand).n + step;
     for (const x of group) extend(run, input.config, car, x, to);
@@ -306,8 +302,11 @@ function choiceOrder(alive: readonly Cand[], all: readonly Cand[], zTie: number,
   return [...survivors, ...byDiff.map((e) => e.x)];
 }
 
-/** The re-scored top (fresh scenarios), the rest (the search's), the re-scored leader's search outcomes. */
-type Searched = { top: Cand[]; rest: Cand[]; ref?: Cand | undefined; capHit: boolean; unresolvedTie: boolean };
+/**
+ * The re-scored top (fresh scenarios), the rest (the search's), the re-scored leader's search outcomes, every
+ * candidate's search outcomes (`searched`, the re-scored ones' included).
+ */
+type Searched = { top: Cand[]; rest: Cand[]; searched: Cand[]; ref?: Cand | undefined; capHit: boolean; unresolvedTie: boolean };
 
 /**
  * Car `car`'s search within `budget` `raceForecast` calls (spec §7.3): the first batch for all, merged; batches to the
@@ -320,18 +319,20 @@ function search(run: Run, input: McInput, car: number, budget: number): Searched
   const committed = input.committed[car as CarId] ?? null;
   const all = (input.candidates[car as CarId] ?? []).map((c) => newCand(c, Math.max(budget, 1)));
   const before = run.calls;
-  const first = Math.min(n0, Math.floor(budget / costSum(run, car, all)));
+  // the re-scoring's share is kept back before the first batch, so every re-scored finalist gets its scenarios
+  const reserve = Math.floor(budget * RESCORE_SHARE);
+  const first = Math.min(n0, Math.floor((budget - reserve) / costSum(run, all)));
   if (first === 0) {
     // fewer calls than one scenario each: one scenario each for as many as fit
     const scoredOnes: Cand[] = [];
     let held = 0;
     for (const x of all) {
-      held += costOf(run, car, x);
+      held += run.cost;
       if (held > budget) break;
       scoredOnes.push(x);
     }
     for (const x of scoredOnes) extend(run, input.config, car, x, 1);
-    return { top: [], rest: scoredOnes, capHit: true, unresolvedTie: scoredOnes.length > 1 };
+    return { top: [], rest: scoredOnes, searched: scoredOnes, capHit: true, unresolvedTie: scoredOnes.length > 1 };
   }
   for (const x of all) extend(run, input.config, car, x, first);
   const spent = (): number => run.calls - before;
@@ -344,16 +345,19 @@ function search(run: Run, input: McInput, car: number, budget: number): Searched
     let open = false;
     for (const x of [...alive]) {
       const v = x === leaderOf(alive) ? 'tie' : verdict(lead, scoredOf(x), zDrop, tieBand);
-      if (v === 'worse') alive.splice(alive.indexOf(x), 1);
+      // a slot or the active plan is never dropped (spec §5.3): clearly worse, it stays without holding the search open
+      if (v === 'worse' && !kept(x, committed)) alive.splice(alive.indexOf(x), 1);
       else if (v === 'open') open = true;
     }
     return !open;
   };
-  const searchBudget = Math.max(0, budget - Math.floor(budget * RESCORE_SHARE) - spent());
+  const searchBudget = Math.max(0, budget - reserve - spent());
   const s = batches(run, input, car, alive, searchBudget, clear, () => merge(alive, all, committed));
-  // the re-scoring: the top few together on fresh scenarios, none dropped
+  // the re-scoring: the top few leaders (a slot among them counts as one) and, on top of them, every other slot and the
+  // active plan, on fresh scenarios, none dropped
   const ranked = choiceOrder(alive, all, zTie, tieBand);
-  const chosen = ranked.slice(0, rescoreTop);
+  const leaders = ranked.slice(0, rescoreTop);
+  const chosen = ranked.filter((x) => leaders.includes(x) || kept(x, committed));
   const top = chosen.map((x) => newCand(x.c, Math.max(budget - spent(), 1), FRESH_FROM));
   const settled = (): boolean => {
     if (!judgeable(top, n0)) return false;
@@ -364,11 +368,11 @@ function search(run: Run, input: McInput, car: number, budget: number): Searched
   const r = batches(run, input, car, top, budget - spent(), settled);
   if (r.capHit && top.some((x) => x.n === 0)) {
     // nothing left for re-scoring: the search's own outcomes stand
-    return { top: [], rest: all, capHit: true, unresolvedTie: s.capHit || first < n0 };
+    return { top: [], rest: all, searched: all, capHit: true, unresolvedTie: s.capHit || first < n0 };
   }
   const capHit = s.capHit || r.capHit || first < n0;
   const ref = chosen[rank(top.map(scoredOf), zTie, tieBand).order[0] ?? 0];
-  return { top, rest: ranked.slice(rescoreTop), ref, capHit, unresolvedTie: capHit && !settled() };
+  return { top, rest: ranked.filter((x) => !chosen.includes(x)), searched: all, ref, capHit, unresolvedTie: capHit && !settled() };
 }
 
 export function raceMonteCarlo(input: McInput, rng: Rng, maxScenarioPolicies: number): McResult {
@@ -377,9 +381,13 @@ export function raceMonteCarlo(input: McInput, rng: Rng, maxScenarioPolicies: nu
   // the cap (calls) shared evenly by our cars: neither car's result depends on how soon the other's search ended
   const budget = Math.floor(Math.max(0, maxScenarioPolicies) / Math.max(1, cars.length));
   cars.forEach((car) => {
-    const { top, rest, ref, capHit, unresolvedTie } = search(run, input, car, budget);
+    const { top, rest, searched, ref, capHit, unresolvedTie } = search(run, input, car, budget);
+    // ΔPOS against the plan on the scenarios both ran: the re-scoring's for the re-scored, the search's for the rest
+    const planC = planOf(input.candidates[car as CarId] ?? [], input.committed[car as CarId] ?? null);
+    const planTop = top.find((x) => x.c === planC);
+    const planSearched = searched.find((x) => x.c === planC && x.n > 0);
     // the rest below the re-scored, against the re-scored leader over the search's scenarios
-    const rows = [...rowsOf(run, input, car, top), ...rowsOf(run, input, car, rest, ref)];
+    const rows = [...rowsOf(run, input, car, top, undefined, planTop), ...rowsOf(run, input, car, rest, ref, planSearched)];
     out[car as CarId] = { rows, scenarios: [...top, ...rest].reduce((m, x) => Math.max(m, x.n), 0), capHit, unresolvedTie };
   });
   return out;

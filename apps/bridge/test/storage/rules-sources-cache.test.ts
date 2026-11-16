@@ -1,6 +1,8 @@
 // The rules sources walk is cached by a content key (Task 28 fix round 1; C61, C90). The dependency-cruiser walk costs
 // about 1.4 s per start, so its file list is cached in `<root>/node_modules/.cache/pitwall/rules-sources.json`, keyed by
-// a content hash of every `.ts` file under `packages/{protocol,domain,engine}/src` (the generated indexes included). On
+// a content hash of every `.ts` file under `packages/{protocol,domain,engine}/src` (the generated indexes included) and
+// of the bridge's keyed files (the decision placement, the decision sidecars and the decisions decoder they import,
+// SP4.3d1 Task 3). On
 // a hit the walk is skipped; the version is still the sha256 of the walked files' contents, computed every time.
 // The walk is observed through the injected walker `{ walk }` (default `walkRulesSources`, the uncached walk). Every
 // tree here is a scratch copy in a temp dir with a `node_modules` of its own, so no cache is shared (C84).
@@ -15,9 +17,13 @@ const REPO = fileURLToPath(new URL('../../../../', import.meta.url));
 const CACHE = 'node_modules/.cache/pitwall/rules-sources.json';
 
 /** What the scratch copy holds: the root configs, every package and the bridge's source. */
-const COPIED = ['package.json', 'pnpm-workspace.yaml', 'tsconfig.json', 'tsconfig.base.json', '.dependency-cruiser.cjs', 'packages', 'apps/bridge/package.json', 'apps/bridge/src'];
-/** A package's workspace links (`packages/<pkg>/node_modules/@pitwall/<name>`), kept as the relative links they are. */
-const WORKSPACE_LINK = /^packages\/[^/]+\/node_modules(\/@pitwall(\/[^/]+)?)?$/;
+const COPIED = ['package.json', 'pnpm-workspace.yaml', 'tsconfig.json', 'tsconfig.base.json', '.dependency-cruiser.cjs', 'packages', 'apps/bridge/package.json', 'apps/bridge/node_modules', 'apps/bridge/src'];
+/**
+ * A package's and the bridge's workspace links (`packages/<pkg>/node_modules/@pitwall/<name>`,
+ * `apps/bridge/node_modules/@pitwall/<name>`: the decision sidecars import `@pitwall/contracts`), kept as the relative
+ * links they are.
+ */
+const WORKSPACE_LINK = /^(packages\/[^/]+|apps\/bridge)\/node_modules(\/@pitwall(\/[^/]+)?)?$/;
 const copied = (src: string): boolean => {
   const rel = relative(REPO, src).split(sep).join('/');
   if (rel.split('/').includes('node_modules')) return WORKSPACE_LINK.test(rel);
@@ -32,8 +38,10 @@ function scratchTree(): string {
   return root;
 }
 
-/** Sources the walk reaches: protocol, domain, an entry, a sub-machine and the generated indexes. */
+/** Sources the walk reaches: protocol, domain, an entry, a sub-machine, the generated indexes, the decision sidecars and their decoder. */
 const SOURCES = [
+  'apps/bridge/src/pipeline/decision-sidecars.ts',
+  'packages/contracts/src/ui/decode.ts',
   'packages/protocol/src/wire.ts',
   'packages/domain/src/ids.ts',
   'packages/engine/src/step/step.ts',

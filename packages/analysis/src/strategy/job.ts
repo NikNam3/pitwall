@@ -5,8 +5,11 @@
 // - Per car the DP (`strategy-dp`) from the car's lap on (`startLapOf`), its input from the starting point, the hazard,
 //   the weather worlds and each world's plain forecast (`shared/strategy-input/`, SP4.3b2 Task 6, SP4.3c Task 19); its
 //   result and each world's solve (`solveWorld`, queried by `bestWith`) give the candidates (`candidates.ts`, SP4.3c
-//   Task 20). A committed policy is followed as far as it can be (spec §8.2): a passed stop boxes this lap, a
+//   Task 20), and its heaviest world's solve its SC/VSC reaction table (`reactions`, SP4.3d spec §5.2). A committed policy is followed as far as it can be (spec §8.2): a passed stop boxes this lap, a
 //   stop onto a compound without a set left is dropped; its row is marked with the reason.
+// - Plan slots (SP4.3d spec §5.3, `carPlanOf`): the active plan first, then every saved slot, each followed as far as
+//   it can be and shown as saved with its reason; a DP plan equal to one is that row. Per car `bestPerStops`: per stop
+//   count the best row a DP, neighbour or rule candidate gave (before the dedup), never a slot-only row.
 // - The parts (spec §7.3 item 4, §8.1 step 3): `splitStrategy` gives one part per our car planned (`planCar`), or the
 //   input as it is when none can be planned; `mergeStrategy` takes each car's entry from the part that planned it and
 //   every other entry from the first part. `run` without `planCar` runs the parts one after another on one rng.
@@ -19,12 +22,11 @@
 //   mean race time against the leader's and the committed row's; per car its race position at the trigger.
 // - `candidatesForRun` is the candidate step's one place and `partFinalCall` a part's final call's;
 //   `scripts/gen-strategy-reference.ts` builds its input with them.
-import { known, unknown, type CarId, type Known, type McRow, type Policy, type StartingPoint, type StrategyOutput } from '@pitwall/domain';
+import { known, PLAN_SLOTS, unknown, type CarId, type Known, type McRow, type Policy, type Slot, type StartingPoint, type StrategyOutput } from '@pitwall/domain';
 import type { Rng } from '@pitwall/engine/readers';
-import { RACE_INTERACTION_CONFIG } from '../race-interaction/config.ts';
 import { RAIN_OUTLOOK_CONFIG } from '../rain-outlook/config.ts';
-import { raceMonteCarlo, type McCandidate, type McConfig, type McInput, type McResult } from '../race-monte-carlo/index.ts';
-import { committedField, dpInputOn, followable, mcSettingsFrom, notPlannedWhy, plannedCars, plannedField, roadWorlds, strategyConfigOf, toMcHazard, worldsOf, type StrategyInput } from '../shared/strategy-input/index.ts';
+import { raceMonteCarlo, type McCandidate, type McConfig, type McInput, type McResult, type Reactions } from '../race-monte-carlo/index.ts';
+import { committedField, dpInputOn, followable, mcSettingsFrom, notPlannedWhy, plannedCars, plannedField, reactionOf, roadWorlds, strategyConfigOf, toMcHazard, worldsOf, type StrategyInput } from '../shared/strategy-input/index.ts';
 import { solveDp, solveWorld } from '../strategy-dp/index.ts';
 import { candidatesOf } from './candidates.ts';
 import type { StrategyConfig } from './config.ts';
@@ -44,8 +46,61 @@ function mcConfigOf(config: StrategyConfig, points: number[]): McConfig {
   };
 }
 
-/** One car's plan as the job holds it: its candidates and, where committed, the policy followed and the commit's reason. */
-export type CarPlan = { candidates: McCandidate[]; followed: Policy | null; original: Policy | null; infeasible: Infeasible };
+/**
+ * One car's plan as the job holds it: its candidates and, where committed, the policy followed and the commit's reason;
+ * per saved slot the policy saved and why it can no longer be followed as saved (`slots`); the policies the DP,
+ * neighbour and rule candidates gave before the dedup (`searched`, `JSON.stringify`ed: what `bestPerStops` names).
+ */
+export type CarPlan = {
+  candidates: McCandidate[];
+  followed: Policy | null;
+  original: Policy | null;
+  infeasible: Infeasible;
+  slots: Map<Slot, { original: Policy; infeasible: Infeasible }>;
+  searched: Set<string>;
+};
+
+const keyOf = (policy: Policy): string => JSON.stringify(policy);
+
+/**
+ * Car `car`'s candidates (SP4.3d spec §5.3): the active plan first, as far as it can be followed, in the slot
+ * `activePlan` gives it (R32, carried by the input; in no slot: source `committed`);
+ * then each other saved slot as far as it can be followed (source `game` for G1 and G2, else `plan`); then the search's
+ * own candidates `own` minus every policy already a candidate (a DP plan equal to a slot is that slot's row).
+ */
+function carPlanOf(field: StartingPoint, car: CarId, own: McCandidate[], original: Policy | null, slots: NonNullable<StrategyInput['slots']>[CarId] | undefined): CarPlan {
+  const saved = slots?.saved ?? {};
+  const sourceOf = (slot: Slot): McCandidate['source'] => (slot.startsWith('G') ? 'game' : 'plan');
+  // the active plan's slot is `activePlan`'s (R32, via the input); none without a committed plan
+  const active = original === null ? null : (slots?.active ?? null);
+  const candidates: McCandidate[] = [];
+  const bySlot: CarPlan['slots'] = new Map();
+  let followed: Policy | null = null;
+  let infeasible: Infeasible = null;
+  if (original !== null) {
+    const f = followable(field, car, original);
+    followed = f.policy;
+    infeasible = f.infeasible;
+    candidates.push(active === null ? { policy: f.policy, source: 'committed', rule: null } : { policy: f.policy, source: sourceOf(active), rule: null, slot: active });
+    if (active !== null) bySlot.set(active, { original, infeasible });
+  }
+  for (const slot of PLAN_SLOTS) {
+    const policy = saved[slot];
+    if (policy === undefined || slot === active) continue;
+    const f = followable(field, car, policy);
+    candidates.push({ policy: f.policy, source: sourceOf(slot), rule: null, slot });
+    bySlot.set(slot, { original: policy, infeasible: f.infeasible });
+  }
+  const taken = new Set(candidates.map((c) => keyOf(c.policy)));
+  return {
+    candidates: [...candidates, ...own.filter((c) => !taken.has(keyOf(c.policy)))],
+    followed,
+    original,
+    infeasible,
+    slots: bySlot,
+    searched: new Set(own.map((c) => keyOf(c.policy))),
+  };
+}
 
 /**
  * The job's candidate step, its one place: the cars planned and, per car, its candidates (a committed policy first, as
@@ -78,25 +133,20 @@ export function candidatesForRun(input: StrategyInput, rng: Rng): { mc: McInput 
   const worlds = roadWorlds(field, rng, worldsOf(input));
   const candidates: Record<CarId, McCandidate[]> = {};
   const committed: Record<CarId, Policy | null> = {};
+  const reactions: Reactions = {};
   for (const car of planned) {
     const dpInput = dpInputOn(field, car, hazard, worlds, config.trafficGapMs);
     const solutions = dpInput.worlds.map((_, w) => solveWorld(dpInput, w));
     const dp = solveDp(dpInput, solutions);
-    const own = candidatesOf(field, car, dp, solutions, { ...config, closeGapMs: RACE_INTERACTION_CONFIG.read(input).closeGapMs, rainPct: RAIN_OUTLOOK_CONFIG.read(input).rainPct });
-    const original = input.committed[car] ?? null;
-    let plan: CarPlan = { candidates: own, followed: null, original: null, infeasible: null };
-    if (original !== null) {
-      const f = followable(field, car, original);
-      const key = JSON.stringify(f.policy);
-      const withCommit = [{ policy: f.policy, source: 'committed' as const, rule: null }, ...own.filter((c) => JSON.stringify(c.policy) !== key)];
-      plan = { candidates: withCommit, followed: f.policy, original, infeasible: f.infeasible };
-    }
+    reactions[car] = reactionOf(dpInput, solutions);
+    const own = candidatesOf(field, car, dp, solutions, { ...config, rainPct: RAIN_OUTLOOK_CONFIG.read(input).rainPct });
+    const plan = carPlanOf(field, car, own, input.committed[car] ?? null, input.slots?.[car]);
     perCar.set(car, plan);
     candidates[car] = plan.candidates;
     committed[car] = plan.followed;
   }
   const { rivalRules, points } = mcSettingsFrom(input.config);
-  return { mc: { start: field, candidates, committed, hazard, rivalRules, config: mcConfigOf(config, points) }, perCar, out };
+  return { mc: { start: field, candidates, committed, hazard, rivalRules, config: mcConfigOf(config, points), reactions }, perCar, out };
 }
 
 /** The job's parts (C51): one per our car planned, in our cars' order, each `{ ...input, planCar }`; the input as it is when none can be planned. */
@@ -195,9 +245,34 @@ function runPart(input: StrategyInput, rng: Rng): StrategyOutput {
   const hazardState: Known<'ok'> = input.hazard.known ? known('ok', s.at) : input.hazard;
   const own = perCar.get(final.car) as CarPlan;
   const r = raceMonteCarlo(final.mc, rng, final.mc.config.maxScenarioPolicies)[final.car] as McResult[CarId];
-  const rows = withTableFields(r.rows.map((row): McRow => (row.committed ? { ...row, policy: own.original ?? row.policy, source: 'committed', infeasible: own.infeasible } : row)));
+  const bestPerStops = bestPerStopsOf(r.rows, own.searched);  const stamp = (k: Known<number>): Known<number> => (k.known ? known(k.value, s.at) : k);
+  const rows = withTableFields(
+    r.rows.map((row): McRow => {
+      const stamped = { ...row, diffPlan: stamp(row.diffPlan), sePlan: stamp(row.sePlan) };
+      // the active plan and a slot show the policy saved (what the user saved), the search played its followable version
+      if (row.committed) return { ...stamped, policy: own.original ?? row.policy, source: row.slot === null ? 'committed' : row.source, infeasible: own.infeasible };
+      const slot = row.slot === null ? undefined : own.slots.get(row.slot);
+      return slot === undefined ? stamped : { ...stamped, policy: slot.original, infeasible: slot.infeasible };
+    }),
+  );
   const currentPosition = input.positions[final.car] ?? orderPlaceOf(s.value, final.car);
-  out[final.car] = known({ rows, scenarios: r.scenarios, capHit: r.capHit, candidates: own.candidates.length, hazard: hazardState, unresolvedTie: r.unresolvedTie, currentPosition }, s.at);
+  out[final.car] = known({ rows, bestPerStops, scenarios: r.scenarios, capHit: r.capHit, candidates: own.candidates.length, hazard: hazardState, unresolvedTie: r.unresolvedTie, currentPosition }, s.at);
+  return out;
+}
+
+const STOP_COUNTS = [0, 1, 2, 3] as const;
+
+/**
+ * Per stop count 0–3 the index of the first (best) row whose played policy a DP, neighbour or rule candidate gave
+ * (`searched`, before the dedup: a DP plan merged into a slot's row names that row; a slot-only row never), SP4.3d spec
+ * §5.3.
+ */
+function bestPerStopsOf(rows: readonly McRow[], searched: ReadonlySet<string>): Partial<Record<(typeof STOP_COUNTS)[number], number>> {
+  const out: Partial<Record<(typeof STOP_COUNTS)[number], number>> = {};
+  for (const k of STOP_COUNTS) {
+    const i = rows.findIndex((row) => row.policy.stops.length === k && searched.has(keyOf(row.policy)));
+    if (i !== -1) out[k] = i;
+  }
   return out;
 }
 

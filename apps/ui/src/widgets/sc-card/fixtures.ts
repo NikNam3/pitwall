@@ -1,83 +1,119 @@
-// Builders and cases shared by the sc-card gallery and its tests (test-phase file: the implementer does not edit it).
-// The sample is the approved mockup's (docs/design/2026-11-12-sp4.3b/sc-card.html, gen.mjs `scRow`; KUH, Spa L14/44, P8):
-// green: SC +1.4 75% P9 9.8ᵈ L12–24 (loss from the track file's default), VSC +0.6 53% P10 13.1ᶜ L15–24 (the set
-// `league`); SC out: SC +1.8 84%, VSC notApplicable (Q5 B); VSC out: VSC +0.9 62%, SC notApplicable. The bins are gen.mjs'
-// `wholeBins(mu, 1.3, 4)` to three decimals, the tails folded into the first bin so each row sums to 1 (the ends hold the
-// tails, `SC_CALL_GAIN_BINS`); ΔPOS and P(GAIN) are the topic's own numbers (the display computes nothing, C65).
+// Builders and cases shared by the Box call gallery and its tests (test-phase file: the implementer does not edit it).
+// The sample is the approved mockup's (docs/design/2026-11-16-sp4.3d/sc-card.html, gen.mjs `CALL`, `block`; KUH, Spa
+// L14/44, P8 on mediums, sets left S H H I): per condition SC, VSC, GREEN the six answers stay, box S, M, H, I, W; M and
+// W have no set left. E[POS], its SE, ΔPOS against stay, P(GAIN) and REJ are the topic's own numbers, as the mockup
+// prints them (the display computes nothing, C65); each position pmf is gen.mjs' `placeDist` at the mockup's `mu`
+// (stay 1.6/1.9, a box option 1.7/2.0), built here for the fixture only.
 import type { Computed, MachineSpans } from '@pitwall/contracts';
 import { carId, known, toSessionTime, unknown } from '@pitwall/domain';
-import type { EstimateSource, Known, Ms, NeutralisedDetail, ScCall, ScCallRow, UnknownReason } from '@pitwall/domain';
+import type {
+  EstimateSource,
+  Known,
+  Ms,
+  NeutralisedDetail,
+  ScCallAnswer,
+  ScCallBlock,
+  ScCallBlocks,
+  ScCallOption,
+  UnknownReason,
+} from '@pitwall/domain';
 import type { GalleryEntry } from '../../kit/gallery-types.ts';
 import type { widget } from './widget.ts';
 
 const at = toSessionTime(2_460_000);
 export const value = <T>(v: T): Known<T> => known(v, at);
 
-/** Sources as the `pit-loss` calculator decides them (C43): the display only maps the kind to its badge. */
-export const sessionSource: EstimateSource = { kind: 'session', sessionShare: 1, parts: '2 stops this session' };
-export const calibrationSource: EstimateSource = {
-  kind: 'calibration', setName: 'league', sources: 3, sessionShare: 0, parts: '3 stops (race 15 Oct) · 0 stops this session',
-};
-export const defaultSource: EstimateSource = {
-  kind: 'default', note: 'Spa, real F1 2025 (track file)', sessionShare: 0, parts: 'track file',
-};
+/** The field's size: one pmf entry per place. */
+export const PLACES = 20;
+/** Our place now (stay's rejoin, ruling R29). */
+export const OUR_PLACE = 8;
 
-/** One condition's known values, as `scCall.car` carries them. */
-export type RowValues = {
-  ePosDelta: number;
-  pGain: number;
-  /** 9 shares, places gained −4 … +4. */
-  gainBins: number[];
-  rejoin: number;
-  lossMs: number;
-  range: [number, number];
-};
+/** gen.mjs `placeDist`: a skewed bell around `mu` over P1 … P20, a DNF share on the last place. */
+export function placeDist(mu: number, sdL: number, sdR: number, dnf = 0.015): number[] {
+  const w = Array.from({ length: PLACES }, (_, i) => {
+    const d = i + 1 - mu;
+    const s = d < 0 ? sdL : sdR;
+    return Math.exp(-(d * d) / (2 * s * s));
+  });
+  const t = w.reduce((a, b) => a + b, 0);
+  return w.map((x, i) => (x / t) * (1 - dnf) + (i === PLACES - 1 ? dnf : 0));
+}
 
-/** One condition's row: known values, or every `Known` unknown with one reason (as the job gives a row that does not apply). */
-export function row(condition: ScCallRow['condition'], v: RowValues | UnknownReason, lossSource: EstimateSource): ScCallRow {
+/** Sources as the `pit-loss` calculator decides them (C43); the Box call does not draw them. */
+export const defaultSource: EstimateSource = { kind: 'default', note: 'Spa, real F1 2025 (track file)', sessionShare: 0, parts: 'track file' };
+
+/** Stay's known values: E[pos], SE, REJ (our place now), the pmf's `mu`. */
+export type StayValues = { ePos: number; se: number; rejoin: number; mu: number };
+/** A box answer's known values: stay's, plus ΔPOS and P(GAIN) against stay. */
+export type BoxValues = StayValues & { dPos: number; pGain: number };
+
+/** One answer: known values, or every `Known` unknown with one reason (`noSet`: no set of that compound left). */
+export function option(answer: ScCallAnswer, v: StayValues | BoxValues | UnknownReason): ScCallOption {
   if (typeof v === 'string') {
     return {
-      condition, ePosDelta: unknown(v), pGain: unknown(v), gainBins: unknown(v), rejoinPosition: unknown(v), lossMs: unknown(v),
-      lossSource, range: unknown(v),
+      answer, ePos: unknown(v), se: unknown(v), ePosDelta: unknown(v), pGain: unknown(v), rejoinPosition: unknown(v), positionPmf: unknown(v),
     };
   }
+  const box = 'dPos' in v;
   return {
-    condition,
-    ePosDelta: value(v.ePosDelta),
-    pGain: value(v.pGain),
-    gainBins: value(v.gainBins),
+    answer,
+    ePos: value(v.ePos),
+    se: value(v.se),
+    // stay against itself: zero places, no chance of a gain to show (the display leaves both cells empty)
+    ePosDelta: value(box ? v.dPos : 0),
+    pGain: box ? value(v.pGain) : unknown('notApplicable'),
     rejoinPosition: value(v.rejoin),
-    lossMs: value<Ms>(v.lossMs),
-    lossSource,
-    range: value({ fromLap: v.range[0], toLap: v.range[1] }),
+    positionPmf: value(box ? placeDist(v.mu, 1.7, 2.0) : placeDist(v.mu, 1.6, 1.9)),
   };
 }
 
-/** The mockup's rows (gen.mjs `SC_GREEN`, `SC_OUT`, `VSC_OUT`). */
-export const scGreen: RowValues = {
-  ePosDelta: 1.362, pGain: 0.748, gainBins: [0.009, 0.001, 0.011, 0.059, 0.172, 0.286, 0.271, 0.146, 0.045],
-  rejoin: 9, lossMs: 9_800, range: [12, 24],
+/** The six answers of one condition, in the order stay, S, M, H, I, W (M and W: no set). */
+export type BlockValues = { stay: StayValues; S: BoxValues; H: BoxValues; I: BoxValues };
+
+export const SC: BlockValues = {
+  stay: { ePos: 8.03, se: 0.07, rejoin: 8, mu: 7.61 },
+  S: { ePos: 8.51, se: 0.07, dPos: -0.48, pGain: 0.35, rejoin: 11, mu: 8.1 },
+  H: { ePos: 7.31, se: 0.07, dPos: 0.72, pGain: 0.54, rejoin: 10, mu: 6.88 },
+  I: { ePos: 12.75, se: 0.07, dPos: -4.72, pGain: 0.03, rejoin: 11, mu: 12.4 },
 };
-export const vscGreen: RowValues = {
-  ePosDelta: 0.587, pGain: 0.528, gainBins: [0.002, 0.008, 0.045, 0.146, 0.271, 0.286, 0.172, 0.059, 0.011],
-  rejoin: 10, lossMs: 13_100, range: [15, 24],
+export const VSC: BlockValues = {
+  stay: { ePos: 7.97, se: 0.07, rejoin: 8, mu: 7.55 },
+  S: { ePos: 8.83, se: 0.07, dPos: -0.86, pGain: 0.3, rejoin: 12, mu: 8.42 },
+  H: { ePos: 7.63, se: 0.07, dPos: 0.34, pGain: 0.48, rejoin: 11, mu: 7.2 },
+  I: { ePos: 13.24, se: 0.07, dPos: -5.27, pGain: 0.02, rejoin: 12, mu: 12.9 },
 };
-export const scOut: RowValues = {
-  ePosDelta: 1.783, pGain: 0.836, gainBins: [0.024, 0, 0.004, 0.028, 0.108, 0.238, 0.299, 0.213, 0.086],
-  rejoin: 9, lossMs: 9_800, range: [12, 24],
-};
-export const vscOut: RowValues = {
-  ePosDelta: 0.887, pGain: 0.618, gainBins: [0.004, 0.004, 0.028, 0.108, 0.238, 0.299, 0.213, 0.086, 0.02],
-  rejoin: 10, lossMs: 13_100, range: [15, 24],
+export const GREEN: BlockValues = {
+  stay: { ePos: 7.94, se: 0.07, rejoin: 8, mu: 7.52 },
+  S: { ePos: 9.79, se: 0.07, dPos: -1.85, pGain: 0.18, rejoin: 15, mu: 9.4 },
+  H: { ePos: 8.72, se: 0.07, dPos: -0.78, pGain: 0.31, rejoin: 15, mu: 8.31 },
+  I: { ePos: 14.52, se: 0.07, dPos: -6.57, pGain: 0.02, rejoin: 15, mu: 14.2 },
 };
 
-export const call = (
-  sc: ScCallRow = row('sc', scGreen, defaultSource),
-  vsc: ScCallRow = row('vsc', vscGreen, calibrationSource),
-): ScCall => ({ carId: carId(0), lap: 14, rows: [sc, vsc] });
+/** The stop's loss per condition (gen.mjs `LOSS`). */
+const LOSS_MS = { sc: 9_800, vsc: 13_500, green: 22_300 } as const satisfies Record<ScCallBlock['condition'], number>;
+
+/** One condition's block; `lapsLeft` known only for the condition that is out. */
+export function block(condition: ScCallBlock['condition'], v: BlockValues, lapsLeft: Known<number> = unknown('notApplicable')): ScCallBlock {
+  return {
+    condition,
+    options: [
+      option('stay', v.stay),
+      option('S', v.S),
+      option('M', 'noSet'),
+      option('H', v.H),
+      option('I', v.I),
+      option('W', 'noSet'),
+    ],
+    lossMs: value<Ms>(LOSS_MS[condition]),
+    lossSource: defaultSource,
+    lapsLeft,
+  };
+}
+
+export const call = (blocks: ScCallBlock[], out: ScCallBlocks['out'] = null): ScCallBlocks => ({ carId: carId(0), lap: 14, out, blocks });
 
 /** The job's result as `scCall.car` publishes it (C51). */
-export const computed = (c: ScCall = call()): Computed<ScCall> => ({ computedFor: { lap: c.lap, frameId: 4_100 }, value: c });
+export const computed = (c: ScCallBlocks): Computed<ScCallBlocks> => ({ computedFor: { lap: c.lap, frameId: 4_100 }, value: c });
 
 /** `situation.sessionPhaseRace` with one open span of `kind`. */
 export const phaseSpans = (kind: string, detail: unknown = undefined): MachineSpans => ({
@@ -88,29 +124,33 @@ export const neutralised = (car: NeutralisedDetail['car']): MachineSpans =>
   phaseSpans('neutralised', { car, stages: [{ stage: 'deployed', at }] } satisfies NeutralisedDetail);
 export const racing: MachineSpans = phaseSpans('racing');
 
+/** Green running: the three blocks, each "if it came now". */
+export const greenCall = (): ScCallBlocks => call([block('sc', SC), block('vsc', VSC), block('green', GREEN)]);
+/** An SC out, ~4 laps left (race-hazard's 3.6): its block alone, GREEN hidden. */
+export const scOutCall = (): ScCallBlocks => call([block('sc', SC, value(3.6))], 'sc');
+/** A VSC out, ~2 laps left: its block alone. */
+export const vscOutCall = (): ScCallBlocks => call([block('vsc', VSC, value(2))], 'vsc');
+
 /**
- * The gallery's synthetic cases, the mockup's four states (the 4.2 cases replaced); its two compact states are the
- * `green` and `scOut` cases at the compact size. The tests take them from here, since only the gallery imports
- * gallery.ts (C69).
+ * The gallery's synthetic cases: the mockup's states (green full, SC out, VSC out; the two compact states are `green`
+ * and `scOut` at the compact size), and a car the call does not apply to (`blocks: []`, ruling R29). The tests take
+ * them from here, since only the gallery imports gallery.ts (C69).
  */
 export const cases = {
-  // Green running (first case: the screenshot baseline, Task 18): nothing out, both rows "if one came now".
-  green: { call: computed(), phase: racing },
-  // The SC is out: its row the real SC; the VSC row notApplicable in every value (Q5 B, spec §9.3).
-  scOut: { call: computed(call(row('sc', scOut, defaultSource), row('vsc', 'notApplicable', calibrationSource))), phase: neutralised('SC') },
-  // The VSC is out: its row the real VSC; the SC row notApplicable.
-  vscOut: { call: computed(call(row('sc', 'notApplicable', defaultSource), row('vsc', vscOut, calibrationSource))), phase: neutralised('VSC') },
-  // Too few laps yet: every value the kit's pending mark, the reason on hover, no badge.
-  unknown: {
-    call: computed(call(row('sc', 'insufficientData', defaultSource), row('vsc', 'insufficientData', calibrationSource))),
-    phase: racing,
-  },
+  // Green running (first case: the screenshot baseline, Task 15): SC, VSC, GREEN.
+  green: { call: computed(greenCall()), phase: racing },
+  // The SC is out: its block alone, its label amber with ~4 laps.
+  scOut: { call: computed(scOutCall()), phase: neutralised('SC') },
+  // The VSC is out: its block alone, its label amber with ~2 laps.
+  vscOut: { call: computed(vscOutCall()), phase: neutralised('VSC') },
+  // The call does not apply to the car (a rival, our car in the pit lane): no block.
+  notApplicable: { call: computed(call([])), phase: racing },
 } satisfies NonNullable<GalleryEntry<typeof widget>['cases']>;
 
-/** The gallery's fit sizes: the two minimums (compact 26×2, full 45×3) plus a size just inside each mode. */
+/** The gallery's fit sizes: the two minimums (compact 26×3, full 58×23) plus a size just inside each mode. */
 export const fit = [
-  { mode: 'compact', cols: 26, rows: 2 },
-  { mode: 'compact', cols: 44, rows: 2 },
-  { mode: 'full', cols: 45, rows: 3 },
-  { mode: 'full', cols: 60, rows: 6 },
+  { mode: 'compact', cols: 26, rows: 3 },
+  { mode: 'compact', cols: 44, rows: 3 },
+  { mode: 'full', cols: 58, rows: 23 },
+  { mode: 'full', cols: 70, rows: 30 },
 ] satisfies NonNullable<GalleryEntry<typeof widget>['fit']>;

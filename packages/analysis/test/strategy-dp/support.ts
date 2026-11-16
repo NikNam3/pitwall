@@ -41,9 +41,7 @@
 //   end of `fromLap` and without one; `boxThisLap` is `null` where no play boxing now can meet the rule, the sets and the
 //   limit; `continue`, where no play without a stop now meets the rule and the limit, is the best such play that ignores
 //   both (always a value, C3).
-// - Every plan carries its own triggers (SP4.3c §5.4): its `neutralised` triggers are its own sequence's (a box under a
-//   neutralisation onto the compound its sequence fits next; a no-stop plan has none), never another plan's.
-import { carId, NOISE_COMPOUNDS, type LapInput, type LapModelParams, type NoiseCompound, type TrackHazard, type Trigger } from '@pitwall/domain';
+import { carId, NOISE_COMPOUNDS, type LapInput, type LapModelParams, type NoiseCompound, type TrackHazard } from '@pitwall/domain';
 import { lapTimeMs } from '../../src/lap-model/index.ts';
 import { HUMAN_STOP_SAVING_MS } from '../../src/race-forecast/constants.ts';
 import type { DpCarParams, DpInput, DpPlan, DpWorld } from '../../src/strategy-dp/index.ts';
@@ -410,6 +408,3 @@ export function bruteForce(input: DpInput, w = 0): { bySequence: Map<string, num
 /** The plans of a result by their sequence key (of one world's plans). */
 export const plansBySequence = (plans: readonly DpPlan[]): Map<string, DpPlan> => new Map(plans.map((p) => [sequenceOf(p.stops), p]));
 
-/** A plan's `neutralised` triggers that box (not `stayOut`). */
-export const neutralBoxes = (plan: Pick<DpPlan, 'triggers'>): Extract<Trigger, { kind: 'neutralised' }>[] =>
-  plan.triggers.filter((t): t is Extract<Trigger, { kind: 'neutralised' }> => t.kind === 'neutralised' && t.action !== 'stayOut');

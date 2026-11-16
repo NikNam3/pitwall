@@ -70,10 +70,10 @@ function world(fromLap: number, wetnessMs: number): WeatherLap[] {
 const DRY_WORLD = world(TOTAL + 1, 0);
 
 /** The policies the task expects of the field, by slot (slot 0 is ours: no stop in the plain road). */
-const SWITCH: Policy = { stops: [{ lap: LAP, compound: 'inter' }], triggers: [] };
-const ODDS_HARD: Policy = { stops: [{ lap: MID, compound: 'hard' }], triggers: [] };
+const SWITCH: Policy = { stops: [{ lap: LAP, compound: 'inter' }] };
+const ODDS_HARD: Policy = { stops: [{ lap: MID, compound: 'hard' }] };
 /** Slot 4 without odds: the compound rule's other dry compound (medium → hard). */
-const RULE_HARD: Policy = { stops: [{ lap: MID, compound: 'hard' }], triggers: [] };
+const RULE_HARD: Policy = { stops: [{ lap: MID, compound: 'hard' }] };
 
 describe('rivalPlainPolicy (O9, O5)', () => {
   it("a rival whose inter delta turns −300 ms on lap 4 switches on lap 4, under no world and under a dry one alike", () => {
@@ -87,7 +87,7 @@ describe('rivalPlainPolicy (O9, O5)', () => {
   it("without a delta, the lap model's rule: the first lap another type is faster at the world's wetness, onto the fastest", () => {
     const start = field();
     // slot 3 on mediums: at wetness 12,000 ms medium 12,000 > inter 5,000 + 6,000 = 11,000 < wet 9,000 + 3,000: inter on lap 8
-    expect(rivalPlainPolicy(start, 3, world(8, 12_000))).toEqual({ stops: [{ lap: 8, compound: 'inter' }], triggers: [] });
+    expect(rivalPlainPolicy(start, 3, world(8, 12_000))).toEqual({ stops: [{ lap: 8, compound: 'inter' }] });
     // no world, or a dry one: no switch, and slot 3 has no stop before the flag
     expect(rivalPlainPolicy(start, 3, null)).toEqual(NO_STOP);
     expect(rivalPlainPolicy(start, 3, DRY_WORLD)).toEqual(NO_STOP);

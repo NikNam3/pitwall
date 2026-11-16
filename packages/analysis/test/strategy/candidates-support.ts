@@ -6,17 +6,15 @@
 //   `solveWorld` solve of the same input (a `DpPlan`'s `world` indexes it). The function queries the solutions with
 //   `bestWith` and never solves.
 // - Sources (R59, no domain change): base plans `'dp'`; stop-lap neighbours `'neighbour'`; the rule families `'rule'`
-//   with `rule` `mirrorAhead`, `mirrorBehind`, `cover`, `extend`; the committed row is the job's (`'committed'`).
-// - Base: per world and stop count (0–3) the best `dpPlansMax` plans by `expectedMs`, each with its own triggers (the
+//   with `rule` `mirrorAhead`, `mirrorBehind`; the committed row is the job's (`'committed'`).
+// - Base: per world and stop count (0–3) the best `dpPlansMax` plans by `expectedMs`, each a stop list (the
 //   rain filter of Task 23a unchanged); `boxThisLap` and `continue` besides.
 // - A neighbour: the best plan's first stop moved by `neighbourMinLaps`–`neighbourMaxLaps` laps either way on the
-//   same compound, as `bestWith(solutions[best.world], { stopLap, compound })`: its stops and its own triggers; `null`
+//   same compound, as `bestWith(solutions[best.world], { stopLap, compound })`: its stops; `null`
 //   gives no candidate.
 // - A mirror of the nearest rival ahead (behind) not of ours: its first stop is the first stop of `race-monte-carlo`'s
 //   `rivalPlainPolicy` for that rival, lap **and compound**, as `bestWith(solutions[w], { stopLap, compound })` of a
 //   world w; never `start.stopMid` alone.
-// - Cover and extend: a base plan's candidate as it is (its stops and own triggers) plus its one `rivalPits` trigger.
-// - No candidate copies another's triggers.
 //
 // The field: 8 cars 2 s apart from lap 20 of 50, our cars 2 and 5; the rival ahead of car 2 (car 1) plainly stops on
 // lap 33 for inters (`nextOdds`), the one behind (car 3) on lap 27 for softs. The track is wet (600 ms), so inter
@@ -25,8 +23,8 @@
 import { carId, type CarId, type StartingPoint } from '@pitwall/domain';
 import type { McCandidate } from '../../src/race-monte-carlo/index.ts';
 import { startLapOf } from '../../src/race-forecast/index.ts';
-import { solveDp, solveWorld, type DpInput, type DpResult, type DpSolution } from '../../src/strategy-dp/index.ts';
-import { candidatesOf as candidatesOfUnit, type CandidatesConfig } from '../../src/strategy/candidates.ts';
+import { bestWith, solveDp, solveWorld, type DpInput, type DpPlan, type DpResult, type DpSolution } from '../../src/strategy-dp/index.ts';
+import { candidatesOf as candidatesOfUnit, policyOf, type CandidatesConfig } from '../../src/strategy/candidates.ts';
 import { STRATEGY_CONFIG } from '../../src/strategy/config.ts';
 import { startingPoint } from '../race-forecast/start.ts';
 import { dpInput, LAP as DP_LAP, type DpSpec } from '../strategy-dp/support.ts';
@@ -74,6 +72,57 @@ export function input(start: StartingPoint = field(), sets: DpSpec['sets'] = { s
     sets,
     worlds: [{ u: 0.25 }, { u: 0.75 }],
   });
+}
+
+/**
+ * A rival behind whose plain stop gives a mirror no DP plan or neighbour has (SP4.3d1 Task 3, ruling R18): on lap 25
+ * for softs `bestWith` gives `[25 soft, 36 medium]`, a plan outside the base plans and the neighbours (on lap 27 the
+ * mirror is a base plan, `[27 soft, 37 medium]`).
+ */
+export const BEHIND_OWN_STOP = { lap: 25, compound: 'soft' } as const;
+
+/** The field above, the rival behind plainly stopping on `stop` (two laps early to three late) instead. */
+export function fieldWithBehind(stop: { lap: number; compound: 'soft' }): StartingPoint {
+  const start = field();
+  start.stopLow[BEHIND] = stop.lap - 2;
+  start.stopMid[BEHIND] = stop.lap;
+  start.stopHigh[BEHIND] = stop.lap + 3;
+  start.nextOdds[BEHIND] = { [stop.compound]: 1 };
+  return start;
+}
+
+type Stop = DpPlan['stops'][number];
+
+/**
+ * A mirror's expected candidate (ruling R18, "no policy twice"): its policy, `bestWith`'s for the rival's first stop in
+ * the first world that gives one, and its label, the first source in candidate order with that policy: a base plan
+ * (`dp`; per world and stop count the best `dpPlansMax`, box this lap, continue), else a neighbour of the best plan,
+ * else the mirror's rule. Computed from the solves, not from `candidatesOf`; every plan passes the rain filter (the
+ * track is wet).
+ */
+export function expectedMirror(s: Solved, config: CandidatesConfig, rule: 'mirrorAhead' | 'mirrorBehind', stop: Stop): { policy: string; source: McCandidate['source']; rule: McCandidate['rule'] } | null {
+  const key = (p: Pick<DpPlan, 'stops'>): string => JSON.stringify(policyOf(p));
+  const q = s.solutions.map((w) => bestWith(w, { stopLap: stop.lap, compound: stop.compound })).find((p) => p !== null);
+  if (q === undefined || q === null) return null;
+  const byGroup = new Map<string, DpPlan[]>();
+  for (const p of s.dp.plans) byGroup.set(`${p.world}:${p.stops.length}`, [...(byGroup.get(`${p.world}:${p.stops.length}`) ?? []), p]);
+  const base = new Set([...byGroup.values()].flatMap((g) => [...g].sort((a, b) => a.expectedMs - b.expectedMs).slice(0, config.dpPlansMax)).map(key));
+  for (const p of [s.dp.boxThisLap, s.dp.continue]) if (p !== null) base.add(key(p));
+  const best = [...s.dp.plans].sort((a, b) => a.expectedMs - b.expectedMs)[0];
+  const neighbours = new Set<string>();
+  const first = best?.stops[0];
+  if (best !== undefined && first !== undefined) {
+    for (let d = config.neighbourMinLaps; d <= config.neighbourMaxLaps; d++) {
+      for (const lap of [first.lap - d, first.lap + d]) {
+        const n = bestWith(s.solutions[best.world]!, { stopLap: lap, compound: first.compound });
+        if (n !== null) neighbours.add(key(n));
+      }
+    }
+  }
+  const policy = key(q);
+  if (base.has(policy)) return { policy, source: 'dp', rule: null };
+  if (neighbours.has(policy)) return { policy, source: 'neighbour', rule: null };
+  return { policy, source: 'rule', rule };
 }
 
 /** The real solves: `solveDp`'s result and one `solveWorld` per world, computed once per input. */

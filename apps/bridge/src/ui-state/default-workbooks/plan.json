@@ -1,0 +1,56 @@
+{
+  "name": "plan",
+  "windows": [
+    {
+      "id": "main",
+      "layout": {
+        "grid": {
+          "root": {
+            "type": "branch",
+            "data": [
+              {
+                "type": "branch",
+                "data": [
+                  { "type": "leaf", "data": { "views": ["plan-board-1"], "activeView": "plan-board-1", "id": "gplan-board-1" }, "size": 320 },
+                  { "type": "leaf", "data": { "views": ["strategy-table-1"], "activeView": "strategy-table-1", "id": "gstrategy-table-1" }, "size": 300 },
+                  { "type": "leaf", "data": { "views": ["strategy-overview-1"], "activeView": "strategy-overview-1", "id": "gstrategy-overview-1" }, "size": 380 }
+                ],
+                "size": 960
+              },
+              {
+                "type": "branch",
+                "data": [
+                  { "type": "leaf", "data": { "views": ["plan-board-2"], "activeView": "plan-board-2", "id": "gplan-board-2" }, "size": 320 },
+                  { "type": "leaf", "data": { "views": ["strategy-table-2"], "activeView": "strategy-table-2", "id": "gstrategy-table-2" }, "size": 300 },
+                  { "type": "leaf", "data": { "views": ["strategy-overview-2"], "activeView": "strategy-overview-2", "id": "gstrategy-overview-2" }, "size": 380 }
+                ],
+                "size": 960
+              }
+            ],
+            "size": 1000
+          },
+          "width": 1920,
+          "height": 1000,
+          "orientation": "HORIZONTAL"
+        },
+        "panels": {
+          "plan-board-1": { "id": "plan-board-1", "contentComponent": "panel", "title": "plan-board-1" },
+          "strategy-table-1": { "id": "strategy-table-1", "contentComponent": "panel", "title": "strategy-table-1" },
+          "strategy-overview-1": { "id": "strategy-overview-1", "contentComponent": "panel", "title": "strategy-overview-1" },
+          "plan-board-2": { "id": "plan-board-2", "contentComponent": "panel", "title": "plan-board-2" },
+          "strategy-table-2": { "id": "strategy-table-2", "contentComponent": "panel", "title": "strategy-table-2" },
+          "strategy-overview-2": { "id": "strategy-overview-2", "contentComponent": "panel", "title": "strategy-overview-2" }
+        },
+        "activeGroup": "gplan-board-1"
+      },
+      "panels": {
+        "plan-board-1": { "widget": "plan-board", "options": { "source": "live" }, "linkGroup": 1 },
+        "strategy-table-1": { "widget": "strategy-table", "options": {}, "linkGroup": 1 },
+        "strategy-overview-1": { "widget": "strategy-overview", "options": {}, "linkGroup": 1 },
+        "plan-board-2": { "widget": "plan-board", "options": { "source": "live" }, "linkGroup": 2 },
+        "strategy-table-2": { "widget": "strategy-table", "options": {}, "linkGroup": 2 },
+        "strategy-overview-2": { "widget": "strategy-overview", "options": {}, "linkGroup": 2 }
+      }
+    }
+  ]
+}

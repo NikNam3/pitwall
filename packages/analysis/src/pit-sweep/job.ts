@@ -5,7 +5,7 @@
 // `scoreCalls` plays our stops from) to `min(flag − 1, window.to + rowsAfter)`, the window being the compound's
 // `pit-window` `windowLaps` (every stop lap from now to `flag − 1` while it is unknown, Task 18q B), the candidate "box
 // at L onto the compound, then the DP's best continuation"
-// (`policyOf(bestWith(...))`, with the plan's own triggers, to the flag); one `scoreCalls` per compound on common scenarios,
+// (`policyOf(bestWith(...))`, a stop list to the flag); one `scoreCalls` per compound on common scenarios,
 // `floor(maxScenarioPolicies / rows)` each (a count, C2). A stop lap whose `bestWith` is `null` has no row; a compound
 // without a row is absent. The car is the call's only car of ours, with a committed teammate as certain input (as far
 // as it can follow its plan) and an uncommitted one modelled like a rival, as `strategy`'s final call does.
@@ -13,7 +13,7 @@ import { known, unknown, type CarId, type Known, type PitSweepCar, type PitSweep
 import type { Rng } from '@pitwall/engine/readers';
 import { startLapOf } from '../race-forecast/index.ts';
 import { scoreCalls, type CallCandidate } from '../race-monte-carlo/index.ts';
-import { committedField, mcSettingsFrom, notPlannedWhy, plannedCars, plannedField, policyOf, strategyConfigOf, toDpInput, toMcHazard } from '../shared/strategy-input/index.ts';
+import { committedField, mcSettingsFrom, notPlannedWhy, plannedCars, plannedField, policyOf, reactionsOf, strategyConfigOf, toDpInput, toMcHazard } from '../shared/strategy-input/index.ts';
 import { bestWith, solveWorld } from '../strategy-dp/index.ts';
 import type { PitSweepInput, SweepCar } from './prepare.ts';
 import { rowsOf } from './rows.ts';
@@ -48,6 +48,8 @@ function tablesOf(input: PitSweepInput, start: StartingPoint, at: SessionTime, c
   const { start: callStart, committed } = callField(input, field, car);
   const hazard = toMcHazard(strategy.hazard, field);
   const { rivalRules, zTie, tieBand } = mcSettingsFrom(strategy.config);
+  // our cars' SC/VSC reaction (spec §5.2): the car's from its solve, a committed teammate's from its own
+  const reactions = reactionsOf(strategy, start, Object.keys(callStart.sets).map((k) => Number(k) as CarId), (k) => (k === car ? solution : null));
 
   const byCompound: PitSweepCar['byCompound'] = {};
   for (const compound of c.compounds) {
@@ -65,7 +67,7 @@ function tablesOf(input: PitSweepInput, start: StartingPoint, at: SessionTime, c
     const scenarios = Math.max(1, Math.floor(config.maxScenarioPolicies / candidates.length));
     // the one traffic gap (C43): strategy's, as the DP's and sc-call's
     const traffic = { gapMs: strategyConfigOf(strategy.config).trafficGapMs, laps: config.trafficLaps };
-    const { outcomes } = scoreCalls({ start: callStart, car, candidates, committed, hazard, rivalRules, scenarios, traffic }, rng);
+    const { outcomes } = scoreCalls({ start: callStart, car, candidates, committed, hazard, rivalRules, scenarios, traffic, reactions }, rng);
     const rows = rowsOf(stopLaps, outcomes, { position, cars: callStart.cars, latest: c.latest, zTie, tieBand, at });
     if (rows.length === 0) continue;
     const table: PitSweepTable = { compound, rows, scenarios };

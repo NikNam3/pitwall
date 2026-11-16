@@ -118,7 +118,8 @@ describe('pitwall strategy', { timeout: 180_000 }, () => {
       const line = rows[i]!;
       expect(line).toMatch(new RegExp(`^\\s+${i + 1}\\b\\D*\\b${r.source}\\b`));
       for (const stop of r.policy.stops) expect(line).toContain(`L${stop.lap} ${stop.compound}`);
-      for (const t of r.policy.triggers) expect(line).toContain(t.kind);
+      // a plan is a stop list (SP4.3d1 Task 3): no trigger columns
+      expect(line, line).not.toMatch(/\bfired\b|\bif\b|neutralised/);
       expect(line).toContain(`E[pos] ${r.ePos.toFixed(2)}`);
       expect(line).toContain(`E[points] ${r.ePoints.toFixed(2)}`);
       expect(line).toContain(pmfText(r.positionPmf));

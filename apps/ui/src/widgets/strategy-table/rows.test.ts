@@ -7,24 +7,21 @@
 //    `text.tieHover`; `rank` the row's `rank`; `source` the word `text.source[row.source]` (`plan` for the committed row)
 //    with hover `text.sourceHover[source]`, for a rule candidate `text.sourceHover.rule(row.rule)`; `stops`; `ePos` kit
 //    `formatExpectedPlace`; `committed`; `infeasible` `text.infeasible[row.infeasible]` or null;
-//  - `infoRow(plan, i, cars)`: rank, source (as the list), stops, `trg` the number of trigger lines it shows
-//    (`triggerTexts(...).length`: an SC and a VSC trigger joined count as one, 3 in the sample), `ePos`, `ePoints`
-//    (kit `formatPoints`), `delta`: without a commit kit `formatSignedSeconds(deltaLeaderMs, 1)`, empty on rows[0]; with
-//    a commit `formatSignedSeconds(deltaPlanMs, 1)`, empty on the committed row; `button` `clear` on the committed row,
-//    else `commit`; `triggers` = `triggerTexts(policy.triggers, cars)`;
+//  - `infoRow(plan, i)`: rank, source (as the list), stops, `ePos`, `ePoints` (kit `formatPoints`), `delta`: without a
+//    commit kit `formatSignedSeconds(deltaLeaderMs, 1)`, empty on rows[0]; with a commit
+//    `formatSignedSeconds(deltaPlanMs, 1)`, empty on the committed row; `button` `clear` on the committed row,
+//    `activate` on a row saved in a slot (`slot` not null), else `save` (SP4.3d1 Task 11: commit became "save to slot …"
+//    with a slot picker; a saved row is activated). A policy is a stop list (SP4.3d spec §5.1): the TRG count, the trigger lines (`triggerTexts`) and the
+//    rivals' race numbers (`cars`) are deleted with the triggers (SP4.3d1 Task 3);
 //  - `deltaHeader(plan)`: `text.headers.dLead` (`ΔTIME`) without a committed row, `text.headers.dPlan` (`ΔPLAN`) with one;
 //  - `footer(plan)`: `n` the scenario count (kit `formatCount`), `warning` with `text.openTieHover` while `unresolvedTie`,
-//    else no warning; `cand` the candidate count;
-//  - `triggerTexts(triggers, cars)`: one text per trigger in policy order (`text.trigger[kind]`), an SC and a VSC trigger
-//    with the same range joined as one `SC/VSC L12–24` at the first one's place; a `rivalPits` trigger names its rival by
-//    the race number from `cars` (`cars.overview`, kit `formatRaceNumber`: `COVER #44 1.0 s`), never by the car slot; a
-//    car `cars` does not list shows the kit's `unknownMark.notReceived` in its place.
-import { type McRow, type Trigger } from '@pitwall/domain';
+//    else no warning; `cand` the candidate count.
+import { type McRow } from '@pitwall/domain';
 import { describe, expect, it } from 'vitest';
-import { unknownMark } from '../../kit/text.ts';
-import { formatCount, formatExpectedPlace, formatPoints, formatRaceNumber, formatSignedSeconds } from '../../kit/values/format.ts';
-import { COMMITTED, coverTrigger, FIELD, NO_HIGHLIGHT, OPEN_TIE, RIVAL, RIVAL_NUMBER, RIVAL_TABLE, table, UNLISTED } from './fixtures.ts';
-import { deltaHeader, footer, infoRow, listRows, stopsText, triggerTexts } from './rows.ts';
+import { formatCount, formatExpectedPlace, formatPoints, formatSignedSeconds } from '../../kit/values/format.ts';
+import { COMMITTED, NO_HIGHLIGHT, OPEN_TIE, SAVED, table } from './fixtures.ts';
+import * as rowsModule from './rows.ts';
+import { deltaHeader, footer, infoRow, listRows, stopsText } from './rows.ts';
 import * as text from './text.ts';
 
 const at = (rows: McRow[], stops: string): number => rows.findIndex((r) => r.policy.stops.map((s) => `L${s.lap} ${s.compound[0]!.toUpperCase()}`).join(' ') === stops);
@@ -39,76 +36,75 @@ describe('strategy-table rows', () => {
     expect(list[at(rows, 'L20 H')]!.stops).toBe('L20 H');
     expect(list[at(rows, 'L16 H L31 M')]!.stops).toBe('L16 H L31 M');
     expect(list.map((r) => r.ePos)).toEqual(rows.map((r) => formatExpectedPlace(r.ePos)));
-    expect(list.map((r) => r.source.text)).toEqual(rows.map((r) => ({ dp: 'dp', neighbour: 'nbr', rule: 'rule', committed: 'plan' })[r.source]));
+    expect(list.map((r) => r.source.text)).toEqual(rows.map((r) => ({ dp: 'dp', neighbour: 'nbr', rule: 'rule', committed: 'plan', plan: 'plan', game: 'game' })[r.source]));
     expect(list.map((r) => r.bracket === null)).toEqual(rows.map((r) => !r.tie));
     expect(list.slice(0, 3).map((r) => [r.bracket?.first, r.bracket?.last])).toEqual([[true, false], [false, false], [false, true]]);
     expect(list[0]!.bracket).toMatchObject({ role: 'textDim', hover: text.tieHover });
     expect(list.every((r) => r.infeasible === null)).toBe(true);
   });
 
-  it('the info rows: rank, source, stops, TRG count, E[pos], E[points], the button, then the triggers', () => {
+  it('the info rows: rank, source, stops, E[pos], E[points], the button', () => {
     const i = at(NO_HIGHLIGHT.rows, 'L20 H');
     const r = NO_HIGHLIGHT.rows[i]!;
-    expect(infoRow(NO_HIGHLIGHT, i, FIELD)).toEqual({
+    expect(infoRow(NO_HIGHLIGHT, i)).toEqual({
       rank: String(r.rank),
       source: { text: 'dp', hover: text.sourceHover.dp },
       stops: 'L20 H',
-      // TRG counts the trigger lines shown: SC and VSC over one range are one line (the mockup's 3), not the policy's 4 triggers
-      trg: '3',
       ePos: formatExpectedPlace(r.ePos),
       ePoints: formatPoints(r.ePoints),
       delta: i === 0 ? '' : formatSignedSeconds(r.deltaLeaderMs, 1),
-      button: 'commit',
-      triggers: ['SC/VSC L12–24', 'DMG +1.2 s/lap', 'DEG +30%'],
+      button: 'save',
     });
-    expect(r.policy.triggers).toHaveLength(4);
     const k = COMMITTED.rows.findIndex((x) => x.committed);
-    expect(infoRow(COMMITTED, k, FIELD)).toMatchObject({ source: { text: 'plan', hover: text.sourceHover.committed }, button: 'clear' });
+    expect(infoRow(COMMITTED, k)).toMatchObject({ source: { text: 'plan', hover: text.sourceHover.committed }, button: 'clear' });
     expect(listRows(COMMITTED)[k]).toMatchObject({ committed: true, source: { text: 'plan' } });
   });
 
-  it('TRG is the number of trigger lines shown: SC and VSC with one range count as one', () => {
-    NO_HIGHLIGHT.rows.forEach((r, i) => {
-      const info = infoRow(NO_HIGHLIGHT, i, FIELD);
-      expect(info.trg, `row ${i}`).toBe(String(info.triggers.length));
-      expect(info.trg, `row ${i}`).toBe('3');
+  // SP4.3d1 Task 11: the commit button became "save to slot …"; a row saved in a slot is activated instead
+  it('the button: save on a row in no slot, activate on a saved row, clear on the committed row', () => {
+    const b = at(SAVED.rows, 'L19 H');
+    const g = at(SAVED.rows, 'L22 H');
+    expect(SAVED.rows[b]!.slot).toBe('B');
+    expect(infoRow(SAVED, b)).toMatchObject({ source: { text: 'plan', hover: text.sourceHover.plan }, button: 'activate' });
+    expect(infoRow(SAVED, g)).toMatchObject({ source: { text: 'game', hover: text.sourceHover.game }, button: 'activate' });
+    SAVED.rows.forEach((r, i) => {
+      if (r.slot === null) expect(infoRow(SAVED, i).button, `row ${i}`).toBe('save');
     });
-    // a cover rule adds a fourth line
-    const c = RIVAL_TABLE.rows.findIndex((r) => r.rule === 'cover');
-    expect(infoRow(RIVAL_TABLE, c, FIELD).trg).toBe('4');
   });
 
-  it('a cover trigger names its rival by race number from cars.overview, never by slot; an unlisted car the unknown mark', () => {
-    const c = RIVAL_TABLE.rows.findIndex((r) => r.rule === 'cover');
-    expect(c).toBeGreaterThanOrEqual(0);
-    expect(RIVAL).not.toBe(RIVAL_NUMBER);
-    const info = infoRow(RIVAL_TABLE, c, FIELD);
-    expect(info.triggers).toEqual(['SC/VSC L12–22', 'DMG +1.2 s/lap', 'DEG +30%', `COVER ${formatRaceNumber(RIVAL_NUMBER)} 1.0 s`]);
-    expect(info.triggers.at(-1)).toBe('COVER #44 1.0 s');
-    expect(info.triggers.join(' ')).not.toContain(`#${RIVAL}`);
-    // the same slot with another race number: the text follows the race number
-    const renumbered = FIELD.map((car) => (car.id === RIVAL ? { ...car, identity: { ...car.identity, raceNumber: 31 } } : car));
-    expect(triggerTexts([coverTrigger()], renumbered)).toEqual(['COVER #31 1.0 s']);
-    // a car cars.overview does not list (no participant data yet): the kit's unknown mark in its place
-    expect(triggerTexts([coverTrigger(UNLISTED)], FIELD)).toEqual([`COVER ${unknownMark.notReceived} 1.0 s`]);
-    expect(triggerTexts([coverTrigger()], [])).toEqual([`COVER ${unknownMark.notReceived} 1.0 s`]);
+  // SP4.3d1 Task 3 row 5 (spec §5.1): the TRG column and its trigger lines are deleted with the triggers
+  it('strategy table: no TRG column; rows render without triggers', () => {
+    expect(Object.keys(text.headers)).not.toContain('trg');
+    expect(Object.values(text.headers)).not.toContain('TRG');
+    expect('trigger' in text, 'no trigger wording').toBe(false);
+    expect('triggerTexts' in rowsModule, 'no trigger lines').toBe(false);
+    for (const plan of [NO_HIGHLIGHT, COMMITTED, OPEN_TIE]) {
+      plan.rows.forEach((r, i) => {
+        expect(Object.keys(r.policy), `row ${i}`).toEqual(['stops']);
+        expect(Object.keys(r), `row ${i}`).not.toContain('triggers');
+        const info = infoRow(plan, i);
+        expect(Object.keys(info), `row ${i}`).not.toContain('trg');
+        expect(Object.keys(info), `row ${i}`).not.toContain('triggers');
+        expect(info.stops, `row ${i}`).toBe(stopsText(r.policy));
+      });
+    }
   });
 
   it('ΔTIME without a commit, ΔPLAN with one; an unresolved tie amber with the footer\'s N', () => {
     expect(deltaHeader(NO_HIGHLIGHT)).toBe('ΔTIME');
     expect(deltaHeader(COMMITTED)).toBe('ΔPLAN');
     // without a commit: against the leader, rows[0] blank
-    expect(infoRow(NO_HIGHLIGHT, 0, FIELD).delta).toBe('');
+    expect(infoRow(NO_HIGHLIGHT, 0).delta).toBe('');
     NO_HIGHLIGHT.rows.forEach((r, i) => {
-      if (i > 0) expect(infoRow(NO_HIGHLIGHT, i, FIELD).delta, `row ${i}`).toBe(formatSignedSeconds(r.deltaLeaderMs, 1));
+      if (i > 0) expect(infoRow(NO_HIGHLIGHT, i).delta, `row ${i}`).toBe(formatSignedSeconds(r.deltaLeaderMs, 1));
     });
     // with a commit: against the plan, the committed row blank (Q1 A)
     const k = COMMITTED.rows.findIndex((r) => r.committed);
-    expect(infoRow(COMMITTED, k, FIELD).delta).toBe('');
+    expect(infoRow(COMMITTED, k).delta).toBe('');
     COMMITTED.rows.forEach((r, i) => {
-      if (i !== k) expect(infoRow(COMMITTED, i, FIELD).delta, `row ${i}`).toBe(formatSignedSeconds(r.deltaPlanMs!, 1));
+      if (i !== k) expect(infoRow(COMMITTED, i).delta, `row ${i}`).toBe(formatSignedSeconds(r.deltaPlanMs!, 1));
     });
-    expect(infoRow(COMMITTED, 0, FIELD).delta).not.toBe(formatSignedSeconds(COMMITTED.rows[0]!.deltaLeaderMs, 1));
+    expect(infoRow(COMMITTED, 0).delta).not.toBe(formatSignedSeconds(COMMITTED.rows[0]!.deltaLeaderMs, 1));
     // an open tie at the cap: the bracket and N amber
     const open = listRows(OPEN_TIE);
     expect(open.filter((r) => r.bracket !== null)).toHaveLength(2);
@@ -131,59 +127,20 @@ describe('strategy-table rows', () => {
     const i = NO_HIGHLIGHT.rows.findIndex((r) => r.source === 'rule');
     expect(NO_HIGHLIGHT.rows[i]!.rule).toBe('mirrorAhead');
     expect(listRows(NO_HIGHLIGHT)[i]!.source).toEqual({ text: 'rule', hover: text.sourceHover.rule('mirrorAhead') });
-    expect(infoRow(NO_HIGHLIGHT, i, FIELD).source).toEqual({ text: 'rule', hover: text.sourceHover.rule('mirrorAhead') });
-    const rules = (['mirrorAhead', 'mirrorBehind', 'cover', 'extend'] as const).map((r) => text.sourceHover.rule(r));
-    expect(new Set(rules).size).toBe(4);
+    expect(infoRow(NO_HIGHLIGHT, i).source).toEqual({ text: 'rule', hover: text.sourceHover.rule('mirrorAhead') });
+    const rules = (['mirrorAhead', 'mirrorBehind'] as const).map((r) => text.sourceHover.rule(r));
+    expect(new Set(rules).size).toBe(2);
     for (const h of rules) expect(h.length).toBeGreaterThan(0);
     const others = (['dp', 'neighbour', 'committed'] as const).map((s) => text.sourceHover[s]);
     expect(others.every((h) => h.length > 0 && !rules.includes(h))).toBe(true);
   });
 });
 
-/** Every `Trigger['kind']`, checked both ways against the type. */
-const KINDS = ['neutralised', 'rain', 'rivalPits', 'degradationOff', 'damage'] as const satisfies readonly Trigger['kind'][];
-type Missing = Exclude<Trigger['kind'], (typeof KINDS)[number]>;
-const allKinds: Missing extends never ? true : false = true;
-
-describe('strategy-table trigger wording', () => {
-  it('every Trigger kind has its wording; SC and VSC with one range join as SC/VSC', () => {
-    expect(allKinds).toBe(true);
-    expect(Object.keys(text.trigger).sort()).toEqual([...KINDS].sort());
-    const sc = (from: number, to: number): Trigger => ({ kind: 'neutralised', condition: 'sc', fromLap: from, toLap: to, action: { box: 'hard' } });
-    const vsc = (from: number, to: number): Trigger => ({ kind: 'neutralised', condition: 'vsc', fromLap: from, toLap: to, action: 'stayOut' });
-    expect(triggerTexts([sc(12, 24)], FIELD)).toEqual(['SC L12–24']);
-    // the vsc helper's trigger is a stay-out one: it carries the "not this lap" word (Task 22b)
-    expect(triggerTexts([vsc(15, 24)], FIELD)).toEqual(['VSC L15–24 not this lap']);
-    expect(triggerTexts([sc(12, 24), vsc(15, 24)], FIELD)).toEqual(['SC L12–24', 'VSC L15–24 not this lap']);
-    // a box and a stay-out trigger over one range join as today, without the stay-out word (only both stay-out keep it)
-    expect(triggerTexts([sc(12, 24), vsc(12, 24)], FIELD)).toEqual(['SC/VSC L12–24']);
-    expect(triggerTexts([{ kind: 'damage', lossMsPerLap: 1_200, action: { box: 'hard' } }], FIELD)).toEqual(['DMG +1.2 s/lap']);
-    expect(triggerTexts([{ kind: 'degradationOff', wearRateDeltaPct: 30, action: { switchTo: [{ lap: 18, compound: 'hard' }] } }], FIELD)).toEqual(['DEG +30%']);
-    expect(triggerTexts([{ kind: 'rain', wetnessMs: 800, action: { box: 'inter' } }], FIELD)).toEqual(['RAIN +0.8 s']);
-    // the rival in slot 3 carries race number 44 (FIELD): the text names #44
-    expect(triggerTexts([{ kind: 'rivalPits', carId: RIVAL, withinMs: 1_000, action: 'cover' }], FIELD)).toEqual(['COVER #44 1.0 s']);
-    expect(triggerTexts([{ kind: 'rivalPits', carId: RIVAL, withinMs: 1_000, action: 'extend' }], FIELD)).toEqual(['EXT #44 1.0 s']);
-    // the joined pair keeps the first one's place
-    expect(triggerTexts([{ kind: 'damage', lossMsPerLap: 1_200, action: { box: 'hard' } }, vsc(12, 24), sc(12, 24)], FIELD)).toEqual(['DMG +1.2 s/lap', 'SC/VSC L12–24']);
-  });
-});
-
 // SP4.3c Task 22b (T5, R61): what a "stay out" means on screen. A policy with no stops reads `text.toTheFlag` in STOPS
-// (list and detail rows); a `neutralised` trigger with action 'stayOut' reads its text then `text.notThisLap`
-// (`SC L12–24 not this lap`); a box trigger reads as before; an SC and a VSC trigger over one range join as before and
-// keep the word once when both are stay-out.
+// (list and detail rows). SP4.3d1 Task 3: the stay-out trigger's wording (`not this lap`) is deleted with the triggers.
 describe('strategy-table stay-out wording', () => {
-  const neutralised = (condition: 'sc' | 'vsc', from: number, to: number, action: { box: 'hard' } | 'stayOut'): Trigger => ({
-    kind: 'neutralised',
-    condition,
-    fromLap: from,
-    toLap: to,
-    action,
-  });
-
-  it('the words live in text.ts', () => {
+  it('the word lives in text.ts', () => {
     expect(text.toTheFlag).toBe('to the flag');
-    expect(text.notThisLap).toBe('not this lap');
   });
 
   it('a zero-stop policy shows "to the flag" in STOPS, in the list and in the detail row', () => {
@@ -192,30 +149,9 @@ describe('strategy-table stay-out wording', () => {
     const rows = base.rows.map((r, j) => (j === i ? { ...r, policy: { ...r.policy, stops: [] } } : r));
     const plan = { ...base, rows };
     expect(listRows(plan)[i]!.stops).toBe(text.toTheFlag);
-    expect(infoRow(plan, i, FIELD).stops).toBe(text.toTheFlag);
+    expect(infoRow(plan, i).stops).toBe(text.toTheFlag);
     // the other rows keep their stops
     expect(listRows(plan)[0]!.stops).toBe(stopsText(base.rows[0]!.policy));
     expect(listRows(plan)[0]!.stops).not.toBe(text.toTheFlag);
-  });
-
-  it('a stay-out neutralised trigger reads "SC L12–24 not this lap"; a box trigger over the same range as today', () => {
-    expect(triggerTexts([neutralised('sc', 12, 24, 'stayOut')], FIELD)).toEqual(['SC L12–24 not this lap']);
-    expect(triggerTexts([neutralised('sc', 12, 24, 'stayOut')], FIELD)).toEqual([`${text.neutralisedText('SC', 12, 24)} ${text.notThisLap}`]);
-    expect(triggerTexts([neutralised('vsc', 12, 24, 'stayOut')], FIELD)).toEqual(['VSC L12–24 not this lap']);
-    expect(triggerTexts([neutralised('sc', 12, 24, { box: 'hard' })], FIELD)).toEqual(['SC L12–24']);
-    expect(triggerTexts([neutralised('vsc', 12, 24, { box: 'hard' })], FIELD)).toEqual(['VSC L12–24']);
-  });
-
-  it('an SC and a VSC stay-out trigger over one range join as today, with the stay-out word once', () => {
-    const joined = triggerTexts([neutralised('sc', 12, 24, 'stayOut'), neutralised('vsc', 12, 24, 'stayOut')], FIELD);
-    expect(joined).toEqual(['SC/VSC L12–24 not this lap']);
-    expect(joined).toEqual([`${text.neutralisedText(text.scOrVsc, 12, 24)} ${text.notThisLap}`]);
-    expect(joined[0]!.split(text.notThisLap)).toHaveLength(2);
-    // the pair keeps the first one's place, after another trigger
-    expect(
-      triggerTexts([{ kind: 'damage', lossMsPerLap: 1_200, action: { box: 'hard' } }, neutralised('vsc', 12, 24, 'stayOut'), neutralised('sc', 12, 24, 'stayOut')], FIELD),
-    ).toEqual(['DMG +1.2 s/lap', 'SC/VSC L12–24 not this lap']);
-    // two box triggers join as today
-    expect(triggerTexts([neutralised('sc', 12, 24, { box: 'hard' }), neutralised('vsc', 12, 24, { box: 'hard' })], FIELD)).toEqual(['SC/VSC L12–24']);
   });
 });

@@ -1,11 +1,14 @@
 // `rejoin` (SP4.2 spec 3.2, 6.1): our car as if it were in the pit lane now, per condition (green, VSC, SC). For every
-// other car X, `t_X = gapMs_X − loss[c]` (its gap to us at the same point of the road, from `gapsToCar`, minus the
-// loss); the physical order sorts by `t`, the ghost at 0; the rejoin position is our position plus the cars on our lap
+// other car X, `t_X = behind_X − loss[c]` (SP4.3d1 Task 7, spec §6.5: its time behind us on our crossing history,
+// `now − timeAtProgress(ours, its live progress)`, modulo one of our laps; in a built race at one pace that is its gap
+// to us at the same point of the road), on every frame; the physical order sorts by `t`, the ghost at 0; the rejoin position is our position plus the cars on our lap
 // behind us within the loss; each row's interval is its `t` minus the row ahead's (the first row against the car ahead
 // of it in the full order). The map point is `rejoin-ghost`'s (SP4.3c §5.7, O18; the map-point cases moved to its
 // tests). Built races (`field.ts`); every case runs through the guarded view (C41); race only (C14); our cars only.
 import { carId, known, unknown, type CarId, type CrossingRow, type Known, type PitCondition } from '@pitwall/domain';
 import fc from 'fast-check';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { GAPS } from '../../src/gaps/index.ts';
 import { PIT_LOSS } from '../../src/pit-loss/index.ts';
@@ -14,7 +17,7 @@ import { rejoinCalculator } from '../../src/rejoin/calculator.ts';
 import { REJOIN, REJOIN_CONFIG, type Rejoin, type RejoinAt, type RejoinOutput } from '../../src/rejoin/index.ts';
 import { guardedQuick } from '../situated.ts';
 import { loadUnitFolders } from '../units.ts';
-import { INSUFFICIENT, NOT_APPLICABLE, rejoinCase, SOURCES, US, type Field, type RejoinCase } from './field.ts';
+import { FIELD, INSUFFICIENT, NOT_APPLICABLE, NOW, rejoinCase, SOURCES, US, type Field, type RejoinCase } from './field.ts';
 
 const calc = guardedQuick(rejoinCalculator);
 
@@ -49,6 +52,15 @@ const rowOf = (rows: readonly CrossingRow[], car: number): CrossingRow => {
   return row;
 };
 
+/** A car's `t` in an order (the ghost's is 0): the sum of the intervals between the ghost and its row. */
+const tOf = (rows: readonly CrossingRow[], car: number): number => {
+  const g = rows.findIndex((r) => r.ghost);
+  const k = rows.findIndex((r) => !r.ghost && r.carId === carId(car));
+  if (g < 0 || k < 0) throw new Error(`no ghost or no row of car ${car}`);
+  const sum = (from: number, to: number) => intervals(rows.slice(from, to)).reduce((a, b) => a + b, 0);
+  return k > g ? sum(g + 1, k + 1) : -sum(k + 1, g + 1);
+};
+
 const ghostOf = (rows: readonly CrossingRow[]): CrossingRow => {
   const ghosts = rows.filter((r) => r.ghost);
   expect(ghosts).toHaveLength(1);
@@ -56,10 +68,10 @@ const ghostOf = (rows: readonly CrossingRow[]): CrossingRow => {
 };
 
 describe('rejoin calculator', () => {
-  it('is the quick analysis `rejoin` on our crossings, over gaps, pit-loss, the weekend phase, car activity and car status', () => {
+  it('is the quick analysis `rejoin` on every frame (SP4.3d1 Task 7), over gaps, pit-loss, the weekend phase, car activity and car status', () => {
     expect(rejoinCalculator.id).toBe(REJOIN);
     expect(rejoinCalculator.kind).toBe('quick');
-    expect(rejoinCalculator.cadence).toBe('ourCrossing');
+    expect(rejoinCalculator.cadence).toBe('frame');
     expect(rejoinCalculator.reads).toEqual(
       expect.arrayContaining([{ calculator: GAPS }, { calculator: PIT_LOSS }, 'spans:weekend-phase', 'spans:car-activity-race', 'spans:car-status']),
     );
@@ -191,6 +203,34 @@ describe('rejoin calculator', () => {
     }
   });
 
+  // SP4.3d1 Task 8 R21: a car behind us on our lap needs only as much of our history as its own gap, not a full lap;
+  // an SC on lap 1 must still give a rejoin position. Cars ahead stay unknown with less than a lap of our history.
+  it('our first lap, or after a join mid-race: cars behind us on our lap keep their gaps and the rejoin position is where the ghost falls among them; cars ahead are unknown (R21)', () => {
+    const wide = { [REJOIN_CONFIG.key]: { orderAround: 12 } };
+    // the standard field on our first lap: now 50 000, we at progress 25 (45 s of history), every car behind us within it
+    const first: RejoinCase = { now: 50_000, config: wide };
+    // the standard field after a join mid-race: the race started 180 s before our first record, so our kept crossings
+    // begin at progress 98 (1 400) and we are at progress 125 at 50 000: 48.6 s of history, less than a lap
+    const joined: RejoinCase = { field: Object.fromEntries(Object.entries(FIELD).map(([id, o]) => [id, o - 180_000])), now: 50_000, config: wide };
+    for (const [name, c] of [['first lap', first], ['joined', joined]] as const) {
+      const r = rejoinOf(outputOf(c));
+      // green 20 300: cars 6, 7, 8 (+3.1, +12.0, +19.9 s) cross before us, car 9 (+24.0 s) after: P9, as in the full race
+      expect(r.conditions.green.rejoinPosition, name).toMatchObject({ known: true, value: 9 });
+      const green = valueOf(r.conditions.green.order);
+      // only the cars behind us have a gap: the cars ahead (1 … 5) are not in the order
+      expect(ids(green), name).toEqual([6, 7, 8, 'ghost', 9, 10, 11]);
+      expect(tOf(green, 8), name).toBeCloseTo(-400, 0);
+      expect(tOf(green, 9), name).toBeCloseTo(3_700, 0);
+      expect(tOf(green, 11), name).toBeCloseTo(14_700, 0);
+      // SC 9 800 on lap 1: car 6 crosses before us, car 7 after: P7
+      expect(r.conditions.sc.rejoinPosition, name).toMatchObject({ known: true, value: 7 });
+      const sc = valueOf(r.conditions.sc.order);
+      expect(ids(sc), name).toEqual([6, 'ghost', 7, 8, 9, 10, 11]);
+      expect(tOf(sc, 6), name).toBeCloseTo(-6_700, 0);
+      expect(tOf(sc, 7), name).toBeCloseTo(2_200, 0);
+    }
+  });
+
   // 8
   it('our car in a box stop, on its out lap or serving a penalty: absent; on a racing lap or its in lap: present', () => {
     for (const kind of ['boxStop', 'outLap', 'servingPenalty']) expect(outputOf({ activity: { [US]: kind } }).cars[carId(US)], kind).toBeUndefined();
@@ -228,6 +268,47 @@ describe('rejoin calculator', () => {
     expect(outputOf({ kind: 'qualifying' }).cars).toEqual({});
   });
 
+  // SP4.3d1 Task 7 row 4
+  it('a stopped car: 5 s stopped puts it 5 s further behind on our scale, and the rejoin position changes on the frame it passes the ghost', () => {
+    // the standard field without car 9: car 8 at +19.9 s (t −400 under green 20 300), car 10 at +30.0 s, car 11 at +35.0 s;
+    // car 8 stops at STOP and stays there while the field and our car run on; nobody reaches it within 6 s
+    const field: Field = { 1: 0, 2: 1_000, 3: 2_000, 4: 3_000, 5: 4_000, 0: 5_000, 6: 8_100, 7: 17_000, 8: 24_900, 10: 35_000, 11: 40_000 };
+    const STOP = 225_000;
+    const caseAt = (d: number): RejoinCase => ({ field, now: STOP + d, stopped: { car: 8, at: STOP } });
+    const green = (d: number) => at(caseAt(d));
+    const first = valueOf(green(25).order);
+    const later = valueOf(green(5_025).order);
+    // car 8: t −375 25 ms after it stopped, t +4 625 5 s later; car 10, still running, keeps its t
+    expect(tOf(later, 8) - tOf(first, 8)).toBeCloseTo(5_000, 0);
+    expect(tOf(first, 8)).toBeCloseTo(-375, 0);
+    expect(tOf(first, 10)).toBeCloseTo(9_700, 0);
+    expect(tOf(later, 10)).toBeCloseTo(9_700, 0);
+    expect(ids(first)).toEqual([6, 7, 8, 'ghost', 10, 11]);
+    expect(ids(later)).toEqual([5, 6, 7, 'ghost', 8, 10, 11]);
+    // every 50 ms: car 8 is 19 900 + d behind us; it stays ahead of the ghost while the ghost yields to it (within
+    // minGapMs 500 of the loss, B8) and is behind it from the first frame with 19 900 + d ≥ 20 800
+    for (let d = 25; d <= 6_025; d += 50) {
+      const want = 19_900 + d < 20_800 ? 9 : 8;
+      expect(green(d).rejoinPosition, `${d} ms after the stop`).toMatchObject({ known: true, value: want });
+    }
+  });
+
+  // SP4.3d1 Task 7 row 5
+  it("readers: between two of our crossings the output keeps its type; each condition's loss is pit-loss's, unchanged", () => {
+    // 700 ms after our crossing of progress 125
+    const r = rejoinOf(outputOf({ now: NOW + 700 }));
+    expect(r.position).toBe(6);
+    for (const c of CONDITIONS) expect(Object.keys(r.conditions[c]).sort(), c).toEqual(['condition', 'lossMs', 'lossSource', 'order', 'rejoinPosition']);
+    expect(r.conditions.green.lossMs).toMatchObject({ known: true, value: 20_300 });
+    expect(r.conditions.vsc.lossMs).toMatchObject({ known: true, value: 13_100 });
+    expect(r.conditions.sc.lossMs).toMatchObject({ known: true, value: 9_800 });
+    // every car moved on at one pace: the same places and intervals as on the crossing
+    expect(r.conditions.green.rejoinPosition).toMatchObject({ known: true, value: 9 });
+    const rows = valueOf(r.conditions.green.order);
+    expect(ids(rows)).toEqual([6, 7, 8, 'ghost', 9, 10, 11]);
+    intervals(rows).forEach((v, k) => expect(v, `row ${k}`).toBeCloseTo([4_100, 8_900, 7_900, 400, 3_700, 6_000, 5_000][k]!, 0));
+  });
+
   it('behaviour table: race → computes, other weekend phases notApplicable; racing and in laps compute, the rest notApplicable; car status as gaps (C44)', () => {
     expect(REJOIN_BEHAVIOUR['weekend-phase']).toEqual({ race: { race: true }, practice: { notApplicable: true }, qualifying: { notApplicable: true }, none: { notApplicable: true } });
     expect(REJOIN_BEHAVIOUR['car-activity-race']).toEqual({
@@ -246,5 +327,19 @@ describe('rejoin calculator', () => {
   it('the unit folder exports its behaviour table, the one the generic completeness test checks (C44, C87)', async () => {
     const folder = (await loadUnitFolders()).find((f) => f.unit === 'rejoin');
     expect(folder?.table).toBe(REJOIN_BEHAVIOUR);
+  });
+
+  // SP4.3d1 Task 8 F1 (C43, ruling R14): a car's time behind us now has one owner, the shared `timeBehind`; rejoin keeps
+  // no local copy of our position now, our live point, the lap-ago point or the folding by whole laps
+  it('keeps no copy of the time behind us: its calculator calls the shared timeBehind and folds nothing itself (C43, Task 7 F1, Task 8 F1)', () => {
+    const source = readFileSync(join(import.meta.dirname, '../../src/rejoin/calculator.ts'), 'utf8');
+    const imported = /import\s*\{([^}]*)\}\s*from\s*'\.\.\/shared\/crossing-history\.ts'/.exec(source)?.[1] ?? '';
+    expect(imported).toMatch(/\btimeBehind\b/);
+    expect(source).toMatch(/\btimeBehind\(/);
+    // reading our history directly, our live point and the lap unit are the helper's
+    expect(source).not.toMatch(/\btimeAtProgress\b/);
+    expect(source).not.toMatch(/\bLivePoint\b|\blivePoint\b/);
+    expect(source).not.toMatch(/\bMINI_SECTORS\b/);
+    expect(source).not.toMatch(/\b(?:function|const|let)\s+(?:progressOf|whenAt|liveOf|here|lapAgo|sinceThere|there|up|down)\b/);
   });
 });

@@ -41,7 +41,7 @@ Other docs: `docs/research/README.md` (index of the domain research), `docs/acce
 - `pnpm check`: typecheck, lint, depcruise and tests; the supervisor runs it before every merge (C88), except of a minor change, which runs its related tests (C82)
 - `pnpm vitest related <files>`: the tests a worker runs for its changes, with `pnpm typecheck`, `pnpm lint`, `pnpm depcruise`
 - `pnpm test` / `pnpm test:budget` / `pnpm test:acceptance`: unit and property tests / the `*.budget.test.ts` speed targets, one file at a time / acceptance tests on real recordings, then `test:budget`
-- `pnpm test:ui`: the Playwright suite. Screenshots: one baseline per display size of the display's first gallery case, default theme (plus kit and shell cells); `SCREENSHOT_BUDGET` (`apps/ui/test/gallery/screenshot-budget.test.ts`) caps the total; `fit.spec` checks every case and theme
+- `pnpm test:ui`: the Playwright suite. Screenshots: one baseline per display size of the display's first gallery case, default theme (plus kit and shell cells); the budget (`apps/ui/test/gallery/screenshot-budget.test.ts`) is at most 2 per registered display plus 5 misc (top bar, shell, kit, frame states), computed from the widget registry; `fit.spec` checks every case and theme
 - `pnpm mutation`: Stryker on protocol, engine, analysis and the UI logic (at least 80 %); once at the MVP end
 - `pnpm gen`: regenerate the gitignored generated files: `gen:features`, `gen:topics`, `gen:widgets`, `gen:catalogue`; `pnpm gen:moments` is separate
 - `pnpm desktop` / `pnpm desktop:dev`: the Electron panel (starts or attaches to the bridge)
