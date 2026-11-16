@@ -8,7 +8,7 @@
 // with the triggers (SP4.3d1 Task 3).
 import type { Computed } from '@pitwall/contracts';
 import { carId, known, toSessionTime, unknown } from '@pitwall/domain';
-import type { McRow, McSource, NoiseCompound, Policy, StrategyCar } from '@pitwall/domain';
+import type { McRow, McSource, NoiseCompound, Policy, Slot, StrategyCar } from '@pitwall/domain';
 import type { GalleryEntry } from '../../kit/gallery-types.ts';
 import type { widget } from './widget.ts';
 
@@ -89,6 +89,8 @@ export type TableSpec = {
   /** The committed row can no longer be followed as committed. */
   infeasible?: McRow['infeasible'];
   scenarios?: number;
+  /** SP4.3d1 Task 11: rows saved in a plan slot, by their stops text (`L19 H` → `B`): source `plan` (`game` for G1, G2). */
+  slots?: Partial<Record<string, Slot>>;
 };
 
 const stopsKey = (stops: [number, NoiseCompound][]): string => stops.map(([l, c]) => `L${l} ${c.charAt(0).toUpperCase()}`).join(' ');
@@ -101,7 +103,7 @@ const first = <T>(a: T[]): T => {
 
 /** A ranked strategy table as `strategy` publishes it for KUH. */
 export function table(spec: TableSpec = {}): PlanTable {
-  const { committed, openTie = false, allTied = false, n = 8, infeasible = null } = spec;
+  const { committed, openTie = false, allTied = false, n = 8, infeasible = null, slots = {} } = spec;
   const drawn = (openTie ? CANDIDATES.map((c, i) => (i === 1 ? { ...c, mu: 7.43 } : i === 2 ? { ...c, mu: 7.56 } : c)) : CANDIDATES).map(draw);
   const sorted = [...drawn].sort((a, b) => a.ePos - b.ePos);
   const lead = first(sorted).ePos;
@@ -114,14 +116,15 @@ export function table(spec: TableSpec = {}): PlanTable {
   if (committed !== undefined && committedAt < 0) throw new Error(`no row ${committed}`);
   const leader = first(ordered);
   const planMs = committedAt < 0 ? null : (ordered[committedAt]?.timeMs ?? null);
+  const slotOf = (r: Drawn): Slot | null => slots[stopsKey(r.stops)] ?? null;
   const rows: McRow[] = ordered.map((r, i) => {
     const isCommitted = i === committedAt;
     const policy: Policy = { stops: r.stops.map(([lap, compound]) => ({ lap, compound })) };
     const tie = groupSize > 1 && i < groupSize;
     return {
       policy,
-      source: isCommitted ? 'committed' : r.source,
-      slot: null,
+      source: slotOf(r) !== null ? (slotOf(r) === 'G1' || slotOf(r) === 'G2' ? 'game' : 'plan') : isCommitted ? 'committed' : r.source,
+      slot: slotOf(r),
       positionPmf: r.pmf,
       ePos: r.ePos,
       ePoints: r.ePoints,
@@ -166,6 +169,8 @@ export const KUH = carId(0);
 export const NO_HIGHLIGHT = table(); // rows: L20 H, L19 H, L21 H (tied, rank 1), L18 H (rule), L22 H, …
 export const COMMITTED = table({ committed: 'L19 H' });
 export const OPEN_TIE = table({ openTie: true });
+/** SP4.3d1 Task 11: L19 H saved in slot B, L22 H in G1; nothing active. */
+export const SAVED = table({ slots: { 'L19 H': 'B', 'L22 H': 'G1' } });
 
 /** The gallery's synthetic cases (data states only: a highlight is window-local, a component test, P17). */
 export const cases = {
