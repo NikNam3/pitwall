@@ -14,10 +14,12 @@ const ruleName: Record<RuleName, string> = {
   mirrorBehind: 'mirror the car behind',
 };
 /** The source hovers; a rule candidate's names its rule. */
-export const sourceHover: { dp: string; neighbour: string; committed: string; rule: (rule: RuleName) => string } = {
+export const sourceHover: { dp: string; neighbour: string; committed: string; plan: string; game: string; rule: (rule: RuleName) => string } = {
   dp: "dp · the DP's plan",
   neighbour: 'nbr · a stop lap next to a DP plan',
   committed: 'plan · the committed plan',
+  plan: 'plan · a saved plan slot',
+  game: "game · the game's plan slot",
   rule: (rule) => `rule · ${ruleName[rule]}`,
 };
 /** Button words `commit`, `clear`, and their hovers (the uiAction they send). */
