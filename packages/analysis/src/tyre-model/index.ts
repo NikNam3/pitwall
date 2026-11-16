@@ -11,4 +11,5 @@ export { INTER_CONFIG } from './types/inter.ts';
 export type { TypeLossInput, TypeModule, TypeOffsetInput, TypeRateInput } from './types/module.ts';
 export { SLICK_CONFIG } from './types/slick.ts';
 export { WET_CONFIG } from './types/wet.ts';
+export { worstWearRate } from './worst.ts';
 export type { TyreModelOutput } from '@pitwall/domain';
