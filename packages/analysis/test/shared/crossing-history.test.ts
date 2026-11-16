@@ -7,7 +7,7 @@
 import { carId, MINI_SECTORS, unknown, type Known } from '@pitwall/domain';
 import { describe, expect, it } from 'vitest';
 import { crossings } from '../../../../test-support/builders/index.ts';
-import { progressAt, timeAtProgress } from '../../src/shared/crossing-history.ts';
+import { liveProgress, progressAt, timeAtProgress } from '../../src/shared/crossing-history.ts';
 import type { CarCrossings } from '../../src/shared/gapper-lines.ts';
 
 const INSUFFICIENT = unknown('insufficientData');
@@ -111,5 +111,37 @@ describe('crossing history: where our car was when (shared, C43)', () => {
     const newest = ALL.length - 1;
     expect(timeAtProgress(o, newest + 0.5)).toEqual(INSUFFICIENT);
     expect(timeAtProgress(o, newest + 10)).toEqual(INSUFFICIENT);
+  });
+
+  // F1 (C43, ruling R3): the live tail and a car's live progress belong to the helper, so `rejoin` and `circle` share one scale
+  it('liveProgress: lap 3, half a lap → 125 mini-sectors (the unit of progressAt); a non-positive track length → notReceived', () => {
+    expect(valueOf(liveProgress(3, 2_500, 5_000))).toBeCloseTo(2 * MINI_SECTORS + MINI_SECTORS / 2, 9);
+    expect(valueOf(liveProgress(1, 0, 5_000))).toBe(0);
+    // the engine's mini-sector recorder places boundary s at s × length / 50: a car just past boundary 7 of lap 2
+    expect(valueOf(liveProgress(2, (7 * 5_000) / MINI_SECTORS, 5_000))).toBeCloseTo(MINI_SECTORS + 7, 9);
+    expect(liveProgress(3, 2_500, 0)).toEqual(unknown('notReceived'));
+    expect(liveProgress(3, 2_500, -1)).toEqual(unknown('notReceived'));
+  });
+
+  it('timeAtProgress with our live point: between our newest crossing and it, linear; past it insufficientData; without it as before', () => {
+    const o = ours(20);
+    const newest = ALL.length - 1;
+    const newestTime = ALL[newest]!;
+    const now = { t: newestTime + 1_000, progress: newest + 0.4 };
+    // halfway between our newest crossing and our live point → halfway in time
+    expect(valueOf(timeAtProgress(o, newest + 0.2, now))).toBeCloseTo(newestTime + 500, 9);
+    expect(valueOf(timeAtProgress(o, newest + 0.1, now))).toBeCloseTo(newestTime + 250, 9);
+    // at the live point: now
+    expect(valueOf(timeAtProgress(o, newest + 0.4, now))).toBeCloseTo(now.t, 9);
+    // past the live point we never were there (R2 stays)
+    expect(timeAtProgress(o, newest + 0.5, now)).toEqual(INSUFFICIENT);
+    // up to our newest crossing the live point changes nothing
+    expect(valueOf(timeAtProgress(o, 73, now))).toBe(ALL[73]);
+    expect(valueOf(timeAtProgress(o, 73.25, now))).toBeCloseTo(ALL[73]! + (ALL[74]! - ALL[73]!) / 4, 9);
+    expect(timeAtProgress(o, 19, now)).toEqual(INSUFFICIENT);
+    // a live point not past our newest crossing adds no tail
+    expect(timeAtProgress(o, newest + 0.2, { t: newestTime + 1_000, progress: newest })).toEqual(INSUFFICIENT);
+    // without the live point: insufficientData past our newest progress, as today
+    expect(timeAtProgress(o, newest + 0.2)).toEqual(INSUFFICIENT);
   });
 });

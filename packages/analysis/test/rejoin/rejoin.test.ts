@@ -7,6 +7,8 @@
 // tests). Built races (`field.ts`); every case runs through the guarded view (C41); race only (C14); our cars only.
 import { carId, known, unknown, type CarId, type CrossingRow, type Known, type PitCondition } from '@pitwall/domain';
 import fc from 'fast-check';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { GAPS } from '../../src/gaps/index.ts';
 import { PIT_LOSS } from '../../src/pit-loss/index.ts';
@@ -297,5 +299,14 @@ describe('rejoin calculator', () => {
   it('the unit folder exports its behaviour table, the one the generic completeness test checks (C44, C87)', async () => {
     const folder = (await loadUnitFolders()).find((f) => f.unit === 'rejoin');
     expect(folder?.table).toBe(REJOIN_BEHAVIOUR);
+  });
+
+  it('keeps no copy of the live tail: its calculator imports liveProgress and timeAtProgress from the shared crossing history and defines no progressOf/whenAt (C43, F1)', () => {
+    const source = readFileSync(join(import.meta.dirname, '../../src/rejoin/calculator.ts'), 'utf8');
+    const imported = /import\s*\{([^}]*)\}\s*from\s*'\.\.\/shared\/crossing-history\.ts'/.exec(source)?.[1] ?? '';
+    expect(imported).toMatch(/\bliveProgress\b/);
+    expect(imported).toMatch(/\btimeAtProgress\b/);
+    expect(source).not.toMatch(/\b(?:function|const|let)\s+progressOf\b/);
+    expect(source).not.toMatch(/\b(?:function|const|let)\s+whenAt\b/);
   });
 });
