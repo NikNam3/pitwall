@@ -51,7 +51,7 @@
   const places = $derived(view === undefined ? 0 : (view.slots[0]?.pmf.length ?? view.dp[0]?.pmf.length ?? 0));
   const stopsWidth = $derived(full ? STOPS.full : STOPS.compact);
   const width = $derived(
-    LEAD.length + SLOT + GAP.length + stopsWidth + GAP.length + EPOS + GAP.length + DPOS + (full ? 3 * GAP.length + DTIME + places + ACT + GAP.length : 0),
+    LEAD.length + SLOT + GAP.length + stopsWidth + GAP.length + EPOS + GAP.length + DPOS + (full ? 3 * GAP.length + DTIME + places + ACT : 0),
   );
   const acting = $derived(full && actionsShown(data.phase));
   const sel = $derived(acting && selected !== null ? view?.slots.find((l) => l.slot === selected) : undefined);
