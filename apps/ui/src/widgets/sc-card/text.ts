@@ -1,9 +1,20 @@
-// Wording of the sc-card display; text shared with the kit lives in kit/text.ts.
-import type { ScCallRow } from '@pitwall/domain';
+// Wording of the Box call (sc-card); text shared with the kit lives in kit/text.ts.
+import type { ScCallAnswer, ScCallBlock } from '@pitwall/domain';
 
-/** Headers of the full sheet by column key (the COND column has none). */
-export const headers = { dPos: 'ΔPOS', pGain: 'P(GAIN)', rejoin: 'REJ', loss: 'LOSS', range: 'RANGE' } as const;
-/** The strip's labels: places gained at its first bin, its zero bin and its last bin. */
-export const stripLabels = { low: '−4', zero: '0', high: '+4' } as const;
+/** The panel's title. */
+export const title = 'Box call';
+/** Headers of the full sheet by column key (the label column carries the condition). */
+export const headers = { ePos: 'E[POS]', dPos: 'ΔPOS', pGain: 'P(GAIN)', rejoin: 'REJ' } as const;
 /** A condition's name. */
-export const conditions = { sc: 'SC', vsc: 'VSC' } as const satisfies Record<ScCallRow['condition'], string>;
+export const conditions = { sc: 'SC', vsc: 'VSC', green: 'GREEN' } as const satisfies Record<ScCallBlock['condition'], string>;
+/** An answer's label. */
+export const answers = {
+  stay: 'stay',
+  S: 'box S',
+  M: 'box M',
+  H: 'box H',
+  I: 'box I',
+  W: 'box W',
+} as const satisfies Record<ScCallAnswer, string>;
+/** The E[POS] cell of an answer without a set of its compound left. */
+export const noSet = 'no set';

@@ -8,7 +8,9 @@
 // - `rejoin`'s output is passed explicitly (`rejoinOutput`): the job takes its rejoin position, loss and loss source
 //   per condition from it (C43), as the 4.2 calculator did; the 4.2 values (SC 9 / 9 800 / default, VSC 10 / 13 100 /
 //   calibration) are its default.
-// - `ScCall.lap` is our car's DP start lap (`toDpInput(…).fromLap`, `startLapOf`): the lap "box now" boxes at.
+// - `ScCallBlocks.lap` is our car's DP start lap (`toDpInput(…).fromLap`, `startLapOf`): the lap "box now" boxes at.
+// - SP4.3d1 Task 6 (spec §6.3): the value is `ScCallBlocks`, per condition a block of six options (stay, S, M, H, I,
+//   W); the old `ScCall` rows and their helpers are deleted with the type. A block's options are found by `answer`.
 // - The races: `GREEN` (no neutralisation), `SC_OUT` (an SC deployed during the leader's lap 5, in during lap 7, nobody
 //   stops under it), `SC_BOX` (an SC deployed during lap 9, in during lap 12; our cars stop on lap 10, under it).
 import {
@@ -22,8 +24,10 @@ import {
   type PitCondition,
   type Rejoin,
   type RejoinAt,
-  type ScCall,
-  type ScCallRow,
+  type ScCallAnswer,
+  type ScCallBlock,
+  type ScCallBlocks,
+  type ScCallOption,
 } from '@pitwall/domain';
 import type { EngineView } from '@pitwall/engine/readers';
 import type { BuilderRace } from '../../../../test-support/builders/long-race.ts';
@@ -35,10 +39,9 @@ export { OURS, PLAYER, TEAMMATE } from '../strategy/support.ts';
 
 /**
  * The cap of the behaviour tests, through `sc-call`'s config override (C47; Task 18s: test speed): far below the
- * config's (spec §11.1, pinned by the budget test). The rows compare the job's rows with the recorded `scoreCalls`
- * outcomes of the same run, so any cap with scenarios per condition holds them: 10 per forced condition, 20 under an SC out.
+ * config's (pinned by the budget test). Three blocks of six options while green: 6 scenarios per option.
  */
-export const CAP = 40;
+export const CAP = 108;
 
 /** The leader's lap of the green views. */
 export const LAP = 3;
@@ -60,7 +63,10 @@ export const SOURCES: Record<PitCondition, EstimateSource> = { green: SESSION_SO
 /** The 4.2 rejoin positions: green 12, SC 9, VSC 10. */
 export const POSITIONS: Record<PitCondition, Known<number>> = { green: known(12, 0), sc: known(9, 0), vsc: known(10, 0) };
 
-/** `rejoin`'s value of one car: its rejoin positions per condition, the 4.2 losses and sources. */
+/** `rejoin`'s race position of our car now (`Rejoin.position`): the stay option's rejoin. */
+export const POSITION_NOW = 8;
+
+/** `rejoin`'s value of one car: its rejoin positions per condition, the 4.2 losses and sources, its position now 8. */
 export function rejoinOf(car: CarId, positions: Record<PitCondition, Known<number>> = POSITIONS, losses: Record<PitCondition, Known<Ms>> = LOSSES): Rejoin {
   const at = (condition: PitCondition): RejoinAt => ({
     condition,
@@ -69,7 +75,7 @@ export function rejoinOf(car: CarId, positions: Record<PitCondition, Known<numbe
     rejoinPosition: positions[condition],
     order: unknown('insufficientData'),
   });
-  return { carId: car, position: 8, conditions: { green: at('green'), sc: at('sc'), vsc: at('vsc') } };
+  return { carId: car, position: POSITION_NOW, conditions:{ green: at('green'), sc: at('sc'), vsc: at('vsc') } };
 }
 
 /** `rejoin`'s output with `cars` (default: our two cars with the 4.2 values). */
@@ -120,26 +126,47 @@ export function firstFrameWith(race: BuilderRace, car: CarId, kind: string, from
 }
 
 /** Our car's value; fails the test that asks when it is absent. */
-export function callOf(out: Record<CarId, ScCall>, car: CarId): ScCall {
+export function callOf(out: Record<CarId, ScCallBlocks>, car: CarId): ScCallBlocks {
   const v = out[car];
   if (v === undefined) throw new Error(`no sc call for car ${car}`);
   return v;
 }
 
-/** One condition's row of `call`. */
-export function rowOf(call: ScCall, condition: 'sc' | 'vsc'): ScCallRow {
-  const r = call.rows.find((x) => x.condition === condition);
-  if (r === undefined) throw new Error(`no ${condition} row`);
-  return r;
+/** The six answers in the card's order (spec §6.3). */
+export const ANSWERS: readonly ScCallAnswer[] = ['stay', 'S', 'M', 'H', 'I', 'W'];
+
+/** The compound a box answer stops onto. */
+export const COMPOUND_OF = { S: 'soft', M: 'medium', H: 'hard', I: 'inter', W: 'wet' } as const satisfies Record<Exclude<ScCallAnswer, 'stay'>, string>;
+
+/** One condition's block of `call`; fails the test that asks when it is absent. */
+export function blockOf(call: ScCallBlocks, condition: ScCallBlock['condition']): ScCallBlock {
+  const b = call.blocks.find((x) => x.condition === condition);
+  if (b === undefined) throw new Error(`no ${condition} block`);
+  return b;
 }
 
-/** Every `Known` field of a row. */
-export const KNOWN_FIELDS = ['ePosDelta', 'pGain', 'gainBins', 'rejoinPosition', 'lossMs', 'range'] as const satisfies readonly (keyof ScCallRow)[];
+/** One answer's option of `block`; fails the test that asks when it is absent. */
+export function optionOf(block: ScCallBlock, answer: ScCallAnswer): ScCallOption {
+  const o = block.options.find((x) => x.answer === answer);
+  if (o === undefined) throw new Error(`no ${answer} option in the ${block.condition} block`);
+  return o;
+}
+
+/** Every `Known` field of an option. */
+export const KNOWN_FIELDS = ['ePos', 'se', 'ePosDelta', 'pGain', 'rejoinPosition', 'positionPmf'] as const satisfies readonly (keyof ScCallOption)[];
 
 export const NOT_APPLICABLE = unknown('notApplicable');
+export const NO_SET = unknown('noSet');
 
-/** A row's `Known` fields, to compare with `ALL_NOT_APPLICABLE`. */
-export const knownsOf = (row: ScCallRow): Record<string, unknown> => Object.fromEntries(KNOWN_FIELDS.map((k) => [k, row[k]]));
+/** An option's `Known` fields, to compare with `ALL_NOT_APPLICABLE` or `ALL_NO_SET`. */
+export const knownsOf = (option: ScCallOption): Record<string, unknown> => Object.fromEntries(KNOWN_FIELDS.map((k) => [k, option[k]]));
 
 /** Every `Known` field `unknown('notApplicable')`. */
 export const ALL_NOT_APPLICABLE: Record<string, unknown> = Object.fromEntries(KNOWN_FIELDS.map((k) => [k, NOT_APPLICABLE]));
+
+/** Every `Known` field `unknown('noSet')`. */
+export const ALL_NO_SET: Record<string, unknown> = Object.fromEntries(KNOWN_FIELDS.map((k) => [k, NO_SET]));
+
+/** Every option of every block of `call`, labelled `<condition> <answer>`. */
+export const optionsOf = (call: ScCallBlocks): { label: string; option: ScCallOption }[] =>
+  call.blocks.flatMap((b) => b.options.map((option) => ({ label: `${b.condition} ${option.answer}`, option })));

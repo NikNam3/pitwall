@@ -1,5 +1,6 @@
-// Gallery declaration of the sc-card display (SP4.3b spec §10, V18; mockup docs/design/2026-11-12-sp4.3b/sc-card.html).
-// Test-phase file: the implementer does not edit it. The cases and fit sizes live in fixtures.ts, shared with the tests.
+// Gallery declaration of the sc-card display, the Box call (SP4.3d spec §6.3, V18 reworked; mockup
+// docs/design/2026-11-16-sp4.3d/sc-card.html). Test-phase file: the implementer does not edit it. The cases and fit
+// sizes live in fixtures.ts, shared with the tests.
 import type { GalleryEntry } from '../../kit/gallery-types.ts';
 import { cases, fit } from './fixtures.ts';
 import type { widget } from './widget.ts';

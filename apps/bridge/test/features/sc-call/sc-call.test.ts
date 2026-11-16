@@ -7,11 +7,12 @@
 //    `jobSeed`, twice;
 //  - a rewind: the run under way is cancelled, the rewound frame re-triggers the job (C30), and its output equals the
 //    one of a run that never received the undone frames;
-//  - outside the race phase both rows are `notApplicable` with our car present; the trigger runs only while
+//  - outside the race phase every option is `notApplicable` with our car present; the trigger runs only while
 //    `scCall.car` is subscribed (C49);
 //  - the trigger is `strategy`'s (`ourLap`, a line crossing of ours): a mini-sector crossing alone does not run it.
+// SP4.3d1 Task 6 (C82): ported to `ScCallBlocks` (per condition SC, VSC, GREEN six options).
 import type { TopicName } from '@pitwall/contracts';
-import type { CarId, FrameNumber, ScCall } from '@pitwall/domain';
+import type { CarId, FrameNumber, ScCallBlocks as ScCall } from '@pitwall/domain';
 import { createRng, type EngineView } from '@pitwall/engine/readers';
 import { CalculatorRegistry, projectionLengths, Scheduler, type SchedulerInput } from '@pitwall/engine';
 import { SC_CALL_JOB, STRATEGY_TRIGGER, type ScCallInput } from '@pitwall/analysis';
@@ -23,7 +24,7 @@ import { jobSeed, type JobResult } from '../../../src/jobs/job-runner.ts';
 import { demandOf } from '../../../src/pipeline/demand.ts';
 import { NO_DRIVERS, NO_PRIORS } from '../../../../../test-support/builders/index.ts';
 import { generated, OURS, PARAMS } from '../../../../../packages/analysis/test/strategy/support.ts';
-import { ALL_NOT_APPLICABLE, knownsOf, scViewAtFrame, type ScViewSpec } from '../../../../../packages/analysis/test/sc-call/support.ts';
+import { ALL_NOT_APPLICABLE, blockOf, knownsOf, optionOf, optionsOf, scViewAtFrame, type ScViewSpec } from '../../../../../packages/analysis/test/sc-call/support.ts';
 
 const TOPIC: TopicName = 'scCall.car';
 const TRIGGER = jobCalculatorId('sc-call');
@@ -155,14 +156,20 @@ describe('sc-call feature', () => {
     const live = feed([TOPIC]);
     for (let f = 1; f <= at; f++) live.pass(inputOf(f as FrameNumber), f);
     const liveOut = valueOf(await live.resultFor(at));
-    for (const car of OURS) expect(liveOut[car]?.rows[0].ePosDelta.known, `car ${car}`).toBe(true);
+    for (const car of OURS) expect(optionOf(blockOf(liveOut[car]!, 'green'), 'H').ePos.known, `car ${car}`).toBe(true);
 
     // in process, the trigger's input with the frame's seed: twice the same, and the worker's
     const input = live.inputs.get(at);
     expect(input).toBeDefined();
     // the job's module, as the worker loads it
     const { run: runScCall } = (await import(SC_CALL_JOB.module.href)) as { run: (input: ScCallInput, rng: ReturnType<typeof createRng>) => Record<CarId, ScCall> };
-    const inProcess = () => runScCall(structuredClone(input!), createRng(jobSeed(0, SC_CALL_JOB.id, { lap: 0, frameId: at })));
+    // ported in SP4.3d1 Task 6: the job runs in one part per car, part i seeded with jobSeed(…, `${id}/${i}`, …)
+    const parts = SC_CALL_JOB.parts;
+    if (parts === undefined) throw new Error('sc-call runs in parts');
+    const inProcess = () =>
+      parts.merge(
+        parts.split(structuredClone(input!)).map((part, i) => runScCall(part, createRng(jobSeed(0, `${SC_CALL_JOB.id}/${i}`, { lap: 0, frameId: at })))),
+      );
     const once = inProcess();
     expect(inProcess()).toStrictEqual(once);
     expect(once).toEqual(liveOut);
@@ -195,7 +202,7 @@ describe('sc-call feature', () => {
   }, 120_000);
 
   // row 8
-  it('notApplicable outside the race phase (both rows unknown, the car present); on demand only (C49)', async () => {
+  it('notApplicable outside the race phase (every option unknown, the car present); on demand only (C49)', async () => {
     const spec: ScViewSpec = { phase: 'qualifying' };
     const at = 1 as FrameNumber;
     const qualifying = feed([TOPIC]);
@@ -206,8 +213,7 @@ describe('sc-call feature', () => {
     for (const car of OURS) {
       const call = out[car]!;
       expect(call.carId).toBe(car);
-      expect(call.rows.map((r) => r.condition)).toEqual(['sc', 'vsc']);
-      for (const row of call.rows) expect(knownsOf(row), `car ${car} ${row.condition}`).toEqual(ALL_NOT_APPLICABLE);
+      for (const { label, option } of optionsOf(call)) expect(knownsOf(option), `car ${car} ${label}`).toEqual(ALL_NOT_APPLICABLE);
     }
 
     // on demand: without a subscriber of scCall.car the trigger never runs and nothing is computed

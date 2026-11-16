@@ -1,59 +1,177 @@
-// The sc-card's rows (SP4.3b spec §10, V18; mockup docs/design/2026-11-12-sp4.3b/sc-card.html; C65): the topic's values
-// formatted, nothing computed. The loss's source is the `pit-loss` calculator's (C43); only LOSS takes its badge.
-import type { EstimateSource, Ms, ScCall, ScCallRow } from '@pitwall/domain';
+// The Box call's rows (SP4.3d spec §6.3; mockup docs/design/2026-11-16-sp4.3d/sc-card.html; C65): the topic's values
+// formatted, nothing computed. The best row of a block and the compact form's option are selections for emphasis
+// (ruling R30): the lowest E[pos] in a block, the box option with the highest ΔPOS in compact.
+import type { Known, ScCallAnswer, ScCallBlock, ScCallBlocks, ScCallOption } from '@pitwall/domain';
 import { sharedScale } from '../../kit/dist/dist.ts';
-import { knownPart, unknownPart, type CellPart } from '../../kit/grid/grid.ts';
+import { knownPart, type CellPart } from '../../kit/grid/grid.ts';
+import { estimatedPrefix } from '../../kit/text.ts';
 import {
-  formatLapRange,
+  formatExpectedPlace,
+  formatExpectedPlaceSe,
   formatPlacesGained,
   formatPosition,
-  formatSeconds,
   formatShare,
+  formatWhole,
 } from '../../kit/values/format.ts';
+import type { Role } from '../../theme/roles.ts';
+import { deltaRole } from './emphasis.ts';
+import * as text from './text.ts';
 
-export type Condition = ScCallRow['condition'];
+export type Condition = ScCallBlock['condition'];
+/** A condition that can be out. */
+export type OutCondition = Exclude<Condition, 'green'>;
 
-/** The places-gained strip: the topic's bins as they are, or a cell part (a notApplicable mark, else blank). */
-export type StripPart = { bins: readonly number[] } | CellPart;
+/** An option's places strip: its pmf as the topic gives it, or a blank cell part. */
+export type StripPart = { pmf: readonly number[] } | CellPart;
 
-export type ScRow = {
-  condition: Condition;
-  /** The row of the condition that is out. */
-  active: boolean;
+export type OptionRow = {
+  answer: ScCallAnswer;
+  label: string;
+  /** The block's option with the lowest known E[pos]. */
+  best: boolean;
+  /** No set of this compound is left. */
+  noSet: boolean;
+  ePos: CellPart;
   dPos: CellPart;
   pGain: CellPart;
-  strip: StripPart;
   rejoin: CellPart;
-  loss: CellPart;
-  range: CellPart;
-  source: EstimateSource;
+  dPosRole: Role | undefined;
+  strip: StripPart;
 };
 
-/** A row's strip: its bins; a notApplicable row the kit's mark; any other unknown row blank (the mockup's unknown state). */
-function stripOf(bins: ScCallRow['gainBins']): StripPart {
-  if (bins.known) return { bins: bins.value };
-  return bins.reason === 'notApplicable' ? unknownPart(bins.reason) : { text: '' };
+export type BlockView = {
+  condition: Condition;
+  /** The block of the condition that is out. */
+  out: boolean;
+  label: string;
+  rows: OptionRow[];
+  /** The kit's shared scale over the block's known pmfs. */
+  scale: number;
+  /** Our place now: stay's rejoin position. */
+  ourPlace: number | undefined;
+  /** The strip's cells: the length of the block's first known pmf. */
+  places: number;
+};
+
+export type CompactRow = {
+  condition: Condition;
+  label: string;
+  out: boolean;
+  option: string;
+  dPos: CellPart;
+  rejoin: CellPart;
+  /** The option's ΔPOS is above zero. */
+  lit: boolean;
+};
+
+const EMPTY: CellPart = { text: '' };
+
+/** Whether a strip part carries a pmf to draw. */
+export const isDrawn = (s: StripPart): s is { pmf: readonly number[] } => 'pmf' in s;
+
+const isNoSet = (o: ScCallOption): boolean => !o.ePos.known && o.ePos.reason === 'noSet';
+
+/** The block's label: the condition's name, with its laps left while it is out and they are known (`SC ~4`). */
+function labelOf(b: ScCallBlock, out: boolean): string {
+  const name = text.conditions[b.condition];
+  return out && b.lapsLeft.known ? `${name} ${estimatedPrefix}${formatWhole(b.lapsLeft.value)}` : name;
 }
 
-/** Whether a strip part carries bins to draw. */
-export const isDrawn = (s: StripPart): s is { bins: readonly number[] } => 'bins' in s;
-
-/** The rows' shared strip scale (the kit's `sharedScale` over the drawn strips), so the strips compare. */
-export function scaleOf(rows: readonly ScRow[]): number {
-  return sharedScale(rows.flatMap((r) => (isDrawn(r.strip) ? [r.strip.bins] : [])));
+/** E[pos] with its SE (`8.03±.07`), E[pos] alone while the SE is unknown. */
+function ePosPart(o: ScCallOption): CellPart {
+  const se = o.se;
+  return knownPart(o.ePos, (x) => (se.known ? formatExpectedPlaceSe(x, se.value) : formatExpectedPlace(x)));
 }
 
-/** One row per topic row, in its order (SC, VSC); `active` the condition that is out, if any. */
-export function buildRows(call: ScCall, active: Condition | undefined): ScRow[] {
-  return call.rows.map((r) => ({
-    condition: r.condition,
-    active: r.condition === active,
-    dPos: knownPart(r.ePosDelta, formatPlacesGained),
-    pGain: knownPart(r.pGain, formatShare),
-    strip: stripOf(r.gainBins),
-    rejoin: knownPart(r.rejoinPosition, formatPosition),
-    loss: knownPart(r.lossMs, (ms: Ms) => formatSeconds(ms, 1)),
-    range: knownPart(r.range, (x) => formatLapRange(x.fromLap, x.toLap)),
-    source: r.lossSource,
-  }));
+const dPosPart = (v: Known<number>): CellPart => knownPart(v, (x) => formatPlacesGained(x, 2));
+const rejoinPart = (v: Known<number>): CellPart => knownPart(v, formatPosition);
+
+/** The index of the first option with the lowest known value of `pick` (`lowest`) or the highest; -1 without one. */
+function firstExtreme(options: readonly ScCallOption[], pick: (o: ScCallOption) => Known<number>, lowest: boolean): number {
+  let at = -1;
+  let best = 0;
+  options.forEach((o, i) => {
+    const v = pick(o);
+    if (!v.known) return;
+    if (at < 0 || (lowest ? v.value < best : v.value > best)) {
+      at = i;
+      best = v.value;
+    }
+  });
+  return at;
+}
+
+function optionRow(o: ScCallOption, best: boolean): OptionRow {
+  const label = text.answers[o.answer];
+  if (isNoSet(o)) {
+    return {
+      answer: o.answer, label, best: false, noSet: true,
+      ePos: { text: text.noSet }, dPos: EMPTY, pGain: EMPTY, rejoin: EMPTY, dPosRole: undefined, strip: EMPTY,
+    };
+  }
+  const stay = o.answer === 'stay';
+  return {
+    answer: o.answer,
+    label,
+    best,
+    noSet: false,
+    ePos: ePosPart(o),
+    dPos: stay ? EMPTY : dPosPart(o.ePosDelta),
+    pGain: stay ? EMPTY : knownPart(o.pGain, formatShare),
+    rejoin: rejoinPart(o.rejoinPosition),
+    dPosRole: !stay && o.ePosDelta.known ? deltaRole(o.ePosDelta.value) : undefined,
+    strip: o.positionPmf.known ? { pmf: o.positionPmf.value } : EMPTY,
+  };
+}
+
+function blockView(b: ScCallBlock, outCondition: OutCondition | undefined): BlockView {
+  const out = b.condition === outCondition;
+  const bestAt = firstExtreme(b.options, (o) => o.ePos, true);
+  const rows = b.options.map((o, i) => optionRow(o, i === bestAt));
+  const pmfs = rows.flatMap((r) => (isDrawn(r.strip) ? [r.strip.pmf] : []));
+  const stay = b.options.find((o) => o.answer === 'stay');
+  return {
+    condition: b.condition,
+    out,
+    label: labelOf(b, out),
+    rows,
+    scale: sharedScale(pmfs),
+    ourPlace: stay?.rejoinPosition.known ? stay.rejoinPosition.value : undefined,
+    places: pmfs[0]?.length ?? 0,
+  };
+}
+
+/** One block view per topic block, in its order; `out` the condition the presentation table names, if any. */
+export function buildBlocks(call: ScCallBlocks, out: OutCondition | undefined): BlockView[] {
+  return call.blocks.map((b) => blockView(b, out));
+}
+
+function compactRow(b: ScCallBlock, outCondition: OutCondition | undefined): CompactRow {
+  const out = b.condition === outCondition;
+  const boxes = b.options.filter((o) => o.answer !== 'stay');
+  const at = firstExtreme(boxes, (o) => o.ePosDelta, false);
+  const shown = boxes[at];
+  const head = { condition: b.condition, label: labelOf(b, out), out };
+  if (shown === undefined || !shown.ePosDelta.known) {
+    const first = boxes[0];
+    return {
+      ...head,
+      option: '',
+      dPos: first === undefined ? EMPTY : dPosPart(first.ePosDelta),
+      rejoin: first === undefined ? EMPTY : rejoinPart(first.rejoinPosition),
+      lit: false,
+    };
+  }
+  return {
+    ...head,
+    option: text.answers[shown.answer],
+    dPos: dPosPart(shown.ePosDelta),
+    rejoin: rejoinPart(shown.rejoinPosition),
+    lit: shown.ePosDelta.value > 0,
+  };
+}
+
+/** One compact row per topic block: the box option with the highest known ΔPOS, never stay. */
+export function buildCompact(call: ScCallBlocks, out: OutCondition | undefined): CompactRow[] {
+  return call.blocks.map((b) => compactRow(b, out));
 }
