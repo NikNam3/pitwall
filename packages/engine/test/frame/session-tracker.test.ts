@@ -62,6 +62,34 @@ describe('SessionTracker', () => {
     expect(last.events.map((e) => e.details.code)).toEqual(['SEND']);
     expect(t.metrics).toMatchObject({ droppedUid0: 1, latePackets: 0 });
   });
+  // SP4.3d2 Task 3 (C37, C59): a session ends by timer, without waiting for the next packet.
+  it('tracker expire', () => {
+    const t0 = 1000;
+    const afterSend = () => {
+      const t = ended();
+      t.push(stub('event', 0, 0.032, { uid: A, code: 'SEND' }), t0);
+      t.push(stub('finalClassification', 0, 0.032, { uid: 0n }), t0 + 2000);
+      return t;
+    };
+    // what `push` at that time gives: the session's frames and its end (the packet itself belongs to no session)
+    const byPacket = afterSend().push(stub('sessionHistory', 0, 0.032, { uid: 0n }), t0 + 10_001);
+    expect(kinds(byPacket)).toEqual(['frame', 'frame', 'ended:SEND']);
+
+    const early = afterSend();
+    expect(early.expire(t0 + 9000)).toEqual([]);
+    const byTimer = early.expire(t0 + 10_001);
+    expect(byTimer).toEqual(byPacket);
+    expect((byTimer[1] as FrameEvent).frame.finalClassification).toBeDefined();
+    // the session is closed: expiring again ends nothing
+    expect(early.expire(t0 + 20_000)).toEqual([]);
+
+    // no SEND: the session stays open however long the silence
+    const open = ended();
+    expect(open.expire(t0 + 60_000)).toEqual([]);
+    expect(kinds(open.end())).toEqual(['frame', 'frame', 'ended:streamEnd']);
+    // no session at all
+    expect(new SessionTracker({ feedId }).expire(t0)).toEqual([]);
+  });
   it('keeps uid-0 packets received up to 10 s before SEND (fixture order: bulk, then SEND)', () => {
     const t = ended();
     t.push(stub('sessionHistory', 2, 0.032, { uid: 0n, carIdx: 1 }), 900);
