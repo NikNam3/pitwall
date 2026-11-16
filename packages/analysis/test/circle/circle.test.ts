@@ -1,9 +1,11 @@
 // `circle` (SP4.3d spec §6.5, SP4.3d1 Task 8): the field as a lap circle, per our car, on every frame. A car's place is
 // how long ago our car was where that car is now, modulo one of our laps (ruling R10: from the shared crossing history,
 // `shared/crossing-history.ts`, never a local copy, C43): a car just behind sits seconds behind us, a car ahead near the
-// far side, a car that stops slides back every frame. `lapMs` is our last green lap from its one owner (`lap-classes`'
-// `forPace` over `currentLaps`, C25, C43). Our ghosts are `rejoin`'s, one per condition: its rejoin position and the
-// times to the car ahead and behind (its order's intervals, never recomputed, C43), on the circle's scale. `current` is
+// far side, a car that stops slides back every frame. One turn of the circle, `lapMs`, is our rolling lap (ruling R15):
+// the time our car took for the last full lap of progress up to now, the shared `timeBehind`'s (R14), the lap every
+// place is folded into, so no place lies past a full turn. Our ghosts are `rejoin`'s, one per condition: a ghost sits
+// `rejoin`'s loss for its condition behind us, folded into our rolling lap (R16, never rebuilt from a neighbour), with
+// its rejoin position and the times to the car ahead and behind (its order's intervals, never recomputed, C43). `current` is
 // the race's session phase: `neutralised` gives its condition (SC, VSC), every other kind `green`. Quick, every frame
 // (C41), bound to `circle.car` (C42, C53, C56). Built races (`case.ts`); every case runs through the guarded view (C41).
 import { carId, type CarId, type Circle, type CircleCar, type CircleGhost, type CrossingRow, type Known, type PitCondition } from '@pitwall/domain';
@@ -71,6 +73,8 @@ describe('circle analysis', () => {
     expect(circleCalculator.kind).toBe('quick');
     expect(circleCalculator.cadence).toBe('frame');
     expect(circleCalculator.reads).toEqual(expect.arrayContaining([{ calculator: REJOIN }, 'spans:session-phase-race', 'spans:car-status']));
+    // R15: the circle's lap is our rolling lap, not a lap record: no read of the laps list
+    expect(circleCalculator.reads).not.toContain('laps');
   });
 
   // 1
@@ -79,9 +83,9 @@ describe('circle analysis', () => {
     const field: Field = { ...FIELD, 12: 6_200 };
     const c = circleOf(outputOf({ field }));
     expect(c.carId).toBe(carId(US));
-    // our last green lap: lap 2 in 90 000 (lap 1, the race's first, is no pace lap)
+    // our rolling lap: every car laps in 90 000 (R15)
     const lapMs = valueOf(c.lapMs);
-    expect(lapMs).toBe(90_000);
+    expect(Math.abs(lapMs - 90_000)).toBeLessThanOrEqual(TOL);
     expect(Math.abs(behindOf(c, 12) - 1_200)).toBeLessThanOrEqual(TOL);
     expect(Math.abs(behindOf(c, 3) - (lapMs - 3_000))).toBeLessThanOrEqual(TOL);
     expect(Math.abs(behindOf(c, 1) - (lapMs - 5_000))).toBeLessThanOrEqual(TOL);
@@ -97,18 +101,23 @@ describe('circle analysis', () => {
     for (const [id, want] of [[12, 1_200], [3, 87_000], [6, 3_100]] as const) expect(Math.abs(behindOf(between, id) - want), `car ${id}`).toBeLessThanOrEqual(TOL);
   });
 
-  it("lapMs: our newest green lap (`lap-classes`' forPace over the current laps); an invalid lap is none; no green lap: unknown", () => {
-    // lap 2 invalid: lap 1 is the race's first lap, no pace lap either
-    expect(circleOf(outputOf({ laps: ourLaps(NOW, { 2: { valid: { lap: false, sectors: [true, true, false] } } }) })).lapMs.known).toBe(false);
-    expect(circleOf(outputOf({ laps: [] })).lapMs.known).toBe(false);
-    // three laps: lap 3 in 89 000 is the newest; with lap 3 an in lap, lap 2's 90 000
-    const later = NOW + 90_000;
-    expect(circleOf(outputOf({ now: later, laps: ourLaps(later, { 3: { lapTimeMs: 89_000 } }) })).lapMs).toMatchObject({ known: true, value: 89_000 });
-    expect(circleOf(outputOf({ now: later, laps: ourLaps(later, { 3: { lapTimeMs: 99_000, inLap: true } }) })).lapMs).toMatchObject({ known: true, value: 90_000 });
-    // the circle's places do not depend on lapMs: they are our crossing history's
+  // R15 (ported from "our newest green lap"): one turn of the circle is our rolling lap, the shared timeBehind's
+  it('lapMs: our rolling lap (the time we took for the last full lap of progress up to now); lap records change nothing; unknown on our first lap', () => {
+    // our first lap (we started at 5 000, now 65 000: two thirds of a lap of history): unknown, as timeBehind is
+    const first = circleOf(outputOf({ now: 65_000 }));
+    expect(first.lapMs.known).toBe(false);
+    // no place and no ghost place without a turn to fold into
+    expect(first.cars.known && first.cars.value.length > 0).toBe(false);
+    for (const g of first.ghosts) expect(g.behindMs.known, g.condition).toBe(false);
+    // every car laps in 90 000: at our crossing and between two
+    for (const now of [NOW, NOW + 700, NOW + 90_000]) expect(Math.abs(valueOf(circleOf(outputOf({ now })).lapMs) - 90_000), `now ${now}`).toBeLessThanOrEqual(TOL);
+    // lap records are not the circle's lap: none, an invalid one, a faster one give the same circle
     const a = circleOf(outputOf());
-    const b = circleOf(outputOf({ laps: [] }));
-    expect(b.cars).toEqual(a.cars);
+    for (const laps of [[], ourLaps(NOW, { 2: { valid: { lap: false, sectors: [true, true, false] } } }), ourLaps(NOW, { 2: { lapTimeMs: 85_000 } })]) {
+      const b = circleOf(outputOf({ laps }));
+      expect(b.lapMs).toEqual(a.lapMs);
+      expect(b.cars).toEqual(a.cars);
+    }
   });
 
   // 2
@@ -142,6 +151,60 @@ describe('circle analysis', () => {
     expect(c.current).toBe('green');
     expect(circleOf(outputOf({ neutralised: 'SC' })).current).toBe('sc');
     expect(circleOf(outputOf({ neutralised: 'VSC' })).current).toBe('vsc');
+  });
+
+  // F2 (C43, ruling R16): the ghost's place is rejoin's loss folded into our rolling lap, never rebuilt from a neighbour
+  it("ghost behind us: the car ahead of the ghost is ahead of our car (nobody within the SC loss behind us) → the ghost's behindMs is the SC loss, less than lapMs", () => {
+    // the standard field without cars 6 and 7: behind us car 8 at +19.9 s first; under SC (9 800) and VSC (13 100) the
+    // car ahead of the ghost is car 5, 1 s ahead of our car
+    const field: Field = { 1: 0, 2: 1_000, 3: 2_000, 4: 3_000, 5: 4_000, 0: 5_000, 8: 24_900, 9: 29_000, 10: 35_000, 11: 40_000 };
+    const { view, rejoin } = circleCase({ field });
+    const c = circleOf(calc.compute(view));
+    const lapMs = valueOf(c.lapMs);
+    const r = rejoin.cars[carId(US)]!;
+    for (const [cond, loss] of [['sc', 9_800], ['vsc', 13_100], ['green', 20_300]] as const) {
+      const ghost = ghostOf(c, cond);
+      // the case the review describes: the row ahead of the ghost in rejoin's order is a car ahead of us (or none)
+      if (cond !== 'green') expect(aroundGhost(valueOf(r.conditions[cond].order)).ahead?.carId, cond).toBe(carId(5));
+      const at = valueOf(ghost.behindMs);
+      expect(Math.abs(at - valueOf(r.conditions[cond].lossMs)), cond).toBeLessThanOrEqual(TOL);
+      expect(Math.abs(at - loss), cond).toBeLessThanOrEqual(TOL);
+      expect(at, cond).toBeGreaterThanOrEqual(0);
+      expect(at, cond).toBeLessThan(lapMs);
+      // the rest still rejoin's
+      expect(ghost.rejoinPosition, cond).toEqual(r.conditions[cond].rejoinPosition);
+      const { ghost: row, behind } = aroundGhost(valueOf(r.conditions[cond].order));
+      expect(ghost.aheadMs, cond).toEqual(row.intervalMs);
+      expect(ghost.behindCarMs, cond).toEqual(behind!.intervalMs);
+    }
+  });
+
+  it('a car lapping us ahead of the ghost: the ghost still sits the loss behind us', () => {
+    // car 1 a lap and 2 s ahead of our car (offset −87 000 + 5 000 … at one pace: it passes every point 92 s before us)
+    const field: Field = { 1: -87_000, 0: 5_000, 8: 24_900, 9: 29_000 };
+    const { view, rejoin } = circleCase({ field });
+    const c = circleOf(calc.compute(view));
+    const lapMs = valueOf(c.lapMs);
+    for (const cond of CONDITIONS) {
+      const at = valueOf(ghostOf(c, cond).behindMs);
+      expect(Math.abs(at - valueOf(rejoin.cars[carId(US)]!.conditions[cond].lossMs)), cond).toBeLessThanOrEqual(TOL);
+      expect(at, cond).toBeLessThan(lapMs);
+    }
+  });
+
+  // R15: one turn is our rolling lap, so under SC (a slow lap behind us, a fast green lap on record) no place passes it
+  it('under an SC span every car’s behindMs (and every ghost’s) is less than lapMs, our rolling lap, not our last green lap', () => {
+    // our last green lap on record 85 000, faster than the lap we just drove (90 000): car 3, 3 s ahead, sits at 87 000
+    const c = circleOf(outputOf({ neutralised: 'SC', laps: ourLaps(NOW, { 2: { lapTimeMs: 85_000 } }) }));
+    expect(c.current).toBe('sc');
+    const lapMs = valueOf(c.lapMs);
+    expect(Math.abs(lapMs - 90_000)).toBeLessThanOrEqual(TOL);
+    expect(Math.abs(behindOf(c, 3) - (lapMs - 3_000))).toBeLessThanOrEqual(TOL);
+    for (const x of valueOf(c.cars)) {
+      expect(x.behindMs, `car ${x.carId}`).toBeGreaterThanOrEqual(0);
+      expect(x.behindMs, `car ${x.carId}`).toBeLessThan(lapMs);
+    }
+    for (const g of c.ghosts) expect(valueOf(g.behindMs), g.condition).toBeLessThan(lapMs);
   });
 
   // 3
@@ -214,5 +277,20 @@ describe('circle analysis', () => {
     const source = readFileSync(join(import.meta.dirname, '../../src/circle/calculator.ts'), 'utf8');
     expect(source).toMatch(/from\s*'\.\.\/shared\/crossing-history\.ts'/);
     expect(source).not.toMatch(/\b(?:function|const|let)\s+(?:progressOf|whenAt|timeAtProgress|liveProgress|progressAt)\b/);
+  });
+
+  // SP4.3d1 Task 8 F1, F2, R15 (C43, rulings R14–R16): the time behind us is the shared timeBehind's, the ghost's place
+  // rejoin's loss, the circle's lap the rolling lap: no local copy of our position now, our live point or the folding,
+  // no rebuild of the ghost from a neighbour, no read of a lap record
+  it('calls the shared timeBehind and folds nothing itself; reads no lap record (R14, R15, R16, C43)', () => {
+    const source = readFileSync(join(import.meta.dirname, '../../src/circle/calculator.ts'), 'utf8');
+    const imported = /import\s*\{([^}]*)\}\s*from\s*'\.\.\/shared\/crossing-history\.ts'/.exec(source)?.[1] ?? '';
+    expect(imported).toMatch(/\btimeBehind\b/);
+    expect(source).toMatch(/\btimeBehind\(/);
+    expect(source).not.toMatch(/\btimeAtProgress\b/);
+    expect(source).not.toMatch(/\bLivePoint\b|\blivePoint\b/);
+    expect(source).not.toMatch(/\bMINI_SECTORS\b/);
+    expect(source).not.toMatch(/\b(?:function|const|let)\s+(?:liveOf|here|back|lapAgo|aheadAt|behindAt)\b/);
+    expect(source).not.toMatch(/\blap-classes\b|\bisPaceLap\b|\bcurrentLaps\b|\blastGreenLap\b/);
   });
 });

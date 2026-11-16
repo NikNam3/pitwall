@@ -301,12 +301,17 @@ describe('rejoin calculator', () => {
     expect(folder?.table).toBe(REJOIN_BEHAVIOUR);
   });
 
-  it('keeps no copy of the live tail: its calculator imports liveProgress and timeAtProgress from the shared crossing history and defines no progressOf/whenAt (C43, F1)', () => {
+  // SP4.3d1 Task 8 F1 (C43, ruling R14): a car's time behind us now has one owner, the shared `timeBehind`; rejoin keeps
+  // no local copy of our position now, our live point, the lap-ago point or the folding by whole laps
+  it('keeps no copy of the time behind us: its calculator calls the shared timeBehind and folds nothing itself (C43, Task 7 F1, Task 8 F1)', () => {
     const source = readFileSync(join(import.meta.dirname, '../../src/rejoin/calculator.ts'), 'utf8');
     const imported = /import\s*\{([^}]*)\}\s*from\s*'\.\.\/shared\/crossing-history\.ts'/.exec(source)?.[1] ?? '';
-    expect(imported).toMatch(/\bliveProgress\b/);
-    expect(imported).toMatch(/\btimeAtProgress\b/);
-    expect(source).not.toMatch(/\b(?:function|const|let)\s+progressOf\b/);
-    expect(source).not.toMatch(/\b(?:function|const|let)\s+whenAt\b/);
+    expect(imported).toMatch(/\btimeBehind\b/);
+    expect(source).toMatch(/\btimeBehind\(/);
+    // reading our history directly, our live point and the lap unit are the helper's
+    expect(source).not.toMatch(/\btimeAtProgress\b/);
+    expect(source).not.toMatch(/\bLivePoint\b|\blivePoint\b/);
+    expect(source).not.toMatch(/\bMINI_SECTORS\b/);
+    expect(source).not.toMatch(/\b(?:function|const|let)\s+(?:progressOf|whenAt|liveOf|here|lapAgo|sinceThere|there|up|down)\b/);
   });
 });

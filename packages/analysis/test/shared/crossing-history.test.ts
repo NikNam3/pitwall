@@ -7,7 +7,7 @@
 import { carId, MINI_SECTORS, unknown, type Known } from '@pitwall/domain';
 import { describe, expect, it } from 'vitest';
 import { crossings } from '../../../../test-support/builders/index.ts';
-import { liveProgress, progressAt, timeAtProgress } from '../../src/shared/crossing-history.ts';
+import { liveProgress, progressAt, timeAtProgress, timeBehind } from '../../src/shared/crossing-history.ts';
 import type { CarCrossings } from '../../src/shared/gapper-lines.ts';
 
 const INSUFFICIENT = unknown('insufficientData');
@@ -143,5 +143,110 @@ describe('crossing history: where our car was when (shared, C43)', () => {
     expect(timeAtProgress(o, newest + 0.2, { t: newestTime + 1_000, progress: newest })).toEqual(INSUFFICIENT);
     // without the live point: insufficientData past our newest progress, as today
     expect(timeAtProgress(o, newest + 0.2)).toEqual(INSUFFICIENT);
+  });
+});
+
+// SP4.3d1 Task 8 F1 (C43, ruling R14): "a car's time behind us now on our crossing history" has one owner.
+// `timeBehind(ours, ourLive, carProgress, now)`: `ourLive` is our car's live progress (`liveProgress`, possibly
+// unknown), `carProgress` the other car's (mini-sectors), `now` the frame's time. The function owns where we are now
+// (our live progress, never before our newest crossing), our live point and the folding. It answers
+// `{ wrappedMs, lapsDown, lapMs }`:
+// - `lapMs`: our rolling lap, the time our car took for the last full lap of progress up to where we are now;
+// - `wrappedMs`: how long ago we were where the car is now, folded into that lap (0 ≤ wrappedMs < lapMs);
+// - `lapsDown`: signed whole laps of progress between us, `floor((here − carProgress) / 50)`: 0 for a car behind us on
+//   our lap, −1 for a car ahead on our lap, 1 for a car a lap and more behind, −2 for one a lap and more ahead. So the
+//   signed time behind us is about `lapsDown × lapMs + wrappedMs` (a car 3 s ahead: −lapMs + (lapMs − 3 000)).
+// `insufficientData` when our history is shorter than a lap behind where we are now (first lap, a join mid-race).
+describe('timeBehind: a car’s time behind us now, folded into our rolling lap (shared, C43, R14)', () => {
+  /** Our kept crossings from progress 20 to 150 (the line of lap 4); we are at our newest crossing. */
+  const o = ours(20);
+  const NEWEST = ALL.length - 1;
+  const AT_LINE = ALL[NEWEST]!;
+  /** Our lap 3: from progress 100 to 150. */
+  const LAP3 = LAPS[2]!.ms;
+  const atLine = { known: true, value: NEWEST, at: AT_LINE } as const;
+
+  /** The answer's shape (ruling R14), typed here so a missing export fails only at its import. */
+  type TimeBehind = { wrappedMs: number; lapsDown: number; lapMs: number };
+  const tb = (h: CarCrossings, ourLive: Known<number>, carProgress: number, now: number): Known<TimeBehind> => timeBehind(h, ourLive, carProgress, now) as Known<TimeBehind>;
+  const behind = (carProgress: number, ourLive: Known<number> = atLine, now: number = AT_LINE): TimeBehind => valueOf(tb(o, ourLive, carProgress, now));
+
+  it('rolling lap equals our last lap’s time on a builder lap (at our newest crossing: lap 3, 88 700)', () => {
+    expect(behind(NEWEST - 10).lapMs).toBeCloseTo(LAP3, 0);
+  });
+
+  it('a car behind us by 1.2 s: wrapped 1 200, lapsDown 0', () => {
+    const p = valueOf(progressAt(o, AT_LINE - 1_200));
+    const b = behind(p);
+    expect(b.wrappedMs).toBeCloseTo(1_200, 0);
+    expect(b.lapsDown).toBe(0);
+  });
+
+  it('a car ahead of us by 3 s (where we were a lap ago plus 3 s, a lap on): wrapped lapMs − 3 000, lapsDown −1', () => {
+    const lapAgo = AT_LINE - LAP3;
+    const p = valueOf(progressAt(o, lapAgo + 3_000)) + MINI_SECTORS;
+    const b = behind(p);
+    expect(b.wrappedMs).toBeCloseTo(b.lapMs - 3_000, 0);
+    expect(b.wrappedMs).toBeCloseTo(LAP3 - 3_000, 0);
+    expect(b.lapsDown).toBe(-1);
+  });
+
+  it('a lapped car (a lap and 1.2 s behind): wrapped 1 200, lapsDown 1; a car lapping us (a lap less 1.2 s ahead): wrapped 1 200, lapsDown −1', () => {
+    const p = valueOf(progressAt(o, AT_LINE - 1_200));
+    const lapped = behind(p - MINI_SECTORS);
+    expect(lapped.wrappedMs).toBeCloseTo(1_200, 0);
+    expect(lapped.lapsDown).toBe(1);
+    const lapping = behind(p + MINI_SECTORS);
+    expect(lapping.wrappedMs).toBeCloseTo(1_200, 0);
+    expect(lapping.lapsDown).toBe(-1);
+    // two laps and 1.2 s behind
+    const twice = behind(p - 2 * MINI_SECTORS);
+    expect(twice.wrappedMs).toBeCloseTo(1_200, 0);
+    expect(twice.lapsDown).toBe(2);
+  });
+
+  it('a car exactly where we are: wrapped 0, lapsDown 0; every answer lies in [0, lapMs)', () => {
+    const b = behind(NEWEST);
+    expect(b.wrappedMs).toBeCloseTo(0, 0);
+    expect(b.lapsDown).toBe(0);
+    for (let p = 60; p <= 260; p += 0.73) {
+      const x = behind(p);
+      expect(x.wrappedMs, `p ${p}`).toBeGreaterThanOrEqual(0);
+      expect(x.wrappedMs, `p ${p}`).toBeLessThan(x.lapMs);
+      expect(x.lapsDown, `p ${p}`).toBe(Math.floor((NEWEST - p) / MINI_SECTORS));
+    }
+  });
+
+  it('our live point past our newest crossing: where we are now is our live progress; the rolling lap ends there', () => {
+    // 0.4 mini-sectors past the line, 720 ms later (lap 4 at lap 3's pace near the line)
+    const now = AT_LINE + 720;
+    const live = { known: true, value: NEWEST + 0.4, at: now } as const;
+    // a car at our live progress is 0 behind; a car at our newest crossing 720 behind
+    expect(valueOf(tb(o, live, NEWEST + 0.4, now)).wrappedMs).toBeCloseTo(0, 0);
+    expect(valueOf(tb(o, live, NEWEST, now)).wrappedMs).toBeCloseTo(720, 0);
+    // the rolling lap: from where we were at progress 100.4 to now
+    const lapAgo = valueOf(timeAtProgress(o, NEWEST + 0.4 - MINI_SECTORS));
+    expect(Math.abs(valueOf(tb(o, live, NEWEST, now)).lapMs - (now - lapAgo))).toBeLessThanOrEqual(1);
+  });
+
+  it('our live progress unknown or before our newest crossing: where we are now is our newest crossing', () => {
+    const now = AT_LINE + 500;
+    for (const live of [unknown('notReceived'), { known: true, value: NEWEST - 3, at: now }] as Known<number>[]) {
+      const b = valueOf(tb(o, live, NEWEST, now));
+      expect(b.wrappedMs).toBeCloseTo(500, 0);
+      expect(b.lapsDown).toBe(0);
+      expect(b.lapMs).toBeCloseTo(now - ALL[NEWEST - MINI_SECTORS]!, 0);
+    }
+  });
+
+  it('our history shorter than a lap behind where we are now (first lap, a join mid-race): insufficientData', () => {
+    // kept from progress 120, we are at 150: a lap back is 100, before our first kept crossing
+    const joined = ours(120);
+    expect(timeBehind(joined, atLine, NEWEST - 1, AT_LINE)).toEqual(INSUFFICIENT);
+    // the first lap: crossings 0 … 30 only, we are at 30
+    const first: CarCrossings = { fromProgress: 0, at: ALL.slice(0, 31) };
+    expect(timeBehind(first, { known: true, value: 30, at: ALL[30]! }, 10, ALL[30]!)).toEqual(INSUFFICIENT);
+    // no crossing at all
+    expect(timeBehind({ fromProgress: 0, at: [] }, unknown('notReceived'), 10, 10_000)).toEqual(INSUFFICIENT);
   });
 });

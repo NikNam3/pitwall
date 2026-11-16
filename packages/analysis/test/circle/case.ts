@@ -1,8 +1,8 @@
 // Built races for `circle` (SP4.3d spec §6.5): `rejoin`'s built races (`../rejoin/field.ts`: every car laps at one pace
 // from its own start offset, so a car's time behind us is the difference of the offsets, modulo one of our laps), with
 // what the circle reads besides: `rejoin`'s output on the same view (computed through its own guarded view), our lap
-// records in the projection (our last green lap, `lap-classes`' `forPace` over `currentLaps`, C25, C43), the race's
-// session phase (`racing`, or an open `neutralised` span under an SC or a VSC) and each car's status.
+// records in the projection (since R15 the circle's lap is our rolling lap, so the tests use them to show records change
+// nothing), the race's session phase (`racing`, or an open `neutralised` span under an SC or a VSC) and each car's status.
 import { carId, type LapRecord, type OpenSpan } from '@pitwall/domain';
 import type { EngineView } from '@pitwall/engine/readers';
 import { lap, openNeutralisation } from '../../../../test-support/builders/index.ts';
