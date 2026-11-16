@@ -79,9 +79,9 @@ export * from './race-hazard/index.ts';
 export {
   SIMULATOR as STRATEGY_DP_SIMULATOR,
   bestWith,
-  dpResult,
   solveDp,
-  strategyDp,
+  solveWorld,
+  STRATEGY_DP_CONFIG,
   type DpCarParams,
   type DpFirst,
   type DpInput,
@@ -90,6 +90,7 @@ export {
   type DpSolution,
   type DpTable,
   type DpUnder,
+  type DpWorld,
 } from './strategy-dp/index.ts';
 export {
   SIMULATOR as RACE_MONTE_CARLO_SIMULATOR,

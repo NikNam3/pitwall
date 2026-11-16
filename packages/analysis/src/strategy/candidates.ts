@@ -3,13 +3,15 @@
 // either way (`neighbour`; the supervisor's ruling: the best plan's only, so the count stays inside the cap); the rule
 // candidates on the best plan (`rule`): mirror the rival directly ahead and the one directly behind (the first stop at
 // its likeliest stop lap, `stopMid`), cover the car behind and extend past the car ahead (a `rivalPits` trigger within
-// `closeGapMs`, `race-interaction`'s, the one close gap, C43). Every policy is `policyOf(plan, thresholds)`; no policy twice.
+// `closeGapMs`, `race-interaction`'s, the one close gap, C43). Every policy is `policyOf(plan, extra)`; no policy twice.
 //
-// SP4.3b Task 23a (supervisor rulings, 2026-11-13): at most `dpPlansMax` DP plans, the best by `expectedMs` (box-now and
-// stay-out besides); inter and wet plans only where rain can come (the track's wetness at the DP's rain threshold, or
-// rain coming over the remaining laps by `rain-outlook`'s rule, SP4.3c O3a; no forecast counts as no rain); the
-// best plan's sequence twice, with every DP threshold and without degradation-off and rain; every other candidate
-// carries only the neutralised triggers (and a cover or extend rule its own `rivalPits`).
+// SP4.3b Task 23a (supervisor rulings, 2026-11-13): at most `dpPlansMax` DP plans, the best by `expectedMs` (box this
+// lap and continue besides); inter and wet plans only where rain can come (the track's wetness at the DP best plan's
+// rain threshold, or rain coming over the remaining laps by `rain-outlook`'s rule, SP4.3c O3a; no forecast counts as no
+// rain); the best plan's sequence twice, with every trigger of its own and without degradation-off and rain. SP4.3c Task
+// 19 (each plan its own triggers): every other DP plan carries its own neutralised triggers; a neighbour and a rule the
+// best plan's (and a cover or extend rule its own `rivalPits`). Which plans of which weather world are candidates is
+// Task 20's; until then every world's plans are ranked together.
 import type { CarId, Policy, StartingPoint, Trigger } from '@pitwall/domain';
 import type { McCandidate } from '../race-monte-carlo/index.ts';
 import { startLapOf } from '../race-forecast/index.ts';
@@ -74,19 +76,22 @@ export function candidatesOf(start: StartingPoint, car: CarId, dp: DpResult, con
     out.push({ policy, source, rule });
   };
   const fromLap = startLapOf(start, car);
-  const thresholds = dp.thresholds.filter((t) => t.kind === 'neutralised');
-  const allowed = rainCanCome(start, fromLap, dp.thresholds, config.rainPct ?? RAIN_OUTLOOK_CONFIG.defaults.rainPct) ? () => true : (p: Pick<DpPlan, 'stops'>) => !p.stops.some((s) => WET.has(s.compound));
-  const plans = dp.plans
-    .filter(allowed)
-    .sort((a, b) => a.expectedMs - b.expectedMs)
-    .slice(0, config.dpPlansMax);
-  const best = plans[0] ?? dp.stayOut;
+  const neutralisedOf = (p: Pick<DpPlan, 'triggers'>): Trigger[] => p.triggers.filter((t) => t.kind === 'neutralised');
+  const ranked = [...dp.plans].sort((a, b) => a.expectedMs - b.expectedMs);
+  // the rain threshold: the DP's best plan's own (SP4.3c Task 19)
+  const top = ranked[0] ?? dp.continue;
+  const allowed = rainCanCome(start, fromLap, top.triggers, config.rainPct ?? RAIN_OUTLOOK_CONFIG.defaults.rainPct) ? () => true : (p: Pick<DpPlan, 'stops'>) => !p.stops.some((s) => WET.has(s.compound));
+  const plans = ranked.filter(allowed).slice(0, config.dpPlansMax);
+  const best = plans[0] ?? dp.continue;
+  // a neighbour's and a rule's triggers: the best plan's neutralised ones
+  const thresholds = neutralisedOf(best);
 
-  // the best plan's own sequence: with every DP threshold, and without degradation-off and rain
-  add(policyOf(best, dp.thresholds), 'dp');
-  add(policyOf(best, dp.thresholds.filter((t) => t.kind !== 'degradationOff' && t.kind !== 'rain')), 'dp');
-  for (const plan of [...plans.slice(1), ...(dp.boxNow === null ? [] : [dp.boxNow]), dp.stayOut]) {
-    if (plan !== best && allowed(plan)) add(policyOf(plan, thresholds), 'dp');
+  // the best plan's own sequence: with every trigger of its own, and without degradation-off and rain
+  add(policyOf(best), 'dp');
+  add(policyOf({ stops: best.stops, triggers: best.triggers.filter((t) => t.kind !== 'degradationOff' && t.kind !== 'rain') }), 'dp');
+  // every other DP plan with its own neutralised triggers
+  for (const plan of [...plans.slice(1), ...(dp.boxThisLap === null ? [] : [dp.boxThisLap]), dp.continue]) {
+    if (plan !== best && allowed(plan)) add(policyOf({ stops: plan.stops, triggers: neutralisedOf(plan) }), 'dp');
   }
 
   for (let k = 0; k < best.stops.length; k++) {
@@ -94,7 +99,7 @@ export function candidatesOf(start: StartingPoint, car: CarId, dp: DpResult, con
     for (let d = config.neighbourMinLaps; d <= config.neighbourMaxLaps; d++) {
       for (const moved of [lap - d, lap + d]) {
         const stops = moveStop(best.stops, k, moved, fromLap, start.lapsTotal);
-        if (stops !== null) add(policyOf({ stops }, thresholds), 'neighbour');
+        if (stops !== null) add(policyOf({ stops, triggers: thresholds }), 'neighbour');
       }
     }
   }
@@ -106,11 +111,12 @@ export function candidatesOf(start: StartingPoint, car: CarId, dp: DpResult, con
     for (const [rival, rule] of mirrors) {
       if (rival === undefined) continue;
       const stops = moveStop(best.stops, 0, start.stopMid[rival] ?? start.lapsTotal, fromLap, start.lapsTotal);
-      if (stops !== null) add(policyOf({ stops }, thresholds), 'rule', rule);
+      if (stops !== null) add(policyOf({ stops, triggers: thresholds }, []), 'rule', rule);
     }
     const rivalPits = (carId: CarId, action: 'cover' | 'extend'): Trigger => ({ kind: 'rivalPits', carId, withinMs: config.closeGapMs, action });
-    if (behind !== undefined) add(policyOf(best, [...thresholds, rivalPits(behind, 'cover')]), 'rule', 'cover');
-    if (ahead !== undefined) add(policyOf(best, [...thresholds, rivalPits(ahead, 'extend')]), 'rule', 'extend');
+    const ruled = { stops: best.stops, triggers: thresholds };
+    if (behind !== undefined) add(policyOf(ruled, [rivalPits(behind, 'cover')]), 'rule', 'cover');
+    if (ahead !== undefined) add(policyOf(ruled, [rivalPits(ahead, 'extend')]), 'rule', 'extend');
   }
   return out;
 }

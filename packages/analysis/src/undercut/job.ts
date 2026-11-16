@@ -1,13 +1,13 @@
-// `undercut`'s job module (SP4.3b spec §9.1): `run` runs in a worker (C51). Per our car one DP solve (`solveDp`), its
+// `undercut`'s job module (SP4.3b spec §9.1): `run` runs in a worker (C51). Per our car one DP solve (`solveWorld`), its
 // cases against the rivals in range (`cases.ts`), scored by one `scoreCalls` on common scenarios under the cap of
 // scenario-policies (a count, C2). Our other car is certain input following its committed plan as far as it can
 // (`committedField`, one rule for every job, C43), else modelled like a rival (as `strategy` plans a car alone). No state between runs (C31, C32).
-import { known, unknown, type CarId, type Known, type Policy, type StartingPoint, type Trigger, type Undercut, type UndercutRival } from '@pitwall/domain';
+import { known, unknown, type CarId, type Known, type Policy, type StartingPoint, type Undercut, type UndercutRival } from '@pitwall/domain';
 import type { Rng } from '@pitwall/engine/readers';
 import { startLapOf } from '../race-forecast/index.ts';
 import { scoreCalls, type CallInput } from '../race-monte-carlo/index.ts';
 import { committedField, mcSettingsFrom, notPlannedWhy, toDpInput, toMcHazard } from '../shared/strategy-input/index.ts';
-import { dpResult, solveDp, type DpSolution } from '../strategy-dp/index.ts';
+import { solveWorld, type DpSolution } from '../strategy-dp/index.ts';
 import { caseValue, casesOf, ownStopsOf, rivalStopsOf, type CaseCall, type RivalStopsAt } from './cases.ts';
 import type { UndercutCarInput, UndercutInput } from './prepare.ts';
 
@@ -22,16 +22,16 @@ export type UndercutOutput = Record<CarId, Known<Undercut>>;
  */
 const TRAFFIC_LAPS = 1;
 
-/** Our cars' DP solutions of one run, each solved once (C43: the one solve a car's cases and its turn as a rival share). */
-type Solutions = (car: CarId) => { sol: DpSolution; thresholds: Trigger[] } | null;
+/**
+ * Our cars' DP solutions of one run, each solved once (C43: the one solve a car's cases and its turn as a rival share):
+ * the first weather world's (the heaviest, `toDpInput`'s order; Task 20 selects across worlds).
+ */
+type Solutions = (car: CarId) => DpSolution | null;
 
 function solutionsOf(input: UndercutInput, start: StartingPoint): Solutions {
-  const solved = new Map<CarId, { sol: DpSolution; thresholds: Trigger[] } | null>();
+  const solved = new Map<CarId, DpSolution | null>();
   return (car) => {
-    if (!solved.has(car)) {
-      const sol = notPlannedWhy(input.strategy, start, car) === null ? solveDp(toDpInput(input.strategy, car)) : null;
-      solved.set(car, sol === null ? null : { sol, thresholds: dpResult(sol).thresholds });
-    }
+    if (!solved.has(car)) solved.set(car, notPlannedWhy(input.strategy, start, car) === null ? solveWorld(toDpInput(input.strategy, car), 0) : null);
     return solved.get(car) ?? null;
   };
 }
@@ -47,10 +47,9 @@ function carValue(input: UndercutInput, start: StartingPoint, at: number, car: C
   const stopsOf = (k: CarId): RivalStopsAt => {
     if (!ours.has(k)) return rivalStopsOf(start, k);
     const theirs = solutions(k);
-    return theirs === null ? () => null : ownStopsOf(theirs.sol);
+    return theirs === null ? () => null : ownStopsOf(theirs);
   };
-  const calls: CaseCall[] =
-    mine === null ? [] : own.rivals.flatMap((rival) => casesOf(start, mine.sol, mine.thresholds, lap, rival, stopsOf(rival.carId), input.config.maxLapsLater));
+  const calls: CaseCall[] = mine === null ? [] : own.rivals.flatMap((rival) => casesOf(start, mine, lap, rival, stopsOf(rival.carId), input.config.maxLapsLater));
 
   const outcomes = (() => {
     const scenarios = calls.length === 0 ? 0 : Math.floor(input.config.maxScenarioPolicies / calls.length);

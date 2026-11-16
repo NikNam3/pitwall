@@ -1,8 +1,13 @@
 // `strategy`'s candidates (SP4.3b spec §8.1 step 1, S21; plan 4.3b1 Task 20 row 1; 4.3b2 precondition 3): per car the
-// DP's plans and its box-now and stay-out variants, their stop-lap neighbours ±1–3 laps, and the rule candidates
+// DP's plans and its box-this-lap and continue variants, their stop-lap neighbours ±1–3 laps, and the rule candidates
 // mirror ahead, mirror behind, cover and extend on the best plan; every policy built by one function, `policyOf(plan,
-// thresholds)`, with the DP's thresholds. A hand-built field (race-forecast's test builder) and a hand-made DP result,
-// so every expected candidate is known (how they are read: `./support.ts`).
+// extra)`: the plan's stops and its own triggers, then `extra`. A hand-built field (race-forecast's test builder) and a
+// hand-made DP result, so every expected candidate is known (how they are read: `./support.ts`).
+//
+// Ported in SP4.3c Task 19 (the DP result's shape, spec §5.4: no shared thresholds, every plan its own triggers and
+// world): a DP plan's candidate carries the plan's own triggers (the best plan's sequence also without degradation-off
+// and rain); a candidate derived from the best plan (neighbour, rule) carries the best plan's neutralised triggers.
+// Which candidates exist is Task 20's; this port keeps today's selection.
 import { carId, known, type CarId, type McSource, type Policy, type StartingPoint, type Trigger, type TyreSet } from '@pitwall/domain';
 import { describe, expect, it } from 'vitest';
 import { candidatesOf, policyOf } from '../../src/strategy/candidates.ts';
@@ -34,28 +39,30 @@ function field(): StartingPoint {
   return start;
 }
 
-// Ported in SP4.3b Task 23a: the damage trigger left this fixture; a candidate other than the best plan's own sequence
-// now carries only the neutralised triggers (the supervisor's ruling; the Task 23a rows below test the rest).
+/** The best plan's own neutralised triggers. */
 const NEUTRALISED: Trigger[] = [
   { kind: 'neutralised', condition: 'sc', fromLap: 6, toLap: 15, action: { box: 'hard' } },
   { kind: 'neutralised', condition: 'vsc', fromLap: 9, toLap: 14, action: { box: 'hard' } },
 ];
-const THRESHOLDS: Trigger[] = NEUTRALISED;
+/** The two-stop's own: different from the best plan's, so a copy would show. */
+const TWO_STOP_NEUTRALISED: Trigger[] = [{ kind: 'neutralised', condition: 'sc', fromLap: 6, toLap: 9, action: { box: 'hard' } }];
 
-const plan = (stops: DpPlan['stops'], expectedMs: number): DpPlan => ({ stops, expectedMs });
+const plan = (stops: DpPlan['stops'], expectedMs: number, triggers: Trigger[] = [], world = 0): DpPlan => ({ stops, expectedMs, triggers, world });
 
-/** The DP's result for car 2: the best one-stop on lap 16, a two-stop, box now and stay out (its stop on lap 26). */
-const BEST = plan([{ lap: 16, compound: 'hard' }], 1_000);
-const TWO_STOP = plan([{ lap: 10, compound: 'hard' }, { lap: 21, compound: 'medium' }], 2_000);
+/** The DP's result for car 2: the best one-stop on lap 16, a two-stop, box this lap and continue (its stop on lap 26). */
+const BEST = plan([{ lap: 16, compound: 'hard' }], 1_000, NEUTRALISED);
+const TWO_STOP = plan([{ lap: 10, compound: 'hard' }, { lap: 21, compound: 'medium' }], 2_000, TWO_STOP_NEUTRALISED);
 const BOX_NOW = plan([{ lap: LAP, compound: 'hard' }], 3_000);
-const STAY_OUT = plan([{ lap: 26, compound: 'hard' }], 4_000);
+const STAY_OUT = plan([{ lap: 26, compound: 'hard' }], 4_000, [{ kind: 'neutralised', condition: 'sc', fromLap: 20, toLap: 25, action: { box: 'hard' } }]);
 const DP: DpResult = {
   plans: [BEST, TWO_STOP],
-  boxNow: BOX_NOW,
-  stayOut: STAY_OUT,
-  thresholds: THRESHOLDS,
+  boxThisLap: BOX_NOW,
+  continue: STAY_OUT,
   table: { boxUnderMs: new Float64Array(LAPS - LAP + 1), stayMs: new Float64Array(LAPS - LAP + 1) },
 };
+
+/** `p`'s stops with only its neutralised triggers. */
+const neutralOnly = (p: DpPlan, from: DpPlan = p): Pick<DpPlan, 'stops' | 'triggers'> => ({ stops: p.stops, triggers: from.triggers.filter((t) => t.kind === 'neutralised') });
 
 // the rule candidates' gap: the one close gap, `race-interaction`'s `closeGapMs` (SP4.3c Task 3), beside strategy's config
 const CONFIG = { ...STRATEGY_CONFIG.defaults, closeGapMs: 2_500 };
@@ -71,50 +78,59 @@ const moved = (p: DpPlan, k: number, lap: number): DpPlan => ({ ...p, stops: p.s
 
 describe('strategy: candidates', () => {
   // row 1
-  it('candidates per car: DP plans, boxNow, stayOut, neighbours ±1–3, mirror ahead, mirror behind, cover, extend; each with the DP\'s thresholds', () => {
+  it('candidates per car: DP plans, boxThisLap, continue, neighbours ±1–3, mirror ahead, mirror behind, cover, extend; each plan with its own triggers', () => {
     const start = field();
     const cands = candidatesOf(start, CAR, DP, CONFIG);
-    // the DP's plans and its variants
-    for (const p of [BEST, TWO_STOP, BOX_NOW, STAY_OUT]) expect(find(cands, policyOf(p, THRESHOLDS)).source, json(p.stops)).toBe('dp');
-    // the best plan's stop-lap neighbours, 1 to 3 laps either way
-    for (const d of [-3, -2, -1, 1, 2, 3]) expect(find(cands, policyOf(moved(BEST, 0, 16 + d), THRESHOLDS)).source, `lap ${16 + d}`).toBe('neighbour');
+    // the DP's plans and its variants, each with its own (neutralised) triggers
+    expect(find(cands, policyOf(BEST)).source).toBe('dp');
+    for (const p of [TWO_STOP, BOX_NOW, STAY_OUT]) expect(find(cands, policyOf(neutralOnly(p))).source, json(p.stops)).toBe('dp');
+    // the best plan's stop-lap neighbours, 1 to 3 laps either way, with the best plan's neutralised triggers
+    for (const d of [-3, -2, -1, 1, 2, 3]) expect(find(cands, policyOf(neutralOnly(moved(BEST, 0, 16 + d)))).source, `lap ${16 + d}`).toBe('neighbour');
     // every neighbour is one stop of a DP plan or variant moved by 1 to 3 laps, the rest kept
     const bases = [BEST, TWO_STOP, BOX_NOW, STAY_OUT];
     for (const c of cands.filter((x) => x.source === 'neighbour')) {
       const isNeighbour = bases.some((b) =>
         b.stops.some((s, k) =>
-          [-3, -2, -1, 1, 2, 3].some((d) => s.lap + d >= LAP && s.lap + d < LAPS && json(c.policy) === json(policyOf(moved(b, k, s.lap + d), THRESHOLDS))),
+          [-3, -2, -1, 1, 2, 3].some((d) => s.lap + d >= LAP && s.lap + d < LAPS && json(c.policy.stops) === json(moved(b, k, s.lap + d).stops)),
         ),
       );
       expect(isNeighbour, json(c.policy.stops)).toBe(true);
     }
     // the rules on the best plan: mirror the rival ahead and the one behind at their likeliest stop laps
-    expect(find(cands, policyOf(moved(BEST, 0, 12), THRESHOLDS)).source).toBe('rule');
-    expect(find(cands, policyOf(moved(BEST, 0, 22), THRESHOLDS)).source).toBe('rule');
+    expect(find(cands, policyOf(neutralOnly(moved(BEST, 0, 12)))).source).toBe('rule');
+    expect(find(cands, policyOf(neutralOnly(moved(BEST, 0, 22)))).source).toBe('rule');
     // cover the car behind and extend past the car ahead, within closeGapMs (from the config)
     const cover: Trigger = { kind: 'rivalPits', carId: BEHIND, withinMs: 2_500, action: 'cover' };
     const extend: Trigger = { kind: 'rivalPits', carId: AHEAD, withinMs: 2_500, action: 'extend' };
-    expect(find(cands, policyOf(BEST, [...THRESHOLDS, cover])).source).toBe('rule');
-    expect(find(cands, policyOf(BEST, [...THRESHOLDS, extend])).source).toBe('rule');
+    expect(find(cands, policyOf(neutralOnly(BEST), [cover])).source).toBe('rule');
+    expect(find(cands, policyOf(neutralOnly(BEST), [extend])).source).toBe('rule');
     // nothing else: no committed row (the job adds it), no policy twice
     expect(new Set(cands.map((c) => c.source))).toEqual(new Set(['dp', 'neighbour', 'rule']));
     expect(new Set(cands.map((c) => json(c.policy))).size).toBe(cands.length);
   });
 
-  // 4.3b2 precondition 3
-  it("every candidate's policy is policyOf(its plan, the DP's thresholds)", () => {
+  // 4.3b2 precondition 3, ported (SP4.3c Task 19): no candidate carries another plan's triggers
+  it("every candidate's policy is policyOf(its plan, extra): a DP plan's own triggers; a neighbour's and a rule's the best plan's", () => {
     const cands = candidatesOf(field(), CAR, DP, CONFIG);
     expect(cands.length).toBeGreaterThan(0);
+    const dpPlans = [BEST, TWO_STOP, BOX_NOW, STAY_OUT];
     for (const c of cands) {
-      // a rule's own trigger (cover, extend) joins the DP's thresholds
       const own = c.policy.triggers.filter((t) => t.kind === 'rivalPits');
-      expect(c.policy, json(c.policy.stops)).toEqual(policyOf({ stops: c.policy.stops, expectedMs: 0 }, [...THRESHOLDS, ...own]));
+      const rest = c.policy.triggers.filter((t) => t.kind !== 'rivalPits');
+      if (c.source === 'dp') {
+        const p = dpPlans.find((x) => json(x.stops) === json(c.policy.stops))!;
+        expect(p, json(c.policy.stops)).toBeDefined();
+        // the plan's own triggers: all of them (the best plan's first candidate) or its neutralised ones
+        expect([json(p.triggers), json(neutralOnly(p).triggers)], json(c.policy.stops)).toContain(json(rest));
+      } else expect(rest, `${c.source} ${json(c.policy.stops)}`).toEqual(NEUTRALISED);
+      expect(c.policy, json(c.policy.stops)).toEqual(policyOf({ stops: c.policy.stops, triggers: rest }, own));
     }
-    // policyOf keeps the plan's stops and carries the thresholds
-    const p = policyOf(TWO_STOP, THRESHOLDS);
+    // policyOf keeps the plan's stops and carries its own triggers, then the extra ones
+    const p = policyOf(TWO_STOP);
     expect(p.stops).toEqual(TWO_STOP.stops);
-    expect(p.triggers.length).toBeGreaterThan(0);
-    for (const t of p.triggers) expect(THRESHOLDS.map(json)).toContain(json(t));
+    expect(p.triggers).toEqual(TWO_STOP_NEUTRALISED);
+    const cover: Trigger = { kind: 'rivalPits', carId: BEHIND, withinMs: 2_500, action: 'cover' };
+    expect(policyOf(TWO_STOP, [cover]).triggers).toEqual([...TWO_STOP_NEUTRALISED, cover]);
   });
 });
 
@@ -122,14 +138,14 @@ describe('strategy: candidates', () => {
 // best by `expectedMs`; inter and wet plans only where rain can come; degradation-off and rain triggers only on the
 // best plan's own sequence, as two candidates.
 //
-// How these rows read the rulings (the test agent's decisions, Task 23a report):
-// - "The rain threshold" is the DP's `rain` trigger's `wetnessMs`. The dry case keeps the forecast's highest rainPct
-//   (4) and the current wetness (500 ms) below a threshold of 9,000 ms (more than one rain lap's rise); the rain cases
-//   set a threshold of 50 ms and either a forecast of 100 % from lap 10 or a current wetness of 600 ms, so each holds
-//   under any reading of "reaches".
-// - "With the trigger" carries the DP's degradation-off and rain triggers and every neutralised one; "without" carries
-//   neither of the two but every neutralised one. Every other candidate carries only the neutralised triggers (plus a
-//   cover or extend rule's own `rivalPits`).
+// How these rows read the rulings (the test agent's decisions, Task 23a report; ported in SP4.3c Task 19):
+// - "The rain threshold" is the `rain` trigger's `wetnessMs` of the DP's best plan (its own triggers). The dry case keeps
+//   the forecast's highest rainPct (4) and the current wetness (500 ms) below a threshold of 9,000 ms (more than one
+//   rain lap's rise); the rain cases set a threshold of 50 ms and either a forecast of 100 % from lap 10 or a current
+//   wetness of 600 ms, so each holds under any reading of "reaches".
+// - "With the trigger" carries the best plan's degradation-off and rain triggers and its neutralised ones; "without"
+//   carries neither of the two but its neutralised ones. Every other candidate carries only neutralised triggers (its
+//   own plan's, or the best plan's for a neighbour or rule; plus a cover or extend rule's own `rivalPits`).
 const isWetStop = (s: { compound: string }): boolean => s.compound === 'inter' || s.compound === 'wet';
 
 const RAIN_THRESHOLD = (wetnessMs: number): Trigger => ({ kind: 'rain', wetnessMs, action: { box: 'inter' } });
@@ -144,18 +160,18 @@ function weatherField(rainPct: (lap: number) => number, wetnessMs: number): Star
   return { ...start, weather: known({ byLap, accuracy: 'perfect' as const }, 0), wetness: { wetnessMs, sdMs: 0, wet: wetnessMs > 0 } };
 }
 
-/** A DP result with the dry plans above and three inter/wet plans (second best: a shower hedge), and `rain` at `threshold`. */
+/** A DP result with the dry plans above and three inter/wet plans (second best: a shower hedge), the best plan's `rain` at `threshold`. */
 function wetDp(threshold: number): DpResult {
   const interThenMedium = plan([{ lap: 11, compound: 'inter' }, { lap: 13, compound: 'medium' }], 1_500);
   const inter = plan([{ lap: 12, compound: 'inter' }], 2_500);
   const wet = plan([{ lap: 14, compound: 'wet' }], 3_500);
-  return { ...DP, plans: [BEST, interThenMedium, TWO_STOP, inter, wet], thresholds: [...NEUTRALISED, RAIN_THRESHOLD(threshold)] };
+  return { ...DP, plans: [{ ...BEST, triggers: [...NEUTRALISED, RAIN_THRESHOLD(threshold)] }, interThenMedium, TWO_STOP, inter, wet] };
 }
 const WET_PLANS = (dp: DpResult): DpPlan[] => dp.plans.filter((p) => p.stops.some(isWetStop));
 
 describe('strategy: candidates (Task 23a)', () => {
   // row 1
-  it('candidatesOf keeps at most dpPlansMax DP plans (config, 8), the best by expectedMs, plus boxNow and stayOut', () => {
+  it('candidatesOf keeps at most dpPlansMax DP plans (config, 8), the best by expectedMs, plus boxThisLap and continue', () => {
     expect((STRATEGY_CONFIG.defaults as Record<string, unknown>).dpPlansMax, 'the default').toBe(8);
     // twelve dry two-stops, not in expectedMs order (the best first, as the DP gives it); none is a neighbour or rule of BEST
     const twoStop = (i: number, expectedMs: number): DpPlan => plan([{ lap: 7 + i, compound: 'medium' }, { lap: 24, compound: i % 2 === 0 ? 'hard' : 'soft' }], expectedMs);
@@ -170,7 +186,7 @@ describe('strategy: candidates (Task 23a)', () => {
       const kept = byExpected.slice(0, max);
       const dropped = byExpected.slice(max);
       const dpStops = new Set(cands.filter((c) => c.source === 'dp').map((c) => json(c.policy.stops)));
-      expect(dpStops, `dpPlansMax ${max}: the best ${max} plans, boxNow and stayOut`).toEqual(new Set([...kept, BOX_NOW, STAY_OUT].map((p) => json(p.stops))));
+      expect(dpStops, `dpPlansMax ${max}: the best ${max} plans, boxThisLap and continue`).toEqual(new Set([...kept, BOX_NOW, STAY_OUT].map((p) => json(p.stops))));
       for (const p of dropped) expect(cands.some((c) => json(c.policy.stops) === json(p.stops)), `dpPlansMax ${max}: dropped ${json(p.stops)}`).toBe(false);
     }
   });
@@ -200,8 +216,9 @@ describe('strategy: candidates (Task 23a)', () => {
   });
 
   // row 4
-  it('degradationOff and rain triggers are attached only to the best plan\'s sequence, as two candidates (with and without the trigger); every other candidate carries only the neutralised triggers', () => {
-    const dp: DpResult = { ...DP, thresholds: [...NEUTRALISED, DAMAGE, DEG_OFF, RAIN_THRESHOLD(9_000)] };
+  it('degradationOff and rain triggers are attached only to the best plan\'s sequence, as two candidates (with and without the trigger); every other candidate carries only neutralised triggers', () => {
+    const best: DpPlan = { ...BEST, triggers: [...NEUTRALISED, DAMAGE, DEG_OFF, RAIN_THRESHOLD(9_000)] };
+    const dp: DpResult = { ...DP, plans: [best, TWO_STOP] };
     const cands = candidatesOf(weatherField(() => 4, 0), CAR, dp, CONFIG);
     const has = (c: { policy: Policy }, kind: Trigger['kind']): boolean => c.policy.triggers.some((t) => t.kind === kind);
     const carriesNeutralised = (c: { policy: Policy }): boolean => NEUTRALISED.every((n) => c.policy.triggers.some((t) => json(t) === json(n)));
@@ -217,14 +234,17 @@ describe('strategy: candidates (Task 23a)', () => {
     expect(has(without[0]!, 'rain'), 'without: no rain trigger').toBe(false);
     for (const c of own) expect(carriesNeutralised(c), json(c.policy.triggers)).toBe(true);
 
-    // every other candidate: the neutralised triggers only (a cover or extend rule adds its own rivalPits)
+    // every other candidate: neutralised triggers only (a cover or extend rule adds its own rivalPits); a neighbour or
+    // rule the best plan's, another DP plan its own
     const others = cands.filter((c) => !own.includes(c));
     expect(others.length).toBeGreaterThan(0);
     for (const c of others) {
       const at = `${c.source} ${json(c.policy.stops)}: ${json(c.policy.triggers.map((t) => t.kind))}`;
       expect(c.policy.triggers.every((t) => t.kind === 'neutralised' || t.kind === 'rivalPits'), at).toBe(true);
-      expect(carriesNeutralised(c), at).toBe(true);
+      if (c.source !== 'dp') expect(carriesNeutralised(c), at).toBe(true);
     }
+    const twoStop = others.find((c) => c.source === 'dp' && json(c.policy.stops) === json(TWO_STOP.stops))!;
+    expect(twoStop.policy.triggers, 'the two-stop: its own triggers, not the best plan\'s').toEqual(TWO_STOP_NEUTRALISED);
   });
 
   it("one close gap (SP4.3c Task 3, C43, C47): the job's cover and extend rules read race-interaction's closeGapMs; strategy has no ruleGapMs", () => {
@@ -246,7 +266,7 @@ describe('strategy: candidates (Task 23a)', () => {
   it('on the generator test race the candidate count per car is at most dpPlansMax + neighbours + rules + 2', () => {
     const config = STRATEGY_CONFIG.defaults;
     // dpPlansMax: the config's (8, row 1); neighbours: one stop of the best plan (at most maxStops) moved
-    // neighbourMinLaps…neighbourMaxLaps either way; rules: mirror ahead, mirror behind, cover, extend; 2: boxNow and stayOut
+    // neighbourMinLaps…neighbourMaxLaps either way; rules: mirror ahead, mirror behind, cover, extend; 2: boxThisLap and continue
     const dpPlansMax = 8;
     const neighbours = 2 * (config.neighbourMaxLaps - config.neighbourMinLaps + 1) * config.maxStops;
     const bound = dpPlansMax + neighbours + 4 + 2;

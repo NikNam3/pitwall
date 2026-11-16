@@ -1,11 +1,11 @@
-// `strategy-dp`'s trigger thresholds (SP4.3b spec §6, O9), read from one solve: SC/VSC per remaining stop, damage,
-// degradation off (by bisection over a few re-solves) and rain. A simulator has no view and so no `config.ts` (C47
-// binds calculators and analyses); the constants are the model's fixed terms, each with its source.
+// `strategy-dp`'s trigger thresholds (SP4.3b spec §6, O9; SP4.3c spec §5.4: each plan its own), read from one world's
+// solve: per plan its SC/VSC ranges along its own sequence; for the world's best plan also damage, degradation off (by
+// bisection over a few re-solves) and rain. The constants are the model's fixed terms, each with its source.
 import { NOISE_COMPOUNDS, type LapInput, type NoiseCompound, type Trigger } from '@pitwall/domain';
 import { lapTimeMs } from '../lap-model/index.ts';
 import { stopCostOf } from '../race-forecast/stop.ts';
 import { isWet } from '../track-wetness/wet.ts';
-import { DRY_COMPOUNDS, nodeAt, type GraphSolution } from './state.ts';
+import { after, DRY_COMPOUNDS, neutralKindsOf, nodeAt, stopCostMs, worldOf, type GraphSolution, type Play } from './state.ts';
 import type { DpInput, DpPlan } from './types.ts';
 
 /** The degradation-off threshold's bisection steps, each a re-solve (spec §6, plan 4.3b1 Task 18: `degBisectSteps` 4). */
@@ -19,21 +19,7 @@ export const DEG_OFF_MAX_FACTOR = 1;
 /** The wet-weather sets a slick-shod car switches to in rain, in order (spec §6: inters and wets join in a wet race). */
 const RAIN_SETS: readonly NoiseCompound[] = ['inter', 'wet'];
 
-/** What the thresholds read of a solve. */
-export type ThresholdInput = {
-  input: DpInput;
-  /** The solve holding the adaptive graph, and its root. */
-  graph: GraphSolution;
-  adaptiveRoot: number;
-  /** The best play: the best plan, else the stay-out play. */
-  best: DpPlan;
-  boxNow: DpPlan | null;
-  stayOut: DpPlan;
-  /** Re-solves the plans of a changed input and gives the best one, or `null` where none is feasible. */
-  bestPlanOf: (input: DpInput) => DpPlan | null;
-};
-
-/** The adaptive nodes along `stops` from `root`: `[k]` is the node after the first k stops. */
+/** The nodes along `stops` from `root`: `[k]` is the node after the first k stops. */
 export function nodesAlong(graph: GraphSolution, root: number, stops: DpPlan['stops']): number[] {
   const out = [root];
   let index = root;
@@ -47,37 +33,43 @@ export function nodesAlong(graph: GraphSolution, root: number, stops: DpPlan['st
 }
 
 /**
- * Per remaining stop of the best play (and one more where a set is left) the lap ranges where boxing under an SC or
- * VSC starting that lap beats staying out past it (S25), split where the best compound changes.
+ * A play's own `neutralised` triggers (S25, SP4.3c §5.4): per stop k of its stops, from the lap after stop k − 1, the
+ * lap ranges where boxing onto stop k's compound under an SC or VSC starting that lap beats staying out past it, along
+ * the play's path from `root` in `graph`. A play without a stop has none.
  */
-function neutralised(t: ThresholdInput): Trigger[] {
-  const { input } = t;
+export function neutralisedOf(input: DpInput, graph: GraphSolution, root: number, stops: DpPlan['stops']): Trigger[] {
   const n = input.totalLaps - input.fromLap + 1;
+  const { layout } = graph;
+  const kinds = neutralKindsOf(input, layout);
+  const along = nodesAlong(graph, root, stops);
   const out: Trigger[] = [];
-  nodesAlong(t.graph, t.adaptiveRoot, t.best.stops).forEach((index, k) => {
-    const solved = nodeAt(t.graph, index);
-    if (solved.neutral === null || solved.node.children.length === 0) return;
-    const previousStop = k === 0 ? undefined : t.best.stops[k - 1];
+  stops.forEach((stop, k) => {
+    const index = along[k];
+    if (index === undefined) return;
+    const solved = nodeAt(graph, index);
+    const child = solved.node.children.find((c) => c.compound === stop.compound);
+    const lt = graph.lapTimes.get(solved.node.tyre);
+    const { neutral } = solved;
+    if (child === undefined || lt === undefined || neutral === null) return;
+    const kid = nodeAt(graph, child.node);
+    const previousStop = k === 0 ? undefined : stops[k - 1];
     const previous = previousStop === undefined ? null : previousStop.lap - input.fromLap;
-    for (const condition of ['sc', 'vsc'] as const) {
-      const { box, boxArg, stay } = solved.neutral[condition];
-      let run: { from: number; to: number; compound: NoiseCompound } | null = null;
+    for (const kind of kinds) {
+      const { stay } = neutral[kind.key];
+      let run: { from: number; to: number } | null = null;
       const flush = (): void => {
-        if (run !== null) out.push({ kind: 'neutralised', condition, fromLap: input.fromLap + run.from, toLap: input.fromLap + run.to, action: { box: run.compound } });
+        if (run !== null) out.push({ kind: 'neutralised', condition: kind.key, fromLap: input.fromLap + run.from, toLap: input.fromLap + run.to, action: { box: stop.compound } });
         run = null;
       };
       for (let i = previous === null ? 0 : previous + 1; i < n - 1; i++) {
-        const at = i * n + (previous === null ? i : i - previous - 1);
-        const compound = solved.node.children[boxArg[at] ?? -1]?.compound;
-        if (compound === undefined || !((box[at] ?? Infinity) < (stay[at] ?? Infinity))) {
+        const j = previous === null ? i : i - previous - 1;
+        const box = (lt[(kind.cond * n + i) * n + j] ?? Infinity) + stopCostMs(input, kind.cond, i) + after(kind, kid.entry, (i + 1) * layout.ns);
+        if (!(box < (stay[i * n + j] ?? Infinity))) {
           flush();
           continue;
         }
-        if (run !== null && run.compound === compound) run.to = i;
-        else {
-          flush();
-          run = { from: i, to: i, compound };
-        }
+        if (run === null) run = { from: i, to: i };
+        else run.to = i;
       }
       flush();
     }
@@ -85,17 +77,28 @@ function neutralised(t: ThresholdInput): Trigger[] {
   return out;
 }
 
-/** The loss per lap on the car's set above which boxing now beats carrying it to the stay-out play's next stop. */
+/** What the best plan's further thresholds read of a solve. */
+export type ThresholdInput = {
+  input: DpInput;
+  /** The world's best plan, else the continue play. */
+  best: Play;
+  boxThisLap: Play | null;
+  continue: Play;
+  /** Re-solves the plans of a changed input and gives the best one, or `null` where none is feasible. */
+  bestPlanOf: (input: DpInput) => Play | null;
+};
+
+/** The loss per lap on the car's set above which boxing now beats carrying it to the continue play's next stop. */
 function damage(t: ThresholdInput): Trigger[] {
-  const { input, boxNow, stayOut } = t;
-  const compound = boxNow?.stops[0]?.compound;
-  if (boxNow === null || compound === undefined || !Number.isFinite(stayOut.expectedMs)) return [];
-  const laps = (stayOut.stops[0]?.lap ?? input.totalLaps) - input.fromLap;
+  const { input, boxThisLap, continue: stay } = t;
+  const compound = boxThisLap?.stops[0]?.compound;
+  if (boxThisLap === null || compound === undefined || !Number.isFinite(stay.expectedMs)) return [];
+  const laps = (stay.stops[0]?.lap ?? input.totalLaps) - input.fromLap;
   if (laps <= 0) return [];
-  return [{ kind: 'damage', lossMsPerLap: Math.max(0, boxNow.expectedMs - stayOut.expectedMs) / laps, action: { box: compound } }];
+  return [{ kind: 'damage', lossMsPerLap: Math.max(0, boxThisLap.expectedMs - stay.expectedMs) / laps, action: { box: compound } }];
 }
 
-const sequenceKey = (plan: DpPlan | null): string | null => (plan === null ? null : plan.stops.map((s) => s.compound).join('-'));
+const sequenceKey = (plan: Play | null): string | null => (plan === null ? null : plan.stops.map((s) => s.compound).join('-'));
 
 /** The wear-rate increase (percentage points per lap on every compound) at which the best sequence changes, by bisection. */
 function degradationOff(t: ThresholdInput): Trigger[] {
@@ -105,7 +108,7 @@ function degradationOff(t: ThresholdInput): Trigger[] {
   const top = rates[input.carParams.compound] * DEG_OFF_MAX_FACTOR;
   if (!(top > 0)) return [];
   const base = sequenceKey(t.best);
-  const at = (delta: number): DpPlan | null => {
+  const at = (delta: number): Play | null => {
     const shifted = Object.fromEntries(NOISE_COMPOUNDS.map((c) => [c, rates[c] + delta])) as Record<NoiseCompound, number>;
     return t.bestPlanOf({ ...input, carParams: { ...input.carParams, wearRatePct: shifted } });
   };
@@ -133,13 +136,14 @@ export const RAIN_REFINE_STEPS = 4;
 /** The two positive wetnesses (ms) a fixed plan's linear race time is read at: past the cold tyre's wet step at 0. */
 const RAIN_PROBE_MS = [1_000, 2_000] as const;
 
-/** The deterministic green race time (ms) from `fromLap` to the flag at a constant wetness `w` with `stops`. */
+/** The deterministic green race time (ms) from `fromLap` to the flag at a constant wetness `w` with `stops`, each stint on its compound's terms. */
 function greenRaceMs(input: DpInput, w: number, stops: DpPlan['stops']): number {
   const p = input.carParams;
   const n = input.totalLaps - input.fromLap + 1;
+  const traffic = worldOf(input).trafficMsByLap;
   // the car's burn per lap (the starting point's, O15)
   const burn = p.fuelBurnKgPerLap;
-  const lap: LapInput = { paceMs: p.paceMs, degMsPerLap: p.degMsPerLap, wearPct: p.wearPct, fuelKg: p.fuelKg, compound: p.compound, lapOnSet: 1, neutralised: 'none', wetnessMs: w, wet: isWet(w, 0, 0), scatterMs: 0, mistakeMs: 0 };
+  const lap: LapInput = { paceMs: p.paceMs, degMsPerLap: p.degMsPerLap[p.compound], wearPct: p.wearPct, fuelKg: p.fuelKg, compound: p.compound, lapOnSet: 1, neutralised: 'none', wetnessMs: w, wet: isWet(w, 0, 0), scatterMs: 0, mistakeMs: 0 };
   let onSet = p.tyreAge;
   let total = 0;
   for (let i = 0; i < n; i++) {
@@ -150,8 +154,8 @@ function greenRaceMs(input: DpInput, w: number, stops: DpPlan['stops']): number 
     lap.fuelKg = Math.max(0, lap.fuelKg - burn);
     const stop = stops.find((s) => s.lap === input.fromLap + i);
     if (stop !== undefined) {
-      total += stopCostOf(input.pitLossMs, p.human, 'green') + (input.trafficMsByLap[i] ?? 0);
-      Object.assign(lap, { compound: stop.compound, wearPct: 0 });
+      total += stopCostOf(input.pitLossMs, p.human, 'green') + (traffic[i] ?? 0);
+      Object.assign(lap, { compound: stop.compound, degMsPerLap: p.degMsPerLap[stop.compound], wearPct: 0 });
       onSet = 0;
     }
   }
@@ -163,7 +167,7 @@ const stopsKey = (stops: DpPlan['stops']): string => stops.map((s) => `${s.lap}$
 /**
  * The track wetness (ms, constant on every lap) above which switching a slick-shod car to its first wet-weather set at
  * the end of `fromLap`, run to the flag, beats the best dry plan (stops onto dry compounds only) at that wetness, pit
- * loss included (green laps, no hazard). None where it is at or below the current wetness (`wetnessByLap[0]`).
+ * loss included (green laps, no hazard). None where it is at or below the world's current wetness (`wetnessByLap[0]`).
  */
 function rain(t: ThresholdInput): Trigger[] {
   const { input } = t;
@@ -173,12 +177,13 @@ function rain(t: ThresholdInput): Trigger[] {
   if (!DRY_COMPOUNDS.includes(p.compound) || to === undefined || n < 2) return [];
   const switched: DpPlan['stops'] = [{ lap: input.fromLap, compound: to }];
   const zeros = new Float64Array(n);
+  const world = worldOf(input);
   const dryInput = (w: number): DpInput => ({
     ...input,
     sets: { ...input.sets, inter: 0, wet: 0 },
     hazard: { ...input.hazard, byLap: zeros, vscByLap: zeros },
     active: null,
-    wetnessByLap: new Float64Array(n).fill(w),
+    worlds: [{ ...world, wetnessByLap: new Float64Array(n).fill(w) }],
   });
   // the best dry plan at w; where the rule cannot be met on dry sets, staying out
   const bestDry = (w: number): DpPlan['stops'] => t.bestPlanOf(dryInput(w))?.stops ?? [];
@@ -188,7 +193,7 @@ function rain(t: ThresholdInput): Trigger[] {
     const slope = (b - a) / (RAIN_PROBE_MS[1] - RAIN_PROBE_MS[0]);
     return slope < 0 ? RAIN_PROBE_MS[0] - a / slope : null;
   };
-  const current = input.wetnessByLap[0] ?? 0;
+  const current = world.wetnessByLap[0] ?? 0;
   let dry = bestDry(current);
   let w = crossing(dry);
   for (let step = 0; step < RAIN_REFINE_STEPS && w !== null; step++) {
@@ -201,7 +206,11 @@ function rain(t: ThresholdInput): Trigger[] {
   return [{ kind: 'rain', wetnessMs: w, action: { box: to } }];
 }
 
-/** Every trigger threshold of a solve (spec §6, O9). */
-export function thresholdsOf(t: ThresholdInput): Trigger[] {
-  return [...neutralised(t), ...damage(t), ...degradationOff(t), ...rain(t)];
+/**
+ * The world's best plan's thresholds besides its neutralised ones (spec §6, O9): damage, degradation off and rain. A plan
+ * without a stop gets no box trigger (damage, rain), only degradation off.
+ */
+export function bestPlanThresholds(t: ThresholdInput): Trigger[] {
+  const boxes = t.best.stops.length > 0;
+  return [...(boxes ? damage(t) : []), ...degradationOff(t), ...(boxes ? rain(t) : [])];
 }

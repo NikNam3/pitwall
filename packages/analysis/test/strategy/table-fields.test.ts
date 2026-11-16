@@ -115,22 +115,22 @@ describe('strategy: the table fields', () => {
     start.stopMid[3] = 22;
     start.stopHigh[3] = 25;
     const thresholds: Trigger[] = [{ kind: 'neutralised', condition: 'sc', fromLap: 6, toLap: 15, action: { box: 'hard' } }];
-    const best: DpPlan = { stops: [{ lap: 16, compound: 'hard' }], expectedMs: 1_000 };
+    // SP4.3c Task 19: each plan its own triggers and world; a rule candidate carries the best plan's neutralised triggers
+    const best: DpPlan = { stops: [{ lap: 16, compound: 'hard' }], expectedMs: 1_000, triggers: thresholds, world: 0 };
     const dp: DpResult = {
       plans: [best],
-      boxNow: { stops: [{ lap: 5, compound: 'hard' }], expectedMs: 3_000 },
-      stayOut: { stops: [{ lap: 26, compound: 'hard' }], expectedMs: 4_000 },
-      thresholds,
+      boxThisLap: { stops: [{ lap: 5, compound: 'hard' }], expectedMs: 3_000, triggers: [], world: 0 },
+      continue: { stops: [{ lap: 26, compound: 'hard' }], expectedMs: 4_000, triggers: [], world: 0 },
       table: { boxUnderMs: new Float64Array(26), stayMs: new Float64Array(26) },
     };
     const config = { ...STRATEGY_CONFIG.defaults, closeGapMs: 2_500 };
     const cands = candidatesOf(start, CAR, dp, config);
     const ruleOf = (policy: ReturnType<typeof policyOf>) => cands.find((c) => json(c.policy) === json(policy))?.rule;
-    const at = (lap: number) => policyOf({ stops: [{ lap, compound: 'hard' }] }, thresholds);
+    const at = (lap: number) => policyOf({ stops: [{ lap, compound: 'hard' }], triggers: thresholds });
     expect(ruleOf(at(12))).toBe('mirrorAhead');
     expect(ruleOf(at(22))).toBe('mirrorBehind');
-    expect(ruleOf(policyOf(best, [...thresholds, { kind: 'rivalPits', carId: carId(3), withinMs: 2_500, action: 'cover' }]))).toBe('cover');
-    expect(ruleOf(policyOf(best, [...thresholds, { kind: 'rivalPits', carId: carId(1), withinMs: 2_500, action: 'extend' }]))).toBe('extend');
+    expect(ruleOf(policyOf(best, [{ kind: 'rivalPits', carId: carId(3), withinMs: 2_500, action: 'cover' }]))).toBe('cover');
+    expect(ruleOf(policyOf(best, [{ kind: 'rivalPits', carId: carId(1), withinMs: 2_500, action: 'extend' }]))).toBe('extend');
     for (const c of cands) {
       if (c.source === 'rule') expect(c.rule, json(c.policy)).not.toBeNull();
       else expect(c.rule, json(c.policy)).toBeNull();

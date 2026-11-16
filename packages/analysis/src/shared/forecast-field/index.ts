@@ -206,6 +206,8 @@ export function buildStartingPoint(view: AsOfView, outputs: ReadonlyMap<Calculat
     stopMid: new Int16Array(cars),
     stopHigh: new Int16Array(cars),
     owesStop: new Uint8Array(cars),
+    // filled from tyre-model (below)
+    fittedLapsToLimit: new Int16Array(cars).fill(-1),
     // filled from rival-stops with the window (below)
     nextOdds: Array.from({ length: cars }, () => null),
     typeSwitch: Array.from({ length: cars }, () => null),
@@ -293,6 +295,9 @@ export function buildStartingPoint(view: AsOfView, outputs: ReadonlyMap<Calculat
       const limit = terms?.lapsToLimit;
       sp.tyre.lapsToLimit[t] = limit?.known === true ? Math.floor(limit.value) : -1;
     }
+    // the fitted set's laps to the 70 % limit (tyre-model's, floored; at or past it 0); −1 while unknown
+    const fittedLimit = model?.fittedLapsToLimit;
+    sp.fittedLapsToLimit[k] = fittedLimit?.known === true ? Math.max(0, Math.floor(fittedLimit.value)) : -1;
 
     sp.sigmaMs[k] = need.of(carNoise?.sigmaMs);
     sp.rho[k] = need.of(carNoise?.rho);

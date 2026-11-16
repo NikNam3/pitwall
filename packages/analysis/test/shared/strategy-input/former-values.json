@@ -48,7 +48,13 @@
           "fuelKg": 96.4,
           "fuelBurnKgPerLap": 1.7999999999999972,
           "paceMs": 92346,
-          "degMsPerLap": 35,
+          "degMsPerLap": {
+            "soft": 57,
+            "medium": 35,
+            "hard": 22,
+            "inter": 11,
+            "wet": 11
+          },
           "wearRatePct": {
             "soft": 3.344444444444444,
             "medium": 3.344444444444444,
@@ -56,6 +62,14 @@
             "inter": 2,
             "wet": 2
           },
+          "lapsToLimit": {
+            "soft": 20,
+            "medium": 20,
+            "hard": 20,
+            "inter": 35,
+            "wet": 35
+          },
+          "fittedLapsToLimit": 19,
           "human": false
         },
         "sets": {
@@ -136,52 +150,58 @@
           ]
         },
         "active": null,
-        "wetnessByLap": [
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0
-        ],
-        "trafficMsByLap": [
-          0,
-          0,
-          0,
-          0,
-          0,
-          128,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          651,
-          0,
-          0
+        "worlds": [
+          {
+            "u": 0.25,
+            "weight": 1,
+            "wetnessByLap": [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            "trafficMsByLap": [
+              0,
+              0,
+              0,
+              0,
+              0,
+              128,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              651,
+              0,
+              0
+            ]
+          }
         ]
       },
       "policy": {
         "stops": [
           {
             "lap": 12,
-            "compound": "soft"
+            "compound": "hard"
           }
         ],
         "triggers": [
@@ -191,7 +211,7 @@
             "fromLap": 11,
             "toLap": 19,
             "action": {
-              "box": "soft"
+              "box": "hard"
             }
           },
           {
@@ -200,14 +220,14 @@
             "fromLap": 10,
             "toLap": 19,
             "action": {
-              "box": "soft"
+              "box": "hard"
             }
           },
           {
             "kind": "damage",
-            "lossMsPerLap": 1155.1018518518604,
+            "lossMsPerLap": 935.3685185185427,
             "action": {
-              "box": "soft"
+              "box": "hard"
             }
           }
         ]
@@ -261,7 +281,13 @@
           "fuelKg": 96.4,
           "fuelBurnKgPerLap": 1.7999999999999972,
           "paceMs": 92385,
-          "degMsPerLap": 35,
+          "degMsPerLap": {
+            "soft": 57,
+            "medium": 35,
+            "hard": 22,
+            "inter": 11,
+            "wet": 11
+          },
           "wearRatePct": {
             "soft": 3.344444444444444,
             "medium": 3.344444444444444,
@@ -269,6 +295,14 @@
             "inter": 2,
             "wet": 2
           },
+          "lapsToLimit": {
+            "soft": 20,
+            "medium": 20,
+            "hard": 20,
+            "inter": 35,
+            "wet": 35
+          },
+          "fittedLapsToLimit": 19,
           "human": false
         },
         "sets": {
@@ -349,52 +383,58 @@
           ]
         },
         "active": null,
-        "wetnessByLap": [
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0
-        ],
-        "trafficMsByLap": [
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          329,
-          0,
-          0,
-          0,
-          0,
-          354,
-          0,
-          0,
-          0,
-          0
+        "worlds": [
+          {
+            "u": 0.25,
+            "weight": 1,
+            "wetnessByLap": [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            "trafficMsByLap": [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              329,
+              0,
+              0,
+              0,
+              0,
+              354,
+              0,
+              0,
+              0,
+              0
+            ]
+          }
         ]
       },
       "policy": {
         "stops": [
           {
             "lap": 12,
-            "compound": "soft"
+            "compound": "hard"
           }
         ],
         "triggers": [
@@ -404,7 +444,7 @@
             "fromLap": 12,
             "toLap": 19,
             "action": {
-              "box": "soft"
+              "box": "hard"
             }
           },
           {
@@ -413,7 +453,7 @@
             "fromLap": 10,
             "toLap": 10,
             "action": {
-              "box": "soft"
+              "box": "hard"
             }
           },
           {
@@ -422,14 +462,14 @@
             "fromLap": 12,
             "toLap": 19,
             "action": {
-              "box": "soft"
+              "box": "hard"
             }
           },
           {
             "kind": "damage",
-            "lossMsPerLap": 1155.1018518518604,
+            "lossMsPerLap": 935.3685185185427,
             "action": {
-              "box": "soft"
+              "box": "hard"
             }
           }
         ]

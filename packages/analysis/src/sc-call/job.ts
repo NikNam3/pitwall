@@ -7,10 +7,10 @@
 // - A neutralisation out: one run on it as it is (the DP's and the hazard's `active`), `floor(maxScenarioPolicies / 2)`
 //   scenarios; the other condition's row `notApplicable`.
 // - Box: the DP's best plan boxing at the car's start lap onto the best compound. Stay out: its best plan without a stop
-//   through that lap, the DP's thresholds kept, the stay-out trigger last (it covers only the neutralisation out at the
-//   start lap; a later one follows the thresholds, precondition 6, N3).
+//   through that lap, its own triggers kept, the stay-out trigger last (it covers only the neutralisation out at the
+//   start lap; a later one follows the plan's triggers, precondition 6, N3). Each plan its own triggers (SP4.3c Task 19).
 // - Per row: the mean places gained by boxing (stay − box finish), the share with box ahead, the places-gained bins;
-//   `rejoin`'s position, loss and source (C43); the DP's trigger range of that condition for the next stop.
+//   `rejoin`'s position, loss and source (C43); the stay-out plan's trigger range of that condition for the next stop.
 import { known, SC_CALL_GAIN_BINS, unknown, type CarId, type Known, type Policy, type ScCall, type ScCallRow, type StartingPoint, type Trigger } from '@pitwall/domain';
 import type { Rng } from '@pitwall/engine/readers';
 import { startLapOf } from '../race-forecast/index.ts';
@@ -19,7 +19,7 @@ import { configOf } from '../shared/config-of.ts';
 import { binShares } from '../shared/distribution.ts';
 import { lowerMedian } from '../shared/stats.ts';
 import { committedField, mcSettingsFrom, notPlannedWhy, plannedCars, plannedField, policyOf, strategyConfigOf, toDpInput, toMcHazard } from '../shared/strategy-input/index.ts';
-import { bestWith, dpResult, solveDp, type DpSolution, type DpUnder } from '../strategy-dp/index.ts';
+import { bestWith, solveWorld, type DpSolution, type DpUnder } from '../strategy-dp/index.ts';
 import { SC_CALL_CONFIG } from './config.ts';
 import type { ScCallCar, ScCallInput, ScCondition } from './prepare.ts';
 
@@ -45,7 +45,7 @@ const callUnknown = (carId: CarId, lap: number, car: ScCallCar, reason: Reason):
   rows: [rowUnknown(car, 'sc', reason), rowUnknown(car, 'vsc', reason)],
 });
 
-/** The first `neutralised` trigger of `condition` among the DP's thresholds: its lap range. */
+/** The first `neutralised` trigger of `condition` among a plan's triggers: its lap range. */
 function rangeOf(thresholds: readonly Trigger[], condition: ScCondition, at: number): ScCallRow['range'] {
   const t = thresholds.find((x): x is Extract<Trigger, { kind: 'neutralised' }> => x.kind === 'neutralised' && x.condition === condition);
   return t === undefined ? unknown('insufficientData') : known({ fromLap: t.fromLap, toLap: t.toLap }, at);
@@ -57,7 +57,6 @@ type Under = { under: DpUnder | undefined; hazard: McInput['hazard'] };
 /** One condition's row: the box and stay-out candidates scored on `scenarios` common scenarios. */
 function rowOn(
   sol: DpSolution,
-  thresholds: readonly Trigger[],
   call: { carId: CarId; lap: number; car: ScCallCar; condition: ScCondition; on: Under; scenarios: number; at: number },
   base: Omit<CallInput, 'candidates' | 'hazard' | 'scenarios'>,
   rng: Rng,
@@ -67,9 +66,10 @@ function rowOn(
   const stay = bestWith(sol, { noStopThrough: lap }, on.under);
   if (box === null || stay === null || scenarios <= 0) return rowUnknown(car, condition, 'notApplicable');
   const stayOut: Trigger = { kind: 'neutralised', condition, fromLap: lap, toLap: lap, action: 'stayOut' };
-  const boxPolicy: Policy = policyOf(box, thresholds);
-  // the stay-out trigger last: the DP's thresholds act first, then it holds the car out under the forced one
-  const stayPolicy: Policy = policyOf(stay, [...thresholds, stayOut]);
+  // each plan with its own triggers (SP4.3c Task 19)
+  const boxPolicy: Policy = policyOf(box);
+  // the stay-out trigger last: the plan's own triggers act first, then it holds the car out under the forced one
+  const stayPolicy: Policy = policyOf(stay, [stayOut]);
   const { outcomes } = scoreCalls(
     {
       ...base,
@@ -107,7 +107,8 @@ function rowOn(
     rejoinPosition: rejoinMedian === undefined ? unknown('insufficientData') : known(rejoinMedian, at),
     lossMs: r.lossMs,
     lossSource: r.lossSource,
-    range: rangeOf(thresholds, condition, at),
+    // the next stop after staying out: the stay-out plan's own range
+    range: rangeOf(stay.triggers, condition, at),
   };
 }
 
@@ -123,8 +124,8 @@ function callFor(input: ScCallInput, start: StartingPoint, at: number, carId: Ca
   if (!hazard.known) return callUnknown(carId, lap, car, hazard.reason);
 
   const dp = toDpInput(strategy, carId);
-  const sol = solveDp(dp);
-  const { thresholds } = dpResult(sol);
+  // the first weather world's solve (the heaviest, `toDpInput`'s order); Task 20 selects across worlds
+  const sol = solveWorld(dp, 0);
   const cap = configOf(SC_CALL_CONFIG, strategy).maxScenarioPolicies;
   // the call's car alone, or with a committed teammate as certain input; an uncommitted teammate is modelled like a rival
   const sets: StartingPoint['sets'] = { [carId]: field.sets[carId] ?? [] };
@@ -140,7 +141,7 @@ function callFor(input: ScCallInput, start: StartingPoint, at: number, carId: Ca
     const remaining = Float64Array.from(hazard.value.durationLaps[condition]);
     return { under: { condition, remaining }, hazard: { ...mcHazard, active: { condition, remaining: Float64Array.from(remaining) } } };
   };
-  const rowFor = (condition: ScCondition, on: Under, scenarios: number): ScCallRow => rowOn(sol, thresholds, { carId, lap: dp.fromLap, car, condition, on, scenarios, at }, base, rng);
+  const rowFor = (condition: ScCondition, on: Under, scenarios: number): ScCallRow => rowOn(sol, { carId, lap: dp.fromLap, car, condition, on, scenarios, at }, base, rng);
 
   const out = input.neutralised;
   if (out === null) {
