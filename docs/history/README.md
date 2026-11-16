@@ -21,3 +21,8 @@ Everything here is done, superseded or void. **Do not read it unless your brief 
 | `tasks/research-06-engineer-decisions.md` | the brief of research 06 | done; the result is `docs/research/06-engineer-decisions.md` |
 | `foundation-open-questions.md` | open questions of sub-project 1 | answered or carried into later specs |
 | `specs/2026-11-06-pre-4.1-design.md`, `plans/2026-11-06-pre-4.1.md` | the pre-4.1 run: track sidecar always (C62b), panel edit mode, `pnpm desktop` start order | **done**, merged 2026-11-06 (86e65215); run ruling: a `+` adds into its group, Ctrl+K keeps a new group to the right |
+| `specs/2026-11-14-consolidation-map.md` | SP4.3c input: the survey of one judgement with several owners (B1–B9, O1–O18), every file:line | input of the SP4.3c spec; **done** with it |
+| `specs/2026-11-14-strategy-fixes-DRAFT.md` | draft of the strategy fixes after the Silverstone live test (triage Q1) | superseded by the consolidation map and the SP4.3c spec (`docs/specs/2026-11-14-sp4.3c-consolidation-design.md`) |
+| `plans/2026-11-14-live-test-triage-questions.md` | triage of the 2026-11-14 live test (T1–T21) and questions Q1–Q7 | answered; built by SP4.3c, except Q4 (the user's action) |
+| `plans/2026-11-14-sp4.3c-consolidation.md` | SP4.3c plan (one owner per judgement), Tasks 0–25 | **done**, merged 2026-11-16 (446600e1); spec in `docs/specs/`, rulings in `notes/2026-11-16-sp4.3c-run-rulings.md` |
+| `notes/2026-11-16-sp4.3c-run-rulings.md` | SP4.3c run rulings R1–R66, final gates, open points | record only |

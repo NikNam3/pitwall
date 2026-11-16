@@ -1,6 +1,6 @@
 # DRAFT: strategy fixes after the Silverstone live test, structurally
 
-**Status: draft by the supervisor, 2026-11-14; not brainstormed, not approved.** Input for the brainstorm of Q1 in `docs/superpowers/plans/2026-11-14-live-test-triage-questions.md`. Evidence: research 21 §2, §9, §12; research 22; the triage file's T-numbers.
+**Status: draft by the supervisor, 2026-11-14; not brainstormed, not approved.** Input for the brainstorm of Q1 in `docs/history/plans/2026-11-14-live-test-triage-questions.md`. Evidence: research 21 §2, §9, §12; research 22; the triage file's T-numbers.
 
 **Superseded in scope by `2026-11-14-consolidation-map.md`** (the whole-codebase map; this draft's §2.1–2.3 are its O1, O3 and B5, with the tyre survey's corrections there).
 

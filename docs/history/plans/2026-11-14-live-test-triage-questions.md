@@ -2,6 +2,8 @@
 
 Written overnight 2026-11-14 (supervisor, alone). Sorts the findings of the Silverstone live test (`docs/acceptance/live-checklist.md`, "2026-11-14: live test notes") and the proposals of research 20 and 21 into bugs, contract gaps and wishes, and asks what becomes a task. Nothing here is built or started.
 
+**Status (2026-11-16): every question is answered; the answers were built by SP4.3c (spec `docs/specs/2026-11-14-sp4.3c-consolidation-design.md`, merged 446600e1) except Q4, the user's own action.**
+
 ## 1. The sort
 
 | # | Finding | Kind | Evidence | Proposed home |
@@ -40,9 +42,9 @@ Silverstone showed the strategy table missing the right answer (stay out on inte
 
 Recommendation: **A**, and B's switch signal too (it is one read of a value already in the live state, and it is the call Silverstone needed); the other B terms (wetness slopes, cold tyres, 1.075) as the first item of the next strategy spec, after the sweep. With the game's priors many of research 21 §10's rows (wear prior, driver factor, race-distance table, per-track wear entries) become fallbacks only. T1–T3 are not choices: the spec already asks for them. T1 is not the reserved inter/wet slot you rejected on 2026-11-14 (deferred item 11, "a hack"): it keeps one plan per stop count, as spec §6 says, whatever its tyres; with T2 (rain in the DP, your item 11 fix) the ranking itself should then find the inter plans. Your item 12 (full mirror candidates, compound included) fits the same run. R49 (Task 23a) introduced the top-8 cap as a "spec refinement to report to the user"; this is that report.
 
-A unit-by-unit draft of A is in `docs/superpowers/specs/2026-11-14-strategy-fixes-DRAFT.md` (not a spec; for speed if you pick A).
+A unit-by-unit draft of A is in `docs/history/specs/2026-11-14-strategy-fixes-DRAFT.md` (not a spec; for speed if you pick A; superseded by the SP4.3c spec `docs/specs/2026-11-14-sp4.3c-consolidation-design.md`).
 
-**Answer:**
+**Answer:** A with B's switch signal (the other B terms to the next strategy spec). Answered: done in SP4.3c (Tasks 9, 11–15, 17–20, 22; T10/T11 in `pitwall-trackdata` and `data/tracks`, Task 11).
 
 ## Q2. A bridge restart mid-session: should the new run continue the old one?
 
@@ -56,7 +58,7 @@ A restart now starts an empty log, and storage keeps only the newest run of the 
 
 Recommendation: **D**, else B. Restarts will happen again (crashes, updates, the several-feeds setup), and the strategy is weakest exactly then; D keeps one file per session, so every reader stays as it is.
 
-**Answer:**
+**Answer:** D. Answered: done in SP4.3c (Task 10, resume record kind 1 in `pitwall-recorder`; Task 10b adds the End session command and the startup close of stale sessions, contract C59/C75 b4892214).
 
 ## Q3. Which tyre temperature and pressure bands should `car-bands` use?
 
@@ -69,7 +71,7 @@ The game computes the pressure from the setup and the carcass temperature with a
 
 Recommendation: **all four**. A keeps your 70–105 °C for C3, the commonest compound. The inter top of 80 °C would have flagged Silverstone by lap 43; whether that is "out of band" or a wear warning is your call.
 
-**Answer:**
+**Answer:** all four (A–D). Answered: done in SP4.3c (Task 16, spec §5.6).
 
 ## Q4. Should Silverstone 2026-11-14's inter stint stay out of DR's driver profile and the Silverstone calibration set?
 
@@ -81,7 +83,7 @@ Car 19 wore its inters 1.9–2.1 × the AI against DR's usual 1.2–1.3 × (dryi
 
 Recommendation: **B**: with the game's wear prior (Q1 A, research 22) a set's absolute inter wear matters less, and it is Silverstone's only inter data; the profile should hold DR's normal driving (this stint is 2.3 × the game rate against DR's usual 1.2).
 
-**Answer:**
+**Answer:** the user's own action (exclusions exist, C62a/C62c); not a task. Answered: SP4.3c spec §9 leaves it to the user.
 
 ## Q5. How should wear rates handle the race-distance setting?
 
@@ -93,7 +95,7 @@ The game scales wear with the menu's race distance (medium long ≈ 2.1 × full 
 
 Recommendation: **A**. The game already carries every setting we know of (and any we do not); B needs a factor measured at one track.
 
-**Answer:**
+**Answer:** A. Answered: done in SP4.3c (Task 9 tyre sets in the lap record, Task 12 `tyre-model` prior k × 70 / `usableLife`, a human's k from the profile).
 
 ## Q6. Track maps: smooth ghosts and driver names, as one display task?
 
@@ -105,7 +107,7 @@ The ghosts hop because `rejoin` moves them only on our mini-sector crossings (`r
 
 Recommendation: **A**, one small two-phase task. Check online: with names hidden the game may send placeholder names, so every human could read the same code.
 
-**Answer:**
+**Answer:** A. Answered: done in SP4.3c (Task 23, `rejoin-ghost` at 10 Hz and driver codes).
 
 ## Q7. The gap chart in a race joined after lights out: what should it show?
 
@@ -117,7 +119,7 @@ Both Silverstone runs joined the race mid-way (the first at about lap 22, the se
 
 Recommendation: **A**, in the fix run of Q1 (or as its own small task).
 
-**Answer:**
+**Answer:** A. Answered: done in SP4.3c (Task 6, the join origin in `gaps`).
 
 ## 3. Diagnoses
 
