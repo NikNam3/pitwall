@@ -1,5 +1,5 @@
 {
-  "sourceHash": "68e5ec0c266625c7956786de1a59b67ac80e7ba22ab4adbe65130972d748f0cf",
+  "sourceHash": "8dcc1c73cd581276b2b9ef98ef5f09b697071f8cbc7311d0e1ea76903f6738a7",
   "generatorParams": {
     "base": "GENERATOR_DEFAULTS",
     "seed": 1,
@@ -417,64 +417,19 @@
         "policy": {
           "stops": [
             {
-              "lap": 18,
-              "compound": "soft"
+              "lap": 17,
+              "compound": "medium"
             },
             {
               "lap": 33,
-              "compound": "medium"
+              "compound": "hard"
             }
           ],
           "triggers": [
             {
               "kind": "neutralised",
               "condition": "sc",
-              "fromLap": 15,
-              "toLap": 21,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 22,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 28,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 30,
-              "toLap": 30,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 32,
+              "fromLap": 16,
               "toLap": 48,
               "action": {
                 "box": "medium"
@@ -483,31 +438,40 @@
             {
               "kind": "neutralised",
               "condition": "vsc",
-              "fromLap": 30,
-              "toLap": 30,
+              "fromLap": 15,
+              "toLap": 48,
               "action": {
                 "box": "medium"
               }
             },
             {
               "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 32,
-              "toLap": 48,
+              "condition": "sc",
+              "fromLap": 33,
+              "toLap": 49,
               "action": {
-                "box": "medium"
+                "box": "hard"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 33,
+              "toLap": 49,
+              "action": {
+                "box": "hard"
               }
             },
             {
               "kind": "damage",
-              "lossMsPerLap": 1503.3529411764705,
+              "lossMsPerLap": 1758.1282407407416,
               "action": {
-                "box": "soft"
+                "box": "medium"
               }
             },
             {
               "kind": "degradationOff",
-              "wearRateDeltaPct": 1,
+              "wearRateDeltaPct": 1.0451388888888888,
               "action": {
                 "switchTo": [
                   {
@@ -515,11 +479,11 @@
                     "compound": "hard"
                   },
                   {
-                    "lap": 24,
+                    "lap": 28,
                     "compound": "soft"
                   },
                   {
-                    "lap": 36,
+                    "lap": 37,
                     "compound": "medium"
                   }
                 ]
@@ -534,64 +498,19 @@
         "policy": {
           "stops": [
             {
-              "lap": 18,
-              "compound": "soft"
+              "lap": 17,
+              "compound": "medium"
             },
             {
               "lap": 33,
-              "compound": "medium"
+              "compound": "hard"
             }
           ],
           "triggers": [
             {
               "kind": "neutralised",
               "condition": "sc",
-              "fromLap": 15,
-              "toLap": 21,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 22,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 28,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 30,
-              "toLap": 30,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 32,
+              "fromLap": 16,
               "toLap": 48,
               "action": {
                 "box": "medium"
@@ -600,854 +519,33 @@
             {
               "kind": "neutralised",
               "condition": "vsc",
-              "fromLap": 30,
-              "toLap": 30,
+              "fromLap": 15,
+              "toLap": 48,
               "action": {
                 "box": "medium"
               }
             },
             {
               "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 32,
-              "toLap": 48,
+              "condition": "sc",
+              "fromLap": 33,
+              "toLap": 49,
               "action": {
-                "box": "medium"
+                "box": "hard"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 33,
+              "toLap": 49,
+              "action": {
+                "box": "hard"
               }
             },
             {
               "kind": "damage",
-              "lossMsPerLap": 1503.3529411764705,
-              "action": {
-                "box": "soft"
-              }
-            }
-          ]
-        },
-        "source": "dp",
-        "rule": null
-      },
-      {
-        "policy": {
-          "stops": [
-            {
-              "lap": 18,
-              "compound": "medium"
-            },
-            {
-              "lap": 35,
-              "compound": "soft"
-            }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 15,
-              "toLap": 21,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 22,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 28,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 30,
-              "toLap": 30,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 32,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 30,
-              "toLap": 30,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 32,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            }
-          ]
-        },
-        "source": "dp",
-        "rule": null
-      },
-      {
-        "policy": {
-          "stops": [
-            {
-              "lap": 18,
-              "compound": "medium"
-            },
-            {
-              "lap": 36,
-              "compound": "hard"
-            }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 15,
-              "toLap": 21,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 22,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 28,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 30,
-              "toLap": 30,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 32,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 30,
-              "toLap": 30,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 32,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            }
-          ]
-        },
-        "source": "dp",
-        "rule": null
-      },
-      {
-        "policy": {
-          "stops": [
-            {
-              "lap": 19,
-              "compound": "hard"
-            },
-            {
-              "lap": 33,
-              "compound": "medium"
-            }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 15,
-              "toLap": 21,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 22,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 28,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 30,
-              "toLap": 30,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 32,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 30,
-              "toLap": 30,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 32,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            }
-          ]
-        },
-        "source": "dp",
-        "rule": null
-      },
-      {
-        "policy": {
-          "stops": [
-            {
-              "lap": 14,
-              "compound": "hard"
-            },
-            {
-              "lap": 24,
-              "compound": "soft"
-            },
-            {
-              "lap": 36,
-              "compound": "medium"
-            }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 15,
-              "toLap": 21,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 22,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 28,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 30,
-              "toLap": 30,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 32,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 30,
-              "toLap": 30,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 32,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            }
-          ]
-        },
-        "source": "dp",
-        "rule": null
-      },
-      {
-        "policy": {
-          "stops": [
-            {
-              "lap": 14,
-              "compound": "hard"
-            },
-            {
-              "lap": 24,
-              "compound": "medium"
-            },
-            {
-              "lap": 38,
-              "compound": "soft"
-            }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 15,
-              "toLap": 21,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 22,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 28,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 30,
-              "toLap": 30,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 32,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 30,
-              "toLap": 30,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 32,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            }
-          ]
-        },
-        "source": "dp",
-        "rule": null
-      },
-      {
-        "policy": {
-          "stops": [
-            {
-              "lap": 15,
-              "compound": "medium"
-            },
-            {
-              "lap": 29,
-              "compound": "soft"
-            },
-            {
-              "lap": 41,
-              "compound": "hard"
-            }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 15,
-              "toLap": 21,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 22,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 28,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 30,
-              "toLap": 30,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 32,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 30,
-              "toLap": 30,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 32,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            }
-          ]
-        },
-        "source": "dp",
-        "rule": null
-      },
-      {
-        "policy": {
-          "stops": [
-            {
-              "lap": 15,
-              "compound": "medium"
-            },
-            {
-              "lap": 29,
-              "compound": "hard"
-            },
-            {
-              "lap": 38,
-              "compound": "soft"
-            }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 15,
-              "toLap": 21,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 22,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 28,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 30,
-              "toLap": 30,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 32,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 30,
-              "toLap": 30,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 32,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            }
-          ]
-        },
-        "source": "dp",
-        "rule": null
-      },
-      {
-        "policy": {
-          "stops": [
-            {
-              "lap": 1,
-              "compound": "soft"
-            },
-            {
-              "lap": 17,
-              "compound": "medium"
-            },
-            {
-              "lap": 36,
-              "compound": "hard"
-            }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 15,
-              "toLap": 21,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 22,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 28,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 30,
-              "toLap": 30,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 32,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 30,
-              "toLap": 30,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 32,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            }
-          ]
-        },
-        "source": "dp",
-        "rule": null
-      },
-      {
-        "policy": {
-          "stops": [
-            {
-              "lap": 18,
-              "compound": "soft"
-            },
-            {
-              "lap": 33,
-              "compound": "medium"
-            }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 15,
-              "toLap": 21,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 22,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 28,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 30,
-              "toLap": 30,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 32,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 30,
-              "toLap": 30,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 32,
-              "toLap": 48,
+              "lossMsPerLap": 1758.1282407407416,
               "action": {
                 "box": "medium"
               }
@@ -1462,10 +560,10 @@
           "stops": [
             {
               "lap": 17,
-              "compound": "soft"
+              "compound": "hard"
             },
             {
-              "lap": 33,
+              "lap": 34,
               "compound": "medium"
             }
           ],
@@ -1473,62 +571,26 @@
             {
               "kind": "neutralised",
               "condition": "sc",
-              "fromLap": 15,
-              "toLap": 21,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 22,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 28,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 30,
-              "toLap": 30,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 32,
+              "fromLap": 16,
               "toLap": 48,
               "action": {
-                "box": "medium"
+                "box": "hard"
               }
             },
             {
               "kind": "neutralised",
               "condition": "vsc",
-              "fromLap": 30,
-              "toLap": 30,
+              "fromLap": 16,
+              "toLap": 48,
+              "action": {
+                "box": "hard"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 33,
+              "toLap": 49,
               "action": {
                 "box": "medium"
               }
@@ -1537,464 +599,14 @@
               "kind": "neutralised",
               "condition": "vsc",
               "fromLap": 32,
-              "toLap": 48,
+              "toLap": 49,
               "action": {
                 "box": "medium"
               }
             }
           ]
         },
-        "source": "neighbour",
-        "rule": null
-      },
-      {
-        "policy": {
-          "stops": [
-            {
-              "lap": 19,
-              "compound": "soft"
-            },
-            {
-              "lap": 33,
-              "compound": "medium"
-            }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 15,
-              "toLap": 21,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 22,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 28,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 30,
-              "toLap": 30,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 32,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 30,
-              "toLap": 30,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 32,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            }
-          ]
-        },
-        "source": "neighbour",
-        "rule": null
-      },
-      {
-        "policy": {
-          "stops": [
-            {
-              "lap": 16,
-              "compound": "soft"
-            },
-            {
-              "lap": 33,
-              "compound": "medium"
-            }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 15,
-              "toLap": 21,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 22,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 28,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 30,
-              "toLap": 30,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 32,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 30,
-              "toLap": 30,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 32,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            }
-          ]
-        },
-        "source": "neighbour",
-        "rule": null
-      },
-      {
-        "policy": {
-          "stops": [
-            {
-              "lap": 20,
-              "compound": "soft"
-            },
-            {
-              "lap": 33,
-              "compound": "medium"
-            }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 15,
-              "toLap": 21,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 22,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 28,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 30,
-              "toLap": 30,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 32,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 30,
-              "toLap": 30,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 32,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            }
-          ]
-        },
-        "source": "neighbour",
-        "rule": null
-      },
-      {
-        "policy": {
-          "stops": [
-            {
-              "lap": 15,
-              "compound": "soft"
-            },
-            {
-              "lap": 33,
-              "compound": "medium"
-            }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 15,
-              "toLap": 21,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 22,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 28,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 30,
-              "toLap": 30,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 32,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 30,
-              "toLap": 30,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 32,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            }
-          ]
-        },
-        "source": "neighbour",
-        "rule": null
-      },
-      {
-        "policy": {
-          "stops": [
-            {
-              "lap": 21,
-              "compound": "soft"
-            },
-            {
-              "lap": 33,
-              "compound": "medium"
-            }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 15,
-              "toLap": 21,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 22,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 28,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 30,
-              "toLap": 30,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 32,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 30,
-              "toLap": 30,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 32,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            }
-          ]
-        },
-        "source": "neighbour",
+        "source": "dp",
         "rule": null
       },
       {
@@ -2013,17 +625,8 @@
             {
               "kind": "neutralised",
               "condition": "sc",
-              "fromLap": 15,
-              "toLap": 21,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 22,
-              "toLap": 49,
+              "fromLap": 17,
+              "toLap": 48,
               "action": {
                 "box": "soft"
               }
@@ -2031,17 +634,8 @@
             {
               "kind": "neutralised",
               "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 28,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 49,
+              "fromLap": 17,
+              "toLap": 48,
               "action": {
                 "box": "soft"
               }
@@ -2049,17 +643,8 @@
             {
               "kind": "neutralised",
               "condition": "sc",
-              "fromLap": 30,
-              "toLap": 30,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 32,
-              "toLap": 48,
+              "fromLap": 31,
+              "toLap": 49,
               "action": {
                 "box": "medium"
               }
@@ -2067,24 +652,69 @@
             {
               "kind": "neutralised",
               "condition": "vsc",
-              "fromLap": 30,
-              "toLap": 30,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 32,
-              "toLap": 48,
+              "fromLap": 31,
+              "toLap": 49,
               "action": {
                 "box": "medium"
               }
             }
           ]
         },
-        "source": "neighbour",
+        "source": "dp",
+        "rule": null
+      },
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 18,
+              "compound": "medium"
+            },
+            {
+              "lap": 36,
+              "compound": "soft"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 17,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 17,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 35,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 35,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            }
+          ]
+        },
+        "source": "dp",
         "rule": null
       },
       {
@@ -2095,25 +725,16 @@
               "compound": "soft"
             },
             {
-              "lap": 34,
-              "compound": "medium"
+              "lap": 32,
+              "compound": "hard"
             }
           ],
           "triggers": [
             {
               "kind": "neutralised",
               "condition": "sc",
-              "fromLap": 15,
-              "toLap": 21,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 22,
-              "toLap": 49,
+              "fromLap": 17,
+              "toLap": 48,
               "action": {
                 "box": "soft"
               }
@@ -2121,17 +742,8 @@
             {
               "kind": "neutralised",
               "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 28,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 49,
+              "fromLap": 17,
+              "toLap": 48,
               "action": {
                 "box": "soft"
               }
@@ -2139,42 +751,24 @@
             {
               "kind": "neutralised",
               "condition": "sc",
-              "fromLap": 30,
-              "toLap": 30,
+              "fromLap": 31,
+              "toLap": 49,
               "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 32,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
+                "box": "hard"
               }
             },
             {
               "kind": "neutralised",
               "condition": "vsc",
-              "fromLap": 30,
-              "toLap": 30,
+              "fromLap": 31,
+              "toLap": 49,
               "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 32,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
+                "box": "hard"
               }
             }
           ]
         },
-        "source": "neighbour",
+        "source": "dp",
         "rule": null
       },
       {
@@ -2182,19 +776,86 @@
           "stops": [
             {
               "lap": 18,
+              "compound": "hard"
+            },
+            {
+              "lap": 36,
+              "compound": "soft"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 17,
+              "toLap": 48,
+              "action": {
+                "box": "hard"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 17,
+              "toLap": 48,
+              "action": {
+                "box": "hard"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 36,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 35,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            }
+          ]
+        },
+        "source": "dp",
+        "rule": null
+      },
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 15,
+              "compound": "medium"
+            },
+            {
+              "lap": 29,
               "compound": "soft"
             },
             {
-              "lap": 31,
-              "compound": "medium"
+              "lap": 36,
+              "compound": "hard"
             }
           ],
           "triggers": [
             {
               "kind": "neutralised",
               "condition": "sc",
-              "fromLap": 15,
-              "toLap": 21,
+              "fromLap": 14,
+              "toLap": 47,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 13,
+              "toLap": 47,
               "action": {
                 "box": "medium"
               }
@@ -2202,8 +863,8 @@
             {
               "kind": "neutralised",
               "condition": "sc",
-              "fromLap": 22,
-              "toLap": 49,
+              "fromLap": 27,
+              "toLap": 48,
               "action": {
                 "box": "soft"
               }
@@ -2211,17 +872,8 @@
             {
               "kind": "neutralised",
               "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 28,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 49,
+              "fromLap": 28,
+              "toLap": 48,
               "action": {
                 "box": "soft"
               }
@@ -2229,62 +881,57 @@
             {
               "kind": "neutralised",
               "condition": "sc",
-              "fromLap": 30,
-              "toLap": 30,
+              "fromLap": 36,
+              "toLap": 49,
               "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 32,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
+                "box": "hard"
               }
             },
             {
               "kind": "neutralised",
               "condition": "vsc",
-              "fromLap": 30,
-              "toLap": 30,
+              "fromLap": 35,
+              "toLap": 49,
               "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 32,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
+                "box": "hard"
               }
             }
           ]
         },
-        "source": "neighbour",
+        "source": "dp",
         "rule": null
       },
       {
         "policy": {
           "stops": [
             {
-              "lap": 18,
+              "lap": 15,
+              "compound": "medium"
+            },
+            {
+              "lap": 29,
+              "compound": "hard"
+            },
+            {
+              "lap": 43,
               "compound": "soft"
-            },
-            {
-              "lap": 35,
-              "compound": "medium"
             }
           ],
           "triggers": [
             {
               "kind": "neutralised",
               "condition": "sc",
-              "fromLap": 15,
-              "toLap": 21,
+              "fromLap": 14,
+              "toLap": 47,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 13,
+              "toLap": 47,
               "action": {
                 "box": "medium"
               }
@@ -2292,25 +939,25 @@
             {
               "kind": "neutralised",
               "condition": "sc",
-              "fromLap": 22,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 28,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
               "fromLap": 29,
+              "toLap": 48,
+              "action": {
+                "box": "hard"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 28,
+              "toLap": 48,
+              "action": {
+                "box": "hard"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 42,
               "toLap": 49,
               "action": {
                 "box": "soft"
@@ -2318,140 +965,27 @@
             },
             {
               "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 30,
-              "toLap": 30,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 32,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
               "condition": "vsc",
-              "fromLap": 30,
-              "toLap": 30,
+              "fromLap": 41,
+              "toLap": 49,
               "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 32,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
+                "box": "soft"
               }
             }
           ]
         },
-        "source": "neighbour",
+        "source": "dp",
         "rule": null
       },
       {
         "policy": {
           "stops": [
             {
-              "lap": 18,
-              "compound": "soft"
+              "lap": 15,
+              "compound": "hard"
             },
             {
-              "lap": 30,
-              "compound": "medium"
-            }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 15,
-              "toLap": 21,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 22,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 28,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 30,
-              "toLap": 30,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 32,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 30,
-              "toLap": 30,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 32,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            }
-          ]
-        },
-        "source": "neighbour",
-        "rule": null
-      },
-      {
-        "policy": {
-          "stops": [
-            {
-              "lap": 18,
+              "lap": 29,
               "compound": "soft"
             },
             {
@@ -2463,17 +997,26 @@
             {
               "kind": "neutralised",
               "condition": "sc",
-              "fromLap": 15,
-              "toLap": 21,
+              "fromLap": 14,
+              "toLap": 47,
               "action": {
-                "box": "medium"
+                "box": "hard"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 13,
+              "toLap": 47,
+              "action": {
+                "box": "hard"
               }
             },
             {
               "kind": "neutralised",
               "condition": "sc",
-              "fromLap": 22,
-              "toLap": 49,
+              "fromLap": 27,
+              "toLap": 48,
               "action": {
                 "box": "soft"
               }
@@ -2481,17 +1024,8 @@
             {
               "kind": "neutralised",
               "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 28,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 49,
+              "fromLap": 26,
+              "toLap": 48,
               "action": {
                 "box": "soft"
               }
@@ -2499,16 +1033,65 @@
             {
               "kind": "neutralised",
               "condition": "sc",
-              "fromLap": 30,
-              "toLap": 30,
+              "fromLap": 35,
+              "toLap": 49,
               "action": {
                 "box": "medium"
               }
             },
             {
               "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 35,
+              "toLap": 49,
+              "action": {
+                "box": "medium"
+              }
+            }
+          ]
+        },
+        "source": "dp",
+        "rule": null
+      },
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 15,
+              "compound": "hard"
+            },
+            {
+              "lap": 29,
+              "compound": "medium"
+            },
+            {
+              "lap": 43,
+              "compound": "soft"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
               "condition": "sc",
-              "fromLap": 32,
+              "fromLap": 14,
+              "toLap": 47,
+              "action": {
+                "box": "hard"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 13,
+              "toLap": 47,
+              "action": {
+                "box": "hard"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 28,
               "toLap": 48,
               "action": {
                 "box": "medium"
@@ -2517,8 +1100,75 @@
             {
               "kind": "neutralised",
               "condition": "vsc",
-              "fromLap": 30,
-              "toLap": 30,
+              "fromLap": 26,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 42,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 42,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            }
+          ]
+        },
+        "source": "dp",
+        "rule": null
+      },
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 14,
+              "compound": "soft"
+            },
+            {
+              "lap": 22,
+              "compound": "medium"
+            },
+            {
+              "lap": 36,
+              "compound": "hard"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 11,
+              "toLap": 47,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 12,
+              "toLap": 47,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 20,
+              "toLap": 48,
               "action": {
                 "box": "medium"
               }
@@ -2526,10 +1176,622 @@
             {
               "kind": "neutralised",
               "condition": "vsc",
-              "fromLap": 32,
+              "fromLap": 20,
               "toLap": 48,
               "action": {
                 "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 36,
+              "toLap": 49,
+              "action": {
+                "box": "hard"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 35,
+              "toLap": 49,
+              "action": {
+                "box": "hard"
+              }
+            }
+          ]
+        },
+        "source": "dp",
+        "rule": null
+      },
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 14,
+              "compound": "soft"
+            },
+            {
+              "lap": 22,
+              "compound": "hard"
+            },
+            {
+              "lap": 36,
+              "compound": "medium"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 11,
+              "toLap": 47,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 12,
+              "toLap": 47,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 21,
+              "toLap": 48,
+              "action": {
+                "box": "hard"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 20,
+              "toLap": 48,
+              "action": {
+                "box": "hard"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 35,
+              "toLap": 49,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 34,
+              "toLap": 49,
+              "action": {
+                "box": "medium"
+              }
+            }
+          ]
+        },
+        "source": "dp",
+        "rule": null
+      },
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 30,
+              "compound": "hard"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 30,
+              "toLap": 49,
+              "action": {
+                "box": "hard"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 30,
+              "toLap": 49,
+              "action": {
+                "box": "hard"
+              }
+            }
+          ]
+        },
+        "source": "dp",
+        "rule": null
+      },
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 30,
+              "compound": "soft"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 30,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 30,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            }
+          ]
+        },
+        "source": "dp",
+        "rule": null
+      },
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 1,
+              "compound": "medium"
+            },
+            {
+              "lap": 19,
+              "compound": "soft"
+            },
+            {
+              "lap": 32,
+              "compound": "hard"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 16,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 15,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 18,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 18,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 31,
+              "toLap": 49,
+              "action": {
+                "box": "hard"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 31,
+              "toLap": 49,
+              "action": {
+                "box": "hard"
+              }
+            }
+          ]
+        },
+        "source": "dp",
+        "rule": null
+      },
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 17,
+              "compound": "medium"
+            },
+            {
+              "lap": 33,
+              "compound": "hard"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 16,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 15,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 33,
+              "toLap": 49,
+              "action": {
+                "box": "hard"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 33,
+              "toLap": 49,
+              "action": {
+                "box": "hard"
+              }
+            }
+          ]
+        },
+        "source": "dp",
+        "rule": null
+      },
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 16,
+              "compound": "medium"
+            },
+            {
+              "lap": 33,
+              "compound": "hard"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 16,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 15,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 32,
+              "toLap": 49,
+              "action": {
+                "box": "hard"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 32,
+              "toLap": 49,
+              "action": {
+                "box": "hard"
+              }
+            }
+          ]
+        },
+        "source": "neighbour",
+        "rule": null
+      },
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 18,
+              "compound": "medium"
+            },
+            {
+              "lap": 34,
+              "compound": "hard"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 16,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 15,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 33,
+              "toLap": 49,
+              "action": {
+                "box": "hard"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 33,
+              "toLap": 49,
+              "action": {
+                "box": "hard"
+              }
+            }
+          ]
+        },
+        "source": "neighbour",
+        "rule": null
+      },
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 15,
+              "compound": "medium"
+            },
+            {
+              "lap": 32,
+              "compound": "hard"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 16,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 15,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 32,
+              "toLap": 49,
+              "action": {
+                "box": "hard"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 32,
+              "toLap": 49,
+              "action": {
+                "box": "hard"
+              }
+            }
+          ]
+        },
+        "source": "neighbour",
+        "rule": null
+      },
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 19,
+              "compound": "medium"
+            },
+            {
+              "lap": 35,
+              "compound": "hard"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 16,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 15,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 34,
+              "toLap": 49,
+              "action": {
+                "box": "hard"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 34,
+              "toLap": 49,
+              "action": {
+                "box": "hard"
+              }
+            }
+          ]
+        },
+        "source": "neighbour",
+        "rule": null
+      },
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 14,
+              "compound": "medium"
+            },
+            {
+              "lap": 32,
+              "compound": "hard"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 16,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 15,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 31,
+              "toLap": 49,
+              "action": {
+                "box": "hard"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 31,
+              "toLap": 49,
+              "action": {
+                "box": "hard"
+              }
+            }
+          ]
+        },
+        "source": "neighbour",
+        "rule": null
+      },
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 20,
+              "compound": "medium"
+            },
+            {
+              "lap": 35,
+              "compound": "hard"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 16,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 15,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 35,
+              "toLap": 49,
+              "action": {
+                "box": "hard"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 34,
+              "toLap": 49,
+              "action": {
+                "box": "hard"
               }
             }
           ]
@@ -2542,10 +1804,10 @@
           "stops": [
             {
               "lap": 26,
-              "compound": "soft"
+              "compound": "hard"
             },
             {
-              "lap": 33,
+              "lap": 37,
               "compound": "medium"
             }
           ],
@@ -2553,53 +1815,26 @@
             {
               "kind": "neutralised",
               "condition": "sc",
-              "fromLap": 15,
-              "toLap": 21,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 22,
+              "fromLap": 17,
               "toLap": 49,
               "action": {
-                "box": "soft"
+                "box": "hard"
               }
             },
             {
               "kind": "neutralised",
               "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 28,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
+              "fromLap": 16,
               "toLap": 49,
               "action": {
-                "box": "soft"
+                "box": "hard"
               }
             },
             {
               "kind": "neutralised",
               "condition": "sc",
-              "fromLap": 30,
-              "toLap": 30,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 32,
-              "toLap": 48,
+              "fromLap": 36,
+              "toLap": 49,
               "action": {
                 "box": "medium"
               }
@@ -2607,17 +1842,8 @@
             {
               "kind": "neutralised",
               "condition": "vsc",
-              "fromLap": 30,
-              "toLap": 30,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 32,
-              "toLap": 48,
+              "fromLap": 35,
+              "toLap": 49,
               "action": {
                 "box": "medium"
               }
@@ -2631,64 +1857,19 @@
         "policy": {
           "stops": [
             {
-              "lap": 18,
-              "compound": "soft"
+              "lap": 17,
+              "compound": "medium"
             },
             {
               "lap": 33,
-              "compound": "medium"
+              "compound": "hard"
             }
           ],
           "triggers": [
             {
               "kind": "neutralised",
               "condition": "sc",
-              "fromLap": 15,
-              "toLap": 21,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 22,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 28,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 30,
-              "toLap": 30,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 32,
+              "fromLap": 16,
               "toLap": 48,
               "action": {
                 "box": "medium"
@@ -2697,19 +1878,55 @@
             {
               "kind": "neutralised",
               "condition": "vsc",
-              "fromLap": 30,
-              "toLap": 30,
+              "fromLap": 15,
+              "toLap": 48,
               "action": {
                 "box": "medium"
               }
             },
             {
               "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 33,
+              "toLap": 49,
+              "action": {
+                "box": "hard"
+              }
+            },
+            {
+              "kind": "neutralised",
               "condition": "vsc",
-              "fromLap": 32,
-              "toLap": 48,
+              "fromLap": 33,
+              "toLap": 49,
+              "action": {
+                "box": "hard"
+              }
+            },
+            {
+              "kind": "damage",
+              "lossMsPerLap": 1758.1282407407416,
               "action": {
                 "box": "medium"
+              }
+            },
+            {
+              "kind": "degradationOff",
+              "wearRateDeltaPct": 1.0451388888888888,
+              "action": {
+                "switchTo": [
+                  {
+                    "lap": 14,
+                    "compound": "hard"
+                  },
+                  {
+                    "lap": 28,
+                    "compound": "soft"
+                  },
+                  {
+                    "lap": 37,
+                    "compound": "medium"
+                  }
+                ]
               }
             },
             {
@@ -2727,64 +1944,19 @@
         "policy": {
           "stops": [
             {
-              "lap": 18,
-              "compound": "soft"
+              "lap": 17,
+              "compound": "medium"
             },
             {
               "lap": 33,
-              "compound": "medium"
+              "compound": "hard"
             }
           ],
           "triggers": [
             {
               "kind": "neutralised",
               "condition": "sc",
-              "fromLap": 15,
-              "toLap": 21,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 22,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 28,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 30,
-              "toLap": 30,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 32,
+              "fromLap": 16,
               "toLap": 48,
               "action": {
                 "box": "medium"
@@ -2793,19 +1965,55 @@
             {
               "kind": "neutralised",
               "condition": "vsc",
-              "fromLap": 30,
-              "toLap": 30,
+              "fromLap": 15,
+              "toLap": 48,
               "action": {
                 "box": "medium"
               }
             },
             {
               "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 33,
+              "toLap": 49,
+              "action": {
+                "box": "hard"
+              }
+            },
+            {
+              "kind": "neutralised",
               "condition": "vsc",
-              "fromLap": 32,
-              "toLap": 48,
+              "fromLap": 33,
+              "toLap": 49,
+              "action": {
+                "box": "hard"
+              }
+            },
+            {
+              "kind": "damage",
+              "lossMsPerLap": 1758.1282407407416,
               "action": {
                 "box": "medium"
+              }
+            },
+            {
+              "kind": "degradationOff",
+              "wearRateDeltaPct": 1.0451388888888888,
+              "action": {
+                "switchTo": [
+                  {
+                    "lap": 14,
+                    "compound": "hard"
+                  },
+                  {
+                    "lap": 28,
+                    "compound": "soft"
+                  },
+                  {
+                    "lap": 37,
+                    "compound": "medium"
+                  }
+                ]
               }
             },
             {
@@ -2826,100 +2034,73 @@
           "stops": [
             {
               "lap": 17,
-              "compound": "soft"
+              "compound": "medium"
             },
             {
-              "lap": 32,
-              "compound": "medium"
+              "lap": 33,
+              "compound": "hard"
             }
           ],
           "triggers": [
             {
               "kind": "neutralised",
               "condition": "sc",
-              "fromLap": 15,
-              "toLap": 21,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 22,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 28,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 31,
-              "toLap": 49,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 29,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 31,
+              "fromLap": 16,
               "toLap": 48,
               "action": {
                 "box": "medium"
               }
             },
             {
-              "kind": "damage",
-              "lossMsPerLap": 1596.9375,
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 15,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 33,
+              "toLap": 49,
               "action": {
                 "box": "hard"
               }
             },
             {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 33,
+              "toLap": 49,
+              "action": {
+                "box": "hard"
+              }
+            },
+            {
+              "kind": "damage",
+              "lossMsPerLap": 1758.1282407407416,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
               "kind": "degradationOff",
-              "wearRateDeltaPct": 1,
+              "wearRateDeltaPct": 1.0451388888888888,
               "action": {
                 "switchTo": [
                   {
-                    "lap": 14,
+                    "lap": 13,
                     "compound": "soft"
                   },
                   {
-                    "lap": 26,
-                    "compound": "medium"
+                    "lap": 23,
+                    "compound": "hard"
                   },
                   {
-                    "lap": 40,
-                    "compound": "hard"
+                    "lap": 37,
+                    "compound": "medium"
                   }
                 ]
               }
@@ -2934,6 +2115,121 @@
           "stops": [
             {
               "lap": 17,
+              "compound": "medium"
+            },
+            {
+              "lap": 33,
+              "compound": "hard"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 16,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 15,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 33,
+              "toLap": 49,
+              "action": {
+                "box": "hard"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 33,
+              "toLap": 49,
+              "action": {
+                "box": "hard"
+              }
+            },
+            {
+              "kind": "damage",
+              "lossMsPerLap": 1758.1282407407416,
+              "action": {
+                "box": "medium"
+              }
+            }
+          ]
+        },
+        "source": "dp",
+        "rule": null
+      },
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 17,
+              "compound": "hard"
+            },
+            {
+              "lap": 34,
+              "compound": "medium"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 16,
+              "toLap": 48,
+              "action": {
+                "box": "hard"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 16,
+              "toLap": 48,
+              "action": {
+                "box": "hard"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 33,
+              "toLap": 49,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 32,
+              "toLap": 49,
+              "action": {
+                "box": "medium"
+              }
+            }
+          ]
+        },
+        "source": "dp",
+        "rule": null
+      },
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 18,
               "compound": "soft"
             },
             {
@@ -2945,17 +2241,8 @@
             {
               "kind": "neutralised",
               "condition": "sc",
-              "fromLap": 15,
-              "toLap": 21,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 22,
-              "toLap": 49,
+              "fromLap": 17,
+              "toLap": 48,
               "action": {
                 "box": "soft"
               }
@@ -2963,17 +2250,8 @@
             {
               "kind": "neutralised",
               "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 28,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 49,
+              "fromLap": 17,
+              "toLap": 48,
               "action": {
                 "box": "soft"
               }
@@ -2990,24 +2268,811 @@
             {
               "kind": "neutralised",
               "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 29,
+              "fromLap": 31,
+              "toLap": 49,
               "action": {
                 "box": "medium"
               }
+            }
+          ]
+        },
+        "source": "dp",
+        "rule": null
+      },
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 18,
+              "compound": "medium"
             },
             {
+              "lap": 36,
+              "compound": "soft"
+            }
+          ],
+          "triggers": [
+            {
               "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 31,
+              "condition": "sc",
+              "fromLap": 17,
               "toLap": 48,
               "action": {
                 "box": "medium"
               }
             },
             {
-              "kind": "damage",
-              "lossMsPerLap": 1596.9375,
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 17,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 35,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 35,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            }
+          ]
+        },
+        "source": "dp",
+        "rule": null
+      },
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 18,
+              "compound": "soft"
+            },
+            {
+              "lap": 32,
+              "compound": "hard"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 17,
+              "toLap": 48,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 17,
+              "toLap": 48,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 31,
+              "toLap": 49,
+              "action": {
+                "box": "hard"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 31,
+              "toLap": 49,
+              "action": {
+                "box": "hard"
+              }
+            }
+          ]
+        },
+        "source": "dp",
+        "rule": null
+      },
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 18,
+              "compound": "hard"
+            },
+            {
+              "lap": 36,
+              "compound": "soft"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 17,
+              "toLap": 48,
+              "action": {
+                "box": "hard"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 17,
+              "toLap": 48,
+              "action": {
+                "box": "hard"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 36,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 35,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            }
+          ]
+        },
+        "source": "dp",
+        "rule": null
+      },
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 15,
+              "compound": "medium"
+            },
+            {
+              "lap": 29,
+              "compound": "soft"
+            },
+            {
+              "lap": 36,
+              "compound": "hard"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 14,
+              "toLap": 47,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 13,
+              "toLap": 47,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 28,
+              "toLap": 48,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 26,
+              "toLap": 26,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 48,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 36,
+              "toLap": 49,
+              "action": {
+                "box": "hard"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 35,
+              "toLap": 49,
+              "action": {
+                "box": "hard"
+              }
+            }
+          ]
+        },
+        "source": "dp",
+        "rule": null
+      },
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 15,
+              "compound": "medium"
+            },
+            {
+              "lap": 29,
+              "compound": "hard"
+            },
+            {
+              "lap": 43,
+              "compound": "soft"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 14,
+              "toLap": 47,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 13,
+              "toLap": 47,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 29,
+              "toLap": 48,
+              "action": {
+                "box": "hard"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 26,
+              "toLap": 26,
+              "action": {
+                "box": "hard"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 29,
+              "toLap": 48,
+              "action": {
+                "box": "hard"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 42,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 41,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            }
+          ]
+        },
+        "source": "dp",
+        "rule": null
+      },
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 15,
+              "compound": "hard"
+            },
+            {
+              "lap": 29,
+              "compound": "soft"
+            },
+            {
+              "lap": 36,
+              "compound": "medium"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 14,
+              "toLap": 47,
+              "action": {
+                "box": "hard"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 14,
+              "toLap": 47,
+              "action": {
+                "box": "hard"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 26,
+              "toLap": 26,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 28,
+              "toLap": 48,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 26,
+              "toLap": 26,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 28,
+              "toLap": 48,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 35,
+              "toLap": 49,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 35,
+              "toLap": 49,
+              "action": {
+                "box": "medium"
+              }
+            }
+          ]
+        },
+        "source": "dp",
+        "rule": null
+      },
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 15,
+              "compound": "hard"
+            },
+            {
+              "lap": 29,
+              "compound": "medium"
+            },
+            {
+              "lap": 43,
+              "compound": "soft"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 14,
+              "toLap": 47,
+              "action": {
+                "box": "hard"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 14,
+              "toLap": 47,
+              "action": {
+                "box": "hard"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 29,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 26,
+              "toLap": 26,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 28,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 42,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 42,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            }
+          ]
+        },
+        "source": "dp",
+        "rule": null
+      },
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 14,
+              "compound": "soft"
+            },
+            {
+              "lap": 22,
+              "compound": "medium"
+            },
+            {
+              "lap": 36,
+              "compound": "hard"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 11,
+              "toLap": 47,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 12,
+              "toLap": 47,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 20,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 20,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 36,
+              "toLap": 49,
+              "action": {
+                "box": "hard"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 35,
+              "toLap": 49,
+              "action": {
+                "box": "hard"
+              }
+            }
+          ]
+        },
+        "source": "dp",
+        "rule": null
+      },
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 14,
+              "compound": "soft"
+            },
+            {
+              "lap": 22,
+              "compound": "hard"
+            },
+            {
+              "lap": 36,
+              "compound": "medium"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 11,
+              "toLap": 47,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 12,
+              "toLap": 47,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 21,
+              "toLap": 48,
+              "action": {
+                "box": "hard"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 20,
+              "toLap": 48,
+              "action": {
+                "box": "hard"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 35,
+              "toLap": 49,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 34,
+              "toLap": 49,
+              "action": {
+                "box": "medium"
+              }
+            }
+          ]
+        },
+        "source": "dp",
+        "rule": null
+      },
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 30,
+              "compound": "hard"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 30,
+              "toLap": 49,
+              "action": {
+                "box": "hard"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 30,
+              "toLap": 49,
+              "action": {
+                "box": "hard"
+              }
+            }
+          ]
+        },
+        "source": "dp",
+        "rule": null
+      },
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 30,
+              "compound": "soft"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 30,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 30,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            }
+          ]
+        },
+        "source": "dp",
+        "rule": null
+      },
+      {
+        "policy": {
+          "stops": [
+            {
+              "lap": 1,
+              "compound": "medium"
+            },
+            {
+              "lap": 19,
+              "compound": "soft"
+            },
+            {
+              "lap": 32,
+              "compound": "hard"
+            }
+          ],
+          "triggers": [
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 16,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 15,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 18,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 18,
+              "toLap": 49,
+              "action": {
+                "box": "soft"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 31,
+              "toLap": 49,
+              "action": {
+                "box": "hard"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 31,
+              "toLap": 49,
               "action": {
                 "box": "hard"
               }
@@ -3025,88 +3090,7 @@
               "compound": "medium"
             },
             {
-              "lap": 35,
-              "compound": "soft"
-            }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 15,
-              "toLap": 21,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 22,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 28,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 31,
-              "toLap": 49,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 29,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 31,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            }
-          ]
-        },
-        "source": "dp",
-        "rule": null
-      },
-      {
-        "policy": {
-          "stops": [
-            {
-              "lap": 18,
-              "compound": "medium"
-            },
-            {
-              "lap": 36,
+              "lap": 33,
               "compound": "hard"
             }
           ],
@@ -3114,651 +3098,37 @@
             {
               "kind": "neutralised",
               "condition": "sc",
-              "fromLap": 15,
-              "toLap": 21,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 22,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 28,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 31,
-              "toLap": 49,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 29,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 31,
+              "fromLap": 16,
               "toLap": 48,
               "action": {
                 "box": "medium"
               }
-            }
-          ]
-        },
-        "source": "dp",
-        "rule": null
-      },
-      {
-        "policy": {
-          "stops": [
-            {
-              "lap": 18,
-              "compound": "hard"
-            },
-            {
-              "lap": 32,
-              "compound": "medium"
-            }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 15,
-              "toLap": 21,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 22,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
             },
             {
               "kind": "neutralised",
               "condition": "vsc",
               "fromLap": 15,
-              "toLap": 28,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 31,
-              "toLap": 49,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 29,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 31,
               "toLap": 48,
               "action": {
                 "box": "medium"
               }
-            }
-          ]
-        },
-        "source": "dp",
-        "rule": null
-      },
-      {
-        "policy": {
-          "stops": [
-            {
-              "lap": 14,
-              "compound": "soft"
-            },
-            {
-              "lap": 26,
-              "compound": "medium"
-            },
-            {
-              "lap": 40,
-              "compound": "hard"
-            }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 15,
-              "toLap": 21,
-              "action": {
-                "box": "medium"
-              }
             },
             {
               "kind": "neutralised",
               "condition": "sc",
-              "fromLap": 22,
+              "fromLap": 33,
               "toLap": 49,
               "action": {
-                "box": "soft"
+                "box": "hard"
               }
             },
             {
               "kind": "neutralised",
               "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 28,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
+              "fromLap": 33,
               "toLap": 49,
               "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 31,
-              "toLap": 49,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 29,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 31,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            }
-          ]
-        },
-        "source": "dp",
-        "rule": null
-      },
-      {
-        "policy": {
-          "stops": [
-            {
-              "lap": 14,
-              "compound": "soft"
-            },
-            {
-              "lap": 26,
-              "compound": "hard"
-            },
-            {
-              "lap": 36,
-              "compound": "medium"
-            }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 15,
-              "toLap": 21,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 22,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 28,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 31,
-              "toLap": 49,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 29,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 31,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            }
-          ]
-        },
-        "source": "dp",
-        "rule": null
-      },
-      {
-        "policy": {
-          "stops": [
-            {
-              "lap": 14,
-              "compound": "medium"
-            },
-            {
-              "lap": 29,
-              "compound": "soft"
-            },
-            {
-              "lap": 41,
-              "compound": "hard"
-            }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 15,
-              "toLap": 21,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 22,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 28,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 31,
-              "toLap": 49,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 29,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 31,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            }
-          ]
-        },
-        "source": "dp",
-        "rule": null
-      },
-      {
-        "policy": {
-          "stops": [
-            {
-              "lap": 14,
-              "compound": "medium"
-            },
-            {
-              "lap": 29,
-              "compound": "hard"
-            },
-            {
-              "lap": 38,
-              "compound": "soft"
-            }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 15,
-              "toLap": 21,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 22,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 28,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 31,
-              "toLap": 49,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 29,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 31,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            }
-          ]
-        },
-        "source": "dp",
-        "rule": null
-      },
-      {
-        "policy": {
-          "stops": [
-            {
-              "lap": 1,
-              "compound": "hard"
-            },
-            {
-              "lap": 15,
-              "compound": "medium"
-            },
-            {
-              "lap": 34,
-              "compound": "soft"
-            }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 15,
-              "toLap": 21,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 22,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 28,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 31,
-              "toLap": 49,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 29,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 31,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            }
-          ]
-        },
-        "source": "dp",
-        "rule": null
-      },
-      {
-        "policy": {
-          "stops": [
-            {
-              "lap": 17,
-              "compound": "soft"
-            },
-            {
-              "lap": 32,
-              "compound": "medium"
-            }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 15,
-              "toLap": 21,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 22,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 28,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 31,
-              "toLap": 49,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 29,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 31,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
+                "box": "hard"
               }
             }
           ]
@@ -3771,75 +3141,48 @@
           "stops": [
             {
               "lap": 16,
-              "compound": "soft"
+              "compound": "medium"
             },
             {
-              "lap": 32,
-              "compound": "medium"
+              "lap": 33,
+              "compound": "hard"
             }
           ],
           "triggers": [
             {
               "kind": "neutralised",
               "condition": "sc",
-              "fromLap": 15,
-              "toLap": 21,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 22,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 28,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 31,
-              "toLap": 49,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 29,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 31,
+              "fromLap": 16,
               "toLap": 48,
               "action": {
                 "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 15,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 32,
+              "toLap": 49,
+              "action": {
+                "box": "hard"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 32,
+              "toLap": 49,
+              "action": {
+                "box": "hard"
               }
             }
           ]
@@ -3852,75 +3195,48 @@
           "stops": [
             {
               "lap": 18,
-              "compound": "soft"
+              "compound": "medium"
             },
             {
-              "lap": 32,
-              "compound": "medium"
+              "lap": 34,
+              "compound": "hard"
             }
           ],
           "triggers": [
             {
               "kind": "neutralised",
               "condition": "sc",
-              "fromLap": 15,
-              "toLap": 21,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 22,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 28,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 31,
-              "toLap": 49,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 29,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 31,
+              "fromLap": 16,
               "toLap": 48,
               "action": {
                 "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 15,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 33,
+              "toLap": 49,
+              "action": {
+                "box": "hard"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 33,
+              "toLap": 49,
+              "action": {
+                "box": "hard"
               }
             }
           ]
@@ -3933,75 +3249,48 @@
           "stops": [
             {
               "lap": 15,
-              "compound": "soft"
+              "compound": "medium"
             },
             {
               "lap": 32,
-              "compound": "medium"
+              "compound": "hard"
             }
           ],
           "triggers": [
             {
               "kind": "neutralised",
               "condition": "sc",
-              "fromLap": 15,
-              "toLap": 21,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 22,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 28,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 31,
-              "toLap": 49,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 29,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 31,
+              "fromLap": 16,
               "toLap": 48,
               "action": {
                 "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 15,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 32,
+              "toLap": 49,
+              "action": {
+                "box": "hard"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 32,
+              "toLap": 49,
+              "action": {
+                "box": "hard"
               }
             }
           ]
@@ -4014,75 +3303,48 @@
           "stops": [
             {
               "lap": 19,
-              "compound": "soft"
+              "compound": "medium"
             },
             {
-              "lap": 32,
-              "compound": "medium"
+              "lap": 35,
+              "compound": "hard"
             }
           ],
           "triggers": [
             {
               "kind": "neutralised",
               "condition": "sc",
-              "fromLap": 15,
-              "toLap": 21,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 22,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 28,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 31,
-              "toLap": 49,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 29,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 31,
+              "fromLap": 16,
               "toLap": 48,
               "action": {
                 "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 15,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 34,
+              "toLap": 49,
+              "action": {
+                "box": "hard"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 34,
+              "toLap": 49,
+              "action": {
+                "box": "hard"
               }
             }
           ]
@@ -4095,75 +3357,48 @@
           "stops": [
             {
               "lap": 14,
-              "compound": "soft"
+              "compound": "medium"
             },
             {
               "lap": 32,
-              "compound": "medium"
+              "compound": "hard"
             }
           ],
           "triggers": [
             {
               "kind": "neutralised",
               "condition": "sc",
-              "fromLap": 15,
-              "toLap": 21,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 22,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 28,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 31,
-              "toLap": 49,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 29,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 31,
+              "fromLap": 16,
               "toLap": 48,
               "action": {
                 "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 15,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 31,
+              "toLap": 49,
+              "action": {
+                "box": "hard"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 31,
+              "toLap": 49,
+              "action": {
+                "box": "hard"
               }
             }
           ]
@@ -4176,561 +3411,48 @@
           "stops": [
             {
               "lap": 20,
-              "compound": "soft"
-            },
-            {
-              "lap": 32,
               "compound": "medium"
-            }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 15,
-              "toLap": 21,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 22,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 28,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 31,
-              "toLap": 49,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 29,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 31,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            }
-          ]
-        },
-        "source": "neighbour",
-        "rule": null
-      },
-      {
-        "policy": {
-          "stops": [
-            {
-              "lap": 17,
-              "compound": "soft"
-            },
-            {
-              "lap": 31,
-              "compound": "medium"
-            }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 15,
-              "toLap": 21,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 22,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 28,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 31,
-              "toLap": 49,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 29,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 31,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            }
-          ]
-        },
-        "source": "neighbour",
-        "rule": null
-      },
-      {
-        "policy": {
-          "stops": [
-            {
-              "lap": 17,
-              "compound": "soft"
-            },
-            {
-              "lap": 33,
-              "compound": "medium"
-            }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 15,
-              "toLap": 21,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 22,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 28,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 31,
-              "toLap": 49,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 29,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 31,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            }
-          ]
-        },
-        "source": "neighbour",
-        "rule": null
-      },
-      {
-        "policy": {
-          "stops": [
-            {
-              "lap": 17,
-              "compound": "soft"
-            },
-            {
-              "lap": 30,
-              "compound": "medium"
-            }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 15,
-              "toLap": 21,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 22,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 28,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 31,
-              "toLap": 49,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 29,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 31,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            }
-          ]
-        },
-        "source": "neighbour",
-        "rule": null
-      },
-      {
-        "policy": {
-          "stops": [
-            {
-              "lap": 17,
-              "compound": "soft"
-            },
-            {
-              "lap": 34,
-              "compound": "medium"
-            }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 15,
-              "toLap": 21,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 22,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 28,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 31,
-              "toLap": 49,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 29,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 31,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            }
-          ]
-        },
-        "source": "neighbour",
-        "rule": null
-      },
-      {
-        "policy": {
-          "stops": [
-            {
-              "lap": 17,
-              "compound": "soft"
-            },
-            {
-              "lap": 29,
-              "compound": "medium"
-            }
-          ],
-          "triggers": [
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 15,
-              "toLap": 21,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 22,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 28,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 31,
-              "toLap": 49,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 29,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 31,
-              "toLap": 48,
-              "action": {
-                "box": "medium"
-              }
-            }
-          ]
-        },
-        "source": "neighbour",
-        "rule": null
-      },
-      {
-        "policy": {
-          "stops": [
-            {
-              "lap": 17,
-              "compound": "soft"
             },
             {
               "lap": 35,
-              "compound": "medium"
+              "compound": "hard"
             }
           ],
           "triggers": [
             {
               "kind": "neutralised",
               "condition": "sc",
-              "fromLap": 15,
-              "toLap": 21,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 22,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 28,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 31,
-              "toLap": 49,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 29,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 31,
+              "fromLap": 16,
               "toLap": 48,
               "action": {
                 "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 15,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 35,
+              "toLap": 49,
+              "action": {
+                "box": "hard"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 34,
+              "toLap": 49,
+              "action": {
+                "box": "hard"
               }
             }
           ]
@@ -4743,10 +3465,10 @@
           "stops": [
             {
               "lap": 26,
-              "compound": "soft"
+              "compound": "hard"
             },
             {
-              "lap": 32,
+              "lap": 37,
               "compound": "medium"
             }
           ],
@@ -4754,43 +3476,25 @@
             {
               "kind": "neutralised",
               "condition": "sc",
-              "fromLap": 15,
-              "toLap": 21,
+              "fromLap": 17,
+              "toLap": 49,
               "action": {
-                "box": "medium"
+                "box": "hard"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 16,
+              "toLap": 49,
+              "action": {
+                "box": "hard"
               }
             },
             {
               "kind": "neutralised",
               "condition": "sc",
-              "fromLap": 22,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 28,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 31,
+              "fromLap": 36,
               "toLap": 49,
               "action": {
                 "box": "medium"
@@ -4799,17 +3503,8 @@
             {
               "kind": "neutralised",
               "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 29,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 31,
-              "toLap": 48,
+              "fromLap": 35,
+              "toLap": 49,
               "action": {
                 "box": "medium"
               }
@@ -4824,75 +3519,75 @@
           "stops": [
             {
               "lap": 17,
-              "compound": "soft"
+              "compound": "medium"
             },
             {
-              "lap": 32,
-              "compound": "medium"
+              "lap": 33,
+              "compound": "hard"
             }
           ],
           "triggers": [
             {
               "kind": "neutralised",
               "condition": "sc",
-              "fromLap": 15,
-              "toLap": 21,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 22,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 28,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 31,
-              "toLap": 49,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 29,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 31,
+              "fromLap": 16,
               "toLap": 48,
               "action": {
                 "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 15,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 33,
+              "toLap": 49,
+              "action": {
+                "box": "hard"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 33,
+              "toLap": 49,
+              "action": {
+                "box": "hard"
+              }
+            },
+            {
+              "kind": "damage",
+              "lossMsPerLap": 1758.1282407407416,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "degradationOff",
+              "wearRateDeltaPct": 1.0451388888888888,
+              "action": {
+                "switchTo": [
+                  {
+                    "lap": 13,
+                    "compound": "soft"
+                  },
+                  {
+                    "lap": 23,
+                    "compound": "hard"
+                  },
+                  {
+                    "lap": 37,
+                    "compound": "medium"
+                  }
+                ]
               }
             },
             {
@@ -4911,75 +3606,75 @@
           "stops": [
             {
               "lap": 17,
-              "compound": "soft"
+              "compound": "medium"
             },
             {
-              "lap": 32,
-              "compound": "medium"
+              "lap": 33,
+              "compound": "hard"
             }
           ],
           "triggers": [
             {
               "kind": "neutralised",
               "condition": "sc",
-              "fromLap": 15,
-              "toLap": 21,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 22,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 15,
-              "toLap": 28,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 49,
-              "action": {
-                "box": "soft"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "sc",
-              "fromLap": 31,
-              "toLap": 49,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 29,
-              "toLap": 29,
-              "action": {
-                "box": "medium"
-              }
-            },
-            {
-              "kind": "neutralised",
-              "condition": "vsc",
-              "fromLap": 31,
+              "fromLap": 16,
               "toLap": 48,
               "action": {
                 "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 15,
+              "toLap": 48,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "sc",
+              "fromLap": 33,
+              "toLap": 49,
+              "action": {
+                "box": "hard"
+              }
+            },
+            {
+              "kind": "neutralised",
+              "condition": "vsc",
+              "fromLap": 33,
+              "toLap": 49,
+              "action": {
+                "box": "hard"
+              }
+            },
+            {
+              "kind": "damage",
+              "lossMsPerLap": 1758.1282407407416,
+              "action": {
+                "box": "medium"
+              }
+            },
+            {
+              "kind": "degradationOff",
+              "wearRateDeltaPct": 1.0451388888888888,
+              "action": {
+                "switchTo": [
+                  {
+                    "lap": 13,
+                    "compound": "soft"
+                  },
+                  {
+                    "lap": 23,
+                    "compound": "hard"
+                  },
+                  {
+                    "lap": 37,
+                    "compound": "medium"
+                  }
+                ]
               }
             },
             {
@@ -4997,64 +3692,64 @@
   },
   "ePos": {
     "2": [
-      6.31288,
-      6.35168,
-      6.34418,
-      6.61966,
-      6.6455,
-      6.93886,
-      6.92992,
-      6.89552,
-      6.89206,
-      8.5943,
-      6.35168,
-      6.36226,
-      6.37162,
-      6.394,
-      6.41424,
-      6.45128,
-      6.47874,
-      6.35368,
-      6.37412,
-      6.38118,
-      6.42126,
-      6.42998,
-      6.49052,
-      7.23624,
-      6.4299,
-      6.4425
+      4.44348,
+      4.33976,
+      4.36778,
+      4.71426,
+      4.66136,
+      4.95364,
+      4.90876,
+      4.77986,
+      4.77906,
+      4.82764,
+      4.80836,
+      4.86898,
+      4.88004,
+      7.63294,
+      8.34776,
+      6.09116,
+      4.33976,
+      4.34268,
+      4.38734,
+      4.3653,
+      4.45018,
+      4.4123,
+      4.53788,
+      5.95838,
+      4.52284,
+      4.65476
     ],
     "5": [
-      6.7339,
-      6.76164,
-      6.76374,
-      7.03398,
-      7.04432,
-      7.40242,
-      7.41168,
-      7.39976,
-      7.39906,
-      8.92126,
-      6.76164,
-      6.78606,
-      6.75766,
-      6.8319,
-      6.78422,
-      6.91324,
-      6.83696,
-      6.7773,
-      6.78554,
-      6.81606,
-      6.80542,
-      6.88384,
-      6.86548,
-      7.73664,
-      6.845,
-      6.85804
+      4.82266,
+      4.70734,
+      4.74758,
+      5.04574,
+      4.98966,
+      5.29472,
+      5.24538,
+      5.16286,
+      5.15904,
+      5.21322,
+      5.19032,
+      5.26774,
+      5.27846,
+      7.9595,
+      8.66714,
+      6.4558,
+      4.70734,
+      4.6574,
+      4.69346,
+      4.68114,
+      4.76384,
+      4.72192,
+      4.85634,
+      6.30276,
+      4.90254,
+      4.98976
     ]
   },
   "winner": {
-    "2": 0,
-    "5": 0
+    "2": 1,
+    "5": 17
   }
 }
