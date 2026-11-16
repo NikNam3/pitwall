@@ -35,7 +35,7 @@ export function followable(start: StartingPoint, car: CarId, policy: Policy): { 
     left.set(s.compound, n - 1);
     stops.push(s);
   }
-  return { policy: infeasible === null ? policy : { stops, triggers: policy.triggers }, infeasible };
+  return { policy: infeasible === null ? policy : { stops }, infeasible };
 }
 
 /**

@@ -113,19 +113,10 @@ export type LapInput = {
 };
 
 /**
- * A reaction a plan carries (SP4.3b spec §6, §8.2): when its condition holds in a scenario, the car does its action.
- * The closed list of kinds; every threshold is the DP's as at the plan. `degradationOff` carries the plan it switches
- * to, never an index: a decision must replay alone (C76).
+ * One car's stops to the flag (SP4.3d spec §5.1): a plan is a stop list. `startCompound` only before the start (the
+ * planning round).
  */
-export type Trigger =
-  | { kind: 'neutralised'; condition: 'sc' | 'vsc'; fromLap: number; toLap: number; action: { box: NoiseCompound } | 'stayOut' }
-  | { kind: 'rain'; wetnessMs: number; action: { box: NoiseCompound } }
-  | { kind: 'rivalPits'; carId: CarId; withinMs: Ms; action: 'cover' | 'extend' }
-  | { kind: 'degradationOff'; wearRateDeltaPct: number; action: { switchTo: { lap: number; compound: NoiseCompound }[] } }
-  | { kind: 'damage'; lossMsPerLap: Ms; action: { box: NoiseCompound } };
-
-/** One car's stops to the flag, and the triggers that change them inside a scenario. */
-export type Policy = { stops: { lap: number; compound: NoiseCompound }[]; triggers: Trigger[]; startCompound?: NoiseCompound };
+export type Policy = { startCompound?: NoiseCompound; stops: { lap: number; compound: NoiseCompound }[] };
 
 /**
  * One scenario: its id (the draws' stream key), whether it draws nothing (`plain`), and its neutralisations.

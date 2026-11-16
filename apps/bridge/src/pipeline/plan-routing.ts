@@ -17,14 +17,8 @@ type PlanFeed = Pick<FeedPipeline, 'commitPlan' | 'totalLaps'>;
 /** Whether `action` is one of the plan uiActions. */
 export const isPlanAction = (action: UiAction): action is PlanAction => action.kind === 'plan.commit' || action.kind === 'plan.clear';
 
-/** The first lap of `policy` (a stop or a `degradationOff` switch) past `totalLaps`, if any. */
-function lapPastRace(policy: Policy, totalLaps: number): number | undefined {
-  const laps = [
-    ...policy.stops.map((stop) => stop.lap),
-    ...policy.triggers.flatMap((trigger) => (trigger.kind === 'degradationOff' ? trigger.action.switchTo.map((stop) => stop.lap) : [])),
-  ];
-  return laps.find((lap) => lap > totalLaps);
-}
+/** The first stop lap of `policy` past `totalLaps`, if any. */
+const lapPastRace = (policy: Policy, totalLaps: number): number | undefined => policy.stops.find((stop) => stop.lap > totalLaps)?.lap;
 
 export class PlanRouting {
   readonly #teams: TeamFeeds;

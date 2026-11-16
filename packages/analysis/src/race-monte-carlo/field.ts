@@ -14,10 +14,9 @@ export function fieldPositions(input: FieldInput, rng: Rng): FieldResult {
   const n = start.cars;
   const counts = Array.from({ length: n }, () => laps.map(() => new Array<number>(n).fill(0)));
   const toLap = Math.min(Math.max(start.lap, ...laps), start.lapsTotal);
-  const none = new Uint8Array(0);
   const position = new Int8Array(n);
   for (let id = 1; id <= input.scenarios; id++) {
-    const r = forecast(run, policiesIn(run, id, -1, null, none), scenarioOf(run, id).scenario, { trace: true, toLap });
+    const r = forecast(run, policiesIn(run, id, -1, null), scenarioOf(run, id).scenario, { trace: true, toLap });
     laps.forEach((lap, j) => {
       const at = Math.min(Math.max(lap, start.lap), toLap);
       const entry = r.trace?.find((t) => t.lap === at);

@@ -21,7 +21,7 @@
   /** The list's share of a full panel: 88 cols − the mockup's 57 chart cols (gen.mjs `FULL_B`). */
   const LIST_COLS = 31;
   /** Cells of the info columns (gen.mjs `infoSpecB`). */
-  const INFO = { rank: 2, src: 4, stops: 17, trg: 3, ePos: 6, ePts: 6, delta: 6 } as const;
+  const INFO = { rank: 2, src: 4, stops: 17, ePos: 6, ePts: 6, delta: 6 } as const;
   /** Rows below the chart: full the info header, two info rows and the footer; compact one info line. */
   const BELOW_FULL = 4;
   const BELOW_COMPACT = 1;
@@ -30,8 +30,6 @@
   const PAD_R = 2;
   /** Compact draws the best-ranked lines only, plus the committed one (gen.mjs `prepRows` n 5; R63). */
   const COMPACT_LINES = 5;
-  /** Two cells between trigger texts (the mockup). */
-  const TRIGGER_GAP = '  ';
 
   let highlight = $state<number | null>(null);
 
@@ -48,7 +46,7 @@
     pad: { l: PAD_L * cell.w, r: PAD_R * cell.w, t: cell.h / 2, b: cell.h },
   });
   const list = $derived(value === undefined ? [] : listRows(value));
-  const info = $derived(value === undefined || hi === null ? undefined : infoRow(value, hi, data.cars));
+  const info = $derived(value === undefined || hi === null ? undefined : infoRow(value, hi));
   const foot = $derived(value === undefined ? undefined : footer(value));
 
   const pick = (i: number): void => {
@@ -116,7 +114,7 @@
       <div class="line" style:color={role('textDim')}> <TextCell text={text.headers.rank} width={INFO.rank} align="right" /> <TextCell
           text={text.headers.src}
           width={INFO.src}
-        /> <TextCell text={text.headers.stops} width={INFO.stops} /> <TextCell text={text.headers.trg} width={INFO.trg} align="right" /> <TextCell
+        /> <TextCell text={text.headers.stops} width={INFO.stops} /> <TextCell
           text={text.headers.ePos}
           width={INFO.ePos}
           align="right"
@@ -126,7 +124,7 @@
             text={info.source.text}
             title={info.source.hover}
             width={INFO.src}
-          /> <TextCell text={info.stops} width={INFO.stops} /> <span data-testid="trg"><TextCell text={info.trg} width={INFO.trg} align="right" /></span> <TextCell
+          /> <TextCell text={info.stops} width={INFO.stops} /> <TextCell
             text={info.ePos}
             width={INFO.ePos}
             align="right"
@@ -137,7 +135,7 @@
               title={text.clearHover}
               onclick={act}>{text.clear}</button
             >{:else}<button type="button" class="pw-button act" data-testid="commit" title={text.commitHover} onclick={act}>{text.commit}</button>{/if}</div>
-        <div class="line" style:color={role('textDim')}> {info.triggers.join(TRIGGER_GAP)}</div>
+        <div class="line"> </div>
       {:else}
         <div class="line"> </div>
         <div class="line"> </div>

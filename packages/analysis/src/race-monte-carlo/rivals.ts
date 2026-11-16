@@ -64,9 +64,9 @@ export function rivalPlan(start: StartingPoint, k: number, dryLap: number, weath
   const delta = start.retired[k] === 1 ? null : (start.typeSwitch[k] ?? null);
   if (delta !== null && delta.lap < start.lapsTotal) {
     const to = { lap: delta.lap, compound: SWITCH_COMPOUND[delta.to] };
-    return { stops: dry !== null && dry.lap < delta.lap ? [dry, to] : [to], triggers: [] };
+    return { stops: dry !== null && dry.lap < delta.lap ? [dry, to] : [to] };
   }
-  if (weather === null || start.retired[k] === 1) return { stops: dry === null ? [] : [dry], triggers: [] };
+  if (weather === null || start.retired[k] === 1) return { stops: dry === null ? [] : [dry] };
   const model = start.lapModel;
   const scOut = (lap: number): boolean => neutralisations.some((n) => n.kind === 'sc' && n.fromLap <= lap && lap <= n.toLap);
   const stops: Policy['stops'] = [];
@@ -104,7 +104,7 @@ export function rivalPlan(start: StartingPoint, k: number, dryLap: number, weath
       current = dry.compound;
     }
   }
-  return { stops, triggers: [] };
+  return { stops };
 }
 
 /**

@@ -56,7 +56,7 @@ export type PlainRoad = Map<number, { gapMs: Float64Array; position: Int8Array }
 export function plainRoad(start: StartingPoint, rng: Rng, weather: readonly WeatherLap[] | null = null): PlainRoad {
   const ours = new Set(Object.keys(start.sets).map(Number));
   // the rivals on their plain policy in the world (race-monte-carlo's one rival policy, O9); our cars without a stop
-  const policies: Policy[] = Array.from({ length: start.cars }, (_, k): Policy => (ours.has(k) ? { stops: [], triggers: [] } : rivalPlainPolicy(start, k, weather)));
+  const policies: Policy[] = Array.from({ length: start.cars }, (_, k): Policy => (ours.has(k) ? { stops: [] } : rivalPlainPolicy(start, k, weather)));
   const scenario: Scenario = { id: 0, plain: true, neutralisations: [] };
   if (weather !== null) scenario.wetnessByLap = Float64Array.from(weather, (w) => w.wetnessMs);
   const result = raceForecast(start, policies, scenario, rng, { trace: true });

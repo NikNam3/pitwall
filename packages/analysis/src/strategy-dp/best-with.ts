@@ -3,15 +3,13 @@
 // neutralisation those laps may bring, then boxes at its end onto the forced compound (`'best'`: per state the child the
 // table values best) or, for `noStopThrough`, plays free from the lap after it; the rest of the race is the table's
 // values from there. With `under`, the start lap is neutralised by it with its laps left drawn from `remaining` (as
-// `input.active`), so a stop at its end costs that condition's loss. The plan is tagged with the solve's world and
-// carries its own neutralised triggers along its stops (SP4.3c Task 19; the best plan's damage, degradation-off and rain
-// thresholds are `solveDp`'s, not a query's). Pure (C2); `null` where no such play keeps the rule, the sets and the 70 %
+// `input.active`), so a stop at its end costs that condition's loss. The plan is tagged with the solve's world. Pure (C2); `null` where no such play keeps the rule, the sets and the 70 %
 // limit (C3).
 //
 // The forced laps walk a few neutralisation states forward (any laps left); the table is read at the first lap the play
 // is free, which must lie within the solved layout: `under.remaining` no longer than the hazard's duration pmf of its
 // condition (or `input.active`'s) plus the forced laps. A longer one is a caller's bug.
-import { adaptivePlan, type DpSolution } from './solve.ts';
+import { planOf, type DpSolution } from './solve.ts';
 import { COND_SC, COND_VSC, NS_GREEN, NS_NO_START, nodeAt, pathFrom, stintLimit, stopCostMs, type Layout, type SolvedNode } from './state.ts';
 import type { DpFirst, DpInput, DpPlan, DpUnder } from './types.ts';
 
@@ -141,7 +139,7 @@ export function bestWith(s: DpSolution, first: DpFirst, under?: DpUnder): DpPlan
     if (forced >= n) ms += root.node.terminal;
     else for (const part of parts) ms += part.p * (root.entry[forced * layout.ns + stateOf(layout, part)] ?? Infinity);
     if (!Number.isFinite(ms)) return null;
-    return adaptivePlan(s, { stops: pathFrom(input, layout, graph, { index: s.adaptiveRoot, i: forced, j: forced, s: stateOf(layout, path) }), expectedMs: ms });
+    return planOf(s, { stops: pathFrom(input, layout, graph, { index: s.adaptiveRoot, i: forced, j: forced, s: stateOf(layout, path) }), expectedMs: ms });
   }
 
   // the forced stop at the end of lap offset `forced`, then the table's values from the next lap
@@ -156,5 +154,5 @@ export function bestWith(s: DpSolution, first: DpFirst, under?: DpUnder): DpPlan
   const child = root.node.children[childArg >= 0 ? childArg : bestChild(s, root, path, i)];
   if (child === undefined) return null;
   const rest = pathFrom(input, layout, graph, { index: child.node, i: i + 1, j: 0, s: stateOf(layout, pathNext(path)) });
-  return adaptivePlan(s, { stops: [{ lap: input.fromLap + i, compound: child.compound }, ...rest], expectedMs: ms });
+  return planOf(s, { stops: [{ lap: input.fromLap + i, compound: child.compound }, ...rest], expectedMs: ms });
 }
