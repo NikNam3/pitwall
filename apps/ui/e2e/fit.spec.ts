@@ -219,6 +219,9 @@ async function findViolations(page: Page): Promise<{ ids: string[]; violations: 
       }
       const box = body.getBoundingClientRect();
       for (const element of [body, ...body.querySelectorAll<HTMLElement>('*')]) {
+        // An SVG element's scroll and client sizes measure its box against its own coordinates' origin, not overflow
+        // (SP4.3d1 R35): skip them; the text-rect check below still catches SVG text laid out outside the body.
+        if (element instanceof SVGElement && element.ownerSVGElement !== null) continue;
         const name = `${element.tagName.toLowerCase()}${element.className ? `.${String(element.className)}` : ''}`;
         if (element.scrollWidth > element.clientWidth) violations.push({ id, problem: `${name} scrollWidth ${element.scrollWidth} > clientWidth ${element.clientWidth}` });
         if (element.scrollHeight > element.clientHeight) violations.push({ id, problem: `${name} scrollHeight ${element.scrollHeight} > clientHeight ${element.clientHeight}` });
