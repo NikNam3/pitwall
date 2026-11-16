@@ -320,8 +320,11 @@ export const formatPlacesGained = (x: number): string => {
   return text === '' || text.startsWith(MINUS) ? text : `+${text}`;
 };
 
+/** A share 0…1 as a whole percent without the sign, `0.75` -> `75` (for compact cells such as `H80`). */
+export const formatShareNumber = (p: number): string => (Number.isFinite(p) ? whole(p * 100) : '');
+
 /** A share 0…1 as a whole percent, `0.75` -> `75%`. */
-export const formatShare = (p: number): string => (Number.isFinite(p) ? `${whole(p * 100)}%` : '');
+export const formatShare = (p: number): string => (Number.isFinite(p) ? `${formatShareNumber(p)}%` : '');
 
 /** Points to one decimal, `6.25` -> `6.3`. */
 export const formatPoints = (x: number): string => fixed(x, 1);
