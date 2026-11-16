@@ -1,9 +1,9 @@
 // Where our car was when (SP4.3d spec §6.5, C43): the one owner of reading our own crossing history (`gaps`' `recent`:
 // `at[i]` is when the car passed progress `fromProgress + i`, a hole where none was recorded) both ways, interpolated
 // between the two crossings around the asked point. `progressAt` (time → our progress) places `rejoin-ghost`'s ghost;
-// `timeAtProgress` (progress → when we were there) gives `rejoin`'s scale and the circle's. Before our first kept
-// crossing either answer is `insufficientData`, never NaN.
-import { known, MINI_SECTORS, unknown, type Known, type SessionTime } from '@pitwall/domain';
+// `timeAtProgress` (progress → when we were there) underlies `timeBehind`, a car's time behind us now: the one scale of
+// `rejoin` and the circle (C43). Before our first kept crossing every answer is `insufficientData`, never NaN.
+import { known, MINI_SECTORS, unknown, type Known, type Ms, type SessionTime } from '@pitwall/domain';
 import type { DeepReadonly } from '@pitwall/engine/readers';
 import type { CarCrossings } from './gapper-lines.ts';
 
@@ -69,6 +69,53 @@ export function timeAtProgress(ours: Crossings, progress: number, now?: LivePoin
   if (j >= at.length) return INSUFFICIENT;
   const to = at[j] as SessionTime;
   return known(from + ((offset - i) * (to - from)) / (j - i), to);
+}
+
+/**
+ * A car's time behind us now on our crossing history (SP4.3d spec §6.5, C43): `wrappedMs` is how long ago we were where
+ * the car is now, its progress moved by whole laps into our last lap (`0 ≤ wrappedMs < lapMs`); `lapsDown` the signed
+ * whole laps of progress between us, `floor((here − carProgress) / 50)` (0 behind us on our lap, −1 ahead on our lap);
+ * `lapMs` our rolling lap, the time we took for the last full lap of progress up to where we are now. So the signed
+ * time behind us is `lapsDown × lapMs + wrappedMs`.
+ */
+export type TimeBehind = { wrappedMs: Ms; lapsDown: number; lapMs: Ms };
+
+/** Where we are now (our live progress, never before our newest crossing), our live point and our rolling lap. */
+type Here = { here: number; live: LivePoint; lapMs: Ms };
+
+function hereOf(ours: Crossings, ourLive: Known<number>, now: SessionTime): Known<Here> {
+  if (ours.at.length === 0) return INSUFFICIENT;
+  const newest = ours.fromProgress + ours.at.length - 1;
+  const here = ourLive.known && ourLive.value > newest ? ourLive.value : newest;
+  const live: LivePoint = { t: now, progress: here };
+  const lapAgo = timeAtProgress(ours, here - MINI_SECTORS, live);
+  if (!lapAgo.known) return INSUFFICIENT;
+  const lapMs = Math.round(now - lapAgo.value);
+  return lapMs > 0 ? known({ here, live, lapMs }, now) : INSUFFICIENT;
+}
+
+/**
+ * Our rolling lap (`TimeBehind`'s `lapMs`): the time our car took for the last full lap of progress up to where we are
+ * now. `insufficientData` when our history is shorter than a lap behind where we are now (first lap, a join mid-race).
+ */
+export function rollingLap(ours: Crossings, ourLive: Known<number>, now: SessionTime): Known<Ms> {
+  const h = hereOf(ours, ourLive, now);
+  return h.known ? known(h.value.lapMs, now) : h;
+}
+
+/**
+ * A car at `carProgress` (mini-sectors, `liveProgress`): its time behind us now (`TimeBehind`), given our live progress
+ * `ourLive` and the frame's time `now`. `insufficientData` when our history is shorter than a lap behind where we are now.
+ */
+export function timeBehind(ours: Crossings, ourLive: Known<number>, carProgress: number, now: SessionTime): Known<TimeBehind> {
+  const h = hereOf(ours, ourLive, now);
+  if (!h.known) return h;
+  const { here, live, lapMs } = h.value;
+  const lapsDown = Math.floor((here - carProgress) / MINI_SECTORS);
+  const t = timeAtProgress(ours, carProgress + lapsDown * MINI_SECTORS, live);
+  if (!t.known) return t;
+  const wrappedMs = Math.min(Math.max(0, Math.round(now - t.value)), lapMs - 1);
+  return known({ wrappedMs, lapsDown, lapMs }, now);
 }
 
 /** Past our newest crossing: linear between it and our live point, `insufficientData` without one or beyond it. */
