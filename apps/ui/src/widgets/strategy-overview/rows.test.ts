@@ -113,3 +113,12 @@ describe('fieldRows: the other states', () => {
     expect(rs.at(-1)!.code).toEqual({ text: '', reason: 'notReceived' });
   });
 });
+
+describe('rows.ts computes nothing (C65; review finding 1)', () => {
+  it('NEXT\'s whole percent comes from the kit\'s formatShareNumber: no `* 100` in rows.ts', () => {
+    const src = Object.values(import.meta.glob<string>('./rows.ts', { query: '?raw', import: 'default', eager: true }))[0]!;
+    const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+    expect(code).not.toMatch(/\*\s*100\b/);
+    expect(code).toMatch(/\bformatShareNumber\b/);
+  });
+});

@@ -155,3 +155,28 @@ describe('Field plans, the other states', () => {
     expect([line(c, KUH).dataset['kind'], line(c, KUH).dataset['bar']]).toEqual(['mate', 'false']);
   });
 });
+
+describe('the .svelte only renders (C65; review finding 2)', () => {
+  /** The component's script without comments and import lines (paths and `import * as` are no arithmetic). */
+  const script = (): string => {
+    const src = Object.values(import.meta.glob<string>('./StrategyOverview.svelte', { query: '?raw', import: 'default', eager: true }))[0]!;
+    const body = /<script[^>]*>([\s\S]*?)<\/script>/.exec(src)?.[1] ?? '';
+    return body
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\/\/.*$/gm, '')
+      .replace(/^\s*import\b.*$/gm, '');
+  };
+
+  it('no `/` or `*` arithmetic in the script: the cell size comes from lane.ts `cellOf`', () => {
+    const code = script();
+    expect(code).not.toBe('');
+    expect(code).not.toMatch(/[\w)\]]\s*[/*]\s*[\w(]/);
+    expect(code).not.toMatch(/size\.px/);
+  });
+
+  it('no row-kind rule in the script: no `plan !== null`, our rows come from rows.ts\'s kind via lane.ts `lanesOf`', () => {
+    const code = script();
+    expect(code).not.toMatch(/plan\s*!==?\s*null/);
+    expect(code).toMatch(/\blanesOf\(/);
+  });
+});

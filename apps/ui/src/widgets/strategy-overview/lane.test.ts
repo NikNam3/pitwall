@@ -23,9 +23,10 @@
 //    of the window: darkest (largest) at `midLap`, never darker nearer either end (monotonic towards `midLap`).
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
-import type { OverviewRow } from '@pitwall/domain';
-import { FLAG, NOW_LAP, ROWS, policy, row } from './fixtures.ts';
-import { laneOf, windowShade } from './lane.ts';
+import type { OverviewRow, StrategyOverview } from '@pitwall/domain';
+import { FIELD, FLAG, FOR_LIN, KUH, LIN, NOR, NOW_LAP, OVERVIEW, ROWS, policy, row } from './fixtures.ts';
+import { cellOf, laneOf, laneScene, lanesOf, windowShade } from './lane.ts';
+import { fieldRows } from './rows.ts';
 
 const ctx = (own: boolean, now = NOW_LAP) => ({ now, flag: FLAG, own });
 type Block = { fromLap: number; toLap: number; letter: string; style: string; role: string };
@@ -132,6 +133,58 @@ describe('laneOf: the rules', () => {
 });
 
 const KUH_A_LATE = policy([22, 'hard']);
+
+// The panel's layout, out of the .svelte (C65; review finding 2). Contract assumed of `lane.ts`:
+//  - `cellOf(size: { cols: number; rows: number; px: { width: number; height: number } }): Cell`, the panel's cell in px
+//    (px width per column, px height per row; a zero count counts as one), as `pit-window-strip/layout.ts` has it;
+//  - `lanesOf(input: { overview: StrategyOverview; rows: readonly FieldRow[]; now: number | undefined;
+//    flag: number | undefined; size: WidgetSize }): Map<CarId, LaneScene>`: per topic row its
+//    `laneScene(laneOf(row, { now, flag, own }), { now, flag }, cellOf(size))`, `own` true on the rows whose `FieldRow`
+//    kind (rows.ts) is `own` or `mate`; empty in compact, while `now` or `flag` is unknown, or with `flag` ≤ 0.
+const SIZE = { mode: 'full', cols: 71, rows: 10, px: { width: 568, height: 196 }, dpr: 1 } as const;
+const COMPACT = { mode: 'compact', cols: 28, rows: 10, px: { width: 224, height: 196 }, dpr: 1 } as const;
+const lanesFor = (overview: StrategyOverview, over: Partial<{ now: number | undefined; flag: number | undefined; size: typeof SIZE | typeof COMPACT }> = {}) =>
+  lanesOf({ overview, rows: fieldRows({ overview, cars: FIELD, now: NOW_LAP }), now: NOW_LAP, flag: FLAG, size: SIZE, ...over });
+
+describe('cellOf: the panel\'s cell in px', () => {
+  it('px width per column and px height per row', () => {
+    expect(cellOf(SIZE)).toEqual({ w: 8, h: 19.6 });
+  });
+
+  it('a zero column or row count counts as one', () => {
+    expect(cellOf({ cols: 0, rows: 0, px: { width: 120, height: 30 } })).toEqual({ w: 120, h: 30 });
+  });
+});
+
+describe('lanesOf: every row\'s lane scene, our rows by their row kind', () => {
+  it('full: one scene per topic row, each laneScene of laneOf at the panel\'s cell', () => {
+    const lanes = lanesFor(OVERVIEW);
+    expect([...lanes.keys()]).toEqual(OVERVIEW.rows.map((r) => r.carId));
+    const at = { now: NOW_LAP, flag: FLAG };
+    expect(lanes.get(KUH)).toEqual(laneScene(laneOf(ROWS.KUH, { ...at, own: true }), at, cellOf(SIZE)));
+    expect(lanes.get(LIN)).toEqual(laneScene(laneOf(ROWS.LIN, { ...at, own: true }), at, cellOf(SIZE)));
+    expect(lanes.get(NOR)).toEqual(laneScene(laneOf(ROWS.NOR, { ...at, own: false }), at, cellOf(SIZE)));
+  });
+
+  it('LIN\'s panel: KUH the teammate is drawn as ours', () => {
+    const at = { now: NOW_LAP, flag: FLAG };
+    const kuh = FOR_LIN.rows.find((r) => r.carId === KUH)!;
+    expect(lanesFor(FOR_LIN).get(KUH)).toEqual(laneScene(laneOf(kuh, { ...at, own: true }), at, cellOf(SIZE)));
+  });
+
+  it('our row is ours by its kind, also without a plan: its stint solid in our colour', () => {
+    const overview: StrategyOverview = { ...OVERVIEW, rows: OVERVIEW.rows.map((r) => (r.carId === KUH ? { ...r, plan: null } : r)) };
+    const scene = lanesFor(overview).get(KUH)!;
+    expect(scene.blocks.map((b: Block) => [b.fromLap, b.toLap, b.style, b.role])).toEqual([[1, 14, 'solid', 'ownCar']]);
+  });
+
+  it('no lanes in compact, while now or the flag is unknown, or with no laps', () => {
+    expect(lanesFor(OVERVIEW, { size: COMPACT }).size).toBe(0);
+    expect(lanesFor(OVERVIEW, { now: undefined }).size).toBe(0);
+    expect(lanesFor(OVERVIEW, { flag: undefined }).size).toBe(0);
+    expect(lanesFor(OVERVIEW, { flag: 0 }).size).toBe(0);
+  });
+});
 
 describe('windowShade: darkest at midLap, monotonic towards it', () => {
   it('the mockup\'s NOR window L16–18–20: rising to L18, falling after, symmetric', () => {
