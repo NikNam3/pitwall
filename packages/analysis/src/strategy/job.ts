@@ -80,8 +80,8 @@ export function candidatesForRun(input: StrategyInput, rng: Rng): { mc: McInput 
   const committed: Record<CarId, Policy | null> = {};
   for (const car of planned) {
     const dpInput = dpInputOn(field, car, hazard, worlds, config.trafficGapMs);
-    const dp = solveDp(dpInput);
     const solutions = dpInput.worlds.map((_, w) => solveWorld(dpInput, w));
+    const dp = solveDp(dpInput, solutions);
     const own = candidatesOf(field, car, dp, solutions, { ...config, closeGapMs: RACE_INTERACTION_CONFIG.read(input).closeGapMs, rainPct: RAIN_OUTLOOK_CONFIG.read(input).rainPct });
     const original = input.committed[car] ?? null;
     let plan: CarPlan = { candidates: own, followed: null, original: null, infeasible: null };

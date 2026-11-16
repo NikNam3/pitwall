@@ -122,10 +122,11 @@ function heaviest(input: DpInput): number {
 /**
  * The car's plans per weather world (SP4.3c §5.4): each world solved alone, its best plan per stop count and compound
  * sequence with its own triggers, tagged with the world; `boxThisLap`, `continue` and the table are the heaviest world's.
+ * `solutions`: the worlds' solves when the caller already has them (`strategy`'s job), else solved here.
  */
-export function solveDp(input: DpInput): DpResult {
+export function solveDp(input: DpInput, solutions: readonly DpSolution[] = input.worlds.map((_, w) => solveWorld(input, w))): DpResult {
   worldOf(input);
-  const results = input.worlds.map((_, w) => resultOf(solveWorld(input, w)));
+  const results = solutions.map(resultOf);
   const main = results[heaviest(input)] as DpResult;
   return { plans: results.flatMap((r) => r.plans), boxThisLap: main.boxThisLap, continue: main.continue, table: main.table };
 }
