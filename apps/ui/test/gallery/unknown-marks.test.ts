@@ -186,6 +186,7 @@ const IN_WORDS: Record<string, { field: string; reason: UnknownReason; rule: str
     field: `overview.rows.*.${f}`,
     reason: 'notApplicable' as const,
     rule: 'stops made: the cell stays empty as in the mockup (SP4.3d1 R13)',
+  })),
   'sc-card': (['ePos', 'se', 'ePosDelta', 'pGain', 'rejoinPosition'] as const).map((f) => ({
     field: `call.value.blocks.*.options.*.${f}`,
     reason: 'noSet' as const,
