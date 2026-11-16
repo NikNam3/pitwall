@@ -1,20 +1,22 @@
-// `strategy-dp`'s state space and its one backward solve (SP4.3b spec §6). A state is a lap, a node (the set on the car
-// and what is left to do with stops), the laps on the set (the integer tyre age) and the neutralisation with its laps
-// left. Two kinds of node graph share the solve:
+// `strategy-dp`'s state space and its one backward solve (SP4.3b spec §6; SP4.3c spec §5.4). A state is a lap, a node
+// (the set on the car and what is left to do with stops), the laps on the set (the integer tyre age) and the
+// neutralisation with its laps left. Two kinds of node graph share the solve:
 // - the adaptive graph: a node is the compound on the car and the multiset of compounds fitted so far (so the sets
 //   left, the stop count and whether the compound rule is met); every stop may pick any compound with a set left. It
-//   gives the closed-loop box-now and stay-out values and the per-lap table.
+//   gives the closed-loop box-this-lap and continue values and the per-lap table.
 // - the plan graph: a node is the compound on the car and the compound sequence still to fit; a stop fits only the
 //   sequence's next compound. Each feasible sequence's root gives that plan's expected time.
 // The model: a stop at lap L boxes at the end of lap L, costs lap L's condition's pit loss (green, VSC, SC) less the
 // human saving plus lap L's traffic cost; an SC or VSC and its length are known from the lap it starts on; none starts
-// on the lap after one ends. Wear is the set's laps times the wear rate (exact where neutralised laps wear as green
-// ones; where the wear is hidden, the rate is 0 and the age terms remain) and fuel is the green burn per lap from
-// `fromLap`. Pure, no randomness (C2).
+// on the lap after one ends. Each compound runs on its own tyre terms (ν and wear rate, SP4.3c Task 12, B5). Wear is the
+// set's laps times its compound's wear rate (exact where neutralised laps wear as green ones; where the wear is hidden,
+// the rate is 0 and the age terms remain) and fuel is the green burn per lap from `fromLap`. A solve is of one weather
+// world (`worlds[0]` of its input, `solve.ts`): its wetness and traffic per lap. The 70 % limit (SP4.3c §5.2): no lap
+// starts on a set past its laps to the limit (the fitted set at least `fromLap`). Pure, no randomness (C2).
 import { NOISE_COMPOUNDS, type LapInput, type NoiseCompound } from '@pitwall/domain';
 import { lapTimeMs } from '../lap-model/index.ts';
 import { stopCostOf } from '../race-forecast/stop.ts';
-import type { DpInput, DpPlan } from './types.ts';
+import type { DpInput, DpPlan, DpWorld } from './types.ts';
 
 /** At most this many stops from `fromLap` (spec §6, §11.1 `strategy`'s maximum stops). */
 export const MAX_STOPS = 3;
@@ -29,6 +31,23 @@ export const COND_VSC = 2;
 /** The neutralisation states at a lap's start: 0 green, 1 green with no start possible, then SC and VSC laps left. */
 export const NS_GREEN = 0;
 export const NS_NO_START = 1;
+
+/** A play of a solve: its stops where no neutralisation comes and its expected remaining race time. */
+export type Play = Pick<DpPlan, 'stops' | 'expectedMs'>;
+
+/** The world a solve's input is of: its first (a solve's input holds that one alone, `solve.ts`); none is a bug (C3). */
+export function worldOf(input: DpInput): DpWorld {
+  const world = input.worlds[0];
+  if (world === undefined) throw new Error('strategy-dp: an input without a weather world');
+  return world;
+}
+
+/** The laps a set may run (the 70 % limit): the fitted set's (`null`) from `fromLap`, at least 1; a new set's; `Infinity` unknown. */
+export function stintLimit(input: DpInput, tyre: NoiseCompound | null): number {
+  const p = input.carParams;
+  if (tyre === null) return p.fittedLapsToLimit === null ? Infinity : Math.max(1, p.fittedLapsToLimit);
+  return p.lapsToLimit[tyre] ?? Infinity;
+}
 
 /** A node: the set on the car (`null` = the set the car is on at `fromLap`) and the stops it can make. */
 export type DpNode = {
@@ -141,16 +160,17 @@ export function planGraph(sequences: readonly NoiseCompound[][]): { nodes: DpNod
 /** The laps on the set at lap offset i that a node's states cover: the car's set has i, a new set 0 … i − 1. */
 const ageRange = (tyre: NoiseCompound | null, i: number): [number, number] => (tyre === null ? [i, i] : [0, i - 1]);
 
-/** A set's lap time per condition, lap offset i and laps on the set j (`[(cond * n + i) * n + j]`). */
+/** A set's lap time per condition, lap offset i and laps on the set j (`[(cond * n + i) * n + j]`), on its compound's terms. */
 function lapTable(input: DpInput, n: number, fuel: Float64Array, tyre: NoiseCompound | null): Float64Array {
   const p = input.carParams;
   const compound = tyre ?? p.compound;
   const rate = p.wearRatePct?.[compound] ?? 0;
-  const lap: LapInput = { paceMs: p.paceMs, degMsPerLap: p.degMsPerLap, wearPct: 0, fuelKg: 0, compound, lapOnSet: 1, neutralised: 'none', wetnessMs: 0, wet: false, scatterMs: 0, mistakeMs: 0 };
+  const wetness = worldOf(input).wetnessByLap;
+  const lap: LapInput = { paceMs: p.paceMs, degMsPerLap: p.degMsPerLap[compound], wearPct: 0, fuelKg: 0, compound, lapOnSet: 1, neutralised: 'none', wetnessMs: 0, wet: false, scatterMs: 0, mistakeMs: 0 };
   const table = new Float64Array(CONDITIONS.length * n * n);
   for (let i = 0; i < n; i++) {
     lap.fuelKg = fuel[i] ?? 0;
-    lap.wetnessMs = input.wetnessByLap[i] ?? 0;
+    lap.wetnessMs = wetness[i] ?? 0;
     const [jFrom, jTo] = ageRange(tyre, i);
     for (let j = jFrom; j <= jTo; j++) {
       lap.wearPct = tyre === null ? p.wearPct + rate * i : rate * j;
@@ -176,14 +196,17 @@ function fuelByLap(input: DpInput, n: number): Float64Array {
   return fuel;
 }
 
-/** A stop at the end of lap offset i under condition `cond` (0 green, SC, VSC): the stop model's cost (`race-forecast`), plus traffic. */
+/** A stop at the end of lap offset i under condition `cond` (0 green, SC, VSC): the stop model's cost (`race-forecast`), plus the world's traffic. */
 export function stopCostMs(input: DpInput, cond: number, i: number): number {
   const condition = cond === COND_SC ? 'sc' : cond === COND_VSC ? 'vsc' : 'green';
-  return stopCostOf(input.pitLossMs, input.carParams.human, condition) + (input.trafficMsByLap[i] ?? 0);
+  return stopCostOf(input.pitLossMs, input.carParams.human, condition) + (worldOf(input).trafficMsByLap[i] ?? 0);
 }
 
-/** A neutralisation starting at a state: its expected value boxing onto the best child and staying out. */
-export type NeutralValues = { box: Float64Array; boxArg: Int8Array; stay: Float64Array };
+/** A neutralisation starting at a state: its expected value staying out and (where kept) boxing onto the best child. */
+export type NeutralValues = { stay: Float64Array; box: Float64Array | null; boxArg: Int8Array | null };
+
+/** What a solve keeps of the neutralised values: none (a re-solve), staying out per node and boxing from `boxFrom` on. */
+export type KeepNeutral = { boxFrom: number } | null;
 
 /** What the solve keeps of a node. */
 export type SolvedNode = {
@@ -204,8 +227,8 @@ export type SolvedNode = {
   entry: Float64Array;
 };
 
-/** A solve: its nodes and per tyre its lap times (`[(cond * n + i) * n + j]`, as `lapTable`). */
-export type GraphSolution = { nodes: SolvedNode[]; lapTimes: ReadonlyMap<NoiseCompound | null, Float64Array> };
+/** A solve: its nodes, per tyre its lap times (`[(cond * n + i) * n + j]`, as `lapTable`) and its layout. */
+export type GraphSolution = { nodes: SolvedNode[]; lapTimes: ReadonlyMap<NoiseCompound | null, Float64Array>; layout: Layout };
 
 /** A node of a solve; a missing index is a bug (C3). */
 export function nodeAt(graph: GraphSolution, index: number): SolvedNode {
@@ -214,13 +237,19 @@ export function nodeAt(graph: GraphSolution, index: number): SolvedNode {
   return node;
 }
 
-type Work = { solved: SolvedNode; kids: Work[]; lt: Float64Array; cur: Float64Array; next: Float64Array };
+type Work = { solved: SolvedNode; kids: Work[]; lt: Float64Array; limit: number; cur: Float64Array; next: Float64Array };
 
 /** A neutralisation kind as a lap starting one sees it: its condition, duration pmf and first state. */
-type NeutralKind = { key: 'sc' | 'vsc'; cond: number; dur: Float64Array; first: number };
+export type NeutralKind = { key: 'sc' | 'vsc'; cond: number; dur: Float64Array; first: number };
+
+/** The SC and the VSC kinds of an input in its layout. */
+export const neutralKindsOf = (input: DpInput, layout: Layout): readonly NeutralKind[] => [
+  { key: 'sc', cond: COND_SC, dur: input.hazard.scDur, first: layout.stateOf('sc', 0) },
+  { key: 'vsc', cond: COND_VSC, dur: input.hazard.vscDur, first: layout.stateOf('vsc', 0) },
+];
 
 /** The expected value after a lap that starts `kind`, from a node's next-lap values at `offset` (its pmf renormalised). */
-function after(kind: NeutralKind, from: Float64Array, offset: number): number {
+export function after(kind: NeutralKind, from: Float64Array, offset: number): number {
   let v = 0;
   let mass = 0;
   for (let k = 0; k < kind.dur.length; k++) {
@@ -232,10 +261,38 @@ function after(kind: NeutralKind, from: Float64Array, offset: number): number {
   return mass > 0 ? v / mass : Infinity;
 }
 
-const neutralValues = (size: number): NeutralValues => ({ box: new Float64Array(size).fill(Infinity), boxArg: new Int8Array(size).fill(-1), stay: new Float64Array(size).fill(Infinity) });
+/** `after` for one kind with its pmf's states and chances read once: the same sum in the same order. */
+function afterOf(kind: NeutralKind): (from: Float64Array, offset: number) => number {
+  const states: number[] = [];
+  const chances: number[] = [];
+  let mass = 0;
+  for (let k = 0; k < kind.dur.length; k++) {
+    const p = kind.dur[k] ?? 0;
+    if (p <= 0) continue;
+    states.push(k === 0 ? NS_NO_START : kind.first + k - 1);
+    chances.push(p);
+    mass += p;
+  }
+  const m = states.length;
+  return (from, offset) => {
+    if (!(mass > 0)) return Infinity;
+    let v = 0;
+    for (let k = 0; k < m; k++) v += (chances[k] ?? 0) * (from[offset + (states[k] ?? 0)] ?? Infinity);
+    return v / mass;
+  };
+}
 
-/** Solves `nodes` backward from the flag to `fromLap`; the nodes from `neutralFrom` on keep their neutralised values. */
-export function solveGraph(input: DpInput, layout: Layout, nodes: readonly DpNode[], neutralFrom = Infinity): GraphSolution {
+const neutralValues = (size: number, box: boolean): NeutralValues => ({
+  stay: new Float64Array(size).fill(Infinity),
+  box: box ? new Float64Array(size).fill(Infinity) : null,
+  boxArg: box ? new Int8Array(size).fill(-1) : null,
+});
+
+/**
+ * Solves `nodes` backward from the flag to `fromLap`; `keep` says which neutralised values it keeps (none by default);
+ * `limit: false` drops the 70 % limit.
+ */
+export function solveGraph(input: DpInput, layout: Layout, nodes: readonly DpNode[], keep: KeepNeutral = null, limit = true): GraphSolution {
   const n = input.totalLaps - input.fromLap + 1;
   const { ns, condOf, nextOf } = layout;
   const fuel = fuelByLap(input, n);
@@ -261,11 +318,12 @@ export function solveGraph(input: DpInput, layout: Layout, nodes: readonly DpNod
       firstBox: new Float64Array(ns).fill(Infinity),
       firstBoxArg: new Int8Array(ns).fill(-1),
       firstStay: new Float64Array(ns),
-      neutral: d >= neutralFrom ? { sc: neutralValues(n * n), vsc: neutralValues(n * n) } : null,
+      neutral: keep === null ? null : { sc: neutralValues(n * n, d >= keep.boxFrom), vsc: neutralValues(n * n, d >= keep.boxFrom) },
       entry: new Float64Array(n * ns).fill(Infinity),
     },
     kids: [],
     lt: tableOf(node.tyre),
+    limit: limit ? stintLimit(input, node.tyre) : Infinity,
     cur: new Float64Array(width),
     next: new Float64Array(width),
   }));
@@ -276,88 +334,116 @@ export function solveGraph(input: DpInput, layout: Layout, nodes: readonly DpNod
       w.kids.push(kid);
     }
   });
-  const neutralKinds: readonly NeutralKind[] = [
-    { key: 'sc', cond: COND_SC, dur: scDur, first: scState },
-    { key: 'vsc', cond: COND_VSC, dur: vscDur, first: vscState },
-  ];
-  const keepNeutral = (solved: SolvedNode, kids: readonly Work[], i: number, j: number, last: boolean, lt: Float64Array, self: Float64Array): void => {
-    // an SC or VSC starting this lap, its length by its pmf: boxing onto the best child, and staying out
-    const at = i * n + j;
-    for (const kind of neutralKinds) {
-      const target = solved.neutral?.[kind.key];
-      if (target === undefined) return;
-      const ms = lt[(kind.cond * n + i) * n + j] ?? Infinity;
-      if (last) {
-        target.stay[at] = ms + solved.node.terminal;
-        continue;
-      }
-      target.stay[at] = ms + after(kind, self, (j + 1) * ns);
-      const cost = stop(kind.cond, i);
-      for (let c = 0; c < kids.length; c++) {
-        const kid = kids[c];
-        if (kid === undefined) continue;
-        const box = ms + cost + after(kind, kid.next, 0);
-        if (box < (target.box[at] ?? Infinity)) {
-          target.box[at] = box;
-          target.boxArg[at] = c;
-        }
-      }
-    }
-  };
+  const kinds = neutralKindsOf(input, layout).map((kind) => ({ kind, after: afterOf(kind) }));
+  // per lap, the best stop of a node: it lands on a new set (age 0) whatever the age it leaves, so it does not depend on
+  // the laps on the set; computed once per node and lap, not per age
+  const boxBestOf = new Float64Array(ns);
+  const boxArgOf = new Int8Array(ns);
+  const neutralBoxOf = new Float64Array(kinds.length);
+  const neutralArgOf = new Int8Array(kinds.length);
+  // per lap the chance of each state at a green lap's start (none, then each SC and VSC length), in the sum's order
+  const greenStates = new Int32Array(ns);
+  const greenWeights = new Float64Array(ns);
 
   for (let i = n - 1; i >= 0; i--) {
     const last = i === n - 1;
     const pSc = byLap[i] ?? 0;
     const pVsc = vscByLap[i] ?? 0;
     const pGreen = 1 - pSc - pVsc;
+    let greens = 0;
+    const weigh = (state: number, p: number): void => {
+      if (!(p > 0)) return;
+      greenStates[greens] = state;
+      greenWeights[greens] = p;
+      greens++;
+    };
+    weigh(NS_NO_START, pGreen);
+    for (let k = 0; k < scDur.length; k++) weigh(scState + k, pSc * (scDur[k] ?? 0));
+    for (let k = 0; k < vscDur.length; k++) weigh(vscState + k, pVsc * (vscDur[k] ?? 0));
     const stopCost = [stop(0, i), stop(COND_SC, i), stop(COND_VSC, i)];
     for (const w of works) {
       const { solved, kids, lt } = w;
-      const { node, decisions } = solved;
+      const { node, decisions, neutral } = solved;
       const self = w.next;
       const out = w.cur;
       const [jFrom, jTo] = ageRange(node.tyre, i);
-      for (let j = jFrom; j <= jTo; j++) {
-        const row = j * ns;
+      boxBestOf.fill(Infinity);
+      boxArgOf.fill(-1);
+      neutralBoxOf.fill(Infinity);
+      neutralArgOf.fill(-1);
+      if (!last) {
         for (let s = 1; s < ns; s++) {
-          const cond = condOf[s] ?? 0;
-          const ms = lt[(cond * n + i) * n + j] ?? Infinity;
+          const cost = stopCost[condOf[s] ?? 0] ?? Infinity;
           const nx = nextOf[s] ?? NS_GREEN;
-          let stay = node.terminal;
-          let boxBest = Infinity;
-          let boxArg = -1;
-          if (!last) {
-            stay = self[(j + 1) * ns + nx] ?? Infinity;
-            const cost = stopCost[cond] ?? Infinity;
-            for (let c = 0; c < kids.length; c++) {
-              const v = cost + (kids[c]?.next[nx] ?? Infinity);
-              if (v < boxBest) {
-                boxBest = v;
-                boxArg = c;
-              }
+          for (let c = 0; c < kids.length; c++) {
+            const v = cost + (kids[c]?.next[nx] ?? Infinity);
+            if (v < (boxBestOf[s] ?? Infinity)) {
+              boxBestOf[s] = v;
+              boxArgOf[s] = c;
             }
           }
+        }
+        if (neutral !== null) {
+          kinds.forEach(({ kind, after: afterKind }, k) => {
+            const cost = stopCost[kind.cond] ?? Infinity;
+            for (let c = 0; c < kids.length; c++) {
+              const kid = kids[c];
+              if (kid === undefined) continue;
+              const v = cost + afterKind(kid.next, 0);
+              if (v < (neutralBoxOf[k] ?? Infinity)) {
+                neutralBoxOf[k] = v;
+                neutralArgOf[k] = c;
+              }
+            }
+          });
+        }
+      }
+      // the 70 % limit: no lap starts on a set that has run its laps (the car's set: i laps since `fromLap`)
+      const jLast = node.tyre === null ? (i < w.limit ? jTo : jFrom - 1) : Math.min(jTo, w.limit - 1);
+      if (jLast < jTo) out.fill(Infinity, Math.max(jFrom, jLast + 1) * ns, (jTo + 1) * ns);
+      const lapAt = (cond: number): number => (cond * n + i) * n;
+      const at0 = lapAt(0);
+      const at1 = lapAt(1);
+      const at2 = lapAt(2);
+      for (let j = jFrom; j <= jLast; j++) {
+        const row = j * ns;
+        const nextRow = (j + 1) * ns;
+        const decided = (i * n + j) * ns;
+        for (let s = 1; s < ns; s++) {
+          const cond = condOf[s] ?? 0;
+          const ms = lt[(cond === 0 ? at0 : cond === 1 ? at1 : at2) + j] ?? Infinity;
+          const stay = last ? node.terminal : (self[nextRow + (nextOf[s] ?? NS_GREEN)] ?? Infinity);
+          const boxBest = boxBestOf[s] ?? Infinity;
           const boxes = boxBest < stay;
           out[row + s] = ms + (boxes ? boxBest : stay);
-          decisions[(i * n + j) * ns + s] = boxes ? boxArg : -1;
+          decisions[decided + s] = boxes ? (boxArgOf[s] ?? -1) : -1;
           if (i === 0) {
             solved.firstStay[s] = ms + stay;
             solved.firstBox[s] = ms + boxBest;
-            solved.firstBoxArg[s] = boxArg;
+            solved.firstBoxArg[s] = boxArgOf[s] ?? -1;
           }
         }
         let green = 0;
-        if (pGreen > 0) green += pGreen * (out[row + NS_NO_START] ?? Infinity);
-        for (let k = 0; k < scDur.length; k++) {
-          const p = pSc * (scDur[k] ?? 0);
-          if (p > 0) green += p * (out[row + scState + k] ?? Infinity);
-        }
-        for (let k = 0; k < vscDur.length; k++) {
-          const p = pVsc * (vscDur[k] ?? 0);
-          if (p > 0) green += p * (out[row + vscState + k] ?? Infinity);
-        }
+        for (let g = 0; g < greens; g++) green += (greenWeights[g] ?? 0) * (out[row + (greenStates[g] ?? 0)] ?? Infinity);
         out[row + NS_GREEN] = green;
-        if (solved.neutral !== null) keepNeutral(solved, kids, i, j, last, lt, self);
+        if (neutral === null) continue;
+        // an SC or VSC starting this lap, its length by its pmf: staying out and (where kept) boxing onto the best child
+        const at = i * n + j;
+        for (let k = 0; k < kinds.length; k++) {
+          const entry = kinds[k];
+          if (entry === undefined) continue;
+          const target = neutral[entry.kind.key];
+          const ms = lt[(entry.kind.cond === 1 ? at1 : at2) + j] ?? Infinity;
+          if (last) {
+            target.stay[at] = ms + node.terminal;
+            continue;
+          }
+          target.stay[at] = ms + entry.after(self, nextRow);
+          const arg = neutralArgOf[k] ?? -1;
+          if (target.box === null || target.boxArg === null || arg < 0) continue;
+          target.box[at] = ms + (neutralBoxOf[k] ?? Infinity);
+          target.boxArg[at] = arg;
+        }
       }
       if (i === 0) solved.first.set(out.subarray(0, ns));
       const jEntry = node.tyre === null ? i : 0;
@@ -365,7 +451,7 @@ export function solveGraph(input: DpInput, layout: Layout, nodes: readonly DpNod
     }
     for (const w of works) [w.cur, w.next] = [w.next, w.cur];
   }
-  return { nodes: works.map((w) => w.solved), lapTimes: tables };
+  return { nodes: works.map((w) => w.solved), lapTimes: tables, layout };
 }
 
 /** The value at `fromLap` of a solved node, its first lap's action free (`'free'`), forced to box or to stay. */
@@ -436,12 +522,12 @@ export function pathFrom(input: DpInput, layout: Layout, graph: GraphSolution, f
   return stops;
 }
 
-/** The feasible plans of a plan-graph solve, best first: per sequence root its expected time and its green path. */
-export function plansOf(input: DpInput, layout: Layout, graph: GraphSolution, roots: readonly number[]): DpPlan[] {
-  const plans: DpPlan[] = [];
+/** The feasible plans of a plan-graph solve, best first: per sequence root its expected time, its green path and its root. */
+export function plansOf(input: DpInput, layout: Layout, graph: GraphSolution, roots: readonly number[]): (Play & { root: number })[] {
+  const plans: (Play & { root: number })[] = [];
   for (const root of roots) {
     const expectedMs = valueAtStart(input, layout, nodeAt(graph, root), 'free');
-    if (Number.isFinite(expectedMs)) plans.push({ stops: greenPath(input, layout, graph, root), expectedMs });
+    if (Number.isFinite(expectedMs)) plans.push({ stops: greenPath(input, layout, graph, root), expectedMs, root });
   }
   return plans.sort((a, b) => a.expectedMs - b.expectedMs);
 }

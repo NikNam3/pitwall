@@ -1,7 +1,7 @@
 // `undercut`'s cases (SP4.3b spec §9.1; C43): per rival and N = 1 … `maxLapsLater`, the candidate `scoreCalls` scores
 // (rival ahead: we box now, it N laps later on its next compound; rival behind: the mirror), until both have stopped
 // plus one lap; and a case's value from its per-scenario outcomes. Pure (C2).
-import { known, unknown, UNDERCUT_GAIN_BINS, type Known, type Ms, type Policy, type StartingPoint, type Trigger, type UndercutCase } from '@pitwall/domain';
+import { known, unknown, UNDERCUT_GAIN_BINS, type Known, type Ms, type Policy, type StartingPoint, type UndercutCase } from '@pitwall/domain';
 import { hasStopAhead, rivalNextCompound, type CallCandidate, type CallOutcome } from '../race-monte-carlo/index.ts';
 import { binShares } from '../shared/distribution.ts';
 import { lowerMedian } from '../shared/stats.ts';
@@ -34,7 +34,7 @@ export function ownStopsOf(sol: DpSolution): RivalStopsAt {
  * for an N whose gap lap (the later stop's out-lap done) is past the last lap, where the DP has no plan with our stop on
  * that lap (`bestWith` `null`: no set left), or where the rival makes no stop there (`stopsAt`).
  */
-export function casesOf(start: StartingPoint, sol: DpSolution, thresholds: readonly Trigger[], lap: number, rival: UndercutRivalInput, stopsAt: RivalStopsAt, maxLapsLater: number): CaseCall[] {
+export function casesOf(start: StartingPoint, sol: DpSolution, lap: number, rival: UndercutRivalInput, stopsAt: RivalStopsAt, maxLapsLater: number): CaseCall[] {
   const out: CaseCall[] = [];
   for (let n = 1; n <= Math.min(3, maxLapsLater); n++) {
     const later = lap + n;
@@ -48,7 +48,8 @@ export function casesOf(start: StartingPoint, sol: DpSolution, thresholds: reado
     out.push({
       rival,
       n: n as UndercutCase['n'],
-      candidate: { policy: policyOf(plan, thresholds), rival: { carId: rival.carId, policy: { stops, triggers: [] }, gapAtLap }, untilLap: gapAtLap },
+      // our plan with its own triggers (SP4.3c Task 19)
+      candidate: { policy: policyOf(plan), rival: { carId: rival.carId, policy: { stops, triggers: [] }, gapAtLap }, untilLap: gapAtLap },
     });
   }
   return out;
