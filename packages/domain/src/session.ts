@@ -54,6 +54,11 @@ export type SessionState = {
   airTempC: Celsius;
   forecast: ForecastSample[];
   forecastAccuracy: 'perfect' | 'approximate';
+  /**
+   * The forecast samples of the session after this one in the weekend's structure (SP4.3d spec §7.3); `[]` when the
+   * packet lists none or this is the last session.
+   */
+  nextForecast: ForecastSample[];
   /** The player's strategy; 0 = none. */
   pitWindow: { idealLap: number; latestLap: number; rejoinPosition: number };
   settings: GameSettings;

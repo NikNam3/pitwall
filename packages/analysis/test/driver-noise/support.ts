@@ -108,6 +108,7 @@ export function storedSession(race: BuilderRace, car: number, uid: string): Stor
     aiDifficulty: known(90, 0),
     totalLaps: known(race.laps, 0),
     projection: { ...last.history, spans, appendedAt: {} },
+    cars: [],
     humanSpans,
     track: unknown('notApplicable'),
   };

@@ -53,6 +53,7 @@ export * from './tyre-model/index.ts';
 export * from './tyre-wear/index.ts';
 export * from './weather/index.ts';
 export { weatherCalculator } from './weather/calculator.ts';
+export * from './weekend-pace/index.ts';
 export { tyreWearCalculator } from './tyre-wear/calculator.ts';
 export { alarmsCalculator } from './alarms/calculator.ts';
 export { incidentsCalculator } from './incidents/calculator.ts';

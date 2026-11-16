@@ -15,3 +15,13 @@ export type WeekendPhase =
 
 /** The phases a per-phase sub-machine can apply to (`appliesTo`, C15). */
 export type WeekendPhaseKind = 'practice' | 'qualifying' | 'race';
+
+/** The race a qualifying format plans (SP4.3d2 §7.0 rule 5): a sprint shootout plans the sprint, every other qualifying the grand prix. */
+export function raceFormatOf(f: QualifyingFormat): RaceFormat {
+  return f === 'sprintShootout' || f === 'shortSprintShootout' || f === 'oneShotSprintShootout' ? 'sprint' : 'grandPrix';
+}
+
+/** Whether a session in this weekend phase ends qualifying: a qualifying session whose segment is 3 or that has none (short, one-shot). */
+export function endsQualifying(p: WeekendPhase): boolean {
+  return p.kind === 'qualifying' && (p.segment === 3 || p.segment === undefined);
+}

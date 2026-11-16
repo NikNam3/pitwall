@@ -37,4 +37,5 @@ export const rejected = (message: string): string => `rejected: ${message}`;
 export const infeasible: Record<NonNullable<McRow['infeasible']>, string> = {
   stopLapPassed: 'its stop lap has passed: followed as far as it can be (box this lap)',
   noSetLeft: 'no set of that compound left',
+  startCompound: 'its start compound is not the one the car starts on',
 };

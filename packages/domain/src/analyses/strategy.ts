@@ -31,7 +31,7 @@ export type McRow = {
   se: number;
   tie: boolean;
   committed: boolean;
-  infeasible: null | 'stopLapPassed' | 'noSetLeft';
+  infeasible: null | 'stopLapPassed' | 'noSetLeft' | 'startCompound';
   /** The row's rank: tied rows share their leader's rank; then index + 1. */
   rank: number;
   /** Mean race time against `rows[0]` (ms). */
@@ -48,11 +48,24 @@ export type McRow = {
 
 /**
  * `strategy.plans`: per our car the ranked rows and the run's metadata (scenarios run, whether the cap was hit, the
- * candidate count, the hazard's state, a near-tie left unresolved at the cap, the car's position at the trigger).
+ * candidate count, the hazard's state, a near-tie left unresolved at the cap, the car's position at the trigger), the
+ * prefill of slots A and B (SP4.3d spec §7.1 step 5; `{}` without one) and the planning round's grid place, race laps
+ * and rain chance (`null` outside the planning round).
  */
 export type StrategyOutput = Record<
   CarId,
-  Known<{ rows: McRow[]; bestPerStops: Partial<Record<0 | 1 | 2 | 3, number>>; scenarios: number; capHit: boolean; candidates: number; hazard: Known<'ok'>; unresolvedTie: boolean; currentPosition: number }>
+  Known<{
+    rows: McRow[];
+    bestPerStops: Partial<Record<0 | 1 | 2 | 3, number>>;
+    scenarios: number;
+    capHit: boolean;
+    candidates: number;
+    hazard: Known<'ok'>;
+    unresolvedTie: boolean;
+    currentPosition: number;
+    prefill: Partial<Record<'A' | 'B', Policy>>;
+    planning: { gridPlace: Known<number>; laps: number; rainPct: Known<number> } | null;
+  }>
 >;
 
 /** `strategy.car`: one car's entry of `StrategyOutput`. */

@@ -77,6 +77,8 @@ export const sessionStateFrom = (p: SessionPacket): SessionState => ({
   airTempC: p.airTemperature,
   forecast: forecastOf(p),
   forecastAccuracy: pick(FORECAST_ACCURACY, p.forecastAccuracy),
+  // SP4.3d2 Task 4 keeps the next session's samples here.
+  nextForecast: [],
   pitWindow: {
     idealLap: p.pitStopWindowIdealLap,
     latestLap: p.pitStopWindowLatestLap,

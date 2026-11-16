@@ -30,6 +30,7 @@ const stored = (c: number, laps: LapRecord[], spans: Span[], humanSpans: StoredD
   aiDifficulty: known(90, 0),
   totalLaps: known(10, 0),
   projection: history({ laps, spans: { [CAR_DRIVER]: spans } }),
+  cars: [],
   humanSpans,
   track: unknown('notApplicable'),
 });

@@ -78,7 +78,16 @@ export type StartingPoint = {
   /** Built by `forecast-field` (plan review P9, C50). */
   interaction: RaceInteraction;
   lapModel: LapModelParams;
+  /**
+   * The grid start (SP4.3d spec §7.2); `null` for a start inside the race. `freeCompound[k] = 1`: car k's start
+   * compound comes from its policy's `startCompound`; `odds[k]`: car k's start compound is drawn from these options
+   * (`null`: neither, the car keeps `compound[k]`).
+   */
+  start: null | { freeCompound: Uint8Array; odds: (StartOption[] | null)[] };
 };
+
+/** One drawn start option of a rival on the grid: its compound, its chance and its stop laps on it (SP4.3d spec §7.2). */
+export type StartOption = { compound: NoiseCompound; p: number; stopLow: number; stopMid: number; stopHigh: number };
 
 /** The lap model's parameters (spec 6.2). */
 export type LapModelParams = {

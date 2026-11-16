@@ -24,6 +24,8 @@ const isLossy = (feed: FeedMetricsView): boolean =>
 export const feedStatusOf = (feedId: FeedId, feed: FeedMetricsView, sessionEnded?: boolean): FeedStatus => ({
   feedId,
   ...(sessionEnded !== undefined && { sessionEnded }),
+  // SP4.3d2 Task 3 sets it from a session's end until the next session's first packet
+  betweenSessions: false,
   connected: feed.connected,
   stale: isStale(feed),
   lossPercent: feed.lossPercent,

@@ -71,7 +71,7 @@ function linkedSession(slot: StoredSlot): LinkedSession | undefined {
     rulesVersion: row.rulesVersion,
     stored: {
       session: slot.session, carId: slot.carId, startedAt: row.startedAt, phase: row.phase, aiDifficulty: row.aiDifficulty,
-      totalLaps: totalLapsOf(row), projection: row.projection, humanSpans: slot.humanSpans, track: row.track,
+      totalLaps: totalLapsOf(row), projection: row.projection, cars: row.cars.map(({ carId, carKey }) => ({ carId, carKey })), humanSpans: slot.humanSpans, track: row.track,
     },
   };
 }

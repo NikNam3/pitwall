@@ -256,7 +256,7 @@ function runPart(input: StrategyInput, rng: Rng): StrategyOutput {
     }),
   );
   const currentPosition = input.positions[final.car] ?? orderPlaceOf(s.value, final.car);
-  out[final.car] = known({ rows, bestPerStops, scenarios: r.scenarios, capHit: r.capHit, candidates: own.candidates.length, hazard: hazardState, unresolvedTie: r.unresolvedTie, currentPosition }, s.at);
+  out[final.car] = known({ rows, bestPerStops, scenarios: r.scenarios, capHit: r.capHit, candidates: own.candidates.length, hazard: hazardState, unresolvedTie: r.unresolvedTie, currentPosition, prefill: {}, planning: null }, s.at);
   return out;
 }
 

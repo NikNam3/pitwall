@@ -162,7 +162,9 @@ export class WsServer {
         // every other one the UI state's.
         const { action } = message;
         // The driver-profile actions are the profile store's (C62c).
-        const owner = action.kind === 'calibration.choose'
+        // `plan.accept` and the planning round's `plans.prepare.*` have no owner yet (SP4.3d2 Tasks 10, 11): `notSupported`.
+        const owner = action.kind === 'plan.accept' || action.kind.startsWith('plans.prepare.') ? undefined
+          : action.kind === 'calibration.choose'
           ? this.options.choose?.(action)
           : isPlanAction(action) ? this.options.plan?.(action)
           : action.kind === 'session.end' ? this.options.endSession?.(action)

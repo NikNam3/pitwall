@@ -155,6 +155,8 @@ export function table(spec: TableSpec = {}): PlanTable {
     hazard: known('ok' as const, at),
     unresolvedTie: openTie,
     currentPosition: OUR_PLACE,
+    prefill: {},
+    planning: null,
   };
 }
 

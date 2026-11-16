@@ -221,6 +221,8 @@ export function buildStartingPoint(view: AsOfView, outputs: ReadonlyMap<Calculat
     drs: { rangeMs: drsConfig.drsRangeMs, fromLap: drsConfig.drsFromLap },
     interaction,
     lapModel,
+    // a start inside the race (the grid start is SP4.3d2 Task 7's entry)
+    start: null,
   };
 
   // the declared stand-ins (C3, final review F4): an unknown compound's, an unknown driver's; a car without a lap takes

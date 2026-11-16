@@ -122,7 +122,7 @@ export function board(spec: BoardSpec = {}): BoardTable {
     if (index < 0) throw new Error(`no row for ${n} stops`);
     bestPerStops[n] = index;
   }
-  return { rows, bestPerStops, scenarios, capHit: false, candidates: 14, hazard: known('ok' as const, at), unresolvedTie: false, currentPosition: OUR_PLACE };
+  return { rows, bestPerStops, scenarios, capHit: false, candidates: 14, hazard: known('ok' as const, at), unresolvedTie: false, currentPosition: OUR_PLACE, prefill: {}, planning: null };
 }
 
 /** The job's result as `strategy.car` publishes it (C51). */

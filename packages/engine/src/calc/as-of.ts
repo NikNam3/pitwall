@@ -2,7 +2,7 @@
 // and the situation at N, with the run's fixed inputs; its scheduled run calls it at the current frame (`asOfNow`).
 // `runAsOf` runs several such units in dependency order, so a profile aggregate or the scoreboard can rebuild a past
 // frame's outputs.
-import { known, unknown, type CarId, type FrameNumber, type GameSettings, type Known, type MachineId, type OpenSpan, type SessionTime, type Span } from '@pitwall/domain';
+import { known, unknown, type CarId, type CarKey, type FrameNumber, type GameSettings, type Known, type MachineId, type OpenSpan, type SessionTime, type Span } from '@pitwall/domain';
 import type { DeepReadonly } from '../util/deep-readonly.ts';
 import type { LiveState } from '../state/live-state.ts';
 import type { Projection } from '../log/types.ts';
@@ -20,7 +20,7 @@ export type LiveSets = DeepReadonly<LiveState>['cars'][number]['tyres']['sets'];
  * stored view has none (rulings R17, R19).
  */
 /** The session's weather now and its forecast, as the live state holds them. */
-export type LiveWeather = Pick<DeepReadonly<LiveState>['session'], 'weather' | 'forecast' | 'forecastAccuracy'>;
+export type LiveWeather = Pick<DeepReadonly<LiveState>['session'], 'weather' | 'forecast' | 'forecastAccuracy' | 'nextForecast'>;
 
 export type AsOfFixed = {
   totalLaps: Known<number>;
@@ -31,6 +31,11 @@ export type AsOfFixed = {
   aiDifficulty: Known<number>;
   /** The lobby's safety-car setting (fixed for the session; SP4.3b spec §5.2's lobby factor); absent reads as not received. */
   safetyCar: Known<GameSettings['safetyCar']>;
+  /**
+   * Team and race number per car slot, from Participants (C62; `null` for an empty slot): how a unit matches the
+   * session's slots to `view.weekend`'s. `unknown('notReceived')` before Participants.
+   */
+  carKeys: Known<readonly (CarKey | null)[]>;
   setsNow: readonly LiveSets[] | null;
   weatherNow: LiveWeather | null;
 };
@@ -47,6 +52,22 @@ export type AsOfView = Pick<EngineView, 'config' | 'priors' | 'drivers' | 'track
 
 /** A unit's "as of" form, as `runAsOf` runs it: its id, its reads (the order), and the form. */
 export type AsOfUnit = { id: CalculatorId; reads: readonly Dependency[]; asOf(view: AsOfView): unknown };
+
+/** The live state's team and race number per slot (C62): `null` for a slot Participants left empty; unknown before Participants. */
+const carKeysNow = (view: EngineView): Known<readonly (CarKey | null)[]> => {
+  const at = view.live.cars.reduce<number | undefined>((t, c) => (c.updatedAt.participants === undefined ? t : Math.max(t ?? 0, c.updatedAt.participants)), undefined);
+  if (at === undefined) return unknown('notReceived');
+  return known(view.live.cars.map((c) => (c.updatedAt.participants === undefined ? null : { teamId: c.identity.teamId, raceNumber: c.identity.raceNumber })), at);
+};
+
+/** A stored session's team and race number per slot (C62), `null` for a slot it stored none for; unknown without any. */
+const carKeysStored = (session: StoredDriverSession): Known<readonly (CarKey | null)[]> => {
+  if (session.cars.length === 0) return unknown('notReceived');
+  const slots = Math.max(...session.cars.map((c) => c.carId)) + 1;
+  const keys: (CarKey | null)[] = Array.from({ length: slots }, () => null);
+  for (const c of session.cars) keys[c.carId] = { teamId: c.carKey.teamId, raceNumber: c.carKey.raceNumber };
+  return known(keys, 0);
+};
 
 /**
  * The current view as an `AsOfView` (no cut). Every field is read from `view` only when the form reads it (getters), so
@@ -70,10 +91,11 @@ export function asOfNow(view: EngineView): AsOfView {
       get teammateCar() { const t = view.live.teammateCar; return t === undefined ? unknown('notApplicable') : known(t, view.live.sessionTime); },
       get aiDifficulty() { return known(view.live.session.settings.aiDifficulty, view.live.sessionTime); },
       get safetyCar() { return known(view.live.session.settings.safetyCar, view.live.sessionTime); },
+      get carKeys() { return carKeysNow(view); },
       get setsNow() { return view.live.cars.map((c) => c.tyres.sets); },
       get weatherNow() {
-        const { weather, forecast, forecastAccuracy } = view.live.session;
-        return { weather, forecast, forecastAccuracy };
+        const { weather, forecast, forecastAccuracy, nextForecast } = view.live.session;
+        return { weather, forecast, forecastAccuracy, nextForecast };
       },
     },
   };
@@ -144,6 +166,6 @@ export function asOfStored(session: StoredDriverSession, ctx: ProfileCtx): AsOfV
     track: session.track,
     weekend: undefined,
     outputs: new Map(),
-    fixed: { totalLaps: session.totalLaps, playerCar: known(session.session.feedCar, 0), teammateCar: unknown('notReceived'), aiDifficulty: session.aiDifficulty, safetyCar: unknown('notReceived'), setsNow: null, weatherNow: null },
+    fixed: { totalLaps: session.totalLaps, playerCar: known(session.session.feedCar, 0), teammateCar: unknown('notReceived'), aiDifficulty: session.aiDifficulty, safetyCar: unknown('notReceived'), carKeys: carKeysStored(session), setsNow: null, weatherNow: null },
   };
 }

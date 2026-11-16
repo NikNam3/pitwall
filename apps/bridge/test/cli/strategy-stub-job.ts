@@ -42,7 +42,7 @@ export const STUB_ROWS: McRow[] = [
 ];
 
 /** The run's metadata of the first of our cars. */
-export const STUB_META = { scenarios: 1_234, capHit: true, candidates: 17, unresolvedTie: false, currentPosition: 8 } as const;
+export const STUB_META = { scenarios: 1_234, capHit: true, candidates: 17, unresolvedTie: false, currentPosition: 8, prefill: {}, planning: null } as const;
 
 /** The output for our cars: the first ranked, the other `insufficientData`. */
 export function stubOutput(ourCars: readonly CarId[]): StrategyOutput {
