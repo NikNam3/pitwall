@@ -283,6 +283,21 @@ export function spansOverlapping(
   return found;
 }
 
+/** A built-once coverage query: whether a kept span covers at least one frame of `[fromFrame, toFrame)` (C26). */
+export type Coverage = (fromFrame: FrameNumber | number, toFrame: FrameNumber | number) => boolean;
+
+/**
+ * `spansOverlapping(source, from, to, machine, carId).filter(keep).length > 0`, built once (SP4.3c Task 25s). Stub of
+ * the test phase: the implement phase builds it.
+ */
+export function coverageOf(
+  _source: { history: Pick<MembershipSource['history'], 'spans'>; situation?: Pick<Situation, 'byMachine'> },
+  _machine: MachineId,
+  _o: { carId?: CarId; keep?: (span: DeepReadonly<OpenSpan>) => boolean } = {},
+): Coverage {
+  throw new Error('coverageOf: not implemented (SP4.3c Task 25s)');
+}
+
 /**
  * The spans a fact belongs to (C26), from the frame it describes: of `situationAt(source, fact.frame)`, the spans of
  * session-scoped machines (the clock's included) and, for a car's fact, its car's spans of car-scoped machines. Each
