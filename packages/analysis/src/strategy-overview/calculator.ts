@@ -5,10 +5,9 @@
 // Compound and tyre age are the live state's values; stops and past stints the projection's closed stints. Our rows
 // carry our plans from the projection's decisions (R4): A the active plan, B the first other saved slot. Quick (C31).
 import {
-  activeSlot,
+  activePlan,
   carStatusSpans,
   known,
-  latestPlan,
   ourCars,
   planSlots,
   unknown,
@@ -41,15 +40,14 @@ const B_ORDER: readonly Slot[] = ['B', 'C', 'G1', 'G2', 'A'];
 
 const CAR_ROWS = { [carStatusSpans.machine]: STRATEGY_OVERVIEW_BEHAVIOUR[carStatusSpans.machine] ?? {} };
 
-/** Our car's plans (R4): A the active slot's policy (without a slot, the committed plan's), B the first other saved slot. */
+/** Our car's plans (R4, R32): A the active plan (`activePlan`'s policy), B the first saved slot other than its slot. */
 function plansOf(view: EngineView, car: CarId): { a: Policy | null; b: Policy | null } {
   // the decisions are facts, never changed (C24): read as the plain records they are
   const history = view.history as { readonly decisions: readonly DecisionRecord[] };
   const slots = planSlots(history, car);
-  const active = activeSlot(history, car);
-  const a = (active === null ? undefined : slots[active]) ?? latestPlan(history, car);
-  const bSlot = B_ORDER.find((s) => s !== active && slots[s] !== undefined);
-  return { a, b: bSlot === undefined ? null : (slots[bSlot] ?? null) };
+  const active = activePlan(history, car);
+  const bSlot = B_ORDER.find((s) => s !== active?.slot && slots[s] !== undefined);
+  return { a: active?.policy ?? null, b: bSlot === undefined ? null : (slots[bSlot] ?? null) };
 }
 
 /** Per car its closed stints in log order. */

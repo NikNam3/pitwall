@@ -63,16 +63,16 @@ export type CarPlan = {
 const keyOf = (policy: Policy): string => JSON.stringify(policy);
 
 /**
- * Car `car`'s candidates (SP4.3d spec §5.3): the active plan first, as far as it can be followed (its slot: the one it
- * was activated from while that slot still holds it, else the first slot holding it, else none: source `committed`);
+ * Car `car`'s candidates (SP4.3d spec §5.3): the active plan first, as far as it can be followed, in the slot
+ * `activePlan` gives it (R32, carried by the input; in no slot: source `committed`);
  * then each other saved slot as far as it can be followed (source `game` for G1 and G2, else `plan`); then the search's
  * own candidates `own` minus every policy already a candidate (a DP plan equal to a slot is that slot's row).
  */
 function carPlanOf(field: StartingPoint, car: CarId, own: McCandidate[], original: Policy | null, slots: NonNullable<StrategyInput['slots']>[CarId] | undefined): CarPlan {
   const saved = slots?.saved ?? {};
   const sourceOf = (slot: Slot): McCandidate['source'] => (slot.startsWith('G') ? 'game' : 'plan');
-  const holds = (slot: Slot): boolean => original !== null && saved[slot] !== undefined && keyOf(saved[slot]) === keyOf(original);
-  const active = slots?.active !== undefined && slots.active !== null && holds(slots.active) ? slots.active : (PLAN_SLOTS.find(holds) ?? null);
+  // the active plan's slot is `activePlan`'s (R32, via the input); none without a committed plan
+  const active = original === null ? null : (slots?.active ?? null);
   const candidates: McCandidate[] = [];
   const bySlot: CarPlan['slots'] = new Map();
   let followed: Policy | null = null;
