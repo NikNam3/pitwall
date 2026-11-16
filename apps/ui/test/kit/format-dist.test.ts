@@ -7,7 +7,7 @@
 //  - `formatPoints(x)`: points to one decimal, `6.25` -> `6.3`;
 //  - each returns '' for a non-finite value (as the kit's other formats).
 import { describe, expect, it } from 'vitest';
-import { formatExpectedPlace, formatPlacesGained, formatPoints, formatShare, MINUS } from '../../src/kit/values/format.ts';
+import { formatExpectedPlace, formatPlacesGained, formatPoints, formatShare, formatShareNumber, MINUS } from '../../src/kit/values/format.ts';
 
 describe('strategy formats', () => {
   it('formatExpectedPlace, formatPlacesGained, formatShare and formatPoints', () => {
@@ -25,5 +25,10 @@ describe('strategy formats', () => {
     expect(formatPoints(6.25)).toBe('6.3');
     expect(formatPoints(0)).toBe('0.0');
     for (const f of [formatExpectedPlace, formatPlacesGained, formatShare, formatPoints]) expect(f(Number.NaN)).toBe('');
+  });
+  it('formatShareNumber: a share as a whole percent without the sign', () => {
+    expect(formatShareNumber(0.8)).toBe('80');
+    expect(formatShareNumber(0.755)).toBe(formatShare(0.755).slice(0, -1));
+    expect(formatShareNumber(Number.NaN)).toBe('');
   });
 });
