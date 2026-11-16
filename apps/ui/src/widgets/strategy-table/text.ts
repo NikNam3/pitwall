@@ -7,7 +7,7 @@ type RuleName = NonNullable<McRow['rule']>;
 /** Column headers: `#`, `SRC`, `STOPS`, `E[POS]`, `E[PTS]`, `ΔTIME`, `ΔPLAN`. */
 export const headers = { rank: '#', src: 'SRC', stops: 'STOPS', ePos: 'E[POS]', ePts: 'E[PTS]', dLead: 'ΔTIME', dPlan: 'ΔPLAN' };
 /** The source words: `dp`, `nbr`, `rule`, `plan`. */
-export const source: Record<McSource, string> = { dp: 'dp', neighbour: 'nbr', rule: 'rule', committed: 'plan' };
+export const source: Record<McSource, string> = { dp: 'dp', neighbour: 'nbr', rule: 'rule', committed: 'plan', plan: 'plan', game: 'game' };
 /** The rules' names in a rule candidate's hover. */
 const ruleName: Record<RuleName, string> = {
   mirrorAhead: 'mirror the car ahead',

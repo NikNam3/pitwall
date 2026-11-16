@@ -198,7 +198,7 @@ function runPart(input: StrategyInput, rng: Rng): StrategyOutput {
   const r = raceMonteCarlo(final.mc, rng, final.mc.config.maxScenarioPolicies)[final.car] as McResult[CarId];
   const rows = withTableFields(r.rows.map((row): McRow => (row.committed ? { ...row, policy: own.original ?? row.policy, source: 'committed', infeasible: own.infeasible } : row)));
   const currentPosition = input.positions[final.car] ?? orderPlaceOf(s.value, final.car);
-  out[final.car] = known({ rows, scenarios: r.scenarios, capHit: r.capHit, candidates: own.candidates.length, hazard: hazardState, unresolvedTie: r.unresolvedTie, currentPosition }, s.at);
+  out[final.car] = known({ rows, bestPerStops: {}, scenarios: r.scenarios, capHit: r.capHit, candidates: own.candidates.length, hazard: hazardState, unresolvedTie: r.unresolvedTie, currentPosition }, s.at);
   return out;
 }
 

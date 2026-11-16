@@ -3,7 +3,7 @@
 // beyond `zDrop` SEs of the paired difference), the top `rescoreTop` scored again together up to a common count. The cap
 // is a count of `raceForecast` calls (C2: no clock), shared by our cars and charged per call made (Task 23b); `scoreAll`
 // scores every candidate on the same scenarios, nothing merged or dropped.
-import { NOISE_COMPOUNDS, type CarId, type McRow, type Policy } from '@pitwall/domain';
+import { NOISE_COMPOUNDS, type CarId, type McRow, type Policy, unknown } from '@pitwall/domain';
 import type { Rng } from '@pitwall/engine/readers';
 import { RESCORE_SHARE } from './constants.ts';
 import { paired, rank, ties, type Scored } from './rank.ts';
@@ -173,6 +173,9 @@ function rowsOf(run: Run, input: McInput, car: number, cands: readonly Cand[], r
       se: diff.se,
       tie: ranking.tie[i] ?? false,
       committed: isCommitted,
+      slot: null,
+      diffPlan: unknown('notApplicable'),
+      sePlan: unknown('notApplicable'),
       infeasible: isCommitted ? infeasible(run, car, x.c.policy) : null,
       // placeholders until SP4.3b2 Task 6: the rank by place, no deltas
       rank: index + 1,

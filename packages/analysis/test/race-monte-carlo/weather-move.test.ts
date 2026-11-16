@@ -17,9 +17,11 @@ import { drawnScenario, fieldPositions, raceMonteCarlo, scoreAll, type FieldInpu
 import { LAP_MODEL, NOISY, startingPoint, type CarSpec } from '../race-forecast/start.ts';
 import { byCar, hazard, mcInput, NO_STOP, RIVAL_RULES, stopAt } from './support.ts';
 
-/** A value as text, typed arrays as plain arrays, keys in insertion order (the unit's own order, part of "bit-identical"). */
+/** A value as text, typed arrays as plain arrays, keys in insertion order (the unit's own order, part of "bit-identical"); the row keys SP4.3d1 Task 5 added (`slot`, `diffPlan`, `sePlan`) are left out, so the goldens stand. */
 const stableText = (value: unknown): string =>
-  JSON.stringify(value, (_key, v: unknown) => (ArrayBuffer.isView(v) && !(v instanceof DataView) ? Array.from(v as unknown as ArrayLike<number>) : v));
+  JSON.stringify(value, (key, v: unknown) =>
+    key === 'slot' || key === 'diffPlan' || key === 'sePlan' ? undefined : ArrayBuffer.isView(v) && !(v instanceof DataView) ? Array.from(v as unknown as ArrayLike<number>) : v,
+  );
 
 const sha = (value: unknown): string => createHash('sha256').update(stableText(value)).digest('hex');
 

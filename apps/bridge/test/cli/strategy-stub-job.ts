@@ -23,6 +23,9 @@ function row(rank: number, source: McRow['source'], over: Partial<McRow>): McRow
     rank: rank + 1,
     deltaLeaderMs: 0,
     deltaPlanMs: null,
+    slot: null,
+    diffPlan: unknown('notApplicable'),
+    sePlan: unknown('notApplicable'),
     rule: null,
     ...over,
   };
@@ -45,7 +48,7 @@ export const STUB_META = { scenarios: 1_234, capHit: true, candidates: 17, unres
 export function stubOutput(ourCars: readonly CarId[]): StrategyOutput {
   const out: StrategyOutput = {};
   ourCars.forEach((car, i) => {
-    out[car] = i === 0 ? known({ rows: STUB_ROWS, ...STUB_META, hazard: known('ok', 0) }, 0) : unknown('insufficientData');
+    out[car] = i === 0 ? known({ rows: STUB_ROWS, bestPerStops: {}, ...STUB_META, hazard: known('ok', 0) }, 0) : unknown('insufficientData');
   });
   return out;
 }
