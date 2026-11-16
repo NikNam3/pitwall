@@ -3,6 +3,7 @@
 import type { Component } from 'svelte';
 import type { CarRef, Fold, TimeWindow, TopicName, TopicParams, TopicValue, UiAction } from '@pitwall/contracts';
 import type { CarId, FeedId } from '@pitwall/domain';
+import type { WidgetCommandId } from './command-types.ts';
 
 /** The link group of a panel, resolved to concrete cars and a window. */
 export type ResolvedLink = { group: number; feedId: FeedId; primary: CarId; compare: CarId[]; window: TimeWindow };
@@ -58,6 +59,8 @@ export type WidgetDecl<D extends Record<string, AnyDataDecl>, O extends Record<s
   readonly sizes: Record<string, SizeMode>;
   /** The uiAction kinds the widget sends (C74); the panel passes them to `setUiActions`. `[]` when it sends none. */
   readonly actions: readonly UiAction['kind'][];
+  /** The shell commands the widget invokes by id with arguments (C72, C74); the panel passes them to `setWidgetCommands`. */
+  readonly commands: readonly WidgetCommandId[];
 };
 
 /** The size a component gets (spec 4.4): the mode, cells, pixels and device pixel ratio. */

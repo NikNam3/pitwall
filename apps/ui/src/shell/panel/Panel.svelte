@@ -6,6 +6,7 @@
   import { onDestroy, untrack, type Component } from 'svelte';
   import type { TopicStore } from '../../connection/topic-store.svelte.ts';
   import { setUiActions } from '../../kit/actions.ts';
+  import { setWidgetCommands, type InvokeCommand } from '../../kit/commands.ts';
   import Gear from '../../kit/icons/Gear.svelte';
   import { measure, type Measured } from '../../kit/size/measure.ts';
   import { cellBox, pickMode, toCells } from '../../kit/size/size.ts';
@@ -41,6 +42,8 @@
     defaultFeed?: FeedId | undefined;
     /** Sends a UI action to the bridge; resolves with its outcome (C73). */
     send?: (action: UiAction) => Promise<ActionOutcome>;
+    /** Invokes a shell command by id with arguments (the registry's); resolves with its outcome (C72, C73). */
+    invoke?: InvokeCommand;
     /** Saves new option values for this panel with its window. */
     onOptions?: (options: Record<string, unknown>) => void;
     /** Saves the link group this panel follows with its window. */
@@ -62,6 +65,7 @@
     group,
     defaultFeed,
     send = () => Promise.resolve({ ok: true }),
+    invoke = () => Promise.resolve({ ok: true }),
     onOptions = () => {},
     onLinkGroup = () => {},
     inspection,
@@ -134,6 +138,10 @@
   // A panel's widget is fixed for its life (a new widget is a new panel), so its declared kinds are read once.
   // svelte-ignore state_referenced_locally
   setUiActions((action) => send(action), widget?.decl.actions ?? []);
+  // Widgets invoke the shell commands their declaration lists (C72, C74) through the panel, by id with arguments; the
+  // registry's command sends the uiAction.
+  // svelte-ignore state_referenced_locally
+  setWidgetCommands((id, args) => invoke(id, args), widget?.decl.commands ?? []);
 
   const panelStale = providePanelStale({ cadenceMs: () => feed?.cadenceMs });
 
