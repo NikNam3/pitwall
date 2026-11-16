@@ -211,6 +211,11 @@ export class SessionProcessor {
     return { setId: start?.setId ?? null, snapshot: start?.fingerprint ?? null };
   }
 
+  /** The decisions of the run's projection (C28): a flashback's void leaves out the ones it undid (C27a). */
+  get decisions(): readonly DeepReadonly<DecisionRecord>[] {
+    return this.#runner.state.history.decisions;
+  }
+
   /** The race's laps as the live state holds them now (the Session packet's `totalLaps`). */
   get totalLaps(): number {
     return this.#runner.state.session.totalLaps;

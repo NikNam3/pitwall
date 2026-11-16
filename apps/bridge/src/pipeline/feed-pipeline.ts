@@ -3,7 +3,8 @@
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { ConfigEffectiveValue } from '@pitwall/contracts';
-import { carId, sessionUidString, toSessionTime, type CalibrationActiveValue, type FeedId, type Known, type LiveSeat, type PriorsSnapshot, type ProfileSnapshot, type RunPriors, type SessionRef, type SessionTime, type TeamId, type TrackFile } from '@pitwall/domain';
+import type { DeepReadonly } from '@pitwall/engine/readers';
+import { carId, sessionUidString, toSessionTime, type CalibrationActiveValue, type DecisionRecord, type FeedId, type Known, type LiveSeat, type PriorsSnapshot, type ProfileSnapshot, type RunPriors, type SessionRef, type SessionTime, type TeamId, type TrackFile } from '@pitwall/domain';
 import type { CalibrationStore } from '../calibration/store.ts';
 import type { ProfileStore, SlotIdentity } from '../drivers/store.ts';
 import { profilesSidecarPath, recordingProfiles } from './profile-sidecar.ts';
@@ -378,8 +379,14 @@ export class FeedPipeline {
     return this.#session?.totalLaps;
   }
 
+  /** The running session's projected decisions (C28); `undefined` without a running session. */
+  planDecisions(): readonly DeepReadonly<DecisionRecord>[] | undefined {
+    return this.#session?.decisions;
+  }
+
   /**
-   * A plan decision for the running session (`plan.commit`, `plan.clear`; C76, SP4.3b spec §8.2), as `PlanRouting` hands
+   * A plan decision for the running session (`plan.commit`, `plan.clear`, `plan.save`, `plan.remove`, `plan.activate`;
+   * C76, SP4.3b spec §8.2, SP4.3d spec §6.1), as `PlanRouting` hands
    * it to each of the team's feeds: it goes to the runner with the next frame and, placed at the session's record index,
    * to the decisions sidecar. Without a running session it is not taken. During a restart's restore (C59) it is answered
    * ok and queued: it is committed once the run is live (`#applyQueued`).

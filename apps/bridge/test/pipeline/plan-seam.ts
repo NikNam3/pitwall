@@ -15,7 +15,19 @@
 //    team at its first frame with its team known, and writes it to its own sidecar.
 // A replay feeds the plan decisions of a recording's decisions sidecar back at their record index, as it does
 // `calibrationChosen` (`recordingDecisions`, `FeedPipelineOptions.recorded`).
-import type { CarId, FeedId, Policy } from '@pitwall/domain';
+//
+// SP4.3d1 Task 10 (C1a, C27a, C73, C76; SP4.3d spec §6.1) widens `commit(action)` to the slot actions, routed the same
+// way to every feed of the team, each with its engine's next frame and into its own sidecar:
+//  - `plan.save { carId, slot, policy }` → `planSaved { carId, slot, policy }`;
+//  - `plan.remove { carId, slot }` → `planRemoved { carId, slot }`; removing the car's active slot (`activeSlot` over the
+//    feed's projection) is rejected (`invalid`): activate another or `plan.clear` first;
+//  - `plan.activate { carId, slot }` → `planCommitted { carId, policy, slot }` with the slot's policy read by `planSlots`
+//    over the committing feed's projection, never from the bridge's memory, so a `planSaved` a flashback voided is never
+//    activated (C27a); an empty slot is rejected (`invalid`);
+//  - the range check (C73): every stop lap within the race's laps, compounds of `NOISE_COMPOUNDS`, slots of `PLAN_SLOTS`;
+//    else `{ ok: false, reason: 'invalid', message }` and nothing is stored or handed on;
+//  - a feed that joins the team later is handed, per car, its newest plan decision per slot and its active plan.
+import type { CarId, FeedId, Policy, Slot } from '@pitwall/domain';
 import type { DecisionResult, FeedPipeline } from '../../src/pipeline/feed-pipeline.ts';
 import type { TeamFeeds } from '../../src/pipeline/team-feeds.ts';
 
@@ -25,7 +37,10 @@ import type { TeamFeeds } from '../../src/pipeline/team-feeds.ts';
  */
 export type PlanAction =
   | { kind: 'plan.commit'; feedId: FeedId; carId: CarId; policy: Policy }
-  | { kind: 'plan.clear'; feedId: FeedId; carId: CarId };
+  | { kind: 'plan.clear'; feedId: FeedId; carId: CarId }
+  | { kind: 'plan.save'; feedId: FeedId; carId: CarId; slot: Slot; policy: Policy }
+  | { kind: 'plan.remove'; feedId: FeedId; carId: CarId; slot: Slot }
+  | { kind: 'plan.activate'; feedId: FeedId; carId: CarId; slot: Slot };
 
 export type PlanRouting = { commit(action: PlanAction): DecisionResult };
 type PlanRoutingClass = new (o: { teams: TeamFeeds; pipelines: ReadonlyMap<FeedId, FeedPipeline> }) => PlanRouting;
