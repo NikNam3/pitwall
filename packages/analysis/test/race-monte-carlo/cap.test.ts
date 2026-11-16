@@ -38,4 +38,14 @@ describe('race-monte-carlo: the cap', () => {
       expect(carOf(result, 2).capHit || carOf(result, 3).capHit).toBe(true);
     }
   });
+
+  // SP4.3c Task 21 (supervisor fix): `pitwall strategy --runs n` lifts the cap to Number.MAX_SAFE_INTEGER (R40); the
+  // outcome arrays grow with the scenarios run, never sized by the cap
+  it('a lifted cap allocates by the scenarios run: n0 past the first capacity runs and is not cap-hit', () => {
+    const start = startingPoint({ lapsTotal: 8, cars: Array.from({ length: 4 }, (_, i) => ({ ...NOISY, retireRate: 0, gapMs: 1_500 * i })), ours: [2] });
+    const cap = Number.MAX_SAFE_INTEGER;
+    const result = raceMonteCarlo(mcInput(start, { 2: [stopAt(3), stopAt(5, 'medium')] }, { config: { n0: 1_500, maxScenarioPolicies: cap } }), createRng(72), cap);
+    expect(carOf(result, 2).scenarios).toBeGreaterThanOrEqual(1_500);
+    expect(carOf(result, 2).capHit).toBe(false);
+  });
 });
