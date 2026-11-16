@@ -2,7 +2,7 @@
 // newest plan decision in the projection's decisions, `null` when that one is a `planCleared` or the car has none. A
 // `calibrationChosen` and another car's plan decisions do not count. Readers get the plan here, never by their own matching.
 import { describe, expect, it } from 'vitest';
-import { activeSlot, carId, latestPlan, planSlots, type DecisionRecord, type Policy, type Slot } from '../src/index.ts';
+import { activePlan, activeSlot, carId, latestPlan, planSlots, type DecisionRecord, type Policy, type Slot } from '../src/index.ts';
 
 const CAR = carId(0);
 const MATE = carId(1);
@@ -59,5 +59,25 @@ describe('planSlots and activeSlot (C25, C76; SP4.3d spec §5)', () => {
     expect(activeSlot(history(activated(CAR, 'B', TWO_STOP, 2), cleared(CAR, 3)), CAR)).toBeNull();
     expect(activeSlot(history(activated(CAR, 'B', TWO_STOP, 2), saved(CAR, 'A', POLICY, 3)), CAR)).toBe('B');
     expect(latestPlan(history(activated(CAR, 'B', TWO_STOP, 2), saved(CAR, 'A', POLICY, 3)), CAR)).toEqual(TWO_STOP);
+  });
+});
+
+// SP4.3d1 R32: the active plan and its slot, one owner for the strategy job, the overview and the plan board (C43)
+describe('activePlan', () => {
+  const saved = (slot: Slot, policy: Policy, frame: number): DecisionRecord => ({ kind: 'planSaved', carId: CAR, slot, policy, frame });
+  const activated = (slot: Slot, policy: Policy, frame: number): DecisionRecord => ({ kind: 'planCommitted', carId: CAR, policy, slot, frame });
+  it('null without a committed plan, and after planCleared', () => {
+    expect(activePlan({ decisions: [saved('A', POLICY, 1)] }, CAR)).toBeNull();
+    expect(activePlan({ decisions: [saved('A', POLICY, 1), activated('A', POLICY, 2), cleared(CAR, 3)] }, CAR)).toBeNull();
+  });
+  it('the slot it was activated from while that slot holds it', () => {
+    expect(activePlan({ decisions: [saved('A', POLICY, 1), saved('B', POLICY, 2), activated('B', POLICY, 3)] }, CAR)).toEqual({ policy: POLICY, slot: 'B' });
+  });
+  it('a slot saved again after its activation: the committed policy stands, in no slot', () => {
+    expect(activePlan({ decisions: [saved('A', POLICY, 1), activated('A', POLICY, 2), saved('A', TWO_STOP, 3)] }, CAR)).toEqual({ policy: POLICY, slot: null });
+  });
+  it('a commit without a slot: the first slot holding its policy, else none', () => {
+    expect(activePlan({ decisions: [saved('B', POLICY, 1), committed(CAR, POLICY, 2)] }, CAR)).toEqual({ policy: POLICY, slot: 'B' });
+    expect(activePlan({ decisions: [saved('B', TWO_STOP, 1), committed(CAR, POLICY, 2)] }, CAR)).toEqual({ policy: POLICY, slot: null });
   });
 });

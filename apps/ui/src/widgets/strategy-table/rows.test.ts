@@ -35,7 +35,7 @@ describe('strategy-table rows', () => {
     expect(list[at(rows, 'L20 H')]!.stops).toBe('L20 H');
     expect(list[at(rows, 'L16 H L31 M')]!.stops).toBe('L16 H L31 M');
     expect(list.map((r) => r.ePos)).toEqual(rows.map((r) => formatExpectedPlace(r.ePos)));
-    expect(list.map((r) => r.source.text)).toEqual(rows.map((r) => ({ dp: 'dp', neighbour: 'nbr', rule: 'rule', committed: 'plan' })[r.source]));
+    expect(list.map((r) => r.source.text)).toEqual(rows.map((r) => ({ dp: 'dp', neighbour: 'nbr', rule: 'rule', committed: 'plan', plan: 'plan', game: 'game' })[r.source]));
     expect(list.map((r) => r.bracket === null)).toEqual(rows.map((r) => !r.tie));
     expect(list.slice(0, 3).map((r) => [r.bracket?.first, r.bracket?.last])).toEqual([[true, false], [false, false], [false, true]]);
     expect(list[0]!.bracket).toMatchObject({ role: 'textDim', hover: text.tieHover });

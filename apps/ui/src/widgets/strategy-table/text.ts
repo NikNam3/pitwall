@@ -7,17 +7,19 @@ type RuleName = NonNullable<McRow['rule']>;
 /** Column headers: `#`, `SRC`, `STOPS`, `E[POS]`, `E[PTS]`, `ΔTIME`, `ΔPLAN`. */
 export const headers = { rank: '#', src: 'SRC', stops: 'STOPS', ePos: 'E[POS]', ePts: 'E[PTS]', dLead: 'ΔTIME', dPlan: 'ΔPLAN' };
 /** The source words: `dp`, `nbr`, `rule`, `plan`. */
-export const source: Record<McSource, string> = { dp: 'dp', neighbour: 'nbr', rule: 'rule', committed: 'plan' };
+export const source: Record<McSource, string> = { dp: 'dp', neighbour: 'nbr', rule: 'rule', committed: 'plan', plan: 'plan', game: 'game' };
 /** The rules' names in a rule candidate's hover. */
 const ruleName: Record<RuleName, string> = {
   mirrorAhead: 'mirror the car ahead',
   mirrorBehind: 'mirror the car behind',
 };
 /** The source hovers; a rule candidate's names its rule. */
-export const sourceHover: { dp: string; neighbour: string; committed: string; rule: (rule: RuleName) => string } = {
+export const sourceHover: { dp: string; neighbour: string; committed: string; plan: string; game: string; rule: (rule: RuleName) => string } = {
   dp: "dp · the DP's plan",
   neighbour: 'nbr · a stop lap next to a DP plan',
   committed: 'plan · the committed plan',
+  plan: 'plan · a saved plan slot',
+  game: "game · the game's plan slot",
   rule: (rule) => `rule · ${ruleName[rule]}`,
 };
 /** Button words `commit`, `clear`, and their hovers (the uiAction they send). */

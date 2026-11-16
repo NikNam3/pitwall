@@ -3,9 +3,13 @@
 import type { Policy } from '../forecast.ts';
 import type { CarId } from '../ids.ts';
 import type { Known } from '../known.ts';
+import type { Slot } from '../plan-slots.ts';
 
-/** Where a candidate policy came from: the DP, a stop-lap neighbour of a DP plan, a rule candidate, the committed plan. */
-export type McSource = 'dp' | 'neighbour' | 'rule' | 'committed';
+/**
+ * Where a candidate policy came from: the DP, a stop-lap neighbour of a DP plan, a rule candidate, the active plan
+ * committed without a slot, a saved plan slot (`plan`), a game-strategy slot (`game`).
+ */
+export type McSource = 'dp' | 'neighbour' | 'rule' | 'committed' | 'plan' | 'game';
 
 /**
  * One ranked policy (spec §7.4): the finishing-position pmf (P1 … Pn), E[position], E[points], the mean race time,
@@ -15,6 +19,8 @@ export type McSource = 'dp' | 'neighbour' | 'rule' | 'committed';
 export type McRow = {
   policy: Policy;
   source: McSource;
+  /** The plan slot the row is, or `null` for a row that is no slot. */
+  slot: Slot | null;
   positionPmf: number[];
   ePos: number;
   ePoints: number;
@@ -30,8 +36,12 @@ export type McRow = {
   rank: number;
   /** Mean race time against `rows[0]` (ms). */
   deltaLeaderMs: number;
-  /** Mean race time against the committed row (ms); `null` without a commit. */
+  /** Mean race time against the active row (ms), the board's ΔTIME; `null` without an active plan. */
   deltaPlanMs: number | null;
+  /** The paired mean difference in places against the active plan (ΔPOS); `unknown('notApplicable')` on the active row and without one. */
+  diffPlan: Known<number>;
+  /** The standard error of `diffPlan` in places; `unknown('notApplicable')` on the active row and without one. */
+  sePlan: Known<number>;
   /** The rule candidate's rule (the SRC hover); `null` unless `source` is `'rule'`. */
   rule: 'mirrorAhead' | 'mirrorBehind' | null;
 };
@@ -42,7 +52,7 @@ export type McRow = {
  */
 export type StrategyOutput = Record<
   CarId,
-  Known<{ rows: McRow[]; scenarios: number; capHit: boolean; candidates: number; hazard: Known<'ok'>; unresolvedTie: boolean; currentPosition: number }>
+  Known<{ rows: McRow[]; bestPerStops: Partial<Record<0 | 1 | 2 | 3, number>>; scenarios: number; capHit: boolean; candidates: number; hazard: Known<'ok'>; unresolvedTie: boolean; currentPosition: number }>
 >;
 
 /** `strategy.car`: one car's entry of `StrategyOutput`. */
