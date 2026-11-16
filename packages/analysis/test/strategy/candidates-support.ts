@@ -6,17 +6,15 @@
 //   `solveWorld` solve of the same input (a `DpPlan`'s `world` indexes it). The function queries the solutions with
 //   `bestWith` and never solves.
 // - Sources (R59, no domain change): base plans `'dp'`; stop-lap neighbours `'neighbour'`; the rule families `'rule'`
-//   with `rule` `mirrorAhead`, `mirrorBehind`, `cover`, `extend`; the committed row is the job's (`'committed'`).
-// - Base: per world and stop count (0–3) the best `dpPlansMax` plans by `expectedMs`, each with its own triggers (the
+//   with `rule` `mirrorAhead`, `mirrorBehind`; the committed row is the job's (`'committed'`).
+// - Base: per world and stop count (0–3) the best `dpPlansMax` plans by `expectedMs`, each a stop list (the
 //   rain filter of Task 23a unchanged); `boxThisLap` and `continue` besides.
 // - A neighbour: the best plan's first stop moved by `neighbourMinLaps`–`neighbourMaxLaps` laps either way on the
-//   same compound, as `bestWith(solutions[best.world], { stopLap, compound })`: its stops and its own triggers; `null`
+//   same compound, as `bestWith(solutions[best.world], { stopLap, compound })`: its stops; `null`
 //   gives no candidate.
 // - A mirror of the nearest rival ahead (behind) not of ours: its first stop is the first stop of `race-monte-carlo`'s
 //   `rivalPlainPolicy` for that rival, lap **and compound**, as `bestWith(solutions[w], { stopLap, compound })` of a
 //   world w; never `start.stopMid` alone.
-// - Cover and extend: a base plan's candidate as it is (its stops and own triggers) plus its one `rivalPits` trigger.
-// - No candidate copies another's triggers.
 //
 // The field: 8 cars 2 s apart from lap 20 of 50, our cars 2 and 5; the rival ahead of car 2 (car 1) plainly stops on
 // lap 33 for inters (`nextOdds`), the one behind (car 3) on lap 27 for softs. The track is wet (600 ms), so inter

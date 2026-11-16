@@ -92,7 +92,7 @@ describe('burnPerLapKg', () => {
 
 // SP4.3c Task 15 (O15, C43, C50): the burn the simulators use is one, `StartingPoint.fuelBurnKgPerLap`, from here:
 // `planBurnKgPerLap(measured, fuelKg, lapsLeft)` is the car's measured burn (`burnPerLapKg`), else its fuel over the
-// laps left (0 with no lap left). `race-forecast/field.ts`, `strategy-dp/thresholds.ts` and `strategy-dp/state.ts`
+// laps left (0 with no lap left). `race-forecast/field.ts` and `strategy-dp/state.ts`
 // read the starting point's burn and keep no `fuel ÷ laps left` of their own.
 describe('planBurnKgPerLap', () => {
   it('the measured burn where one is known, whatever the fuel and the laps left', () => {

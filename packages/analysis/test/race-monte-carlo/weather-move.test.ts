@@ -3,7 +3,7 @@
 // golden hashes below were taken from the unit before the move (at a04a0396), over seeded runs with a perfect and an
 // approximate forecast, a wet start and a rain trigger; each hash is the sha256 of the result in `stableText`.
 import { createHash } from 'node:crypto';
-import { known, type LapModelParams, type Policy, type StartingPoint, type Trigger } from '@pitwall/domain';
+import { known, type LapModelParams, type Policy, type StartingPoint } from '@pitwall/domain';
 import { createRng } from '@pitwall/engine/readers';
 import { describe, expect, it } from 'vitest';
 import { drawnScenario, fieldPositions, raceMonteCarlo, scoreAll, type FieldInput, type McInput } from '../../src/race-monte-carlo/index.ts';
@@ -22,8 +22,6 @@ const WET_MODEL: LapModelParams = {
   wetnessMsPerMs: { slick: 1, inter: 0.5, wet: 0.25 },
 };
 
-const rainBox = (wetnessMs: number): Trigger => ({ kind: 'rain', wetnessMs, action: { box: 'inter' } });
-
 /** Six noisy cars, our cars 2 and 3 with inters and wets; the forecast `pct` per lap with `accuracy`; wetness as given. */
 function field(accuracy: 'perfect' | 'approximate', pct: (lap: number) => number, wetnessMs: number): StartingPoint {
   const cars: CarSpec[] = Array.from({ length: 6 }, (_, i) => ({ ...NOISY, retireRate: 0, gapMs: 1_500 * i, paceMs: 90_000 + 60 * i }));
@@ -35,7 +33,7 @@ function field(accuracy: 'perfect' | 'approximate', pct: (lap: number) => number
 }
 
 const CANDIDATES: Record<number, Policy[]> = {
-  2: [NO_STOP, stopAt(4, 'inter'), { stops: [], triggers: [rainBox(1_500)] }],
+  2: [NO_STOP, stopAt(4, 'inter'), stopAt(7, 'inter')],
   3: [NO_STOP, stopAt(6, 'hard')],
 };
 

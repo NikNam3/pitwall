@@ -68,7 +68,7 @@ describe('race-forecast: the pit loss split (SP4.3b F2)', () => {
 
     // one quiet car, equal laps; it stops at the end of lap 10 (its in-lap), lap 11 is its out-lap
     const start = startingPoint({ lap: 1, lapsTotal: 20, cars: [{ gapMs: 0 }], pitLossMs: PIT_LOSS });
-    const stop: Policy = { stops: [{ lap: 10, compound: 'medium' }], triggers: [] };
+    const stop: Policy = { stops: [{ lap: 10, compound: 'medium' }] };
     const without = run(start, noStops(1));
     const withStop = run(start, [stop]);
     const lapDelta = (lap: number): number => traceAt(withStop, lap).lapTimeMs[0]! - traceAt(without, lap).lapTimeMs[0]!;
@@ -82,7 +82,7 @@ describe('race-forecast: the pit loss split (SP4.3b F2)', () => {
   it('the race time with a stop is the same as before the split', () => {
     // three cars 35 s apart (no car meets another), one stop each: the split moves time, it adds none
     const cars = [0, 35_000, 70_000].map((gapMs) => ({ gapMs }));
-    const policies: Policy[] = [8, 11, 14].map((lap) => ({ stops: [{ lap, compound: 'hard' as const }], triggers: [] }));
+    const policies: Policy[] = [8, 11, 14].map((lap) => ({ stops: [{ lap, compound: 'hard' as const }] }));
     const split = run(startingPoint({ lap: 1, lapsTotal: 20, cars, pitLossMs: PIT_LOSS }), policies);
     const before = run(startingPoint({ lap: 1, lapsTotal: 20, cars, pitLossMs: { ...PIT_LOSS, inLapShare: 0 } }), policies);
     for (const car of [0, 1, 2]) expect(Math.abs(split.raceTimeMs[car]! - before.raceTimeMs[car]!)).toBeLessThanOrEqual(1);
@@ -94,7 +94,7 @@ describe('race-forecast: the pit loss split (SP4.3b F2)', () => {
   it('a car already in the pit lane at the start pays only the out-lap part', () => {
     // the car has just crossed the line ending lap 4 in the pit lane (its in-lap done, its stop at the end of lap 4)
     const start = startingPoint({ lap: 5, lapsTotal: 20, cars: [{ gapMs: 0 }], pitLossMs: PIT_LOSS });
-    const inPit: Policy = { stops: [{ lap: 4, compound: 'hard' }], triggers: [] };
+    const inPit: Policy = { stops: [{ lap: 4, compound: 'hard' }] };
     const without = run(start, noStops(1));
     const r = run(start, [inPit]);
     expect(Math.abs(traceAt(r, 5).lapTimeMs[0]! - traceAt(without, 5).lapTimeMs[0]! - OUT_LAP_MS)).toBeLessThanOrEqual(1);
@@ -145,7 +145,7 @@ describe('race-forecast and forecast-field: rewind (SP4.3b R1)', () => {
     expect(rewound.drs.rangeMs).toBe(800);
     expect(rewound).toEqual(fresh);
     // and so does the forecast from it, a stop included
-    const policies: Policy[] = Array.from({ length: rewound.cars }, (_, k) => ({ stops: [{ lap: 12 + (k % 3), compound: 'hard' as const }], triggers: [] }));
+    const policies: Policy[] = Array.from({ length: rewound.cars }, (_, k) => ({ stops: [{ lap: 12 + (k % 3), compound: 'hard' as const }] }));
     expect(run(rewound, policies)).toEqual(run(fresh, policies));
   });
 });

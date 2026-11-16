@@ -9,16 +9,15 @@
 // - Row 8: "the car's position at the trigger" is the car's race position in the live state of the view `prepare`
 //   reads (`timing.position`); the view here gives our player car a race position (7) that is not its place in the
 //   starting point's order (3), so the value must come from the trigger's view, not from the order.
-// - Row 9 (ported in SP4.3c Task 20): on the hand-built field and DP solves of `candidates-support.ts`, the four rule
-//   candidates carry `mirrorAhead`,
-//   `mirrorBehind`, `cover`, `extend`; every other candidate `null`; on the job's output every `rule` row carries one of
-//   the four, every other row `null`.
+// - Row 9 (ported in SP4.3c Task 20; SP4.3d1 Task 3: cover and extend deleted): on the hand-built field and DP solves
+//   of `candidates-support.ts`, the two rule candidates carry `mirrorAhead`, `mirrorBehind`; every other candidate
+//   `null`; on the job's output every `rule` row carries one of the two, every other row `null`.
 import type { CarId, StrategyOutput } from '@pitwall/domain';
 import { createRng, type EngineView } from '@pitwall/engine/readers';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as mc from '../../src/race-monte-carlo/index.ts';
 import { prepareStrategy, runStrategy } from '../../src/strategy/index.ts';
-import { AHEAD, AHEAD_STOP, BEHIND, BEHIND_STOP, CAR, candidatesOf, CONFIG, field, input, solved } from './candidates-support.ts';
+import { AHEAD_STOP, BEHIND_STOP, CAR, candidatesOf, CONFIG, field, input, solved } from './candidates-support.ts';
 import { json, PLAYER, RACE, stopIn, TEAMMATE, viewAt, type ViewSpec } from './support.ts';
 
 /** When set, the tie flags `race-monte-carlo`'s rows get, best first (the rest `false`). */
@@ -104,7 +103,7 @@ describe('strategy: the table fields', () => {
   });
 
   // row 9
-  it("a rule candidate's row carries its rule (mirrorAhead, mirrorBehind, cover, extend); every other row null", () => {
+  it("a rule candidate's row carries its rule (mirrorAhead, mirrorBehind); every other row null", () => {
     // SP4.3c Task 20: the hand-built field and real DP solves of candidates.test.ts (`candidates-support.ts`): car 2, the
     // rival ahead (1) plainly stops on lap 33 for inters, the one behind (3) on lap 27 for softs
     const s = solved(input());
@@ -112,20 +111,17 @@ describe('strategy: the table fields', () => {
     const ruled = (rule: string) => cands.filter((c) => c.rule === rule);
     expect(ruled('mirrorAhead').map((c) => c.policy.stops[0])).toEqual([AHEAD_STOP]);
     expect(ruled('mirrorBehind').map((c) => c.policy.stops[0])).toEqual([BEHIND_STOP]);
-    const rivalPits = (rule: string) => ruled(rule).flatMap((c) => c.policy.triggers.filter((t) => t.kind === 'rivalPits'));
-    expect(rivalPits('cover')).toEqual([{ kind: 'rivalPits', carId: BEHIND, withinMs: CONFIG.closeGapMs, action: 'cover' }]);
-    expect(rivalPits('extend')).toEqual([{ kind: 'rivalPits', carId: AHEAD, withinMs: CONFIG.closeGapMs, action: 'extend' }]);
     for (const c of cands) {
       if (c.source === 'rule') expect(c.rule, json(c.policy)).not.toBeNull();
       else expect(c.rule, json(c.policy)).toBeNull();
     }
-    expect(cands.filter((c) => c.source === 'rule').map((c) => c.rule).sort()).toEqual(['cover', 'extend', 'mirrorAhead', 'mirrorBehind']);
+    expect(cands.filter((c) => c.source === 'rule').map((c) => c.rule).sort()).toEqual(['mirrorAhead', 'mirrorBehind']);
 
     // the job's rows carry their candidate's rule
     const out = planned();
     for (const car of [PLAYER, TEAMMATE]) {
       for (const r of entryOf(out, car).rows) {
-        if (r.source === 'rule') expect(['mirrorAhead', 'mirrorBehind', 'cover', 'extend'], json(r.policy)).toContain(r.rule);
+        if (r.source === 'rule') expect(['mirrorAhead', 'mirrorBehind'], json(r.policy)).toContain(r.rule);
         else expect(r.rule, json(r.policy)).toBeNull();
       }
     }

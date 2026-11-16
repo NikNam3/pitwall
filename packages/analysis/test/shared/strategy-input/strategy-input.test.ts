@@ -30,7 +30,7 @@ describe('shared strategy input', () => {
       const dp: DpInput = toDpInput(input, car);
       expect(plainValue(dp), `car ${car}: DP input`).toEqual(dpInput);
       const result = solveDp(dp);
-      // SP4.3c Task 19: the best plan with its own triggers (no shared thresholds); the snapshot is regenerated after it
+      // the best plan, a stop list (SP4.3d spec §5.1); the snapshot holds no triggers
       expect(policyOf(result.plans[0] ?? result.continue), `car ${car}: policy`).toEqual(policy);
     }
     expect(plainValue(toMcHazard(input.hazard))).toEqual(former.hazard);

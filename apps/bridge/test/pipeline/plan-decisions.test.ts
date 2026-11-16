@@ -3,10 +3,11 @@
 // { carId, policy }`, the policy whole, and the decisions sidecar with its record index; `latestPlan` reads it from the
 // projection. A replay feeds the sidecar back at the record index and gives the same plan on every frame. A plan whose
 // stop lies past the race's laps is rejected and never stored (C73). A flashback past the commit voids it (C27a); a
-// commit during the formation lap stays visible (C29). Real segments (C84); temp dirs only.
-import { existsSync, mkdtempSync, readdirSync, readFileSync } from 'node:fs';
+// commit during the formation lap stays visible (C29). A plan is a stop list (SP4.3d spec §5.1): an old sidecar's
+// `planCommitted` with triggers replays, its triggers dropped (SP4.3d1 Task 3 row 6). Real segments (C84); temp dirs only.
+import { copyFileSync, existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { latestPlan, sessionPhaseRaceSpans, type CarId, type DecisionRecord, type FeedId, type Policy } from '@pitwall/domain';
 import type { QuickCalculator } from '@pitwall/engine';
@@ -36,17 +37,17 @@ const tmp = () => mkdtempSync(join(tmpdir(), 'plan-decisions-'));
 const decisionsSidecar = (file: string): string => `${file}.decisions.json`;
 const decisionsOf = (file: string): unknown => (existsSync(decisionsSidecar(file)) ? JSON.parse(readFileSync(decisionsSidecar(file), 'utf8')) : []);
 
-/** A plan with one stop on lap `lap` and a trigger of every kind, thresholds included: the decision carries it whole. */
-const policyAt = (lap: number, compound: 'medium' | 'hard' = 'hard'): Policy => ({
-  stops: [{ lap, compound }],
-  triggers: [
-    { kind: 'neutralised', condition: 'sc', fromLap: 1, toLap: lap, action: { box: 'medium' } },
-    { kind: 'rain', wetnessMs: 4_000, action: { box: 'inter' } },
-    { kind: 'rivalPits', carId: 3 as CarId, withinMs: 1_500, action: 'cover' },
-    { kind: 'degradationOff', wearRateDeltaPct: 20, action: { switchTo: [{ lap, compound: 'medium' }] } },
-    { kind: 'damage', lossMsPerLap: 800, action: { box: 'hard' } },
-  ],
-});
+/** A plan with one stop on lap `lap`, a stop list (SP4.3d spec §5.1): the decision carries it whole. */
+const policyAt = (lap: number, compound: 'medium' | 'hard' = 'hard'): Policy => ({ stops: [{ lap, compound }] });
+
+/** The triggers an old (SP4.3c) policy carried, of every former kind, thresholds included. */
+const oldTriggers = (lap: number) => [
+  { kind: 'neutralised', condition: 'sc', fromLap: 1, toLap: lap, action: { box: 'medium' } },
+  { kind: 'rain', wetnessMs: 4_000, action: { box: 'inter' } },
+  { kind: 'rivalPits', carId: 3, withinMs: 1_500, action: 'cover' },
+  { kind: 'degradationOff', wearRateDeltaPct: 20, action: { switchTo: [{ lap, compound: 'medium' }] } },
+  { kind: 'damage', lossMsPerLap: 800, action: { box: 'hard' } },
+];
 
 /** What the probe saw on one frame: the race clock, the open session phase, the race's laps, our car, its plan and the decisions. */
 type Seen = { at: number; phase: string | undefined; totalLaps: number; player: CarId; plan: Policy | null; decisions: DecisionRecord[] };
@@ -194,6 +195,29 @@ describe('a plan committed in a live run (C10, C76)', () => {
     const replay = await run(live.file!, { recorded });
     expect(plansPerFrame(replay.seen)).toEqual(plansPerFrame(live.seen));
     expect(last(replay.seen).decisions).toEqual(last(live.seen).decisions);
+  }, 60_000);
+
+  // SP4.3d1 Task 3 row 6 (Review Focus 2): old recordings replay, their triggers ignored
+  it('old sidecar: a decisions sidecar line planCommitted with triggers decodes; the replayed decision\'s policy has stops only', async () => {
+    // the live recording with an old sidecar: each planCommitted policy as SP4.3c wrote it, with its triggers
+    const dir = tmp();
+    const copy = join(dir, basename(live.file!));
+    copyFileSync(live.file!, copy);
+    type Entry = { recordIndex: number; decision: { kind: string; policy?: { stops: { lap: number }[] } } };
+    const entries = decisionsOf(live.file!) as Entry[];
+    const old = entries.map((e) =>
+      e.decision.policy === undefined ? e : { ...e, decision: { ...e.decision, policy: { ...e.decision.policy, triggers: oldTriggers(e.decision.policy.stops[0]?.lap ?? 1) } } },
+    );
+    expect(old.filter((e) => 'triggers' in (e.decision.policy ?? {})), 'the case: old planCommitted lines').toHaveLength(2);
+    writeFileSync(decisionsSidecar(copy), `${JSON.stringify(old, null, 2)}\n`);
+
+    const recorded = recordingDecisions(copy);
+    expect(recorded.decisions, 'every line decodes').toHaveLength(3);
+    for (const { decision } of recorded.decisions) if (decision.kind === 'planCommitted') expect(Object.keys(decision.policy)).toEqual(['stops']);
+    const replay = await run(copy, { recorded });
+    expect(plansPerFrame(replay.seen)).toEqual(plansPerFrame(live.seen));
+    expect(last(replay.seen).decisions).toEqual(last(live.seen).decisions);
+    for (const d of last(replay.seen).decisions) if (d.kind === 'planCommitted') expect(Object.keys(d.policy), 'the replayed decision').toEqual(['stops']);
   }, 60_000);
 });
 

@@ -277,7 +277,7 @@ describe("race-monte-carlo: the rows' rule (4.3b2)", () => {
     const cands: McCandidate[] = [
       { policy: NO_STOP, source: 'dp', rule: null },
       { policy: stopAt(2, 'hard'), source: 'rule', rule: 'mirrorAhead' },
-      { policy: stopAt(4, 'medium'), source: 'rule', rule: 'extend' },
+      { policy: stopAt(4, 'medium'), source: 'rule', rule: 'mirrorBehind' },
     ];
     for (const result of [raceMonteCarlo(mcInput(start, { 2: cands }), createRng(43), 2_000), scoreAll(mcInput(start, { 2: cands }), createRng(43), 100)]) {
       const rows = carOf(result, 2).rows;

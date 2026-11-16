@@ -48,8 +48,8 @@ describe('race-forecast: the stop cost (SP4.3c Task 17, O8)', () => {
   it('is what a stop costs in the forecast: a lone car stopping onto its own compound finishes stopCostMs later', () => {
     for (const human of [false, true]) {
       const start = startingPoint({ lap: 10, lapsTotal: 20, cars: [{ gapMs: 0, human }], pitLossMs: LOSSES, drsZones: [] });
-      const stops: Policy = { stops: [{ lap: 12, compound: 'medium' }], triggers: [] };
-      const stays: Policy = { stops: [], triggers: [] };
+      const stops: Policy = { stops: [{ lap: 12, compound: 'medium' }] };
+      const stays: Policy = { stops: [] };
       const stopped = raceForecast(start, [stops], PLAIN, createRng(1)).raceTimeMs[0]!;
       const stayed = raceForecast(start, [stays], PLAIN, createRng(1)).raceTimeMs[0]!;
       expect(Math.abs(stopped - stayed - stopCostMs(start, 0, 'green')), `human ${human}`).toBeLessThanOrEqual(1);

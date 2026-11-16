@@ -11,7 +11,7 @@ import { PLAIN, startingPoint, traceAt, type CarSpec } from './start.ts';
 
 const LAPS = 14;
 const STOP_LAP = 5;
-const stopToHard: Policy[] = [{ stops: [{ lap: STOP_LAP, compound: 'hard' }], triggers: [] }];
+const stopToHard: Policy[] = [{ stops: [{ lap: STOP_LAP, compound: 'hard' }] }];
 
 /** The lap times of the single car, laps 1 to `LAPS`, starting on mediums at age 0. */
 function lapTimes(car: CarSpec): number[] {

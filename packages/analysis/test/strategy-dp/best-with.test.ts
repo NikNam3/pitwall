@@ -1,12 +1,12 @@
 // `bestWith` (SP4.3b2 Task 5, spec §6, §9): a query of one world's solve (`solveWorld(input, w)`, SP4.3c Task 19), never
 // a new solve: the best plan to the flag whose first stop is forced (at `stopLap` onto a compound, `'best'`: the DP picks;
 // or no stop through `noStopThrough`), optionally from the state "that neutralisation out at the start lap" (`under`).
-// Its plan is tagged with its solve's world and carries its own triggers. `support.ts` states how these tests read
+// Its plan is tagged with its solve's world. `support.ts` states how these tests read
 // `DpInput` and `DpPlan`; the deterministic rows compare with an enumeration of every stop list (no hazard).
 import type { NoiseCompound } from '@pitwall/domain';
 import { describe, expect, it } from 'vitest';
 import { bestWith, solveDp, solveWorld, type DpInput, type DpPlan, type DpUnder } from '../../src/strategy-dp/index.ts';
-import { dpInput, everyStopList, LAP, meetsRule, neutralBoxes, plansOf, raceTimeMs, worldOf } from './support.ts';
+import { dpInput, everyStopList, LAP, meetsRule, plansOf, raceTimeMs, worldOf } from './support.ts';
 
 const DIGITS = 3;
 
@@ -114,7 +114,7 @@ describe('strategy-dp bestWith', () => {
   });
 
   // row 6 (ported, SP4.3c Task 19): a world's solve answers as a solve of that world alone, tagged with its world
-  it("solveWorld(input, w) answers as the solve of world w alone; its plans are tagged w and carry their own triggers", () => {
+  it("solveWorld(input, w) answers as the solve of world w alone; its plans are tagged w", () => {
     const input = deterministic({
       scByLap: [0, 0.1, 0.1, 0.2, 0.1],
       vscByLap: [0, 0.05, 0.1, 0.05],
@@ -134,10 +134,6 @@ describe('strategy-dp bestWith', () => {
         const plan = bestWith(solution, first);
         expectSamePlan(plan, bestWith(alone, first));
         expect(plan!.world, `world ${w}: ${JSON.stringify(first)}`).toBe(w);
-        expect(Array.isArray(plan!.triggers)).toBe(true);
-        // its neutralised triggers box only onto compounds it fits itself
-        const own = new Set(plan!.stops.map((s) => s.compound));
-        for (const t of neutralBoxes(plan!)) expect(own.has((t.action as { box: NoiseCompound }).box), JSON.stringify(t)).toBe(true);
       }
       // the world's best plan by query has solveDp's best stops of that world; its value may differ under hazards (the
       // plan's value is the closed-loop play over its sequence, bestWith pins the first stop through a neutralisation)

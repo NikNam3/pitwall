@@ -217,7 +217,7 @@ export const PLAIN: Scenario = { id: 0, plain: true, neutralisations: [] };
 export const drawn = (id: number, neutralisations: Scenario['neutralisations'] = []): Scenario => ({ id, plain: false, neutralisations });
 export const plainWith = (neutralisations: Scenario['neutralisations']): Scenario => ({ id: 0, plain: true, neutralisations });
 
-export const noStops = (n: number): Policy[] => Array.from({ length: n }, () => ({ stops: [], triggers: [] }));
+export const noStops = (n: number): Policy[] => Array.from({ length: n }, () => ({ stops: [] }));
 
 /** The trace's entry of lap `lap`; throws when the forecast has none (the trace is part of what these tests check). */
 export function traceAt(r: ForecastResult, lap: number): ForecastTrace[number] {

@@ -131,7 +131,7 @@ describe('undercut: the job', () => {
     for (const car of OURS) {
       const v = valueOf(out, car);
       const { input: call } = callOf(car);
-      // SP4.3c Task 19: our plans are the first weather world's solve's (`solveWorld(input, 0)`), each with its own triggers
+      // SP4.3c Task 19: our plans are the first weather world's solve's (`solveWorld(input, 0)`), each a stop list
       const sol = solveWorld(toDpInput(input.strategy, car), 0);
       const ours = (stopLap: number) => {
         const plan = bestWith(sol, { stopLap, compound: 'best' });
@@ -155,9 +155,8 @@ describe('undercut: the job', () => {
             expect(c.policy).toEqual(ours(later));
             expect(c.rival!.policy.stops).toEqual([{ lap: v.lap, compound: next }]);
           }
-          // the triggers come from policyOf: the plan's own
-          const plan = bestWith(sol, { stopLap: rival.side === 'ahead' ? v.lap : later, compound: 'best' })!;
-          expect(c.policy.triggers).toEqual(plan.triggers);
+          // a plan is a stop list (SP4.3d spec §5.1)
+          expect(Object.keys(c.policy)).not.toContain('triggers');
           expect(c.rival!.gapAtLap).toBe(later + 1);
         }
       }
@@ -316,7 +315,7 @@ describe('undercut: the job', () => {
       // strategy's boxNow row on the same input and seed: the DP's box-now play as strategy builds its policy
       const dp = solveDp(toDpInput(input.strategy, car));
       expect(dp.boxThisLap).not.toBeNull();
-      // found by its stops, whatever triggers strategy gives it (non-best plans carry only the neutralised triggers)
+      // found by its stops
       const boxNowStops = json(policyOf(dp.boxThisLap!).stops);
       const strategyRows = candidatesForRun(structuredClone(input.strategy), createRng(SEED)).perCar.get(car)?.candidates ?? [];
       const boxNowRow = strategyRows.find((r) => json(r.policy.stops) === boxNowStops);
