@@ -76,22 +76,23 @@ export function timeAtProgress(ours: Crossings, progress: number, now?: LivePoin
  * the car is now, its progress moved by whole laps into our last lap (`0 ≤ wrappedMs < lapMs`); `lapsDown` the signed
  * whole laps of progress between us, `floor((here − carProgress) / 50)` (0 behind us on our lap, −1 ahead on our lap);
  * `lapMs` our rolling lap, the time we took for the last full lap of progress up to where we are now. So the signed
- * time behind us is `lapsDown × lapMs + wrappedMs`.
+ * time behind us is `lapsDown × lapMs + wrappedMs`. `lapMs` is `insufficientData` while our history is shorter than a
+ * lap behind where we are now (R21); only a car behind us on our lap (`lapsDown` 0) is answered then.
  */
-export type TimeBehind = { wrappedMs: Ms; lapsDown: number; lapMs: Ms };
+export type TimeBehind = { wrappedMs: Ms; lapsDown: number; lapMs: Known<Ms> };
 
 /** Where we are now (our live progress, never before our newest crossing), our live point and our rolling lap. */
-type Here = { here: number; live: LivePoint; lapMs: Ms };
+type Here = { here: number; live: LivePoint; lapMs: Known<Ms> };
 
-function hereOf(ours: Crossings, ourLive: Known<number>, now: SessionTime): Known<Here> {
-  if (ours.at.length === 0) return INSUFFICIENT;
+/** `undefined` without a crossing; `lapMs` `insufficientData` with less than a lap of our history behind `here`. */
+function hereOf(ours: Crossings, ourLive: Known<number>, now: SessionTime): Here | undefined {
+  if (ours.at.length === 0) return undefined;
   const newest = ours.fromProgress + ours.at.length - 1;
   const here = ourLive.known && ourLive.value > newest ? ourLive.value : newest;
   const live: LivePoint = { t: now, progress: here };
   const lapAgo = timeAtProgress(ours, here - MINI_SECTORS, live);
-  if (!lapAgo.known) return INSUFFICIENT;
-  const lapMs = Math.round(now - lapAgo.value);
-  return lapMs > 0 ? known({ here, live, lapMs }, now) : INSUFFICIENT;
+  const ms = lapAgo.known ? Math.round(now - lapAgo.value) : 0;
+  return { here, live, lapMs: ms > 0 ? known(ms, now) : INSUFFICIENT };
 }
 
 /**
@@ -99,22 +100,25 @@ function hereOf(ours: Crossings, ourLive: Known<number>, now: SessionTime): Know
  * now. `insufficientData` when our history is shorter than a lap behind where we are now (first lap, a join mid-race).
  */
 export function rollingLap(ours: Crossings, ourLive: Known<number>, now: SessionTime): Known<Ms> {
-  const h = hereOf(ours, ourLive, now);
-  return h.known ? known(h.value.lapMs, now) : h;
+  return hereOf(ours, ourLive, now)?.lapMs ?? INSUFFICIENT;
 }
 
 /**
  * A car at `carProgress` (mini-sectors, `liveProgress`): its time behind us now (`TimeBehind`), given our live progress
- * `ourLive` and the frame's time `now`. `insufficientData` when our history is shorter than a lap behind where we are now.
+ * `ourLive` and the frame's time `now`. A car behind us on our lap needs only as much of our history as its own gap
+ * (R21): it is answered whenever our kept crossings reach its progress, with `lapMs` unknown on less than a lap. A car
+ * ahead or lapped needs the full lap: `insufficientData` when our history is shorter than a lap behind where we are now.
  */
 export function timeBehind(ours: Crossings, ourLive: Known<number>, carProgress: number, now: SessionTime): Known<TimeBehind> {
   const h = hereOf(ours, ourLive, now);
-  if (!h.known) return h;
-  const { here, live, lapMs } = h.value;
+  if (h === undefined) return INSUFFICIENT;
+  const { here, live, lapMs } = h;
   const lapsDown = Math.floor((here - carProgress) / MINI_SECTORS);
+  if (!lapMs.known && lapsDown !== 0) return INSUFFICIENT;
   const t = timeAtProgress(ours, carProgress + lapsDown * MINI_SECTORS, live);
   if (!t.known) return t;
-  const wrappedMs = Math.min(Math.max(0, Math.round(now - t.value)), lapMs - 1);
+  const elapsed = Math.max(0, Math.round(now - t.value));
+  const wrappedMs = lapMs.known ? Math.min(elapsed, lapMs.value - 1) : elapsed;
   return known({ wrappedMs, lapsDown, lapMs }, now);
 }
 

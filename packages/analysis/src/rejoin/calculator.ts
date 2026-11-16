@@ -99,7 +99,8 @@ function roadOf(gaps: readonly GapToCar[], ctx: CarContext): { road: RoadAtLine;
  * Every other car's time behind our car now on our crossing history (spec §6.5, the shared `timeBehind`, C43), shaped
  * as `gapsToCar`'s rows: a car behind us is its wrapped time, its laps down as counted; a car ahead is its wrapped time
  * less our rolling lap, one lap fewer ahead. A car without a crossing, and a car out of the race, has no time (as
- * `gapsToCar`); without a lap of our history (`timeBehind`'s `insufficientData`) no car has one. `undefined` when our
+ * `gapsToCar`); without a lap of our history only a car behind us on our lap within our kept crossings has one (R21,
+ * `timeBehind`'s `insufficientData` for the rest). `undefined` when our
  * car is no running car of `gaps` or has no crossing.
  */
 function liveGaps(view: EngineView, gaps: GapsOutput, carId: CarId, now: SessionTime): GapToCar[] | undefined {
@@ -131,7 +132,8 @@ function liveGaps(view: EngineView, gaps: GapsOutput, carId: CarId, now: Session
       continue;
     }
     const { wrappedMs, lapsDown, lapMs } = b.value;
-    rows.push(lapsDown >= 0 ? { carId: i.carId, gapMs: known(wrappedMs, now), lapsDown } : { carId: i.carId, gapMs: known(wrappedMs - lapMs, now), lapsDown: lapsDown + 1 });
+    if (lapsDown >= 0) rows.push({ carId: i.carId, gapMs: known(wrappedMs, now), lapsDown });
+    else rows.push({ carId: i.carId, gapMs: lapMs.known ? known(wrappedMs - lapMs.value, now) : lapMs, lapsDown: lapMs.known ? lapsDown + 1 : 0 });
   }
   for (const id of gaps.outOfRace) rows.push({ carId: id, gapMs: NOT_APPLICABLE, lapsDown: 0 });
   return rows;
