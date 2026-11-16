@@ -8,7 +8,8 @@
   import TextCell from '../../kit/values/TextCell.svelte';
   import { role } from '../../theme/index.ts';
   import { FAINT_OPACITY, MARK_ROLE, NOW_ROLE, rowEmphasis, SHADE_ROLE, SOLID_LETTER_ROLE } from './emphasis.ts';
-  import { axisParts, laneOf, laneScene } from './lane.ts';
+  import type { CarId } from '@pitwall/domain';
+  import { axisParts, lanesOf, type LaneScene } from './lane.ts';
   import { fieldRows, lapNow, type Cars } from './rows.ts';
   import * as text from './text.ts';
   import type { widget } from './widget.ts';
@@ -25,15 +26,10 @@
   const flag = $derived((data.session as typeof data.session | undefined)?.session.totalLaps);
   const now = $derived(overview === undefined ? undefined : lapNow(cars, overview.carId));
   const rows = $derived(overview === undefined ? [] : fieldRows({ overview, cars, now: now ?? 0 }));
-  const cell = $derived({ w: size.px.width / Math.max(1, size.cols), h: size.px.height / Math.max(1, size.rows) });
-  const laneOn = $derived(full && now !== undefined && flag !== undefined && flag > 0);
-  const lanes = $derived(
-    overview === undefined || !laneOn || now === undefined || flag === undefined
-      ? new Map()
-      : new Map(overview.rows.map((r) => [r.carId, laneScene(laneOf(r, { now, flag, own: r.plan !== null }), { now, flag }, cell)])),
-  );
+  const lanes = $derived(overview === undefined ? new Map<CarId, LaneScene>() : lanesOf({ overview, rows, now, flag, size }));
   /** One character cell of space: Svelte trims whitespace at a block's edges, so the lines spell theirs out. */
   const SP = ' ';
+  const laneOn = $derived(full && now !== undefined && flag !== undefined && flag > 0);
   const axis = $derived(flag === undefined || !laneOn ? [] : axisParts(flag));
 </script>
 

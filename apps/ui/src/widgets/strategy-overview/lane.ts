@@ -1,9 +1,11 @@
 // The lap lane of one Field plans row (SP4.3d spec §6.4, V06; mockup gen.mjs `laneSvg`): one cell a lap, laps 1…flag.
 // It places the topic's laps (stints, a rival's window, our plans' stops); it judges nothing (C65, C43).
-import type { NoiseCompound, OverviewRow, Policy } from '@pitwall/domain';
+import type { CarId, NoiseCompound, OverviewRow, Policy, StrategyOverview } from '@pitwall/domain';
 import { COMPOUND_MARK } from '../../kit/compound/compound-mark.ts';
+import type { WidgetSize } from '../../kit/types.ts';
 import type { Role } from '../../theme/index.ts';
 import { FAINT_ROLE, solidRole } from './emphasis.ts';
+import type { FieldRow } from './rows.ts';
 
 /** One block of the lane, both laps inclusive; `letter` the compound's mark letter, '' for none. */
 export type LaneBlock = { fromLap: number; toLap: number; letter: string; style: 'solid' | 'outline' | 'faint'; role: Role };
@@ -127,4 +129,34 @@ export function laneScene(lane: Lane, ctx: { now: number; flag: number }, cell: 
     planLine: lane.marks.length === 0 ? undefined : { x1: x(ctx.now + 1), x2: x(ctx.flag + 1), y: cell.h - 1 },
     nowX: x(ctx.now + 1),
   };
+}
+
+/** The panel's cell in px: px width per column, px height per row; a zero count counts as one (as `pit-window-strip`). */
+export const cellOf = (size: { cols: number; rows: number; px: { width: number; height: number } }): Cell => ({
+  w: size.px.width / Math.max(1, size.cols),
+  h: size.px.height / Math.max(1, size.rows),
+});
+
+/**
+ * Every topic row's lane scene, by car id, at the panel's cell; our rows (the rows.ts kind `own` or `mate`) drawn as ours.
+ * Empty in compact, while the lap now or the flag is unknown, or with no laps.
+ */
+export function lanesOf(input: {
+  overview: StrategyOverview;
+  rows: readonly FieldRow[];
+  now: number | undefined;
+  flag: number | undefined;
+  size: WidgetSize;
+}): Map<CarId, LaneScene> {
+  const { overview, rows, now, flag, size } = input;
+  const out = new Map<CarId, LaneScene>();
+  if (size.mode !== 'full' || now === undefined || flag === undefined || flag <= 0) return out;
+  const kinds = new Map(rows.map((r) => [r.carId, r.kind]));
+  const cell = cellOf(size);
+  for (const r of overview.rows) {
+    const kind = kinds.get(r.carId);
+    const own = kind === 'own' || kind === 'mate';
+    out.set(r.carId, laneScene(laneOf(r, { now, flag, own }), { now, flag }, cell));
+  }
+  return out;
 }

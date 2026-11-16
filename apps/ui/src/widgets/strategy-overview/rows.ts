@@ -6,7 +6,7 @@ import type { CarId, Known, NoiseCompound, OverviewRow, StrategyOverview } from 
 import { carCodeById } from '../../kit/car/car-label.ts';
 import { COMPOUND_MARK } from '../../kit/compound/compound-mark.ts';
 import { knownPart, unknownPart, type CellPart } from '../../kit/grid/grid.ts';
-import { formatLapNumber, formatLapRange, formatPosition, formatShare, formatSignedSeconds, formatWhole } from '../../kit/values/format.ts';
+import { formatLapNumber, formatLapRange, formatPosition, formatShare, formatShareNumber, formatSignedSeconds, formatWhole } from '../../kit/values/format.ts';
 import type { RowKind } from './emphasis.ts';
 import * as text from './text.ts';
 
@@ -41,7 +41,7 @@ const letterOf = (c: NoiseCompound): string => COMPOUND_MARK[c].letter;
 /** `H80`: the likeliest compound's letter and its chance in whole percent; empty without odds. */
 function likeliest(odds: Partial<Record<NoiseCompound, number>>): string {
   const top = oddsOf(odds)[0];
-  return top === undefined ? '' : `${letterOf(top[0])}${formatWhole(top[1] * 100)}`;
+  return top === undefined ? '' : `${letterOf(top[0])}${formatShareNumber(top[1])}`;
 }
 
 function hoverOf(r: OverviewRow): string | undefined {
