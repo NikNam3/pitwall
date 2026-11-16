@@ -23,7 +23,8 @@ export type InfoRow = {
   ePos: string;
   ePoints: string;
   delta: string;
-  button: 'commit' | 'clear';
+  /** `clear` on the committed row, `activate` on a row saved in a slot, else `save` (to a slot, SP4.3d1 Task 11). */
+  button: 'save' | 'activate' | 'clear';
 };
 
 /** Each stop `L20 H`, joined by a space; a policy with no stops reads `to the flag`. */
@@ -78,7 +79,7 @@ export function infoRow(plan: PlanTable, i: number): InfoRow {
     ePos: formatExpectedPlace(row.ePos),
     ePoints: formatPoints(row.ePoints),
     delta: deltaOf(plan, i, row),
-    button: row.committed ? 'clear' : 'commit',
+    button: row.committed ? 'clear' : row.slot !== null ? 'activate' : 'save',
   };
 }
 

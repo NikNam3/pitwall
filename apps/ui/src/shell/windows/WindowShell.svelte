@@ -1,7 +1,7 @@
 <script lang="ts">
   // One window (spec 7.1-7.3): the active workbook's panels for this window, in a dock, saved back to the bridge.
   import { ackToken, type FeedInfo, type LinkGroup, type PanelSpec, type ReplayControl, type SessionInfo, type TopicValue, type UiAction, type UiSettings } from '@pitwall/contracts';
-  import type { CalibrationActiveValue, FeedId, Insight } from '@pitwall/domain';
+  import { ourCars, type CalibrationActiveValue, type FeedId, type Insight } from '@pitwall/domain';
   import { getAllContexts, mount, onDestroy, unmount, untrack, type Component, type ComponentProps } from 'svelte';
   import type { EntryState, TopicStore } from '../../connection/topic-store.svelte.ts';
   import * as text from '../../kit/text.ts';
@@ -20,6 +20,8 @@
     layoutEditCommand,
     panelCommands,
     panelRemoveCommands,
+    planCommands,
+    planSlotCommands,
     sessionEndCommand,
     windowCommands,
     type CommandContext,
@@ -274,6 +276,16 @@
   });
 
   const baseCommands = [...defaultCommands(commandContext), layoutEditCommand(toggleEditing), driversOpenCommand(() => openGarage('drivers-panel'))];
+  /**
+   * The plan commands for our cars (C72, R34): clear, activate and remove; no `plan.commit` or `plan.save` (they need a
+   * row's policy, which the widgets send through their panel, R33) and no `plan.edit` (no shell seam opens a draft).
+   */
+  const planRegistry = $derived.by(() => {
+    if (defaultFeed === undefined || sessionInfo === undefined) return [];
+    const cars = ourCars(sessionInfo).map((carId) => ({ carId, policy: null }));
+    const ctx = { send, feedId: defaultFeed };
+    return [...planCommands(cars, ctx), ...planSlotCommands(cars, ctx, () => {}).filter((c) => !c.id.startsWith('plan.edit.'))];
+  });
   const commands = $derived([
     ...baseCommands,
     ...alertCommands(shownAlerts, commandContext),
@@ -283,6 +295,7 @@
       ? []
       : calibrationCommands(trackSets, { send, feedId: defaultFeed, pick: () => openGarage('calibration-panel') })),
     ...(defaultFeed === undefined ? [] : [sessionEndCommand({ send, feedId: defaultFeed })]),
+    ...planRegistry,
     ...(editing
       ? [
           layoutEditAddCommand(addToActiveGroup),

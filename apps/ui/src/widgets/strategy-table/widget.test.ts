@@ -7,12 +7,13 @@ import { widget } from './widget.ts';
 
 describe('strategy-table declaration', () => {
   // SP4.3d1 Task 3: `cars.overview` was read only for the trigger lines' rival race numbers; deleted with the triggers
-  it('reads strategy.car for the link\'s primary car, sends plan.commit and plan.clear, has the mockup sizes', () => {
+  // SP4.3d1 Task 11: commit became "save to slot …" (plan.save); a saved row is activated (plan.activate); clear stays
+  it('reads strategy.car for the link\'s primary car, sends plan.save, plan.activate and plan.clear, has the mockup sizes', () => {
     expect([widget.name, widget.title]).toEqual(['strategy-table', 'Strategy']);
     expect(Object.keys(widget.data).sort()).toEqual(['plan']);
     expect(widget.data.plan.topic).toBe('strategy.car');
     expect(widget.data.plan.params?.({ link: { group: 1, feedId: 'f' as never, primary: 3 as never, compare: [], window: { kind: 'live' } }, options: {} })).toEqual({ carId: 3 });
-    expect([...widget.actions].sort()).toEqual(['plan.clear', 'plan.commit']);
+    expect([...widget.actions].sort()).toEqual(['plan.activate', 'plan.clear', 'plan.save']);
     expect(widget.sizes).toEqual({ compact: { minCols: 46, minRows: 6 }, full: { minCols: 88, minRows: 13 } });
   });
 });

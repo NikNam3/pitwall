@@ -22,11 +22,15 @@ export const sourceHover: { dp: string; neighbour: string; committed: string; pl
   game: "game · the game's plan slot",
   rule: (rule) => `rule · ${ruleName[rule]}`,
 };
-/** Button words `commit`, `clear`, and their hovers (the uiAction they send). */
-export const commit = 'commit';
+/** Button words `save to slot …`, `activate`, `clear`, and their hovers (the uiAction they send). */
+export const save = 'save to slot …';
+export const activate = 'activate';
 export const clear = 'clear';
-export const commitHover = 'plan.commit';
+export const saveHover = 'plan.save';
+export const activateHover = 'plan.activate';
 export const clearHover = 'plan.clear';
+/** Before the slot picker's buttons. */
+export const pickArrow = '→';
 /** Footer labels `N`, `CAND`. */
 export const meta = { n: 'N', cand: 'CAND' };
 /** Hover of a tie bracket; of an unresolved one at the cap. */

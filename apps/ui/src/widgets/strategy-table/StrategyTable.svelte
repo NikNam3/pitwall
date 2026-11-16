@@ -1,9 +1,10 @@
 <script lang="ts">
   // The strategy table, variant B (SP4.3b spec §10; mockup docs/design/2026-11-12-sp4.3b/strategy-table-b.html; Q7 A,
   // Q9 B, Q10 B): every ranked policy's place distribution on one chart, the list beside it, the highlighted policy's
-  // info rows below with commit or clear (full only). Every number is `strategy`'s; rows.ts and chart.ts format and
-  // place them (C65). The highlight is window-local (C73); commit and clear go through the panel (C74).
-  import type { McRow } from '@pitwall/domain';
+  // info rows below with "save to slot …" (a slot picker), activate on a saved row or clear on the committed one (full
+  // only; SP4.3d1 Task 11). Every number is `strategy`'s; rows.ts and chart.ts format and place them (C65). The
+  // highlight and the picker are window-local (C73); save, activate and clear go through the panel (C74).
+  import { PLAN_SLOTS, type McRow, type Slot } from '@pitwall/domain';
   import { getUiActions } from '../../kit/actions.ts';
   import type { WidgetProps } from '../../kit/types.ts';
   import TextCell from '../../kit/values/TextCell.svelte';
@@ -49,14 +50,25 @@
   const info = $derived(value === undefined || hi === null ? undefined : infoRow(value, hi));
   const foot = $derived(value === undefined ? undefined : footer(value));
 
+  /** The slot picker of "save to slot …" is open (window-local, C73). */
+  let picking = $state(false);
+
   const pick = (i: number): void => {
     highlight = hi === i ? null : i;
+    picking = false;
   };
-  function act(): void {
-    const row = hi === null ? undefined : rows[hi];
-    if (row === undefined) return;
-    if (row.committed) void send({ kind: 'plan.clear', feedId: link.feedId, carId: link.primary });
-    else void send({ kind: 'plan.commit', feedId: link.feedId, carId: link.primary, policy: row.policy });
+  const highlighted = (): McRow | undefined => (hi === null ? undefined : rows[hi]);
+  function clear(): void {
+    void send({ kind: 'plan.clear', feedId: link.feedId, carId: link.primary });
+  }
+  function activate(): void {
+    const slot = highlighted()?.slot ?? null;
+    if (slot !== null) void send({ kind: 'plan.activate', feedId: link.feedId, carId: link.primary, slot });
+  }
+  function saveTo(slot: Slot): void {
+    const row = highlighted();
+    picking = false;
+    if (row !== undefined) void send({ kind: 'plan.save', feedId: link.feedId, carId: link.primary, slot, policy: row.policy });
   }
   const onKey = (i: number) => (e: KeyboardEvent): void => {
     if (e.key === 'Enter') pick(i);
@@ -133,9 +145,31 @@
               class="pw-button act"
               data-testid="clear"
               title={text.clearHover}
-              onclick={act}>{text.clear}</button
-            >{:else}<button type="button" class="pw-button act" data-testid="commit" title={text.commitHover} onclick={act}>{text.commit}</button>{/if}</div>
-        <div class="line"> </div>
+              onclick={clear}>{text.clear}</button
+            >{:else if info.button === 'activate'}<button
+              type="button"
+              class="pw-button act"
+              data-testid="activate"
+              title={text.activateHover}
+              onclick={activate}>{text.activate}</button
+            >{:else}<button
+              type="button"
+              class="pw-button act"
+              data-testid="save"
+              title={text.saveHover}
+              onclick={() => (picking = !picking)}>{text.save}</button
+            >{/if}</div>
+        {#if picking && info.button === 'save'}
+          <div class="line" data-testid="picker"> {text.pickArrow}{#each PLAN_SLOTS as s (s)} <button
+              type="button"
+              class="pw-button act"
+              data-testid="pick-{s}"
+              title={text.saveHover}
+              onclick={() => saveTo(s)}>{s}</button
+            >{/each}</div>
+        {:else}
+          <div class="line"> </div>
+        {/if}
       {:else}
         <div class="line"> </div>
         <div class="line"> </div>

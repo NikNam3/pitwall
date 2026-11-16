@@ -9,7 +9,9 @@
 //  - full: the list beside the chart, one `[data-testid="row-<i>"]` per row (a click toggles the highlight), its tie
 //    bracket `[data-testid="bracket-<i>"]` (with `data-role`) on tied rows only; the info rows `[data-testid="info"]`:
 //    the header line (`#`, `SRC`, `STOPS`, `E[POS]`, `E[PTS]`, `ΔTIME`/`ΔPLAN`) always, the highlighted row's values
-//    and its button (`<button data-testid="commit">` or, on the committed row, `<button data-testid="clear">`) only with
+//    and its button (`<button data-testid="save">` "save to slot …", which opens a slot picker of one `<button
+//    data-testid="pick-<slot>">` per `PLAN_SLOTS` slot; on a row saved in a slot `<button data-testid="activate">`; on
+//    the committed row `<button data-testid="clear">`; SP4.3d1 Task 11: the commit button became save) only with
 //    a highlight; no TRG column and no trigger lines (plans are stop lists, SP4.3d1 Task 3); the footer
 //    `[data-testid="footer"]` `N <scenarios>  CAND <candidates>`;
 //  - compact: the chart alone; with a highlight one info line `[data-testid="info"]` (rank, stops, E[pos], E[points]);
@@ -19,7 +21,7 @@
 // `send` comes from the panel (kit `getUiActions`); test/kit/ActionsHarness.svelte stands in for it with the widget's
 // declared actions (C74), and the panel's resolved link is a non-default feed (the action carries `link.feedId`, R24).
 import type { UiAction } from '@pitwall/contracts';
-import { carId, feedId, type McRow } from '@pitwall/domain';
+import { carId, feedId, known, PLAN_SLOTS, toSessionTime, type McRow } from '@pitwall/domain';
 import { cleanup, fireEvent, render } from '@testing-library/svelte';
 import type { Component } from 'svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -28,7 +30,7 @@ import type { ResolvedLink } from '../../kit/types.ts';
 import { unknownMark, unknownReason } from '../../kit/text.ts';
 import { formatCount, formatExpectedPlace, formatPoints, formatPosition } from '../../kit/values/format.ts';
 import { DEFAULT_THEME } from '../../theme/index.ts';
-import { cases, COMMITTED, NO_HIGHLIGHT, table, type PlanTable } from './fixtures.ts';
+import { cases, COMMITTED, computed, NO_HIGHLIGHT, SAVED, table, type PlanTable } from './fixtures.ts';
 import { stopsText } from './rows.ts';
 import StrategyTable from './StrategyTable.svelte';
 import * as text from './text.ts';
@@ -101,7 +103,7 @@ describe('strategy-table', () => {
     for (let i = 0; i < rows.length; i++) expect(lineLook(get(c, `line-${i}`)), `row ${i}`).toEqual({ role: 'textDim', width: THIN, dotted: false, dots: 0 });
     expect(find(c, 'now-line')).not.toBeNull();
     expect(find(c, 'epos-tick')).toBeNull();
-    expect(find(c, 'commit')).toBeNull();
+    expect(find(c, 'save')).toBeNull();
 
     // a click on the line of the tied leader
     await fireEvent.click(get(c, 'line-0'));
@@ -114,13 +116,13 @@ describe('strategy-table', () => {
     const info = textOf(get(c, 'info'));
     expect(info).toContain(formatExpectedPlace(rows[0]!.ePos));
     expect(info).toContain(formatPoints(rows[0]!.ePoints));
-    expect(find(c, 'commit')).not.toBeNull();
+    expect(find(c, 'save')).not.toBeNull();
 
     // a second click clears
     await fireEvent.click(get(c, 'line-0'));
     expect(lineLook(get(c, 'line-0'))).toEqual({ role: 'textDim', width: THIN, dotted: false, dots: 0 });
     expect(find(c, 'epos-tick')).toBeNull();
-    expect(find(c, 'commit')).toBeNull();
+    expect(find(c, 'save')).toBeNull();
 
     // a click on a list row (an untied one): it white and thick, every other line faint
     const u = rows.findIndex((r) => !r.tie);
@@ -160,23 +162,46 @@ describe('strategy-table', () => {
     expect(textOf(info)).toContain(formatExpectedPlace(NO_HIGHLIGHT.rows[0]!.ePos));
   });
 
-  it('commit sends plan.commit { feedId: link.feedId, carId: link.primary, policy: row.policy }; clear sends plan.clear { feedId: link.feedId, carId: link.primary }', async () => {
+  // SP4.3d1 Task 11: the commit button became "save to slot …" with a slot picker (plan.save); clear stays
+  it('save to slot sends plan.save { feedId: link.feedId, carId: link.primary, slot, policy: row.policy } after a pick; clear sends plan.clear { feedId: link.feedId, carId: link.primary }', async () => {
     const { container: c, sent } = mount(cases.committed);
     const rows = COMMITTED.rows;
     const k = rows.findIndex((r) => r.committed);
     const h = rows.findIndex((r) => !r.committed);
-    // a row other than the committed one: commit, no clear
+    // a row other than the committed one: save, no clear, no commit
     await fireEvent.click(get(c, `row-${h}`));
     expect(find(c, 'clear')).toBeNull();
-    await fireEvent.click(get(c, 'commit'));
-    expect(sent).toEqual([{ kind: 'plan.commit', feedId: LINK.feedId, carId: LINK.primary, policy: rows[h]!.policy }]);
-    // the committed row: clear, no commit
+    expect(c.querySelector('[data-testid="commit"]')).toBeNull();
+    expect(textOf(get(c, 'save'))).toMatch(/^save to slot/);
+    // the button opens the slot picker; nothing is sent before a pick (C73)
+    expect(all(c, 'pick-')).toHaveLength(0);
+    await fireEvent.click(get(c, 'save'));
+    expect(sent).toEqual([]);
+    expect(all(c, 'pick-').map((e) => e.getAttribute('data-testid'))).toEqual(PLAN_SLOTS.map((s) => `pick-${s}`));
+    await fireEvent.click(get(c, 'pick-B'));
+    expect(sent).toEqual([{ kind: 'plan.save', feedId: LINK.feedId, carId: LINK.primary, slot: 'B', policy: rows[h]!.policy }]);
+    expect(all(c, 'pick-')).toHaveLength(0);
+    // the committed row: clear, no save
     await fireEvent.click(get(c, `row-${k}`));
-    expect(find(c, 'commit')).toBeNull();
+    expect(find(c, 'save')).toBeNull();
     await fireEvent.click(get(c, 'clear'));
     expect(sent[1]).toEqual({ kind: 'plan.clear', feedId: LINK.feedId, carId: LINK.primary });
     expect(sent).toHaveLength(2);
     expect(sent.every((a) => 'feedId' in a && a.feedId === feedId('20778'))).toBe(true);
+  });
+
+  it('on a saved row: activate sends plan.activate { feedId: link.feedId, carId: link.primary, slot: row.slot }', async () => {
+    const { container: c, sent } = mount({ plan: computed(known(SAVED, toSessionTime(0))) });
+    const b = SAVED.rows.findIndex((r) => r.slot === 'B');
+    await fireEvent.click(get(c, `row-${b}`));
+    expect(find(c, 'save')).toBeNull();
+    expect(find(c, 'clear')).toBeNull();
+    await fireEvent.click(get(c, 'activate'));
+    expect(sent).toEqual([{ kind: 'plan.activate', feedId: LINK.feedId, carId: LINK.primary, slot: 'B' }]);
+    // a row in no slot: save, no activate
+    await fireEvent.click(get(c, `row-${SAVED.rows.findIndex((r) => r.slot === null)}`));
+    expect(find(c, 'activate')).toBeNull();
+    expect(find(c, 'save')).not.toBeNull();
   });
 
   it('one row; all rows tied; an infeasible committed row (its reason on hover); notApplicable; computing', async () => {
@@ -187,7 +212,7 @@ describe('strategy-table', () => {
       expect(all(c, 'row-')).toHaveLength(1);
       expect(all(c, 'bracket-')).toHaveLength(0);
       await fireEvent.click(get(c, 'row-0'));
-      expect(find(c, 'commit')).not.toBeNull();
+      expect(find(c, 'save')).not.toBeNull();
       cleanup();
     }
     // every row tied: one bracket over all, each a tie hover

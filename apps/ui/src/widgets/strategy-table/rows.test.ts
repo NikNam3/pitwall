@@ -9,8 +9,9 @@
 //    `formatExpectedPlace`; `committed`; `infeasible` `text.infeasible[row.infeasible]` or null;
 //  - `infoRow(plan, i)`: rank, source (as the list), stops, `ePos`, `ePoints` (kit `formatPoints`), `delta`: without a
 //    commit kit `formatSignedSeconds(deltaLeaderMs, 1)`, empty on rows[0]; with a commit
-//    `formatSignedSeconds(deltaPlanMs, 1)`, empty on the committed row; `button` `clear` on the committed row, else
-//    `commit`. A policy is a stop list (SP4.3d spec §5.1): the TRG count, the trigger lines (`triggerTexts`) and the
+//    `formatSignedSeconds(deltaPlanMs, 1)`, empty on the committed row; `button` `clear` on the committed row,
+//    `activate` on a row saved in a slot (`slot` not null), else `save` (SP4.3d1 Task 11: commit became "save to slot …"
+//    with a slot picker; a saved row is activated). A policy is a stop list (SP4.3d spec §5.1): the TRG count, the trigger lines (`triggerTexts`) and the
 //    rivals' race numbers (`cars`) are deleted with the triggers (SP4.3d1 Task 3);
 //  - `deltaHeader(plan)`: `text.headers.dLead` (`ΔTIME`) without a committed row, `text.headers.dPlan` (`ΔPLAN`) with one;
 //  - `footer(plan)`: `n` the scenario count (kit `formatCount`), `warning` with `text.openTieHover` while `unresolvedTie`,
@@ -18,7 +19,7 @@
 import { type McRow } from '@pitwall/domain';
 import { describe, expect, it } from 'vitest';
 import { formatCount, formatExpectedPlace, formatPoints, formatSignedSeconds } from '../../kit/values/format.ts';
-import { COMMITTED, NO_HIGHLIGHT, OPEN_TIE, table } from './fixtures.ts';
+import { COMMITTED, NO_HIGHLIGHT, OPEN_TIE, SAVED, table } from './fixtures.ts';
 import * as rowsModule from './rows.ts';
 import { deltaHeader, footer, infoRow, listRows, stopsText } from './rows.ts';
 import * as text from './text.ts';
@@ -52,11 +53,23 @@ describe('strategy-table rows', () => {
       ePos: formatExpectedPlace(r.ePos),
       ePoints: formatPoints(r.ePoints),
       delta: i === 0 ? '' : formatSignedSeconds(r.deltaLeaderMs, 1),
-      button: 'commit',
+      button: 'save',
     });
     const k = COMMITTED.rows.findIndex((x) => x.committed);
     expect(infoRow(COMMITTED, k)).toMatchObject({ source: { text: 'plan', hover: text.sourceHover.committed }, button: 'clear' });
     expect(listRows(COMMITTED)[k]).toMatchObject({ committed: true, source: { text: 'plan' } });
+  });
+
+  // SP4.3d1 Task 11: the commit button became "save to slot …"; a row saved in a slot is activated instead
+  it('the button: save on a row in no slot, activate on a saved row, clear on the committed row', () => {
+    const b = at(SAVED.rows, 'L19 H');
+    const g = at(SAVED.rows, 'L22 H');
+    expect(SAVED.rows[b]!.slot).toBe('B');
+    expect(infoRow(SAVED, b)).toMatchObject({ source: { text: 'plan', hover: text.sourceHover.plan }, button: 'activate' });
+    expect(infoRow(SAVED, g)).toMatchObject({ source: { text: 'game', hover: text.sourceHover.game }, button: 'activate' });
+    SAVED.rows.forEach((r, i) => {
+      if (r.slot === null) expect(infoRow(SAVED, i).button, `row ${i}`).toBe('save');
+    });
   });
 
   // SP4.3d1 Task 3 row 5 (spec §5.1): the TRG column and its trigger lines are deleted with the triggers
