@@ -17,7 +17,7 @@ import { rejoinCalculator } from '../../src/rejoin/calculator.ts';
 import { REJOIN, REJOIN_CONFIG, type Rejoin, type RejoinAt, type RejoinOutput } from '../../src/rejoin/index.ts';
 import { guardedQuick } from '../situated.ts';
 import { loadUnitFolders } from '../units.ts';
-import { INSUFFICIENT, NOT_APPLICABLE, NOW, rejoinCase, SOURCES, US, type Field, type RejoinCase } from './field.ts';
+import { FIELD, INSUFFICIENT, NOT_APPLICABLE, NOW, rejoinCase, SOURCES, US, type Field, type RejoinCase } from './field.ts';
 
 const calc = guardedQuick(rejoinCalculator);
 
@@ -203,6 +203,34 @@ describe('rejoin calculator', () => {
     }
   });
 
+  // SP4.3d1 Task 8 R21: a car behind us on our lap needs only as much of our history as its own gap, not a full lap;
+  // an SC on lap 1 must still give a rejoin position. Cars ahead stay unknown with less than a lap of our history.
+  it('our first lap, or after a join mid-race: cars behind us on our lap keep their gaps and the rejoin position is where the ghost falls among them; cars ahead are unknown (R21)', () => {
+    const wide = { [REJOIN_CONFIG.key]: { orderAround: 12 } };
+    // the standard field on our first lap: now 50 000, we at progress 25 (45 s of history), every car behind us within it
+    const first: RejoinCase = { now: 50_000, config: wide };
+    // the standard field after a join mid-race: the race started 180 s before our first record, so our kept crossings
+    // begin at progress 98 (1 400) and we are at progress 125 at 50 000: 48.6 s of history, less than a lap
+    const joined: RejoinCase = { field: Object.fromEntries(Object.entries(FIELD).map(([id, o]) => [id, o - 180_000])), now: 50_000, config: wide };
+    for (const [name, c] of [['first lap', first], ['joined', joined]] as const) {
+      const r = rejoinOf(outputOf(c));
+      // green 20 300: cars 6, 7, 8 (+3.1, +12.0, +19.9 s) cross before us, car 9 (+24.0 s) after: P9, as in the full race
+      expect(r.conditions.green.rejoinPosition, name).toMatchObject({ known: true, value: 9 });
+      const green = valueOf(r.conditions.green.order);
+      // only the cars behind us have a gap: the cars ahead (1 … 5) are not in the order
+      expect(ids(green), name).toEqual([6, 7, 8, 'ghost', 9, 10, 11]);
+      expect(tOf(green, 8), name).toBeCloseTo(-400, 0);
+      expect(tOf(green, 9), name).toBeCloseTo(3_700, 0);
+      expect(tOf(green, 11), name).toBeCloseTo(14_700, 0);
+      // SC 9 800 on lap 1: car 6 crosses before us, car 7 after: P7
+      expect(r.conditions.sc.rejoinPosition, name).toMatchObject({ known: true, value: 7 });
+      const sc = valueOf(r.conditions.sc.order);
+      expect(ids(sc), name).toEqual([6, 'ghost', 7, 8, 9, 10, 11]);
+      expect(tOf(sc, 6), name).toBeCloseTo(-6_700, 0);
+      expect(tOf(sc, 7), name).toBeCloseTo(2_200, 0);
+    }
+  });
+
   // 8
   it('our car in a box stop, on its out lap or serving a penalty: absent; on a racing lap or its in lap: present', () => {
     for (const kind of ['boxStop', 'outLap', 'servingPenalty']) expect(outputOf({ activity: { [US]: kind } }).cars[carId(US)], kind).toBeUndefined();
@@ -301,12 +329,17 @@ describe('rejoin calculator', () => {
     expect(folder?.table).toBe(REJOIN_BEHAVIOUR);
   });
 
-  it('keeps no copy of the live tail: its calculator imports liveProgress and timeAtProgress from the shared crossing history and defines no progressOf/whenAt (C43, F1)', () => {
+  // SP4.3d1 Task 8 F1 (C43, ruling R14): a car's time behind us now has one owner, the shared `timeBehind`; rejoin keeps
+  // no local copy of our position now, our live point, the lap-ago point or the folding by whole laps
+  it('keeps no copy of the time behind us: its calculator calls the shared timeBehind and folds nothing itself (C43, Task 7 F1, Task 8 F1)', () => {
     const source = readFileSync(join(import.meta.dirname, '../../src/rejoin/calculator.ts'), 'utf8');
     const imported = /import\s*\{([^}]*)\}\s*from\s*'\.\.\/shared\/crossing-history\.ts'/.exec(source)?.[1] ?? '';
-    expect(imported).toMatch(/\bliveProgress\b/);
-    expect(imported).toMatch(/\btimeAtProgress\b/);
-    expect(source).not.toMatch(/\b(?:function|const|let)\s+progressOf\b/);
-    expect(source).not.toMatch(/\b(?:function|const|let)\s+whenAt\b/);
+    expect(imported).toMatch(/\btimeBehind\b/);
+    expect(source).toMatch(/\btimeBehind\(/);
+    // reading our history directly, our live point and the lap unit are the helper's
+    expect(source).not.toMatch(/\btimeAtProgress\b/);
+    expect(source).not.toMatch(/\bLivePoint\b|\blivePoint\b/);
+    expect(source).not.toMatch(/\bMINI_SECTORS\b/);
+    expect(source).not.toMatch(/\b(?:function|const|let)\s+(?:progressOf|whenAt|liveOf|here|lapAgo|sinceThere|there|up|down)\b/);
   });
 });
