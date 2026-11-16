@@ -170,6 +170,10 @@ export const commandTitles = {
   driversOpen: 'Link the drivers',
   planCommit: (car: number): string => `Commit the plan for car ${car}`,
   planClear: (car: number): string => `Clear the plan for car ${car}`,
+  planSave: (car: number, slot: string): string => `Save the plan for car ${car} to slot ${slot}`,
+  planActivate: (car: number, slot: string): string => `Activate slot ${slot} for car ${car}`,
+  planRemove: (car: number, slot: string): string => `Remove slot ${slot} of car ${car}`,
+  planEdit: (car: number, slot: string): string => `Edit slot ${slot} of car ${car}`,
   sessionEnd: 'End session',
 } as const;
 

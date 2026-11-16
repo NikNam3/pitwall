@@ -1,6 +1,6 @@
 // The shell's own commands and their default keys (spec 7.7). Widgets cannot register commands in the MVP.
 import { ackToken, type LinkGroup, type PanelSpec, type ReplayControl, type UiAction, type UiSettings } from '@pitwall/contracts';
-import type { CarId, FeedId, Insight, Policy } from '@pitwall/domain';
+import { PLAN_SLOTS, type CarId, type FeedId, type Insight, type Policy, type Slot } from '@pitwall/domain';
 import * as text from '../../kit/text.ts';
 import type { Inspection } from '../inspector/inspection.svelte.ts';
 import { THEMES, type ThemeVariant } from '../../theme/index.ts';
@@ -214,6 +214,35 @@ export function planCommands(
       : [{ id: planCommitId(carId), title: t.planCommit(carId), group: g, run: () => ctx.send({ kind: 'plan.commit', feedId: ctx.feedId, carId, policy }) }]),
     { id: planClearId(carId), title: t.planClear(carId), group: g, run: () => ctx.send({ kind: 'plan.clear', feedId: ctx.feedId, carId }) },
   ]);
+}
+
+/** `plan.<verb>.<carId>.<slot>`: the ids of the plan slot commands (C72). */
+export const planSlotId = (verb: 'save' | 'activate' | 'remove' | 'edit', carId: CarId, slot: Slot): string => `plan.${verb}.${carId}.${slot}`;
+
+/**
+ * The plan slot commands (SP4.3d1 Task 11, C72-C74): per car and slot of `PLAN_SLOTS`, `plan.activate`, `plan.remove`
+ * and `plan.edit`, and `plan.save` for a car given a policy (saved whole). The first three send their uiActions for the
+ * window's feed; `plan.edit` sends nothing (C73): it opens the board's window-local draft through `edit`, which the
+ * caller supplies (there is no shell seam for a widget-local action).
+ */
+export function planSlotCommands(
+  cars: readonly { carId: CarId; policy: Policy | null }[],
+  ctx: Pick<CommandContext, 'send'> & { feedId: FeedId },
+  edit: (carId: CarId, slot: Slot) => void,
+): Command[] {
+  const g = text.commandGroups.plan;
+  const t = text.commandTitles;
+  const feedId = ctx.feedId;
+  return cars.flatMap(({ carId, policy }) =>
+    PLAN_SLOTS.flatMap((slot): Command[] => [
+      ...(policy === null
+        ? []
+        : [{ id: planSlotId('save', carId, slot), title: t.planSave(carId, slot), group: g, run: () => ctx.send({ kind: 'plan.save', feedId, carId, slot, policy }) }]),
+      { id: planSlotId('activate', carId, slot), title: t.planActivate(carId, slot), group: g, run: () => ctx.send({ kind: 'plan.activate', feedId, carId, slot }) },
+      { id: planSlotId('remove', carId, slot), title: t.planRemove(carId, slot), group: g, run: () => ctx.send({ kind: 'plan.remove', feedId, carId, slot }) },
+      { id: planSlotId('edit', carId, slot), title: t.planEdit(carId, slot), group: g, run: () => edit(carId, slot) },
+    ]),
+  );
 }
 
 /**
