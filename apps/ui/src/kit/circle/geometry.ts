@@ -44,7 +44,8 @@ export type CarLabel = { carId: CarId; code: string; ring: LabelRing; label: Poi
  * A single car takes the inner ring. A group fans out alternately (inner, outer, inner, ...) unless it is too tight:
  * three or more cars spanning under two label widths. A tight group keeps one code, the teammate's, else the car
  * closest to our car on the circle, and the others are dots. Our car is skipped. The result is in the sorted order.
- * Our car's own label (drawn at the top by the widget) is not part of a group.
+ * Our car's label (drawn at the top by the widget) takes the inner slot at the top, so a car within a label width of
+ * it goes to the outer ring (a dot if another car's label is there); our car is not a group member.
  */
 export function placeCircleLabels(cars: readonly LabelCar[], opts: LabelOptions): CarLabel[] {
   const { lapMs, innerRadius, outerRadius, labelWidth } = opts;
@@ -71,6 +72,15 @@ export function placeCircleLabels(cars: readonly LabelCar[], opts: LabelOptions)
     }
     const keep = g.find((c) => c.carId === opts.teammate) ?? g.reduce((best, c) => (near(c) < near(best) ? c : best), first);
     for (const c of g) rings.set(c.carId, c === keep ? 'inner' : 'dot');
+  }
+  // Our car's label takes the inner slot at the top: a car within a label width of it never takes the inner ring. It
+  // takes the outer ring if no car there is within a label width, else it is a dot.
+  const ours: LabelCar = { carId: opts.ourCar, code: '', behindMs: 0 };
+  const nearTop = sorted.filter((c) => rings.get(c.carId) !== 'dot' && arc(c, ours) < labelWidth);
+  for (const c of nearTop) rings.delete(c.carId);
+  for (const c of nearTop) {
+    const taken = sorted.some((d) => d !== c && rings.get(d.carId) === 'outer' && arc(c, d) < labelWidth);
+    rings.set(c.carId, taken ? 'dot' : 'outer');
   }
   return sorted.map((c) => {
     const ring = rings.get(c.carId) ?? 'inner';
