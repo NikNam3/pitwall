@@ -252,8 +252,8 @@ describe('a flashback and a plan (C27a)', () => {
     const saveOf = (slot: Slot, lap: number) => (seen: readonly Seen[]): PlanAction =>
       ({ kind: 'plan.save', feedId: F, carId: last(seen).player, slot, policy: policyAt(Math.min(lap, last(seen).totalLaps)) });
     const activateOf = (slot: Slot) => (seen: readonly Seen[]): PlanAction => ({ kind: 'plan.activate', feedId: F, carId: last(seen).player, slot });
-    /** True once the race clock has gone back: the rewind is applied. */
-    const rewound = (_index: number, seen: readonly Seen[]): boolean => seen.length > 1 && seen.some((s) => s.at > last(seen).at);
+    /** True once the race clock has gone back twice: the segment holds two flashbacks to the same target, both applied. */
+    const rewound = (_index: number, seen: readonly Seen[]): boolean => seen.filter((s, i) => i > 0 && s.at < seen[i - 1]!.at).length >= 2;
     // as above: the first pass runs 741.5 to 744.5 s, the flashback goes back to 742.045 s; A is saved on the first
     // frame (before the target), B 2 s into the first pass (after it)
     const live = await run(FLASHBACK, {
