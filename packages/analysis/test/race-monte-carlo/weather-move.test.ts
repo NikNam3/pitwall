@@ -1,7 +1,14 @@
 // `race-monte-carlo` after the weather generator's move to `weather-paths` (SP4.3c Task 14 row 2, O3b, spec §5.4a): the
 // Monte Carlo draws u per scenario as before and calls `weatherPath`, so its scenario results are bit-identical. The
-// golden hashes below were taken from the unit before the move (at a04a0396), over seeded runs with a perfect and an
+// golden hashes were first taken from the unit before the move (at a04a0396), over seeded runs with a perfect and an
 // approximate forecast, a wet start and a rain trigger; each hash is the sha256 of the result in `stableText`.
+//
+// SP4.3d1 Task 3 (spec §5.1, ruling R17) deleted the triggers: a policy is a stop list, so car 2's rain-trigger
+// candidate became the stop list `stopAt(7, 'inter')` and no policy carries a `triggers` key. The goldens were
+// regenerated on 43bbf5c4 and checked against the unit before Task 3 (ecd9b4d1~1, loaded from git): run on these
+// candidates (each with `triggers: []`), its results with every `triggers` key dropped hash to exactly the new goldens,
+// in all 12 hashes; its `scenarios` and `field` hashes with the keys kept equal the a04a0396 goldens. The test below
+// checks the input side: the old candidates, `triggers` dropped and the rain-trigger candidate replaced, are these.
 import { createHash } from 'node:crypto';
 import { known, type LapModelParams, type Policy, type StartingPoint } from '@pitwall/domain';
 import { createRng } from '@pitwall/engine/readers';
@@ -43,27 +50,46 @@ const INPUTS: Record<string, () => McInput> = {
   wetStart: () => mcInput(field('perfect', (l) => (l <= 6 ? 30 : 0), 9_000), CANDIDATES, { hazard: hazard(14) }),
 };
 
-/** The hashes taken before the move (a04a0396). */
+/** The candidates before Task 3 (ecd9b4d1~1) as plain data: every policy with `triggers`, car 2's third one a rain trigger. */
+const OLD_CANDIDATES: Record<number, unknown[]> = {
+  2: [
+    { stops: [], triggers: [] },
+    { stops: [{ lap: 4, compound: 'inter' }], triggers: [] },
+    { stops: [], triggers: [{ kind: 'rain', wetnessMs: 1_500, action: { box: 'inter' } }] },
+  ],
+  3: [
+    { stops: [], triggers: [] },
+    { stops: [{ lap: 6, compound: 'hard' }], triggers: [] },
+  ],
+};
+
+/** The rain-trigger candidate's replacement, a planned inter stop (car 2, position 2). */
+const RAIN_REPLACEMENT = { car: 2, index: 2, policy: stopAt(7, 'inter') };
+
+/** The hashes on 43bbf5c4: the unit before Task 3 gives the same, every `triggers` key dropped (header). */
 const GOLDEN: Record<string, { mc: string; scores: string; scenarios: string; field: string }> = {
   perfect: {
-    mc: 'd2bd3edf3a7caa1a3f67dbbd8ea8fad8f838337e7ce87956557b1925c31b4894',
-    scores: '7e7163c585caa28f11fc765a51421608355885d42a74b0e84e0a2845d5f49e8d',
-    scenarios: '7cb58fca996232dd396215ea2b67f941ce5b229329744c151688f38ed6713185',
+    mc: '191a72bdd8aae72ee3028b4e5210bfa6655b99e687a31fc2076b5be69ee739c9',
+    scores: 'f55cd4f3b0b361ada616362b848f9a65fb9565eae40e04d7079302cedd65c9ef',
+    scenarios: '32182288c2e51a3d33ef3853c0ddb513915946aaf953346564b164de55a34ecd',
     field: 'd217144f4788b93ff3359c25a9aa24a671dc0c37e30026958e5fc13da9392c1e',
   },
   approximate: {
-    mc: '008d380fc4e20a61be46ec98e741b57d2d070ab429ee15fc3075ca4767ce925a',
-    scores: 'f8e43bc4a4f39aa2472516dcf560574fda8e6a0bd2b0374aee628c4ac41e363e',
-    scenarios: 'bca7494745b6828bb41c02f81a13224bd36d53f5ca50949a2736e468132a0b0d',
+    mc: '7312bf34e0731abb47e5a01cce7ddc11666dee164979e45f655f04f607c4529b',
+    scores: 'b6b47f1bad925b2975e5f5aa67b359a3ab6b0e564212791e5aa33c4a8f4a6abd',
+    scenarios: '34919c7bbc941c12b79be12e6be166cfe873a67181ea6ef86b230878c20451ea',
     field: '818b8477ddb36e1f23b3dd14c6d0b4337699c8c6d92cf41efee1aa9bba5f2c7e',
   },
   wetStart: {
-    mc: '81f9a1084a6b59476716e2dbeb074d02f442606f32a9533670e4c7cd00d2842e',
-    scores: '17b9233bf52dea52a4c243a19278de939d4d2f2bad01d60663239e2452b8295c',
-    scenarios: 'a349c71d58a70cda8d944577e0050e40af0a852520a7f8f237f222913c3b69d7',
+    mc: '5f57e05d9f89c4d49dcbf7ee811bdb385d42cd107710618be52fbdaf557b0aed',
+    scores: 'c042e604cc67546a36e054557d4e77f8546181ac1eba4a001934c5354ca2d58a',
+    scenarios: 'e311c9b361072351024ce6a268454e3b067e3dc2ea4c28b8626ac411346b011c',
     field: 'cb317f566bd549642bd6932a3b23ede24ac9a3b59bd198a6a6eefef81a42d36f',
   },
 };
+
+/** `value` as text with every `triggers` key dropped. */
+const withoutTriggers = (value: unknown): string => JSON.stringify(value, (key, v: unknown) => (key === 'triggers' ? undefined : v));
 
 /** What a case's run gives: the search, the full scoring, 200 drawn scenarios and the field positions. */
 function hashesOf(name: string): { mc: string; scores: string; scenarios: string; field: string } {
@@ -76,6 +102,19 @@ function hashesOf(name: string): { mc: string; scores: string; scenarios: string
     field: sha(fieldPositions(fieldInput(), createRng(64))),
   };
 }
+
+describe('race-monte-carlo: the inputs after Task 3 (R17)', () => {
+  it('the old candidates, triggers dropped and the rain-trigger candidate replaced, are the candidates the goldens run', () => {
+    const old = Object.fromEntries(
+      Object.entries(OLD_CANDIDATES).map(([car, list]) => [
+        car,
+        list.map((p, i) => (Number(car) === RAIN_REPLACEMENT.car && i === RAIN_REPLACEMENT.index ? RAIN_REPLACEMENT.policy : p)),
+      ]),
+    );
+    expect(sha(JSON.parse(withoutTriggers(old)))).toBe(sha(CANDIDATES));
+    expect(OLD_CANDIDATES[RAIN_REPLACEMENT.car]?.[RAIN_REPLACEMENT.index]).toMatchObject({ triggers: [{ kind: 'rain' }] });
+  });
+});
 
 describe('race-monte-carlo: bit-identical across the weather move (row 2, seeded, C2)', () => {
   for (const name of Object.keys(INPUTS)) {

@@ -20,7 +20,23 @@ import { policyOf } from '../../src/strategy/candidates.ts';
 import { STRATEGY_CONFIG } from '../../src/strategy/config.ts';
 import { prepareStrategy } from '../../src/strategy/index.ts';
 import { candidatesForRun } from '../../src/strategy/job.ts';
-import { AHEAD, AHEAD_STOP, BEHIND, BEHIND_STOP, CAR, candidatesOf, CONFIG, field, input, LAP, LAPS, solved } from './candidates-support.ts';
+import {
+  AHEAD,
+  AHEAD_STOP,
+  BEHIND,
+  BEHIND_OWN_STOP,
+  BEHIND_STOP,
+  CAR,
+  candidatesOf,
+  CONFIG,
+  expectedMirror,
+  field,
+  fieldWithBehind,
+  input,
+  LAP,
+  LAPS,
+  solved,
+} from './candidates-support.ts';
 import { json, once, PLAYER, RACE, SETS, stopIn, TEAMMATE, TEST_CAP, viewAt } from './support.ts';
 
 type Cand = { policy: Policy; source: McSource; rule: string | null };
@@ -48,6 +64,22 @@ function groups(plans: readonly DpPlan[]): Map<string, DpPlan[]> {
   }
   for (const list of out.values()) list.sort((a, b) => a.expectedMs - b.expectedMs);
   return out;
+}
+
+/**
+ * Each mirror's policy is among `cands` exactly once, labelled by the first source in candidate order that has it
+ * (`expectedMirror`; ruling R18, "no policy twice"): its rule unless a base plan or a neighbour has the same policy.
+ */
+function expectMirrors(cands: readonly Cand[], mirrors: readonly (readonly ['mirrorAhead' | 'mirrorBehind', { lap: number; compound: DpPlan['stops'][number]['compound'] }])[]): void {
+  for (const [rule, stop] of mirrors) {
+    const expected = expectedMirror(S(), CONFIG, rule, stop);
+    expect(expected, `${rule}: bestWith gives a plan`).not.toBeNull();
+    const withPolicy = cands.filter((c) => json(c.policy) === expected!.policy);
+    expect(withPolicy, `${rule}: its policy once`).toHaveLength(1);
+    expect({ source: withPolicy[0]!.source, rule: withPolicy[0]!.rule }, rule).toEqual({ source: expected!.source, rule: expected!.rule });
+    expect(withPolicy[0]!.policy.stops[0], rule).toEqual(stop);
+    if (expected!.source !== 'rule') expect(cands.filter((c) => c.rule === rule), `${rule}: no rule row besides`).toHaveLength(0);
+  }
 }
 
 /** Whether a base (`dp`) candidate is plan `p`: its stops, nothing else. */
@@ -100,12 +132,28 @@ describe('strategy: candidates from named sources (SP4.3c Task 20)', () => {
     // the precondition: race-monte-carlo's one rival policy gives these first stops
     expect(rivalPlainPolicy(start, AHEAD, null).stops[0]).toEqual(AHEAD_STOP);
     expect(rivalPlainPolicy(start, BEHIND, null).stops[0]).toEqual(BEHIND_STOP);
+    // SP4.3d1 Task 3 (ruling R18): a mirror's policy is a candidate, labelled by the first source that has it, so on
+    // this field the behind-mirror `[27 soft, 37 medium]` is a base plan (`dp`) and the ahead-mirror its rule
     const cands = candidates();
-    for (const [rule, stop] of [['mirrorAhead', AHEAD_STOP], ['mirrorBehind', BEHIND_STOP]] as const) {
-      const mirrors = cands.filter((c) => c.source === 'rule' && c.rule === rule);
-      expect(mirrors, rule).toHaveLength(1);
-      expect(mirrors[0]!.policy.stops[0], rule).toEqual(stop);
-    }
+    expectMirrors(cands, [['mirrorAhead', AHEAD_STOP], ['mirrorBehind', BEHIND_STOP]]);
+    expect(expectedMirror(S(), CONFIG, 'mirrorBehind', BEHIND_STOP)?.source, 'the precondition: the behind-mirror is a base plan').toBe('dp');
+    expect(expectedMirror(S(), CONFIG, 'mirrorAhead', AHEAD_STOP)?.source, 'the precondition: the ahead-mirror is no base plan').toBe('rule');
+  });
+
+  // row 2, R18: a behind-mirror that differs from every DP plan carries its label
+  it('a behind-mirror unlike every DP plan and neighbour (lap 25 for softs) is one candidate labelled mirrorBehind', () => {
+    const start = fieldWithBehind(BEHIND_OWN_STOP);
+    expect(rivalPlainPolicy(start, BEHIND, null).stops[0]).toEqual(BEHIND_OWN_STOP);
+    const { dp, solutions } = S();
+    const expected = expectedMirror(S(), CONFIG, 'mirrorBehind', BEHIND_OWN_STOP);
+    expect(expected?.source, 'the precondition: no base plan or neighbour has its policy').toBe('rule');
+    expect(dp.plans.some((p) => json(policyOf(p)) === expected!.policy), 'the precondition: no DP plan at all has its policy').toBe(false);
+    const cands = candidatesOf(start, CAR, dp, solutions, CONFIG) as Cand[];
+    const behind = cands.filter((c) => c.rule === 'mirrorBehind');
+    expect(behind, 'one mirrorBehind candidate').toHaveLength(1);
+    expect(behind[0]).toEqual({ policy: JSON.parse(expected!.policy) as Policy, source: 'rule', rule: 'mirrorBehind' });
+    expect(behind[0]!.policy.stops[0]).toEqual(BEHIND_OWN_STOP);
+    expect(new Set(cands.map((c) => json(c.policy))).size, 'no policy twice').toBe(cands.length);
   });
 
   // row 3
@@ -139,13 +187,14 @@ describe('strategy: candidates from named sources (SP4.3c Task 20)', () => {
   it('candidates: no candidate of source rule has rule cover or extend; mirror ahead and behind unchanged', () => {
     const cands = candidates();
     const rules = cands.filter((c) => c.source === 'rule');
-    expect(rules.map((c) => c.rule).sort()).toEqual(['mirrorAhead', 'mirrorBehind']);
+    for (const c of rules) expect(['mirrorAhead', 'mirrorBehind'], json(c.policy)).toContain(c.rule);
     for (const c of rules) expect(['cover', 'extend'], json(c.policy)).not.toContain(c.rule);
-    for (const [rule, stop] of [['mirrorAhead', AHEAD_STOP], ['mirrorBehind', BEHIND_STOP]] as const) {
-      const mirror = rules.filter((c) => c.rule === rule);
-      expect(mirror, rule).toHaveLength(1);
-      expect(mirror[0]!.policy.stops[0], rule).toEqual(stop);
-    }
+    // the mirrors unchanged, each labelled by the first source with its policy (R18): here the ahead-mirror only
+    expect(rules.map((c) => c.rule)).toEqual(['mirrorAhead']);
+    expectMirrors(cands, [['mirrorAhead', AHEAD_STOP], ['mirrorBehind', BEHIND_STOP]]);
+    // with a behind-mirror unlike every DP plan, both rules
+    const own = candidatesOf(fieldWithBehind(BEHIND_OWN_STOP), CAR, S().dp, S().solutions, CONFIG) as Cand[];
+    expect(own.filter((c) => c.source === 'rule').map((c) => c.rule).sort()).toEqual(['mirrorAhead', 'mirrorBehind']);
     // every candidate's policy is a stop list
     for (const c of cands) expect(Object.keys(c.policy), json(c.policy)).not.toContain('triggers');
   });
