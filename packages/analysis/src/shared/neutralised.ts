@@ -3,8 +3,8 @@
 // `neutralised` (SC, VSC) and `suspended` (red flag) spans, and the `suspended` spans of qualifying and practice. The
 // owner of the neutralisation kind (SP4.3c O6): the open one, the last one (confirmed only), whether it is ending, and
 // the time-loss exclusion every caller of `timeLossEvents` passes; no unit matches these span kinds itself.
-import type { MachineId, NeutralisedDetail, OpenSpan, Span } from '@pitwall/domain';
-import { spansOverlapping, type DeepReadonly, type EngineView } from '@pitwall/engine/readers';
+import type { CarId, MachineId, NeutralisedDetail, OpenSpan, Span } from '@pitwall/domain';
+import { coverageOf, spansOverlapping, type Coverage, type DeepReadonly, type EngineView } from '@pitwall/engine/readers';
 import type { TimeLossExcluded } from './time-loss/index.ts';
 
 /** The span kinds that are a neutralisation, by session-phase sub-machine; the readers declare each `spans:<machine>` (C41). */
@@ -136,17 +136,24 @@ type ExclusionSource = { history: Pick<EngineView['history'], 'spans'>; situatio
  * The one time-loss exclusion (C26, C43) every caller of `timeLossEvents` passes: a car's mini-sector from frame `from`
  * to frame `to` is excluded when a neutralisation (`isNeutralisation`: a closed one confirmed, an open one also pending
  * its confirmation) or the car's pit visit or garage spell covers any of its frames `[from, to)` (frame `from` for an
- * empty one), by the projection module's span-range query (`spansOverlapping`) over those spans, closed and open. With
+ * empty one), by the projection module's coverage query (`coverageOf`, built once per call) over those spans, closed and open. With
  * a situation, the neutralisations are those of the session-phase sub-machine of its weekend phase (C14; none while it
  * is pending); without one (a fold over closed spans alone, C31.2), those of every session-phase sub-machine of the
  * source.
  */
 export function timeLossExcludedOf(view: ExclusionSource): TimeLossExcluded {
   const phase = view.situation === undefined ? NEUTRALISATION_MACHINES : [phaseMachineOf(view.situation)].filter((m) => m !== undefined);
+  const neutralised = phase.map((machine) => coverageOf(view, machine, { keep: (s) => isNeutralisation(machine, s) }));
+  const cars = new Set<CarId>();
+  for (const s of view.history.spans[CAR_LOCATION] ?? []) if (s.carId !== undefined) cars.add(s.carId);
+  for (const s of view.situation?.byMachine[CAR_LOCATION] ?? []) if (s.carId !== undefined) cars.add(s.carId);
+  const keep = (s: { kind: string }) => NO_TIME_LOSS_LOCATIONS.includes(s.kind);
+  const away = new Map<CarId, Coverage>();
+  for (const carId of cars) away.set(carId, coverageOf(view, CAR_LOCATION, { carId, keep }));
   return (carId, from, to) => {
     const end = Math.max(to, from + 1);
-    if (phase.some((machine) => spansOverlapping(view, from, end, machine).some((s) => isNeutralisation(machine, s)))) return true;
-    return spansOverlapping(view, from, end, CAR_LOCATION, carId).some((s) => NO_TIME_LOSS_LOCATIONS.includes(s.kind));
+    for (const covered of neutralised) if (covered(from, end)) return true;
+    return away.get(carId)?.(from, end) ?? false;
   };
 }
 
