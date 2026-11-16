@@ -2,7 +2,7 @@
 // newest plan decision in the projection's decisions, `null` when that one is a `planCleared` or the car has none. A
 // `calibrationChosen` and another car's plan decisions do not count. Readers get the plan here, never by their own matching.
 import { describe, expect, it } from 'vitest';
-import { carId, latestPlan, type DecisionRecord, type Policy } from '../src/index.ts';
+import { activeSlot, carId, latestPlan, planSlots, type DecisionRecord, type Policy, type Slot } from '../src/index.ts';
 
 const CAR = carId(0);
 const MATE = carId(1);
@@ -42,5 +42,31 @@ describe('latestPlan (C25, C76)', () => {
     expect(latestPlan(history(committed(CAR, POLICY, 40), committed(MATE, TWO_STOP, 41), cleared(MATE, 90)), CAR)).toEqual(POLICY);
     // a commit after a clear counts again
     expect(latestPlan(history(committed(CAR, POLICY, 40), cleared(CAR, 90), committed(CAR, TWO_STOP, 120)), CAR)).toEqual(TWO_STOP);
+  });
+});
+
+const saved = (car: typeof CAR, slot: Slot, policy: Policy, frame: number): DecisionRecord => ({ kind: 'planSaved', carId: car, slot, policy, frame });
+const removed = (car: typeof CAR, slot: Slot, frame: number): DecisionRecord => ({ kind: 'planRemoved', carId: car, slot, frame });
+const activated = (car: typeof CAR, slot: Slot, policy: Policy, frame: number): DecisionRecord => ({ kind: 'planCommitted', carId: car, policy, slot, frame });
+
+describe('planSlots and activeSlot (C25, C76; SP4.3d spec §5)', () => {
+  it('save A, save B, remove B leaves { A }', () => {
+    expect(planSlots(history(saved(CAR, 'A', POLICY, 1), saved(CAR, 'B', TWO_STOP, 2), removed(CAR, 'B', 3)), CAR)).toEqual({ A: POLICY });
+  });
+
+  it('saving A twice keeps the newer', () => {
+    expect(planSlots(history(saved(CAR, 'A', POLICY, 1), saved(CAR, 'A', TWO_STOP, 2)), CAR)).toEqual({ A: TWO_STOP });
+  });
+
+  it('activating B makes B the active slot; a plan commit without a slot has none', () => {
+    expect(activeSlot(history(saved(CAR, 'B', TWO_STOP, 1), activated(CAR, 'B', TWO_STOP, 2)), CAR)).toBe('B');
+    expect(activeSlot(history(committed(CAR, POLICY, 2)), CAR)).toBeNull();
+    expect(activeSlot(history(activated(MATE, 'A', POLICY, 2)), CAR)).toBeNull();
+  });
+
+  it('planCleared makes the active slot null; saves do not change it', () => {
+    expect(activeSlot(history(activated(CAR, 'B', TWO_STOP, 2), cleared(CAR, 3)), CAR)).toBeNull();
+    expect(activeSlot(history(activated(CAR, 'B', TWO_STOP, 2), saved(CAR, 'A', POLICY, 3)), CAR)).toBe('B');
+    expect(latestPlan(history(activated(CAR, 'B', TWO_STOP, 2), saved(CAR, 'A', POLICY, 3)), CAR)).toEqual(TWO_STOP);
   });
 });

@@ -4,6 +4,7 @@ export * from './battle/index.ts';
 export { battleCalculator } from './battle/calculator.ts';
 export * from './car-bands/index.ts';
 export * from './car-bands/calculator.ts';
+export * from './circle/index.ts';
 export * from './crossover/index.ts';
 export { crossoverCalculator } from './crossover/calculator.ts';
 export * from './damage/index.ts';
@@ -110,6 +111,7 @@ export {
   type McResult,
   type RivalRules,
 } from './race-monte-carlo/index.ts';
+export * from './strategy-overview/index.ts';
 export * from './strategy/index.ts';
 export * from './undercut/index.ts';
 export * from './pit-sweep/index.ts';

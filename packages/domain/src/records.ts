@@ -5,6 +5,7 @@ import type { TyreSet } from './car.ts';
 import type { Corners } from './corners.ts';
 import type { FactRef, FrameNumber } from './facts.ts';
 import type { Policy } from './forecast.ts';
+import type { Slot } from './plan-slots.ts';
 import type { CarId, SessionTime } from './ids.ts';
 import type { Known } from './known.ts';
 import type { Celsius, Joules, Kg, Ms, Percent, Ratio } from './units.ts';
@@ -165,7 +166,9 @@ export type MiniSectorCrossing = {
  */
 export type DecisionRecord =
   | { kind: 'calibrationChosen'; setId: string | null; snapshot: string | null; frame: FrameNumber }
-  | { kind: 'planCommitted'; carId: CarId; policy: Policy; frame: FrameNumber }
+  | { kind: 'planCommitted'; carId: CarId; policy: Policy; slot?: Slot; frame: FrameNumber }
+  | { kind: 'planSaved'; carId: CarId; slot: Slot; policy: Policy; frame: FrameNumber }
+  | { kind: 'planRemoved'; carId: CarId; slot: Slot; frame: FrameNumber }
   | { kind: 'planCleared'; carId: CarId; frame: FrameNumber };
 
 /** A decision as it enters the engine, before the recorder gives it its frame (C10): one kind at a time. */

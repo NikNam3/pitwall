@@ -75,6 +75,7 @@ export const unknownReason = {
   notApplicable: 'not applicable',
   realism: 'hidden by realism mode',
   insufficientData: 'too few laps or samples yet',
+  noSet: 'no set',
 } as const satisfies Record<UnknownReason, string>;
 
 /** Mark of a value still to come (measuring, not received yet): the ellipsis. */
@@ -92,6 +93,7 @@ export const unknownMark = {
   notApplicable: markAbsent,
   realism: markAbsent,
   insufficientData: markPending,
+  noSet: markAbsent,
 } as const satisfies Record<UnknownReason, string>;
 
 /** Prefix of an estimated value in a value cell. */

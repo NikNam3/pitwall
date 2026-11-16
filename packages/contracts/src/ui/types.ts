@@ -1,5 +1,5 @@
 // UI state shared by the bridge and every window (spec 7.2, 7.5, 7.7, 7.8). JSON-safe.
-import type { CalibrationSource, CarId, FeedId, InsightCategory, PersonId, Policy, SessionRef, TeamId } from '@pitwall/domain';
+import type { CalibrationSource, CarId, FeedId, InsightCategory, PersonId, Policy, SessionRef, Slot, TeamId } from '@pitwall/domain';
 
 export type WindowId = string;
 export type Geometry = { screen: number; x: number; y: number; width: number; height: number };
@@ -60,6 +60,11 @@ export type UiAction =
   /** Commits `policy` for `carId`, its triggers with their thresholds as the user saw them. */
   | { kind: 'plan.commit'; feedId: FeedId; carId: CarId; policy: Policy }
   | { kind: 'plan.clear'; feedId: FeedId; carId: CarId }
+  /** Saves `policy` in `slot` of `carId`'s plans (a decision, C76). */
+  | { kind: 'plan.save'; feedId: FeedId; carId: CarId; slot: Slot; policy: Policy }
+  | { kind: 'plan.remove'; feedId: FeedId; carId: CarId; slot: Slot }
+  /** Commits the policy saved in `slot`, naming the slot. */
+  | { kind: 'plan.activate'; feedId: FeedId; carId: CarId; slot: Slot }
   /** Ends the feed's session recording now (C59): the run finishes as at the session's end; the rest of that session is ignored. */
   | { kind: 'session.end'; feedId: FeedId };
 

@@ -125,7 +125,7 @@ export type Trigger =
   | { kind: 'damage'; lossMsPerLap: Ms; action: { box: NoiseCompound } };
 
 /** One car's stops to the flag, and the triggers that change them inside a scenario. */
-export type Policy = { stops: { lap: number; compound: NoiseCompound }[]; triggers: Trigger[] };
+export type Policy = { stops: { lap: number; compound: NoiseCompound }[]; triggers: Trigger[]; startCompound?: NoiseCompound };
 
 /**
  * One scenario: its id (the draws' stream key), whether it draws nothing (`plain`), and its neutralisations.

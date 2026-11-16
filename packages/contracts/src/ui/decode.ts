@@ -1,6 +1,6 @@
 // Structural validation of UI state (spec 7.2). Input is untrusted: decoders return `undefined`, never throw,
 // and rebuild values from the known fields only. Widget names and option values are the UI's business.
-import { NOISE_COMPOUNDS, type CalibrationSource, type CarId, type FeedId, type InsightCategory, type NoiseCompound, type Policy, type SessionRef, type SessionUid, type Trigger } from '@pitwall/domain';
+import { NOISE_COMPOUNDS, PLAN_SLOTS, type Slot, type CalibrationSource, type CarId, type FeedId, type InsightCategory, type NoiseCompound, type Policy, type SessionRef, type SessionUid, type Trigger } from '@pitwall/domain';
 import type { CarRef, Geometry, LinkGroup, PanelSpec, TimeWindow, UiAction, Workbook, WorkbookWindow } from './types.ts';
 
 type Json = Record<string, unknown>;
@@ -185,6 +185,17 @@ export const decodeUiAction = (raw: unknown): UiAction | undefined => {
     }
     case 'plan.clear':
       return isString(raw.feedId) && isCarSlot(raw.carId) ? { kind: raw.kind, feedId: raw.feedId as FeedId, carId: raw.carId as CarId } : undefined;
+    case 'plan.save': {
+      const policy = decodePolicy(raw.policy);
+      return isString(raw.feedId) && isCarSlot(raw.carId) && isSlot(raw.slot) && policy !== undefined
+        ? { kind: raw.kind, feedId: raw.feedId as FeedId, carId: raw.carId as CarId, slot: raw.slot, policy }
+        : undefined;
+    }
+    case 'plan.remove':
+    case 'plan.activate':
+      return isString(raw.feedId) && isCarSlot(raw.carId) && isSlot(raw.slot)
+        ? { kind: raw.kind, feedId: raw.feedId as FeedId, carId: raw.carId as CarId, slot: raw.slot }
+        : undefined;
     case 'session.end':
       return isString(raw.feedId) ? { kind: raw.kind, feedId: raw.feedId as FeedId } : undefined;
     default:
@@ -258,6 +269,9 @@ const decodeTrigger = (raw: unknown): Trigger | undefined => {
       return undefined;
   }
 };
+
+/** A plan slot of `PLAN_SLOTS`. */
+const isSlot = (value: unknown): value is Slot => (PLAN_SLOTS as readonly unknown[]).includes(value);
 
 /** A plan's policy (SP4.3b spec §8.2): its stops and its triggers, rebuilt from the known fields. */
 const decodePolicy = (raw: unknown): Policy | undefined => {

@@ -1,6 +1,7 @@
 // The value types an analysis computes and its topic publishes (spec 3.2): one file per analysis.
 export type * from './battle.ts';
 export type * from './car-bands.ts';
+export type * from './circle.ts';
 export type * from './crossover.ts';
 export type * from './damage.ts';
 export type * from './driver-noise.ts';
@@ -22,6 +23,7 @@ export type * from './rejoin.ts';
 export type * from './rival-stops.ts';
 export * from './sc-call.ts';
 export type * from './stint-analysis.ts';
+export type * from './strategy-overview.ts';
 export type * from './strategy.ts';
 export type * from './talk-window.ts';
 export type * from './track-positions.ts';
