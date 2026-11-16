@@ -215,7 +215,8 @@ export function carModelsOf(view: AsOfView, config: ResidualConfig): Map<CarId, 
 
   // the human time-loss events, only where a human model has laps (C45: the shared pure function over the projection),
   // with the one exclusion (`timeLossExcludedOf`: neutralisations, the car's pit visits and garage spells, C26); in the
-  // race only, where the models give values (`isRaceAt`): outside it every value is `notApplicable`
+  // race only (`isRaceAt`): outside it every value is `notApplicable`, and on the planning view (qualifying, C62d) a
+  // human's mistakes are its prior's (`driverNoiseAsOf`)
   let events: Map<string, number[]> | undefined;
   const eventsOf = (): Map<string, number[]> => {
     if (events !== undefined) return events;
