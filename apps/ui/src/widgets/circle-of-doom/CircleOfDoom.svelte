@@ -145,10 +145,10 @@
       {#each ghosts as g (g.ghost.condition)}
         <g data-ghost={g.ghost.condition} data-on={String(g.on)} transform="translate({g.at.x} {g.at.y})">
           <rect
-            x={-MARKS.ghostHalf}
-            y={-MARKS.ghostHalf}
-            width={2 * MARKS.ghostHalf}
-            height={2 * MARKS.ghostHalf}
+            x={MARKS.ghostRect.x}
+            y={MARKS.ghostRect.y}
+            width={MARKS.ghostRect.width}
+            height={MARKS.ghostRect.height}
             fill={role(ghostFillRole())}
             stroke={role(ghostRole(g.on))}
             stroke-width={g.on ? MARKS.ghostStrokeOn : MARKS.ghostStrokeOff}
@@ -173,7 +173,8 @@
           <text
             data-testid="ghost-gaps"
             x={current.at.x}
-            y={current.at.y + l.gapsDy}
+            y={current.at.y}
+            dy={l.gapsDy}
             text-anchor="middle"
             font-size={l.codeFontPx}
             fill={role(gapsRole())}

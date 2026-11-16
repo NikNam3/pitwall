@@ -28,6 +28,8 @@ export const MARKS = {
   mateStroke: 2,
   rivalDot: 4,
   ghostHalf: 6,
+  /** The ghost's square around its point: half 6 px each way. */
+  ghostRect: { x: -6, y: -6, width: 12, height: 12 },
   ghostStrokeOn: 2,
   ghostStrokeOff: 1,
   /** The ghost's square turned into a diamond. */
