@@ -19,12 +19,12 @@ import {
   type RejoinAt,
   type SessionTime,
 } from '@pitwall/domain';
-import { openSpansOf, type EngineView, type QuickCalculator } from '@pitwall/engine/readers';
+import { type EngineView, type QuickCalculator } from '@pitwall/engine/readers';
 import { GAPS, type GapsOutput } from '../gaps/index.ts';
 import { REJOIN, type RejoinOutput } from '../rejoin/index.ts';
 import { behaviourByCar, behaviourFor } from '../shared/behaviour.ts';
 import { liveProgress, rollingLap, timeBehind } from '../shared/crossing-history.ts';
-import { neutralisationKind } from '../shared/neutralised.ts';
+import { openNeutralisation } from '../shared/neutralised.ts';
 import { CIRCLE_BEHAVIOUR } from './behaviour.ts';
 import { CIRCLE, type CircleOutput } from './id.ts';
 
@@ -40,9 +40,7 @@ const CAR_ROWS = { 'car-status': CIRCLE_BEHAVIOUR['car-status'] ?? {} };
 /** The race's condition now: an open `neutralised` span's car, else green. */
 function currentOf(view: EngineView): PitCondition {
   if (!behaviourFor(SESSION_PHASE, view).some((row) => 'neutralised' in row)) return 'green';
-  const span = openSpansOf(view, 'session-phase-race').find((s) => s.kind === 'neutralised');
-  if (span === undefined) return 'green';
-  const kind = neutralisationKind(span);
+  const kind = openNeutralisation(view)?.kind;
   return kind === 'SC' ? 'sc' : kind === 'VSC' ? 'vsc' : 'green';
 }
 
