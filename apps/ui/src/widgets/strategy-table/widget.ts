@@ -14,5 +14,6 @@ export const widget = declareWidget({
   },
   // Mockup strategy-table-b.html: full 88×13 (chart 9 rows, the info header, two info rows, the footer), compact 46×6.
   sizes: { compact: { minCols: 46, minRows: 6 }, full: { minCols: 88, minRows: 13 } },
-  actions: ['plan.commit', 'plan.clear'],
+  // SP4.3d1 Task 11: commit became "save to slot …" (plan.save); a saved row is activated (plan.activate).
+  actions: ['plan.save', 'plan.activate', 'plan.clear'],
 });
