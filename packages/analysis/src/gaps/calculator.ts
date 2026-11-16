@@ -8,7 +8,7 @@ import { ourCars } from '@pitwall/domain';
 import { fineOf, gapBehind, lapsBehind, latestTime, progressOf, recentOf, type CarCrossings } from './gaps.ts';
 import { GAPS, GAPS_BEHAVIOUR, GAPS_CONFIG, type GapsOutput } from './index.ts';
 import type { GapsPhase } from './output.ts';
-import { emptyWindow, judgeCrossing, othersInWindow, windowThresholds, type GapperWindow } from './window.ts';
+import { clearCrossingTimes, emptyCrossingTimes, emptyWindow, judgeCrossing, othersInWindow, setCrossingTime, windowThresholds, type CrossingTimes, type GapperWindow } from './window.ts';
 
 /** What the crossings and events so far add up to. */
 type Table = {
@@ -16,6 +16,8 @@ type Table = {
   current: CrossingIndex;
   /** By car id: every crossing, from progress 0. */
   tracks: Array<CarCrossings | undefined>;
+  /** The same times as `tracks`, dense, for the window judge. */
+  times: CrossingTimes;
   lineTimes: GapsOutput['lineTimes'];
   recent: GapsOutput['recent'];
   fine: GapsOutput['fine'];
@@ -71,17 +73,25 @@ function foldCrossings(acc: Table, view: EngineView, from: number): void {
   let lineTimes = acc.lineTimes;
   /** By car id: the car crossed something. */
   const crossed: boolean[] = [];
+  // the helpers as locals: the loop below runs once per crossing of the race
+  const [fold, progressAt, judge, setTime] = [foldCurrentCrossing, progressOf, judgeCrossing, setCrossingTime];
   for (let i = from; i < length; i++) {
     const m = list[i] as MiniSectorCrossing;
-    const progress = progressOf(m);
+    const progress = progressAt(m);
     if (progress < 0) continue; // laps count from 1
     const track = (acc.tracks[m.carId] ??= { fromProgress: 0, at: [] });
-    foldCurrentCrossing(acc.current, m);
-    track.at[progress] = (acc.current.get(m.carId)?.get(m.lap)?.[m.segment] ?? m).at;
-    if (track.at.length > progress + 1) track.at.length = progress + 1; // a car that went back drops what lay ahead
+    fold(acc.current, m); // m is now its car's, lap's and segment's current crossing (C25)
+    const at = m.at;
+    track.at[progress] = at;
+    if (track.at.length > progress + 1) {
+      // a car that went back drops what lay ahead
+      clearCrossingTimes(acc.times, m.carId, progress + 1, track.at.length);
+      track.at.length = progress + 1;
+    }
+    setTime(acc.times, m.carId, progress, at);
     crossed[m.carId] = true;
     foldJoinLine(acc, m, progress);
-    judgeCrossing(acc.window, acc.tracks, m.carId, progress, track.at[progress] as SessionTime, thresholds);
+    judge(acc.window, acc.times, m.carId, progress, at, thresholds);
     // segment 0 is the line at the start of its lap: it completes the lap before (none for lap 1, the start)
     const completed = m.lap - 1;
     if (m.segment === 0 && completed >= 1) {
@@ -337,6 +347,7 @@ const init = (view: EngineView): Table => {
   const table: Table = {
     current: new Map(),
     tracks: [],
+    times: emptyCrossingTimes(),
     lineTimes: {},
     recent: {},
     fine: {},
