@@ -121,6 +121,7 @@ export function table(spec: TableSpec = {}): PlanTable {
     return {
       policy,
       source: isCommitted ? 'committed' : r.source,
+      slot: null,
       positionPmf: r.pmf,
       ePos: r.ePos,
       ePoints: r.ePoints,
@@ -135,12 +136,16 @@ export function table(spec: TableSpec = {}): PlanTable {
       rank: tie ? 1 : i + 1,
       deltaLeaderMs: r.timeMs - leader.timeMs,
       deltaPlanMs: planMs === null ? null : r.timeMs - planMs,
+      // SP4.3d1 Task 5: no slot here; ΔPOS against the active plan not drawn by this table
+      diffPlan: unknown('notApplicable'),
+      sePlan: unknown('notApplicable'),
       rule: !isCommitted && r.source === 'rule' ? (r.rule ?? null) : null,
     };
   });
   const scenarios = spec.scenarios ?? (openTie ? 5_000 : 2_840);
   return {
     rows,
+    bestPerStops: {},
     scenarios,
     capHit: scenarios >= 5_000,
     candidates: 14,

@@ -22,6 +22,7 @@ import {
   type CarId,
   type DecisionRecord,
   type FrameNumber,
+  type GivenDecision,
   type LapRecord,
   type Policy,
   type RaceHazard,
@@ -116,7 +117,7 @@ export type ViewSpec = {
    * Plan decisions, recorded on frame `frame` (absolute: a decision after the view's frame is not in it yet), else on
    * the view's frame minus `framesBefore` (default 1).
    */
-  decisions?: ({ frame?: FrameNumber; framesBefore?: number } & ({ kind: 'planCommitted'; carId: CarId; policy: Policy } | { kind: 'planCleared'; carId: CarId }))[];
+  decisions?: ({ frame?: FrameNumber; framesBefore?: number } & GivenDecision)[];
   /** `strategy`'s config section, over `{ maxScenarioPolicies: TEST_CAP }`. */
   config?: Record<string, unknown>;
   /** `race-hazard`'s output; default its calculator's on the view. */
