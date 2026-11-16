@@ -57,3 +57,61 @@ describe('session state', () => {
     expect(forecast.every((f) => !('sessionType' in f))).toBe(true);
   });
 });
+
+// SP4.3d2 Task 4 (spec §7.3, call 2; C8, C13): `nextForecast` holds the values of the samples whose session type is the
+// one after this session's in the weekend structure, in the packet's order, mapped as `forecast` maps them. The session
+// types choose the samples and are kept nowhere (C13).
+/** A Session packet of `sessionType` in a weekend of `structure`, with two samples per listed session type (offsets 0 and 5, weather from 1). */
+const weekendPacket = (structure: readonly number[], sessionType: number, sampleTypes: readonly number[]) => {
+  const samples = sampleTypes.flatMap((type, i) => [
+    { sessionType: type, timeOffset: 0, weather: (2 * i) % 6, trackTemperature: 20 + i, airTemperature: 15 + i, rainPercentage: 10 * i },
+    { sessionType: type, timeOffset: 5, weather: (2 * i + 1) % 6, trackTemperature: 21 + i, airTemperature: 16 + i, rainPercentage: 10 * i + 5 },
+  ]);
+  return buildPacket('session', {
+    sessionType, numSessionsInWeekend: structure.length, weekendStructure: Object.fromEntries(structure.map((t, i) => [i, t])),
+    numWeatherForecastSamples: samples.length, weatherForecastSamples: Object.fromEntries(samples.map((s, i) => [i, s])),
+  });
+};
+/** The session state from a Session packet. */
+const sessionOf = (packet: ReturnType<typeof weekendPacket>) => initialState({ feedId, sessionUid: 9n, session: packet }).session;
+/** The forecast of the session `type` in a packet of its own: the values `nextForecast` must hold. */
+const forecastOfType = (structure: readonly number[], type: number, sampleTypes: readonly number[]) =>
+  sessionOf(weekendPacket(structure, type, sampleTypes)).forecast;
+
+describe("the next session's forecast (SP4.3d2 Task 4)", () => {
+  const GP = [1, 5, 15] as const;
+  const SPRINT = [1, 10, 15, 5, 16] as const;
+
+  it('structure [1, 5, 15] at type 5 with samples of 5 and 15: nextForecast is the 15 samples', () => {
+    const s = sessionOf(weekendPacket(GP, 5, [5, 15]));
+    const expected = forecastOfType(GP, 15, [5, 15]);
+    expect(expected).toHaveLength(2);
+    expect(s.nextForecast).toEqual(expected);
+    expect(s.nextForecast.map((f) => [f.offsetMin, f.weather, f.trackTempC, f.airTempC, f.rainPct])).toEqual([[0, 'overcast', 21, 16, 10], [5, 'lightRain', 22, 17, 15]]);
+    // the forecast stays this session's
+    expect(s.forecast.map((f) => [f.offsetMin, f.weather])).toEqual([[0, 'clear'], [5, 'lightCloud']]);
+  });
+
+  it('structure [1, 5, 15] at type 15: nextForecast is []', () => {
+    const s = sessionOf(weekendPacket(GP, 15, [5, 15]));
+    expect(s.nextForecast).toEqual([]);
+    expect(s.forecast).toHaveLength(2);
+  });
+
+  it('sprint structure [1, 10, 15, 5, 16] at type 10: nextForecast is the 15 samples', () => {
+    const types = [10, 15, 5, 16];
+    const s = sessionOf(weekendPacket(SPRINT, 10, types));
+    const expected = forecastOfType(SPRINT, 15, types);
+    expect(expected).toHaveLength(2);
+    expect(s.nextForecast).toEqual(expected);
+  });
+
+  it('sprint structure [1, 10, 15, 5, 16] at type 5: nextForecast is the 16 samples', () => {
+    const types = [10, 15, 5, 16];
+    const s = sessionOf(weekendPacket(SPRINT, 5, types));
+    const expected = forecastOfType(SPRINT, 16, types);
+    expect(expected).toHaveLength(2);
+    expect(s.nextForecast).toEqual(expected);
+    expect(s.nextForecast.every((f) => !('sessionType' in f))).toBe(true);
+  });
+});
