@@ -26,3 +26,5 @@ Everything here is done, superseded or void. **Do not read it unless your brief 
 | `plans/2026-11-14-live-test-triage-questions.md` | triage of the 2026-11-14 live test (T1–T21) and questions Q1–Q7 | answered; built by SP4.3c, except Q4 (the user's action) |
 | `plans/2026-11-14-sp4.3c-consolidation.md` | SP4.3c plan (one owner per judgement), Tasks 0–25 | **done**, merged 2026-11-16 (446600e1); spec in `docs/specs/`, rulings in `notes/2026-11-16-sp4.3c-run-rulings.md` |
 | `notes/2026-11-16-sp4.3c-run-rulings.md` | SP4.3c run rulings R1–R66, final gates, open points | record only |
+| `plans/2026-11-16-sp4.3d2-planning-round.md` | SP4.3d2 plan (the planning round), Tasks 0–14 with 6b, 9p | **done**, merged 2026-11-17; spec in `docs/specs/2026-11-16-sp4.3d-planning-design.md`, rulings in `notes/2026-11-16-sp4.3d2-run-rulings.md` |
+| `notes/2026-11-16-sp4.3d2-run-rulings.md` | SP4.3d2 run rulings R1–R38, final gates, open points | record only |
