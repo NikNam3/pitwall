@@ -3,7 +3,7 @@
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { ConfigEffectiveValue } from '@pitwall/contracts';
-import { asOfEnded, type AsOfView, type DeepReadonly } from '@pitwall/engine/readers';
+import { asOfEnded, copyPlain, type AsOfView, type DeepReadonly } from '@pitwall/engine/readers';
 import { carId, carKeyOf, sessionUidString, toSessionTime, type CalibrationActiveValue, type CarKey, type RaceFormat, type DecisionRecord, type FeedId, type Known, type LiveSeat, type PriorsSnapshot, type ProfileSnapshot, type RunPriors, type SessionRef, type SessionTime, type TeamId, type TrackFile, type WeekendPhase } from '@pitwall/domain';
 import type { CalibrationStore } from '../calibration/store.ts';
 import type { ProfileStore, SlotIdentity } from '../drivers/store.ts';
@@ -237,6 +237,22 @@ function withRecordedRealism(config: FeatureConfig, recordingPath: string, log: 
 }
 
 /** A decision or calibration edit that arrived during a restart's restore, as the pipeline was asked it. */
+/** A projected decision as the plan decision it was given as (without its frame); `undefined` for a calibration choice. */
+const planDecisionOf = (record: DecisionRecord): PlanDecision | undefined => {
+  switch (record.kind) {
+    case 'calibrationChosen':
+      return undefined;
+    case 'planCommitted':
+      return record.slot === undefined ? { kind: record.kind, carId: record.carId, policy: record.policy } : { kind: record.kind, carId: record.carId, policy: record.policy, slot: record.slot };
+    case 'planSaved':
+      return { kind: record.kind, carId: record.carId, slot: record.slot, policy: record.policy };
+    case 'planRemoved':
+      return { kind: record.kind, carId: record.carId, slot: record.slot };
+    case 'planCleared':
+      return { kind: record.kind, carId: record.carId };
+  }
+};
+
 type QueuedDecision =
   | { kind: 'pick'; setId: string | null }
   | { kind: 'edit'; setId: string }
@@ -697,9 +713,27 @@ export class FeedPipeline {
       })
       .finally(() => {
         this.#restore = undefined;
+        this.#guarded('restored plans', () => this.#noteRestoredPlans(restore.decisions));
         this.#applyQueued(restore.decisions);
         for (const packet of restore.buffer) this.#deliver(packet);
       });
+  }
+
+  /**
+   * At a restart's restore end (C59, C76): the plan decisions of the restored session's projection, in order, then the
+   * plan decisions queued during the restore (already kept once on arrival, kept again after the older ones), are kept by
+   * `teams` for a feed that joins the team later. The projection, not the sidecar: a flashback's void leaves out the ones
+   * it undid (C27a, C28). Without a running session or a known team nothing is kept.
+   */
+  #noteRestoredPlans(queued: readonly QueuedDecision[]): void {
+    const teams = this.#o.teams;
+    const session = this.#session;
+    if (teams === undefined || session === undefined) return;
+    for (const record of session.decisions) {
+      const decision = planDecisionOf(copyPlain(record) as DecisionRecord);
+      if (decision !== undefined) teams.notePlan(this.#feedId, decision);
+    }
+    for (const entry of queued) if (entry.kind === 'plan') teams.notePlan(this.#feedId, entry.decision);
   }
 
   /** A decision or calibration edit that arrives during a restart's restore waits for the run to be live; none is rejected for the wait. */
