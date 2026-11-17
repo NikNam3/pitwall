@@ -117,3 +117,4 @@ export * from './strategy/index.ts';
 export * from './undercut/index.ts';
 export * from './pit-sweep/index.ts';
 export { FORECAST_FIELD_CONFIG } from './shared/forecast-field/config.ts';
+export { planningInputFrom } from './shared/strategy-input/index.ts';

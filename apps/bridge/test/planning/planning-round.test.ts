@@ -356,6 +356,8 @@ describe('the planning round (Task 10; C62d, C54, C55)', { timeout: 120_000 }, (
     expect(existsSync(file)).toBe(false);
     expect(await b.send({ kind: 'plans.prepare.laps', feedId: A, laps: 44 })).toEqual({ ok: true });
     await vi.waitFor(() => expect(b.round().laps.entered).toBe(44));
+    // the job the laps started has finished, so `running` stays put through the rejections
+    await vi.waitFor(() => expect(b.round().running).toBe(false));
 
     // stop laps from 1 to laps − 1
     await rejected(save(A, 0, 'A', { startCompound: 'medium', stops: [{ lap: 44, compound: 'hard' }] }));
