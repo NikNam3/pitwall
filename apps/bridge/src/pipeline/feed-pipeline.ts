@@ -3,7 +3,7 @@
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { ConfigEffectiveValue } from '@pitwall/contracts';
-import type { DeepReadonly } from '@pitwall/engine/readers';
+import { asOfEnded, type AsOfView, type DeepReadonly } from '@pitwall/engine/readers';
 import { carId, sessionUidString, toSessionTime, type CalibrationActiveValue, type DecisionRecord, type FeedId, type Known, type LiveSeat, type PriorsSnapshot, type ProfileSnapshot, type RunPriors, type SessionRef, type SessionTime, type TeamId, type TrackFile, type WeekendPhase } from '@pitwall/domain';
 import type { CalibrationStore } from '../calibration/store.ts';
 import type { ProfileStore, SlotIdentity } from '../drivers/store.ts';
@@ -144,6 +144,22 @@ export type FeedPipelineOptions = {
    * feed's sessions by it); unset writes `0`. Not part of the log (C61).
    */
   listenPort?: number;
+  /**
+   * The bridge's planning module (C62d, SP4.3d spec §7.0 rules 3–6): told when a session of the feed starts (after the
+   * feed's topics start over) and when one ended (`finish` applied, as a live end, `session.end` or a startup restore
+   * ends it; not when the pipeline is stopped), with what the round needs that the ended run's view (`endedAsOf`) does
+   * not hold.
+   */
+  planning?: PlanningHooks;
+};
+
+/** A session of the feed that ended, as the planning module is told it: its weekend, its track and its weekend phase. */
+export type EndedSession = { weekendId: string; trackId: number; phase: WeekendPhase };
+
+/** What a feed's pipeline tells the planning module (`FeedPipelineOptions.planning`). */
+export type PlanningHooks = {
+  sessionStarted(feedId: FeedId): void;
+  sessionEnded(feedId: FeedId, ended: EndedSession): void;
 };
 
 /** A feed's session uid and its player car's team (`null` before Participants), as reported to `teams`. */
@@ -789,6 +805,15 @@ export class FeedPipeline {
     this.#guarded('restored session end', () => this.#checkFeed(this.#lastReceivedAtMs));
   }
 
+  /**
+   * The ended session's run as of its end (C62d, SP4.3d2 plan call 1): `asOfEnded` on its view, with `laps` the race
+   * laps entered for the race it plans; `undefined` while a session runs or before any ended.
+   */
+  endedAsOf(laps: number): AsOfView | undefined {
+    if (this.#session !== undefined || this.#ended === undefined) return undefined;
+    return asOfEnded(this.#ended.view, laps);
+  }
+
   /** The running session's weekend phase as the machine decided it (C14); `undefined` without a running session. */
   weekendPhase(): WeekendPhase | undefined {
     return this.#session?.weekendPhase;
@@ -896,6 +921,8 @@ export class FeedPipeline {
     hub.resetFeed(feedId);
     this.#publisher.sessionStarted();
     this.#publishInsights(this.#alerts.active.map((insight) => ({ type: 'raised', insight })));
+    // The planning round of the session that ended closes (C62d): the feed runs a session again.
+    this.#guarded('planning', () => this.#o.planning?.sessionStarted(feedId));
     // A session continued after a restart (C59) runs on its first run's start, recording and sidecars, unchanged.
     const continued = this.#continuation;
     this.#continuation = undefined;
@@ -1061,6 +1088,10 @@ export class FeedPipeline {
     this.#jobs.sessionEnded();
     const closing = session.end(receivedAtMs, { interrupted: this.#stopped, unended: opts.unended === true }).finally(() => this.#closing.delete(closing));
     this.#closing.add(closing);
+    // `end` applied `finish` before its file closes: the ended run's view is complete now (C62d).
+    if (this.#stopped || opts.unended === true) return;
+    const { weekendId } = session.key;
+    this.#guarded('planning', () => this.#o.planning?.sessionEnded(this.#feedId, { weekendId, trackId: session.trackId, phase: session.weekendPhase }));
   }
 
   /** Publishes `feed.status` and the feed-health insights as they stand at `nowMs`. */

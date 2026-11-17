@@ -1,6 +1,11 @@
 import type { FeedInfo, ReplayControl } from '@pitwall/contracts';
-import type { FeedId } from '@pitwall/domain';
+import { unknown, type FeedId, type StrategyOutput } from '@pitwall/domain';
+import { PLANNING_JOB, type StrategyInput } from '@pitwall/analysis';
+import type { Job } from '@pitwall/engine/readers';
 import { dirname } from 'node:path';
+import { Planning, type PrepareAction } from '../planning/planning.ts';
+import { suggestedLapsOf } from '../planning/round.ts';
+import { PreparedStore } from '../planning/store.ts';
 import { CalibrationStore, type ApplyResult, type CalibrationAction } from '../calibration/store.ts';
 import { createCalcStats } from '../dev/calc-stats.ts';
 import { readCatalogue } from '../dev/catalogue.ts';
@@ -84,6 +89,8 @@ type ServeBase = {
    * to it (C61), and `serve` closes it before its own server opens (also when it fails).
    */
   startup?: { progress: RebuildProgress; close: () => Promise<void> };
+  /** The planning job the planning round runs (C62d); default `PLANNING_JOB`. */
+  planningJob?: Job<StrategyInput, StrategyOutput>;
   io: CliIo;
 };
 
@@ -267,6 +274,11 @@ export async function serve(opts: ServeOptions): Promise<number> {
         // A plan is a decision of the team's running sessions (C1a, C76): the plan routing takes it.
         plan: (action: PlanAction): ActionOutcome =>
           feedIds.includes(action.feedId) ? planRouting.commit(action) : { ok: false, reason: 'invalid', message: `no feed ${action.feedId}` },
+        // The planning round's prepared plans are the planning module's (C62d, C70, C73).
+        ...(planning && {
+          prepare: (action: PrepareAction): ActionOutcome =>
+            feedIds.includes(action.feedId) ? planning.apply(action) : { ok: false, reason: 'invalid', message: `no feed ${action.feedId}` },
+        }),
         ...(opts.replay && { replay: { control: (control: ReplayControl) => (controller === undefined ? false : (controller.control(control), true)) } }),
       });
       undo.push(() => started.close());
@@ -299,6 +311,18 @@ export async function serve(opts: ServeOptions): Promise<number> {
     const pipelineLog = cliLogger(io, 'info');
     // One job-worker limit for every feed, so all feeds together run at most MAX_JOB_WORKERS workers (Task 18b, C1a).
     const workerLimit = new WorkerLimit();
+    // The planning round (C62d): bridge user state in `<data dir>/plans/`, so only a run with a data dir has one; its
+    // jobs share the feeds' worker limit (C51). The suggestion reads the stored sessions on the track (§7.1 step 3).
+    const planning = opts.uiDir === undefined ? undefined : new Planning({
+      hub,
+      store: new PreparedStore(dirname(opts.uiDir), cliLogger(io, 'warn')),
+      job: opts.planningJob ?? PLANNING_JOB,
+      workerLimit,
+      endedAsOf: (feedId, laps) => pipelines.get(feedId)?.endedAsOf(laps),
+      suggestedLaps: (trackId, format) => (calibrationRepo === undefined ? unknown('notReceived') : suggestedLapsOf(calibrationRepo.sessionsOnTrack(trackId), format)),
+      log: pipelineLog,
+    });
+    if (planning) undo.push(() => planning.close());
     const makePipeline = (source: PacketSource, listenPort?: number): FeedPipeline => {
       const pipeline = new FeedPipeline({
       feedId: source.feedId,
@@ -339,9 +363,12 @@ export async function serve(opts: ServeOptions): Promise<number> {
       ...(testInsight !== undefined && { testInsight }),
       // A replay (and dev) runs with the track file its recording was made with (C62b); live loads the committed file.
       ...(opts.replay && { tracks: (trackId: number) => recordingTrack(opts.replay.path, trackId, TRACKS_DIR, pipelineLog) }),
+      ...(planning && { planning }),
       });
       // A replay's backward jump builds the feed's pipeline anew; the newest one takes the feed's demand and picks.
       pipelines.set(source.feedId, pipeline);
+      // A new pipeline has no ended session: the feed's round, if any, closes (`{ open: false }` from the feed's start on).
+      planning?.sessionStarted(source.feedId);
       return pipeline;
     };
     const failedFeed = (id: FeedId) => (error: unknown): never => {
