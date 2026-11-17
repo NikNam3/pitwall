@@ -176,3 +176,11 @@ Recording `2026-11-16_23-49-46_5929b668ce223b5d_car19.pwrec.gz` (726 MB; the bri
 - **Undercut card listed our teammate (car 5) as a rival.**
 - **No damage in the strategy model:** FR wing damage (~1.5 s/lap) had to be judged by hand (boxed for wing + mediums, lap ~25).
 - **Circle of doom and strategy were empty for the first lap after joining mid-session** (need one full lap); worked afterwards. The teammate's circle (`circle.car` car 5) published nothing in a short tap; not checked further.
+
+### 2026-11-17: before the Texas weekend (two feeds, DR in #63, Asymetrisch in #12, both Mercedes)
+
+- **Garage panel must be fully usable without a running session (user, 2026-11-17).** With no session the calibration panel has no track (`trackOf` falls back only to the active session, the candidates or a picked track) and shows no buttons, even full-screen: no new/copy, no sources. Wanted: pick the track and work on sets, sources and overrides between sessions, with more input fields (e.g. override values typed in). The Texas set `tx-1104` was made via uiActions from the CLI instead.
+- **Calibration set `tx-1104` (Texas):** sources the four stints of cars 19 and 7 of the 2026-11-04 race (session 17704413186476131598). Computed green pit loss 19.86 s (by hand: median of 11 clean green stops 19.2 s, 17.6–21.2 s; track default 20.2 s). Computed **SC pit loss 40.3 s** from the four lap-12 stops whose in-lap was only partly under SC (29–57 s): wrong, overridden to 8.9 s (SC) and 10.9 s (VSC, insufficientData), 0.45/0.55 × green. Check why `pit-loss` counts partly-SC in-laps as SC stops. Measured: soft −852 ms vs medium, hard −104 ms; ν medium 219 ms/lap (high, one 12-lap stint), hard 59, soft 28.
+- **Singapore's +6 s pit loss vs real F1 is not a game-wide offset:** Texas F1 25 ≈ 19.2–19.9 s vs 20.2 s real.
+- **Driver links:** DR → Mercedes #63 (and Ferrari #44); Asymetrisch → Mercedes #12, #64. The 224 old #63 sessions (Japan, Asymetrisch) are excluded from DR. Gap (C62c): a seat link covers every session, so those laps cannot count for Asymetrisch.
+- **Workbooks** reset to the shipped defaults via `workbook.reset` (backups `*.bak-2026-11-17`).
