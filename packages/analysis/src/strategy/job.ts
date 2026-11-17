@@ -4,8 +4,12 @@
 //
 // - Per car the DP (`strategy-dp`) from the car's lap on (`startLapOf`), its input from the starting point, the hazard,
 //   the weather worlds and each world's plain forecast (`shared/strategy-input/`, SP4.3b2 Task 6, SP4.3c Task 19); its
-//   result and each world's solve (`solveWorld`, queried by `bestWith`) give the candidates (`candidates.ts`, SP4.3c
-//   Task 20), and its heaviest world's solve its SC/VSC reaction table (`reactions`, SP4.3d spec §5.2). A committed policy is followed as far as it can be (spec §8.2): a passed stop boxes this lap, a
+//   result and its solves (`solveAll`: per world, on a free start per start compound too; queried by `bestWith`) give
+//   the candidates (`candidates.ts`, SP4.3c Task 20), and its heaviest world's solve (on a free start, of the best
+//   plan's start) its SC/VSC reaction table (`reactions`, SP4.3d spec §5.2).
+// - The prefill (SP4.3d spec §7.1 steps 5, 7; `prefill.ts`): where the input asks (the planning job always, the race's
+//   job on the grid and in the formation lap, by the behaviour table), slots A and B per car; the planning round's
+//   facts (`planning`) where the input carries them (the planning job, `planningInputFrom`). A committed policy is followed as far as it can be (spec §8.2): a passed stop boxes this lap, a
 //   stop onto a compound without a set left is dropped; its row is marked with the reason.
 // - Plan slots (SP4.3d spec §5.3, `carPlanOf`): the active plan first, then every saved slot, each followed as far as
 //   it can be and shown as saved with its reason; a DP plan equal to one is that row. Per car `bestPerStops`: per stop
@@ -27,21 +31,23 @@ import type { Rng } from '@pitwall/engine/readers';
 import { RAIN_OUTLOOK_CONFIG } from '../rain-outlook/config.ts';
 import { raceMonteCarlo, type McCandidate, type McConfig, type McInput, type McResult, type Reactions } from '../race-monte-carlo/index.ts';
 import { committedField, dpInputOn, followable, mcSettingsFrom, notPlannedWhy, plannedCars, plannedField, reactionOf, roadWorlds, strategyConfigOf, toMcHazard, worldsOf, type StrategyInput } from '../shared/strategy-input/index.ts';
-import { solveDp, solveWorld } from '../strategy-dp/index.ts';
-import { candidatesOf } from './candidates.ts';
+import { solveAll, solveDp } from '../strategy-dp/index.ts';
+import { bestPlanOf, candidatesOf } from './candidates.ts';
+import { prefillOf } from './prefill.ts';
 import type { StrategyConfig } from './config.ts';
 
 type Infeasible = McRow['infeasible'];
 
 /** The search's settings from the config (spec §7.3, §11.1). */
-function mcConfigOf(config: StrategyConfig, points: number[]): McConfig {
+function mcConfigOf(config: StrategyConfig, points: number[], planning: boolean): McConfig {
   return {
     n0: config.n0,
     zDrop: config.zDrop,
     zTie: config.zTie,
     tieBand: config.tieBand,
     rescoreTop: config.rescoreTop,
-    maxScenarioPolicies: config.maxScenarioPolicies,
+    // the planning round's job runs on its own cap (R34: the race's 8,000 misses its 7 s per part on the grid start)
+    maxScenarioPolicies: planning ? config.planningMaxScenarioPolicies : config.maxScenarioPolicies,
     points,
   };
 }
@@ -136,17 +142,20 @@ export function candidatesForRun(input: StrategyInput, rng: Rng): { mc: McInput 
   const reactions: Reactions = {};
   for (const car of planned) {
     const dpInput = dpInputOn(field, car, hazard, worlds, config.trafficGapMs);
-    const solutions = dpInput.worlds.map((_, w) => solveWorld(dpInput, w));
+    // per world, and on a free start (the planning round's grid start) per start compound too (SP4.3d spec §7.2)
+    const solutions = solveAll(dpInput);
     const dp = solveDp(dpInput, solutions);
-    reactions[car] = reactionOf(dpInput, solutions);
-    const own = candidatesOf(field, car, dp, solutions, { ...config, rainPct: RAIN_OUTLOOK_CONFIG.read(input).rainPct });
+    const candidatesConfig = { ...config, rainPct: RAIN_OUTLOOK_CONFIG.read(input).rainPct };
+    // the reaction table on the candidates' best plan's start compound, its one owner (R31; C43)
+    reactions[car] = reactionOf(dpInput, solutions, bestPlanOf(field, car, dp, candidatesConfig).startCompound ?? null);
+    const own = candidatesOf(field, car, dp, solutions, candidatesConfig);
     const plan = carPlanOf(field, car, own, input.committed[car] ?? null, input.slots?.[car]);
     perCar.set(car, plan);
     candidates[car] = plan.candidates;
     committed[car] = plan.followed;
   }
   const { rivalRules, points } = mcSettingsFrom(input.config);
-  return { mc: { start: field, candidates, committed, hazard, rivalRules, config: mcConfigOf(config, points), reactions }, perCar, out };
+  return { mc: { start: field, candidates, committed, hazard, rivalRules, config: mcConfigOf(config, points, input.planning != null), reactions }, perCar, out };
 }
 
 /** The job's parts (C51): one per our car planned, in our cars' order, each `{ ...input, planCar }`; the input as it is when none can be planned. */
@@ -245,7 +254,8 @@ function runPart(input: StrategyInput, rng: Rng): StrategyOutput {
   const hazardState: Known<'ok'> = input.hazard.known ? known('ok', s.at) : input.hazard;
   const own = perCar.get(final.car) as CarPlan;
   const r = raceMonteCarlo(final.mc, rng, final.mc.config.maxScenarioPolicies)[final.car] as McResult[CarId];
-  const bestPerStops = bestPerStopsOf(r.rows, own.searched);  const stamp = (k: Known<number>): Known<number> => (k.known ? known(k.value, s.at) : k);
+  const bestPerStops = bestPerStopsOf(r.rows, own.searched);
+  const stamp = (k: Known<number>): Known<number> => (k.known ? known(k.value, s.at) : k);
   const rows = withTableFields(
     r.rows.map((row): McRow => {
       const stamped = { ...row, diffPlan: stamp(row.diffPlan), sePlan: stamp(row.sePlan) };
@@ -256,7 +266,12 @@ function runPart(input: StrategyInput, rng: Rng): StrategyOutput {
     }),
   );
   const currentPosition = input.positions[final.car] ?? orderPlaceOf(s.value, final.car);
-  out[final.car] = known({ rows, bestPerStops, scenarios: r.scenarios, capHit: r.capHit, candidates: own.candidates.length, hazard: hazardState, unresolvedTie: r.unresolvedTie, currentPosition }, s.at);
+  // A and B prefilled where the input asks (the planning job; the race's job before the start), each where empty or infeasible
+  const infeasible = new Set<Slot>([...own.slots].flatMap(([slot, v]) => (v.infeasible === null ? [] : [slot])));
+  const prefill = input.prefill === true ? prefillOf(rows, bestPerStops, input.slots?.[final.car]?.saved ?? {}, infeasible) : {};
+  const round = input.planning;
+  const planning = round === undefined ? null : { gridPlace: round.gridPlace[final.car] ?? unknown('notApplicable'), laps: round.laps, rainPct: round.rainPct };
+  out[final.car] = known({ rows, bestPerStops, scenarios: r.scenarios, capHit: r.capHit, candidates: own.candidates.length, hazard: hazardState, unresolvedTie: r.unresolvedTie, currentPosition, prefill, planning }, s.at);
   return out;
 }
 

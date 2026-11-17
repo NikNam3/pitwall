@@ -56,6 +56,14 @@ Keep `pnpm -s pitwall tap insights` and `pnpm -s pitwall tap laps` running in tw
 - [ ] After a dry race: `pitwall score <recording> --compare docs/research/16-scoreboard-baseline.json`-style comparison runs and prints the rejoin, undercut, SC-stop and forecast tables, split AI and human.
 - [ ] After the bridge starts on the new rules version: stored sessions rebuild once (the `car-driver` sub-machine is new, C61, C90).
 
+## 6. SP4.3d2: the planning round (2026-11-17)
+
+- [ ] End of qualifying (Q3, short or one-shot): about 10 s after the session ends the top bar shows `PLANNING` and "feed between sessions"; no stale-feed insight in the 1–5 minutes of menu time; the `plan` workbook's boards show the planning round (GRID, LAPS, RAIN).
+- [ ] Enter the race's laps (the suggestion is the track's last stored race of the same format): within ~10 s per car the boards show A and B prefilled, the DP's best per stop count, the START column; accept A, enter G1/G2 from the game's strategy screen; a stop past the laps is rejected amber.
+- [ ] Restart the bridge in the gap: the round comes back with the prepared plans and the entered laps; the startup log shows one replay of the qualifying, not two.
+- [ ] Race start: at the race's first frames both drivers' boards show the prepared slots and A active (the decisions sidecar holds `planSaved`, `planCommitted`); a later edit of the prepared plans changes nothing in the race; a restart mid-race continues the race's recording and a teammate joining later gets the plans.
+- [ ] Sprint weekend: the shootout's round prepares the sprint, qualifying's the grand prix; each race commits only its own file (`PITWALL_DATA_DIR/plans/<weekendId>/<format>/<team>.json`).
+
 ## Results
 
 Record the date, the counts per topic and the flashback outcome here after the run.

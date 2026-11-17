@@ -1,0 +1,68 @@
+{
+  "fingerprint": "fixture-priors-texas",
+  "setId": "texas-defaults",
+  "setName": "Texas defaults (data/tracks/15.json pit losses and compound offsets, degradation config nu 150 sd 100)",
+  "sources": 0,
+  "entries": {
+    "degradation.alphaOffsetMs.soft": {
+      "known": true,
+      "value": 118,
+      "at": 0
+    },
+    "degradation.nuMsPerLap.soft": {
+      "known": true,
+      "value": 150,
+      "at": 0
+    },
+    "degradation.nuSdMs.soft": {
+      "known": true,
+      "value": 100,
+      "at": 0
+    },
+    "degradation.alphaOffsetMs.medium": {
+      "known": true,
+      "value": 0,
+      "at": 0
+    },
+    "degradation.nuMsPerLap.medium": {
+      "known": true,
+      "value": 150,
+      "at": 0
+    },
+    "degradation.nuSdMs.medium": {
+      "known": true,
+      "value": 100,
+      "at": 0
+    },
+    "degradation.alphaOffsetMs.hard": {
+      "known": true,
+      "value": 816,
+      "at": 0
+    },
+    "degradation.nuMsPerLap.hard": {
+      "known": true,
+      "value": 150,
+      "at": 0
+    },
+    "degradation.nuSdMs.hard": {
+      "known": true,
+      "value": 100,
+      "at": 0
+    },
+    "pitLoss.ms.green": {
+      "known": true,
+      "value": 20208,
+      "at": 0
+    },
+    "pitLoss.ms.vsc": {
+      "known": true,
+      "value": 11114,
+      "at": 0
+    },
+    "pitLoss.ms.sc": {
+      "known": true,
+      "value": 9094,
+      "at": 0
+    }
+  }
+}

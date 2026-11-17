@@ -11,6 +11,7 @@ const healthy: FeedStatus = {
   latePackets: 0,
   decodeErrors: 0,
   packetsPerSecond: 60,
+  betweenSessions: false,
 };
 
 describe('connectionRole', () => {

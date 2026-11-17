@@ -326,11 +326,11 @@ describe('race-hazard', () => {
   });
 
   it('outside the race phase → notApplicable (C14)', () => {
+    // ported in SP4.3d2 Task 6: qualifying has its own row, `fromLapOne` (`qualifying.test.ts`)
     const phases: WeekendPhase[] = [
       { kind: 'pending' },
       { kind: 'none' },
       { kind: 'practice', format: 'practice', segment: 1 },
-      { kind: 'qualifying', format: 'grandPrix', segment: 1 },
     ];
     for (const weekendPhase of phases) expect(hazardOf(view({ weekendPhase })), weekendPhase.kind).toEqual(unknown('notApplicable'));
     // the race over or stopped (spec §5.2's behaviour table): suspended, finished, post-session

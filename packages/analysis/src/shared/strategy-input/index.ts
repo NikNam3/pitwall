@@ -9,6 +9,7 @@ export { committedField, followable } from './committed-field.ts';
 export { dpInputOn, hazardOf, notPlannedWhy, plainRoad, plannedCars, plannedField, reactionOf, reactionsOf, roadWorlds, toDpInput, worldsOf, type PlainRoad, type RoadWorld } from './dp-input.ts';
 export { STRATEGY_INPUT_READS, strategyInputFrom, type StrategyInput } from './input.ts';
 export { mcSettingsFrom, pointsOf, strategyConfigOf } from './settings.ts';
+export { planningInputFrom, type PlanningRound } from './planning.ts';
 
 /**
  * `race-hazard`'s tables as `race-monte-carlo` reads them: index 0 is the leader's lap of `start`, without `start` the
@@ -22,7 +23,11 @@ export function toMcHazard(hazard: RaceHazard, start?: Pick<StartingPoint, 'lap'
   return hazardOf({ lap: first, lapsTotal: last }, hazard);
 }
 
-/** A plan's stops as a policy (a stop list, SP4.3d spec §5.1); the one builder of a candidate's policy. */
-export function policyOf(plan: Pick<DpPlan, 'stops'>): Policy {
-  return { stops: plan.stops.map((s) => ({ lap: s.lap, compound: s.compound })) };
+/**
+ * A plan's stops as a policy (a stop list, SP4.3d spec §5.1), with a free start's `startCompound` (§7.2); the one
+ * builder of a candidate's policy.
+ */
+export function policyOf(plan: Pick<DpPlan, 'startCompound' | 'stops'>): Policy {
+  const stops = plan.stops.map((s) => ({ lap: s.lap, compound: s.compound }));
+  return plan.startCompound === undefined ? { stops } : { startCompound: plan.startCompound, stops };
 }

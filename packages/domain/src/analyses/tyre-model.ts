@@ -38,6 +38,11 @@ export type TyreModelCar = {
   limitPct: number;
   /** Laps the fitted set has left until `limitPct` from its current wear (the compounds' `lapsToLimit` are a fresh set's); 0 at or past it. */
   fittedLapsToLimit: Known<number>;
+  /**
+   * The compound of the fitted set (the game's visual compound); a car without its sets `unknown`. Set by `tyre-model`
+   * from SP4.3d2 Task 7 (the race's grid start reads it); absent reads as `unknown('notReceived')`.
+   */
+  fittedCompound?: Known<NoiseCompound>;
   /** The fitted set's life span as the game states it (`TyreSet.lifeSpanLaps`). */
   fittedLifeSpanLaps: Known<number>;
   /** Our car's used sets left with their wear (the starting point's `sets`); a rival's `unknown('notApplicable')`. */

@@ -11,7 +11,7 @@ import type { ForecastResult, Policy, Scenario, StartingPoint } from '@pitwall/d
 import { defineSimulator, type Rng } from '@pitwall/engine/readers';
 import { passChance, sessionCurve, type PassContext } from '../race-interaction/pass-chance.ts';
 import { DOUBLE_STACK_MS, MEDIAN_PASS_HAZARD, PASS_MARGIN_MS, PLAIN_PASS_MIN_ADVANTAGE_MS } from './constants.ts';
-import { PURPOSE, streamKey, uniform } from './draws.ts';
+import { PURPOSE, streamKey, uniform, type ScenarioDraws } from './draws.ts';
 import { createField, endLap, fitStop, lineIndex, NEUTRAL, SLOT, startLap, stopAt, STRIDE, wetOn, type Field } from './field.ts';
 import { lapPointsOf, POINT, type LapPoints } from './points.ts';
 import { result } from './result.ts';
@@ -90,14 +90,18 @@ function tAt(r: Run, c: number, g: number): number {
   return t - (posOf(r.pts, last) - posOf(r.pts, g)) * (car[c * W + LAP_MS] ?? 0);
 }
 
-/** The field at the flag (or at `opts.toLap`) under `scenario`, each car following its policy (by car slot). */
-export function raceForecast(start: StartingPoint, policies: readonly Policy[], scenario: Scenario, rng: Rng, opts?: { trace?: boolean; toLap?: number }): ForecastResult {
+/**
+ * The field at the flag (or at `opts.toLap`) under `scenario`, each car following its policy (by car slot).
+ * `opts.draws`: the caller's table of the scenario's draws (`scenarioDrawsTable`), so the scenario's forecasts draw
+ * each value once; the result is the same with or without it.
+ */
+export function raceForecast(start: StartingPoint, policies: readonly Policy[], scenario: Scenario, rng: Rng, opts?: { trace?: boolean; toLap?: number; draws?: ScenarioDraws }): ForecastResult {
   const pts = lapPointsOf(start.track.brakingZones, start.track.drsZones);
   const P = pts.fraction.length;
   const toLap = opts?.toLap;
   const toFlag = toLap === undefined || toLap >= start.lapsTotal;
   const lastLap = toFlag ? start.lapsTotal : toLap;
-  const f = createField(start, policies, scenario, rng.int(0, 2_147_483_647), lastLap);
+  const f = createField(start, policies, scenario, rng.int(0, 2_147_483_647), lastLap, opts?.draws);
   const order = f.order;
   let m = 0;
   for (const c of start.order) if (f.running[c] === 1) order[m++] = c;

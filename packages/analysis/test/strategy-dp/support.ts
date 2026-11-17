@@ -41,6 +41,14 @@
 //   end of `fromLap` and without one; `boxThisLap` is `null` where no play boxing now can meet the rule, the sets and the
 //   limit; `continue`, where no play without a stop now meets the rule and the limit, is the best such play that ignores
 //   both (always a value, C3).
+// - The start compound (SP4.3d2 Task 8, spec §7.2): `startCompound` is the car's start compound, `carParams.compound`
+//   for a car on its tyres (every input but the grid start's; such plans carry no `startCompound` key, as before);
+//   `null` before the start (the grid, `fromLap` 1, nothing out): free. Then the car starts on a new set of the start
+//   compound the DP picks among those with a set left (`sets[c] ≥ 1`), so that set counts as used, and the compound rule
+//   reads it as the car's current compound; `carParams.compound`, `tyreAge`, `wearPct` and `fittedLapsToLimit` are not
+//   read (the set is new: age 0, wear 0, `lapsToLimit[c]` laps to the limit). Every plan, `boxThisLap` and `continue`
+//   then carries the `startCompound` it starts on. A free start on compound c is exactly the fixed input `fixedStart(input,
+//   c)`: what the brute force solves per start compound.
 import { carId, NOISE_COMPOUNDS, type LapInput, type LapModelParams, type NoiseCompound, type TrackHazard } from '@pitwall/domain';
 import { lapTimeMs } from '../../src/lap-model/index.ts';
 import { HUMAN_STOP_SAVING_MS } from '../../src/race-forecast/constants.ts';
@@ -81,6 +89,8 @@ export type CarSpec = Partial<Omit<DpCarParams, 'degMsPerLap' | 'lapsToLimit'>> 
 };
 
 export type DpSpec = {
+  /** The start compound: absent, the car's compound (on its tyres); `null`, free (the grid). */
+  startCompound?: NoiseCompound | null;
   fromLap?: number;
   totalLaps?: number;
   lap?: LapModelParams;
@@ -125,6 +135,7 @@ export function dpInput(spec: DpSpec = {}): DpInput {
   const { degMsPerLap, lapsToLimit, ...car } = spec.car ?? {};
   return {
     car: carId(0),
+    startCompound: spec.startCompound === undefined ? (car.compound ?? 'medium') : spec.startCompound,
     fromLap,
     totalLaps,
     lap: spec.lap ?? LAP,
@@ -404,6 +415,22 @@ export function bruteForce(input: DpInput, w = 0): { bySequence: Map<string, num
   const stay = expectedMs(one, { root: 'stay' });
   return { bySequence, boxThisLap: Number.isFinite(box) ? box : null, continue: Number.isFinite(stay) ? stay : expectedMs(one, { root: 'stay', rule: false, limit: false }) };
 }
+
+/**
+ * A free start (`startCompound` `null`) fixed on a new set of `compound`: the car on it at age 0 and wear 0 with the
+ * new set's laps to the limit, that set taken from `sets` (SP4.3d2 Task 8; see the header).
+ */
+export function fixedStart(input: DpInput, compound: NoiseCompound): DpInput {
+  return {
+    ...input,
+    startCompound: compound,
+    carParams: { ...input.carParams, compound, tyreAge: 0, wearPct: 0, fittedLapsToLimit: input.carParams.lapsToLimit[compound] },
+    sets: { ...input.sets, [compound]: input.sets[compound] - 1 },
+  };
+}
+
+/** The compounds a free start may start on: those with a set left. */
+export const startCompounds = (input: DpInput): NoiseCompound[] => NOISE_COMPOUNDS.filter((c) => input.sets[c] >= 1);
 
 /** The plans of a result by their sequence key (of one world's plans). */
 export const plansBySequence = (plans: readonly DpPlan[]): Map<string, DpPlan> => new Map(plans.map((p) => [sequenceOf(p.stops), p]));

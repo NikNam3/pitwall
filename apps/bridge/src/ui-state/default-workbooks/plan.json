@@ -44,11 +44,11 @@
         "activeGroup": "gplan-board-1"
       },
       "panels": {
-        "plan-board-1": { "widget": "plan-board", "options": { "source": "live" }, "linkGroup": 1 },
-        "strategy-table-1": { "widget": "strategy-table", "options": {}, "linkGroup": 1 },
+        "plan-board-1": { "widget": "plan-board", "options": { "source": "auto" }, "linkGroup": 1 },
+        "strategy-table-1": { "widget": "strategy-table", "options": { "source": "auto" }, "linkGroup": 1 },
         "strategy-overview-1": { "widget": "strategy-overview", "options": {}, "linkGroup": 1 },
-        "plan-board-2": { "widget": "plan-board", "options": { "source": "live" }, "linkGroup": 2 },
-        "strategy-table-2": { "widget": "strategy-table", "options": {}, "linkGroup": 2 },
+        "plan-board-2": { "widget": "plan-board", "options": { "source": "auto" }, "linkGroup": 2 },
+        "strategy-table-2": { "widget": "strategy-table", "options": { "source": "auto" }, "linkGroup": 2 },
         "strategy-overview-2": { "widget": "strategy-overview", "options": {}, "linkGroup": 2 }
       }
     }

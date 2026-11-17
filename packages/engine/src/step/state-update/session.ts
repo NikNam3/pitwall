@@ -55,11 +55,22 @@ const settingsFrom = (p: SessionPacket): GameSettings => ({
  * The forecast of this session: the game sends the samples of every session of the weekend, each with its session type
  * (a signal, C12); step 1 keeps the values of the samples whose session type is this session's, in the packet's order.
  */
-const forecastOf = (p: SessionPacket): ForecastSample[] =>
+const forecastOf = (p: SessionPacket, sessionType: number): ForecastSample[] =>
   p.weatherForecastSamples
     .slice(0, p.numWeatherForecastSamples)
-    .filter((s) => s.sessionType === p.sessionType)
+    .filter((s) => s.sessionType === sessionType)
     .map(forecastFrom);
+
+/**
+ * The forecast of the next session: the samples of the session type after this one in the weekend structure (signals
+ * read only to choose, C8); `[]` for the weekend's last session or a session the structure does not list.
+ */
+const nextForecastOf = (p: SessionPacket): ForecastSample[] => {
+  const structure = p.weekendStructure.slice(0, p.numSessionsInWeekend);
+  const at = structure.indexOf(p.sessionType);
+  const next = at === -1 ? undefined : structure[at + 1];
+  return next === undefined ? [] : forecastOf(p, next);
+};
 
 /** The session's values as the Session packet describes them; its signals go to `Signals` (C8, C13). */
 export const sessionStateFrom = (p: SessionPacket): SessionState => ({
@@ -75,8 +86,9 @@ export const sessionStateFrom = (p: SessionPacket): SessionState => ({
   weather: pick(WEATHER, p.weather),
   trackTempC: p.trackTemperature,
   airTempC: p.airTemperature,
-  forecast: forecastOf(p),
+  forecast: forecastOf(p, p.sessionType),
   forecastAccuracy: pick(FORECAST_ACCURACY, p.forecastAccuracy),
+  nextForecast: nextForecastOf(p),
   pitWindow: {
     idealLap: p.pitStopWindowIdealLap,
     latestLap: p.pitStopWindowLatestLap,

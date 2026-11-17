@@ -13,7 +13,7 @@ import { WeekendRepository } from '../storage/weekend-repository.ts';
  */
 export type SessionRowInput = {
   sessionUid: SessionUid;
-  session: Pick<SessionState, 'link' | 'trackId' | 'settings'>;
+  session: Pick<SessionState, 'link' | 'trackId' | 'settings' | 'totalLaps'>;
   playerCar: CarId;
   /** The engine's `live.teammateCar` now; `null` when it placed none. */
   teammateCar: CarId | null;
@@ -31,7 +31,8 @@ export const sessionRowOf = (s: SessionRowInput): SessionRow => ({
   trackId: s.session.trackId,
   startedAt: s.startedAt,
   pwrecPath: s.pwrecPath,
-  settings: { ...s.session.settings },
+  // the race's laps with the settings (fixed for the session, ruling R17): the planning round suggests them (§7.1 step 3)
+  settings: { ...s.session.settings, totalLaps: s.session.totalLaps },
   cars: s.cars,
 });
 
@@ -48,9 +49,10 @@ export const carsOf = (live: DeepReadonly<Pick<EngineState, 'cars'>>): SessionRo
 
 /**
  * How a session reaches storage: `append` (live) appends its log frame by frame and marks it complete at its end;
- * `replace` (a rebuild, reprocess or import of a recording) writes it once, at its end, replacing the stored one (C24).
+ * `replace` (a rebuild, reprocess or import of a recording) writes it once, at its end, replacing the stored one (C24);
+ * `read` (the restore of a session stored complete, C59) writes nothing and only reads the weekend context (C62).
  */
-export type StorageMode = 'append' | 'replace';
+export type StorageMode = 'append' | 'replace' | 'read';
 
 export type SessionStorageOptions = {
   log: Logger;
@@ -110,19 +112,28 @@ export class SessionStorage {
    * The session ended with `log` complete (its closing spans in it): live, the rest is appended and the session marked
    * complete; a rebuild replaces the stored log whole. `interrupted`: the input was stopped before the session ended
    * (a bridge stop, a stopped rebuild), so its closing spans never happened: nothing is written and the stored log
-   * stays as it was, a live one incomplete, to be continued by the next run (C24, C38, C59).
+   * stays as it was, a live one incomplete, to be continued by the next run (C24, C38, C59). `read` writes nothing.
    */
   finish(row: SessionRow, log: DeepReadonly<EngineState['log']>, opts: { interrupted: boolean }): void {
     const writer = this.#access?.writer;
-    if (writer === undefined || opts.interrupted) return;
+    if (writer === undefined || opts.interrupted || this.#o.mode === 'read') return;
     if (this.#o.mode === 'append') {
       writer.writeLog(keyOf(row), log);
       if (this.#access !== undefined) writer.complete(keyOf(row));
-      // Stored complete, unless the write failed (storage then is off).
-      if (this.#access !== undefined) this.#o.onStored?.();
     } else {
       writer.replaceLog(row, log, this.#o.rulesVersion);
     }
+    // Stored complete, unless the write failed (storage then is off).
+    if (this.#access !== undefined) this.#o.onStored?.();
+  }
+
+  /**
+   * A rebuild of a recording that holds no session end (C59, C61): `log` is the log as the stopped live run left it (no
+   * closing span applied), and it replaces the stored one whole with the row left incomplete, so the live run that
+   * continues the recording appends to it (C24, C38). Only a rebuild (`replace`) writes; live, the log is already stored.
+   */
+  finishUnended(row: SessionRow, log: DeepReadonly<EngineState['log']>): void {
+    if (this.#o.mode === 'replace') this.#access?.writer.replaceLog(row, log, this.#o.rulesVersion, { complete: false });
   }
 
   /**

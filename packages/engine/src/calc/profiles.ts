@@ -1,14 +1,14 @@
 // Driver-profile declarations and `view.drivers` (contract C62c, SP4.3a spec 4): each estimation unit declares its
 // profile entries with pure functions over a person's linked stored sessions; the bridge's profile store runs them
 // between runs; the scheduler gives each car slot its linked profile from the run's snapshot.
-import { known, unknown, type CarId, type DriverProfile, type FrameNumber, type Known, type ProfileSnapshot, type SessionRef, type TrackData, type WeekendPhase } from '@pitwall/domain';
+import { known, unknown, type CarId, type CarKey, type DriverProfile, type FrameNumber, type Known, type ProfileSnapshot, type SessionRef, type TrackData, type WeekendPhase } from '@pitwall/domain';
 import type { Projection } from '../log/types.ts';
 import type { DeepReadonly } from '../util/deep-readonly.ts';
 import type { EngineView } from './types.ts';
 
 /**
  * One linked session of a person as an aggregate reads it, from its stored projection (C34): the session, the linked
- * car slot, when it started (ISO), its weekend phase and AI difficulty, the projection, the frames the car's `human`
+ * car slot, when it started (ISO), its weekend phase and AI difficulty, the projection, its slots' team and race number, the frames the car's `human`
  * car-driver spans cover (the only frames a profile counts, C17, C62c), and the session's track file.
  */
 export type StoredDriverSession = {
@@ -20,6 +20,8 @@ export type StoredDriverSession = {
   /** The session's laps (ruling R17, the as-of view's `fixed.totalLaps`). */
   totalLaps: Known<number>;
   projection: Projection;
+  /** Team and race number per slot, as the session's Participants last named them (C62); empty when none were stored. */
+  cars: ReadonlyArray<{ carId: CarId; carKey: CarKey }>;
   humanSpans: { startFrame: FrameNumber; endFrame?: FrameNumber }[];
   track: Known<DeepReadonly<TrackData>>;
 };

@@ -1,6 +1,11 @@
 import type { FeedInfo, ReplayControl } from '@pitwall/contracts';
-import type { FeedId } from '@pitwall/domain';
+import { unknown, type FeedId, type StrategyOutput } from '@pitwall/domain';
+import { PLANNING_JOB, type StrategyInput } from '@pitwall/analysis';
+import type { Job } from '@pitwall/engine/readers';
 import { dirname } from 'node:path';
+import { Planning, type PrepareAction } from '../planning/planning.ts';
+import { suggestedLapsOf } from '../planning/round.ts';
+import { PreparedStore } from '../planning/store.ts';
 import { CalibrationStore, type ApplyResult, type CalibrationAction } from '../calibration/store.ts';
 import { createCalcStats } from '../dev/calc-stats.ts';
 import { readCatalogue } from '../dev/catalogue.ts';
@@ -21,12 +26,14 @@ import { DEFAULT_WORKBOOKS_DIR, seedDefaultWorkbooks } from '../ui-state/default
 import { UiState } from '../ui-state/ui-state.ts';
 import { StartupError } from '../startup-error.ts';
 import type { Db, SessionKey, StoredSessionRow } from '../storage/db.ts';
-import { WeekendRepository } from '../storage/weekend-repository.ts';
+import { isStale, WeekendRepository } from '../storage/weekend-repository.ts';
 import { WsServer, type ActionOutcome, type ChooseAction, type EndSessionAction } from '../ws/server.ts';
 import { recordingDecisions } from '../pipeline/decision-sidecars.ts';
 import { recordingProfiles } from '../pipeline/profile-sidecar.ts';
 import { ProfileStore } from '../drivers/store.ts';
 import { cliLogger, whenAborted, type CliIo } from './io.ts';
+import type { RebuildProgress } from './rebuild-database.ts';
+import { endedQualifyingsOf, restoreEndedSessions } from './startup-restore.ts';
 
 /** A recording served through a `ReplayController`; `controls` are applied (and any jump finished) before `listening` is printed. */
 export type ReplayInput = { feedId: FeedId; path: string; controls: readonly ReplayControl[]; unpaced: boolean };
@@ -34,8 +41,11 @@ export type ReplayInput = { feedId: FeedId; path: string; controls: readonly Rep
 /** What a feed is called in the `hello` message. */
 export type FeedLabel = Omit<FeedInfo, 'feedId' | 'team'>;
 
-/** One live feed (C1a): its packet source, which names its feed id, and what it is called in `hello`. */
-export type LiveFeed = { source: PacketSource; feed: FeedLabel };
+/**
+ * One live feed (C1a): its packet source, which names its feed id, what it is called in `hello`, and its UDP port (the
+ * meta `listenPort` of its recordings, by which the startup restore finds its sessions; unset: `0`).
+ */
+export type LiveFeed = { source: PacketSource; feed: FeedLabel; port?: number };
 
 /** One live feed (`source`), several (`sources`, one pipeline each, in `hello` in this order), or a replay. */
 export type ServeOptions = (
@@ -54,9 +64,17 @@ type ServeBase = {
   uiDir?: string;
   /**
    * Opened by the caller, closed by `serve` (also when it fails). `rulesVersion`: the logs are stored with it (C61);
-   * `rebuild`: rebuilds a stored session found incomplete, in the background.
+   * `rebuild`: rebuilds a stored session found incomplete, in the background. `restore`: live, each feed's session to
+   * restore at startup as the caller picked it before its startup rebuild (`pitwall live`); unset, `serve` picks them
+   * (`endedQualifyingsOf`).
    */
-  storage?: { db: Db; recordingsDir: string; rulesVersion: string; rebuild?: (row: StoredSessionRow) => Promise<void> };
+  storage?: {
+    db: Db;
+    recordingsDir: string;
+    rulesVersion: string;
+    rebuild?: (row: StoredSessionRow) => Promise<void>;
+    restore?: ReadonlyMap<FeedId, StoredSessionRow>;
+  };
   staleCheck?: FeedPipelineOptions['staleCheck'];
   /** For a source that binds a socket: resolves once it is bound, rejects with a `StartupError` if it cannot be. */
   bound?: () => Promise<void>;
@@ -66,6 +84,13 @@ type ServeBase = {
   config?: FeatureConfig;
   /** Dev mode (`--dev`): times every calculator run and publishes the `dev.calcStats` and `dev.catalogue` topics. */
   dev?: boolean;
+  /**
+   * Live: the startup server still holding the WebSocket port (`pitwall live`): the startup restore reports its progress
+   * to it (C61), and `serve` closes it before its own server opens (also when it fails).
+   */
+  startup?: { progress: RebuildProgress; close: () => Promise<void> };
+  /** The planning job the planning round runs (C62d); default `PLANNING_JOB`. */
+  planningJob?: Job<StrategyInput, StrategyOutput>;
   io: CliIo;
 };
 
@@ -102,7 +127,15 @@ export async function serve(opts: ServeOptions): Promise<number> {
   // Live, with one source or several (`pitwall live` always passes `sources`); a replay is the one other run.
   const isLive = opts.replay === undefined;
   const undo: Array<() => void | Promise<void>> = [];
+  // The startup server frees the port before the WebSocket server takes it, or once a step before that fails.
+  let startupOpen = opts.startup !== undefined;
+  const closeStartup = async (): Promise<void> => {
+    if (!startupOpen) return;
+    startupOpen = false;
+    await opts.startup?.close();
+  };
   try {
+    undo.push(closeStartup);
     const { storage } = opts;
     if (storage) {
       undo.push(() => {
@@ -138,13 +171,24 @@ export async function serve(opts: ServeOptions): Promise<number> {
       rulesVersion: storage.rulesVersion,
       track: (row) => (row.pwrecPath === null ? loadTrackFile(row.trackId, TRACKS_DIR) : recordingTrack(row.pwrecPath, row.trackId, TRACKS_DIR)),
     });
+    // Live, each feed's session to restore at startup (C59, C61): picked before the stores open, so none of their reads
+    // rebuilds it; the restore replays it once.
+    const restoreRows: ReadonlyMap<FeedId, StoredSessionRow> = isLive && storage
+      ? storage.restore ?? await endedQualifyingsOf(storage.db, live.map(({ source, port }) => ({ feedId: source.feedId, port })), cliLogger(io, 'warn'))
+      : new Map();
+    let restoring: readonly SessionKey[] = [...restoreRows.values()];
     // A session a feed is running (or restoring) right now is no stale session: it is never rebuilt under it (C59). The
-    // bridge's rebuilds run one at a time, each checked when it starts: a restore may begin while it waits.
-    const running = (): Array<SessionKey | undefined> => [...pipelines.values()].map((pipeline) => pipeline.runningSession());
+    // bridge's rebuilds run one at a time, each checked when it starts: a restore may begin while it waits, and a session
+    // stored fresh meanwhile (a restore replaced it) is not rebuilt again.
+    const running = (): Array<SessionKey | undefined> => [...restoring, ...[...pipelines.values()].map((pipeline) => pipeline.runningSession())];
     const isRunning = (row: SessionKey): boolean => running().some((key) => key !== undefined && sameSession(row, key));
+    const isFresh = (row: SessionKey): boolean => {
+      const stored = calibrationRepo?.sessionOf(row);
+      return stored !== undefined && storage !== undefined && !isStale(stored, storage.rulesVersion);
+    };
     let rebuilds: Promise<void> = Promise.resolve();
     const checkedRebuild = rebuild && ((row: StoredSessionRow): Promise<void> => {
-      const turn = rebuilds.then(() => (isRunning(row) ? undefined : rebuild(row)));
+      const turn = rebuilds.then(() => (isRunning(row) || isFresh(row) ? undefined : rebuild(row)));
       rebuilds = turn.catch(() => {});
       return turn;
     });
@@ -230,6 +274,11 @@ export async function serve(opts: ServeOptions): Promise<number> {
         // A plan is a decision of the team's running sessions (C1a, C76): the plan routing takes it.
         plan: (action: PlanAction): ActionOutcome =>
           feedIds.includes(action.feedId) ? planRouting.commit(action) : { ok: false, reason: 'invalid', message: `no feed ${action.feedId}` },
+        // The planning round's prepared plans are the planning module's (C62d, C70, C73).
+        ...(planning && {
+          prepare: (action: PrepareAction): ActionOutcome =>
+            feedIds.includes(action.feedId) ? planning.apply(action) : { ok: false, reason: 'invalid', message: `no feed ${action.feedId}` },
+        }),
         ...(opts.replay && { replay: { control: (control: ReplayControl) => (controller === undefined ? false : (controller.control(control), true)) } }),
       });
       undo.push(() => started.close());
@@ -262,10 +311,23 @@ export async function serve(opts: ServeOptions): Promise<number> {
     const pipelineLog = cliLogger(io, 'info');
     // One job-worker limit for every feed, so all feeds together run at most MAX_JOB_WORKERS workers (Task 18b, C1a).
     const workerLimit = new WorkerLimit();
-    const makePipeline = (source: PacketSource): FeedPipeline => {
+    // The planning round (C62d): bridge user state in `<data dir>/plans/`, so only a run with a data dir has one; its
+    // jobs share the feeds' worker limit (C51). The suggestion reads the stored sessions on the track (§7.1 step 3).
+    const planning = opts.uiDir === undefined ? undefined : new Planning({
+      hub,
+      store: new PreparedStore(dirname(opts.uiDir), cliLogger(io, 'warn')),
+      job: opts.planningJob ?? PLANNING_JOB,
+      workerLimit,
+      endedAsOf: (feedId, laps) => pipelines.get(feedId)?.endedAsOf(laps),
+      suggestedLaps: (trackId, format) => (calibrationRepo === undefined ? unknown('notReceived') : suggestedLapsOf(calibrationRepo.sessionsOnTrack(trackId), format)),
+      log: pipelineLog,
+    });
+    if (planning) undo.push(() => planning.close());
+    const makePipeline = (source: PacketSource, listenPort?: number): FeedPipeline => {
       const pipeline = new FeedPipeline({
       feedId: source.feedId,
       source,
+      ...(listenPort !== undefined && { listenPort }),
       teams,
       hub,
       features: FEATURES,
@@ -301,9 +363,12 @@ export async function serve(opts: ServeOptions): Promise<number> {
       ...(testInsight !== undefined && { testInsight }),
       // A replay (and dev) runs with the track file its recording was made with (C62b); live loads the committed file.
       ...(opts.replay && { tracks: (trackId: number) => recordingTrack(opts.replay.path, trackId, TRACKS_DIR, pipelineLog) }),
+      ...(planning && { planning }),
       });
       // A replay's backward jump builds the feed's pipeline anew; the newest one takes the feed's demand and picks.
       pipelines.set(source.feedId, pipeline);
+      // A new pipeline has no ended session: the feed's round, if any, closes (`{ open: false }` from the feed's start on).
+      planning?.sessionStarted(source.feedId);
       return pipeline;
     };
     const failedFeed = (id: FeedId) => (error: unknown): never => {
@@ -334,14 +399,39 @@ export async function serve(opts: ServeOptions): Promise<number> {
       finished = running.done.catch(failed);
     } else {
       // One pipeline per feed, all on the one hub (C1a); the run has finished once every feed's source is done.
-      const running = live.map(({ source }) => {
-        const pipeline = makePipeline(source);
-        pipeline.start();
+      const made = live.map(({ source, port }) => {
+        const pipeline = makePipeline(source, port);
         undo.push(() => pipeline.stop());
+        return { source, pipeline };
+      });
+      // Before input opens: each feed's ended qualifying is restored from its recording (C59, C61; spec §7.0 rule 4).
+      if (storage) {
+        const restoreLog = cliLogger(io, 'warn');
+        try {
+          await restoreEndedSessions(
+            made.flatMap(({ source, pipeline }) => {
+              const row = restoreRows.get(source.feedId);
+              return row === undefined ? [] : [{
+                row,
+                restore: (r: StoredSessionRow) => pipeline.restoreEnded(r).catch((error: unknown) => {
+                  restoreLog.error({ feedId: source.feedId, sessionUid: r.sessionUid, pwrecPath: r.pwrecPath, err: error }, 'ended session not restored');
+                }),
+              }];
+            }),
+            { line: (text) => io.err(text), ...(opts.startup && { progress: opts.startup.progress }) },
+          );
+        } finally {
+          // Restored (stored fresh) or not: from now on a stale one is rebuilt as any other.
+          restoring = [];
+        }
+      }
+      const running = made.map(({ source, pipeline }) => {
+        pipeline.start();
         return pipeline.done.catch(failedFeed(source.feedId));
       });
       finished = Promise.all(running).then(() => opts.onDone?.());
     }
+    await closeStartup();
     const server = await startServer();
     await opts.bound?.();
     listening = true;

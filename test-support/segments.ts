@@ -10,7 +10,9 @@ import { decode, type Packet } from '../packages/protocol/src/index.ts';
  */
 export const SEGMENTS = {
   practiceGarageRestartLine: 'practice-garage-restart-line.pwrec.gz',
+  qualifyingTexasSend: 'qualifying-texas-send.pwrec.gz',
   raceScAfterCollision: 'race-sc-after-collision.pwrec.gz',
+  raceTexasGrid: 'race-texas-grid.pwrec.gz',
   raceWarningCollision: 'race-warning-collision.pwrec.gz',
 } as const;
 

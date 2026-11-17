@@ -45,7 +45,7 @@ describe("forecast-field's forecast on laps (Task 19c)", () => {
     // mid-lap, so the leader's place on its lap counts
     const frames = g.race.framesOfLap(6);
     const base = materialised(asOfNow(g.viewAt(frames[frames.length >> 1]!)));
-    const view: AsOfView = { ...base, fixed: { ...base.fixed, weatherNow: { weather: 'overcast', forecast: forecast(SAMPLES), forecastAccuracy: 'perfect' } } };
+    const view: AsOfView = { ...base, fixed: { ...base.fixed, weatherNow: { weather: 'overcast', forecast: forecast(SAMPLES), forecastAccuracy: 'perfect', nextForecast: [] } } };
     const sp = buildStartingPoint(view, upstreamOf(view, plainNoise(PARAMS.cars, [6, 7], view.at)));
     if (!sp.known) throw new Error(`starting point unknown: ${sp.reason}`);
     if (!sp.value.weather.known) throw new Error(`weather unknown: ${sp.value.weather.reason}`);

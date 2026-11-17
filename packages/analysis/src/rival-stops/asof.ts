@@ -196,6 +196,41 @@ function switchOf(model: DeepReadonly<TyreModelCar> | undefined, set: CurrentSet
   return { switchLap: known(set.lastLap + 1, at), switchTo: known(best.type, at) };
 }
 
+/** The lap numbers of a window in laps on a set (`ages`): from the lap after `set.lastLap` on, capped by the race's last lap. */
+function lapsOf(set: Pick<CurrentSet, 'lastLap' | 'age'>, ages: { low: number; mid: number; high: number }, totalLaps: number): Omit<Window, 'toFlag'> {
+  const lapOf = (age: number): number => Math.min(totalLaps, Math.max(set.lastLap + 1, Math.round(set.lastLap + age - set.age)));
+  return { lowLap: lapOf(ages.low), midLap: lapOf(ages.mid), highLap: lapOf(ages.high) };
+}
+
+/**
+ * The qualifying row (the planning view, C62d): no race stop seen, so the race row's fields are `notApplicable`; per dry
+ * start compound the first stop's window on a fresh set of it from lap 1: a fresh set's laps to the limit
+ * (`tyre-model`'s, as `lifeLeft` reads it) ± `noPeerSpreadLaps`, capped by the race's laps. A compound without a known
+ * fresh life has no window; without the race's laps there is none (C3).
+ */
+function fromGrid(view: AsOfView, effects: ReadonlyMap<CarId, RivalStopsEffect>): RivalStops {
+  const out: Record<CarId, RivalStop> = {};
+  const spread = { ...RIVAL_STOPS_CONFIG.defaults, ...view.config[RIVAL_STOPS_CONFIG.key] }.noPeerSpreadLaps;
+  const total = view.fixed.totalLaps;
+  const tyreModel = (view.outputs.get(TYRE_MODEL) as DeepReadonly<TyreModelOutput> | undefined) ?? {};
+  const grid = { lastLap: 0, age: 0 };
+  for (const [id, effect] of effects) {
+    if (effect.inSession !== true) continue;
+    if (!total.known) {
+      out[id] = { ...NOT_APPLICABLE, window: unknown('insufficientData'), basis: 'tyreLife' };
+      continue;
+    }
+    const byStartCompound: NonNullable<RivalStop['byStartCompound']> = {};
+    for (const c of DRY) {
+      const fresh = tyreModel[id]?.compounds[c].lapsToLimit;
+      if (fresh?.known !== true) continue;
+      byStartCompound[c] = lapsOf(grid, { low: fresh.value - spread, mid: fresh.value, high: fresh.value + spread }, total.value);
+    }
+    out[id] = { ...NOT_APPLICABLE, basis: 'tyreLife', byStartCompound };
+  }
+  return out;
+}
+
 /** Per car in the session, its next stop as of `view`'s frame. */
 export function rivalStopsAsOf(view: AsOfView): RivalStops {
   const out: Record<CarId, RivalStop> = {};
@@ -205,6 +240,7 @@ export function rivalStopsAsOf(view: AsOfView): RivalStops {
     for (const [id, effect] of effects) if (effect.inSession === true) out[id] = { ...NOT_APPLICABLE, basis: 'noStop' };
     return out;
   }
+  if (phase.fromGrid === true) return fromGrid(view, effects);
   const config = { ...RIVAL_STOPS_CONFIG.defaults, ...view.config[RIVAL_STOPS_CONFIG.key] };
   const spread = config.noPeerSpreadLaps;
   const at = view.at;
@@ -285,7 +321,6 @@ export function rivalStopsAsOf(view: AsOfView): RivalStops {
       continue;
     }
     const unclamped = (age: number): number => Math.round(set.lastLap + age - set.age);
-    const lapOf = (age: number): number => Math.min(totalLaps, Math.max(set.lastLap + 1, unclamped(age)));
     // overdue (SP4.3b F3, Task 11d): the median lap is no later than the lap the car is on; the window spreads from its
     // next lap on (clamping the median onto the current lap would box the car at the end of every lap)
     const nextLap = set.lastLap + 2;
@@ -297,7 +332,7 @@ export function rivalStopsAsOf(view: AsOfView): RivalStops {
             highLap: Math.min(totalLaps, nextLap + config.overdueSpreadLaps),
             toFlag: false,
           }
-        : { lowLap: lapOf(ages.low), midLap: lapOf(ages.mid), highLap: lapOf(ages.high), toFlag: false };
+        : { ...lapsOf(set, ages, totalLaps), toFlag: false };
     out[id] = { owesStop, window: known(window, at), nextCompound, basis, ...typeSwitch };
   }
   return out;

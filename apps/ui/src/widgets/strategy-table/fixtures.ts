@@ -6,7 +6,7 @@
 // `deltaPlanMs` against the committed row, null without one). The display computes none of it (C65). A policy is a stop
 // list (SP4.3d spec §5.1): the TRG column, its trigger lines and the rival's race number (`cars.overview`) are deleted
 // with the triggers (SP4.3d1 Task 3).
-import type { Computed } from '@pitwall/contracts';
+import type { Computed, PlanningRound } from '@pitwall/contracts';
 import { carId, known, toSessionTime, unknown } from '@pitwall/domain';
 import type { McRow, McSource, NoiseCompound, Policy, Slot, StrategyCar } from '@pitwall/domain';
 import type { GalleryEntry } from '../../kit/gallery-types.ts';
@@ -91,6 +91,10 @@ export type TableSpec = {
   scenarios?: number;
   /** SP4.3d1 Task 11: rows saved in a plan slot, by their stops text (`L19 H` → `B`): source `plan` (`game` for G1, G2). */
   slots?: Partial<Record<string, Slot>>;
+  /** SP4.3d2 Task 12: the planning round's ranking: every plan with this start compound (the DP's free start compound). */
+  start?: NoiseCompound;
+  /** SP4.3d2 Task 12: the planning round's grid place, race laps and rain chance; default `null` (the race). */
+  planning?: PlanTable['planning'];
 };
 
 const stopsKey = (stops: [number, NoiseCompound][]): string => stops.map(([l, c]) => `L${l} ${c.charAt(0).toUpperCase()}`).join(' ');
@@ -103,7 +107,7 @@ const first = <T>(a: T[]): T => {
 
 /** A ranked strategy table as `strategy` publishes it for KUH. */
 export function table(spec: TableSpec = {}): PlanTable {
-  const { committed, openTie = false, allTied = false, n = 8, infeasible = null, slots = {} } = spec;
+  const { committed, openTie = false, allTied = false, n = 8, infeasible = null, slots = {}, start, planning = null } = spec;
   const drawn = (openTie ? CANDIDATES.map((c, i) => (i === 1 ? { ...c, mu: 7.43 } : i === 2 ? { ...c, mu: 7.56 } : c)) : CANDIDATES).map(draw);
   const sorted = [...drawn].sort((a, b) => a.ePos - b.ePos);
   const lead = first(sorted).ePos;
@@ -119,7 +123,7 @@ export function table(spec: TableSpec = {}): PlanTable {
   const slotOf = (r: Drawn): Slot | null => slots[stopsKey(r.stops)] ?? null;
   const rows: McRow[] = ordered.map((r, i) => {
     const isCommitted = i === committedAt;
-    const policy: Policy = { stops: r.stops.map(([lap, compound]) => ({ lap, compound })) };
+    const policy: Policy = { ...(start === undefined ? {} : { startCompound: start }), stops: r.stops.map(([lap, compound]) => ({ lap, compound })) };
     const tie = groupSize > 1 && i < groupSize;
     return {
       policy,
@@ -155,6 +159,8 @@ export function table(spec: TableSpec = {}): PlanTable {
     hazard: known('ok' as const, at),
     unresolvedTie: openTie,
     currentPosition: OUR_PLACE,
+    prefill: {},
+    planning,
   };
 }
 
@@ -172,6 +178,30 @@ export const OPEN_TIE = table({ openTie: true });
 /** SP4.3d1 Task 11: L19 H saved in slot B, L22 H in G1; nothing active. */
 export const SAVED = table({ slots: { 'L19 H': 'B', 'L22 H': 'G1' } });
 
+// ---- SP4.3d2 Task 12: the planning round (plan-workbook.html "Planning round": the table below each board shows the
+// planning job's ranking, `plans.preview`, header `SPA · race`). The planning job's ranking: five plans on mediums,
+// grid P8, the race's 44 laps, rain 10 %; distinct from the race's eight rows so a test sees which source is drawn.
+export const PLANNING = table({
+  n: 5,
+  start: 'medium',
+  scenarios: 1_200,
+  planning: { gridPlace: known(OUR_PLACE, at), laps: 44, rainPct: known(10, at) },
+});
+/** The planning job's result (C51), computed before any race lap. */
+export const preview = (value: PlanTable = PLANNING): Computed<StrategyCar> => ({ computedFor: { lap: 0, frameId: 0 }, value: known(value, at) });
+/** `plans.prepared` while the round is open (KUH, Mercedes #12; nothing prepared yet, the laps entered). */
+export const ROUND: PlanningRound = {
+  open: true,
+  weekendId: 'spa-2026',
+  format: 'grandPrix',
+  team: 0,
+  laps: { entered: 44, suggested: known(44, at) },
+  cars: { [KUH]: { raceNumber: 12, slots: {}, active: null } },
+  running: false,
+};
+/** `plans.prepared` outside the planning round. */
+export const CLOSED: PlanningRound = { open: false };
+
 /** The gallery's synthetic cases (data states only: a highlight is window-local, a component test, P17). */
 export const cases = {
   // The mockup's first figure (the screenshot baseline): no highlight, the three tied stop laps under one bracket.
@@ -188,7 +218,12 @@ export const cases = {
   oneRow: { plan: plan({ n: 1 }) },
   allTied: { plan: plan({ allTied: true }) },
   infeasible: { plan: plan({ committed: 'L14 H', infeasible: 'stopLapPassed' }) },
+  // SP4.3d2 Task 12: the planning round (plan-workbook.html): the planning job's ranking; the race's last result ignored.
+  planning: { plan: plan(), preview: preview(), prepared: ROUND },
 } satisfies NonNullable<GalleryEntry<typeof widget>['cases']>;
+
+/** Per case, the panel options it is drawn with (the planning case as the plan workbook sets it). */
+export const caseOptions = { planning: { source: 'planning' } } satisfies NonNullable<GalleryEntry<typeof widget>['caseOptions']>;
 
 /** The gallery's fit sizes: the two minimums (compact 46×6, full 88×13) plus a larger one per mode. */
 export const fit = [

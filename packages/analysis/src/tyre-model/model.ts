@@ -456,6 +456,18 @@ function lifeSpanOf(s: Usable | undefined, sets: CarSets): Known<number> {
   return s.fitted === undefined ? unknown('notReceived') : known(s.fitted.lifeSpanLaps, s.at);
 }
 
+/**
+ * The fitted set's compound (its visual compound, SP4.3d2 Task 7, ruling R22): the set at the game's fitted index, else
+ * the first marked fitted; C3: the sets' reason while they do not count (a rival hidden by realism `realism`), a list
+ * without a fitted set of a compound the model tells apart `notReceived`.
+ */
+function fittedCompoundOf(sets: CarSets): Known<NoiseCompound> {
+  if (!sets.known || sets.value.sets.length === 0) return noSets(sets);
+  const list = sets.value.sets;
+  const fitted = list[sets.value.fittedIdx] ?? list.find((x) => x.fitted);
+  return fitted !== undefined && isNoise(fitted.visualCompound) ? known(fitted.visualCompound, sets.at) : unknown('notReceived');
+}
+
 /** Our car's available sets but the fitted one, of a compound the model tells apart, each with its wear. */
 function usedSetsOf(s: Usable | undefined, sets: CarSets): TyreModelCar['usedSets'] {
   if (s === undefined) return noSets(sets);
@@ -535,6 +547,7 @@ function runOf(view: AsOfView, tyresOf: TyresOf) {
       freshSets: freshSetsOf(sets, tyres.sets),
       limitPct: c.limitPct,
       fittedLapsToLimit: fittedLapsToLimit(tyres, fittedRates, c.limitPct),
+      fittedCompound: fittedCompoundOf(tyres.sets),
       fittedLifeSpanLaps: lifeSpanOf(sets, tyres.sets),
       usedSets: ours.includes(id) ? usedSetsOf(sets, tyres.sets) : unknown('notApplicable'),
       basis: { set: tyres.set, human },
@@ -571,6 +584,8 @@ function runOf(view: AsOfView, tyresOf: TyresOf) {
       freshSets: fit.freshSets as TyreModelCar['freshSets'],
       limitPct: c.limitPct,
       fittedLapsToLimit: fittedLapsToLimit(tyres, fittedRates, c.limitPct),
+      // the set fitted now (a new set reaches it at once, not with the fit's next run)
+      fittedCompound: fittedCompoundOf(tyres.sets),
       fittedLifeSpanLaps: fit.fittedLifeSpanLaps as Known<number>,
       usedSets: fit.usedSets as TyreModelCar['usedSets'],
     };

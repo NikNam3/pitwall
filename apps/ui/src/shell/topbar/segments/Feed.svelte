@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Feed health: grey while fine, amber (warning) when the feed is stale or gone.
+  // Feed health: grey while fine or between sessions, amber (warning) when the feed is stale or gone.
   import * as text from '../../../kit/text.ts';
   import { formatLoss } from '../../../kit/values/format.ts';
   import { role } from '../../../theme/index.ts';
@@ -13,6 +13,8 @@
   <span style:color={role('textFaint')}>{text.topBar.feedUnknown}</span>
 {:else if !feed.connected}
   <span style:color={role('warning')}>{text.topBar.feedDown}</span>
+{:else if feed.betweenSessions}
+  <span data-testid="feed-between-sessions" style:color={role('textFaint')}>{text.topBar.feedBetweenSessions}</span>
 {:else if feed.stale}
   <span style:color={role('warning')}>{text.topBar.feedStale}</span>
 {:else}

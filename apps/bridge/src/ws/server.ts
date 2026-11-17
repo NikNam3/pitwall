@@ -7,6 +7,7 @@ import type { ClientMessage, FeedInfo, ReplayControl, ServerMessage, UiAction } 
 import { isCalibrationAction, type CalibrationStore } from '../calibration/store.ts';
 import { isDriverAction, type ProfileStore } from '../drivers/store.ts';
 import { isPlanAction, type PlanAction } from '../pipeline/plan-routing.ts';
+import { isPrepareAction, type PrepareAction } from '../planning/planning.ts';
 import type { Logger } from '../log.ts';
 import type { UiState } from '../ui-state/ui-state.ts';
 import type { TopicHub } from '../hub/topic-hub.ts';
@@ -40,7 +41,7 @@ export type WsServerOptions = {
    */
   choose?: (action: ChooseAction) => ActionOutcome;
   /**
-   * Takes `plan.commit` and `plan.clear` (decisions, C76): `serve` hands them to `PlanRouting.commit`, which commits them
+   * Takes the `plan.*` uiActions, `plan.accept` included (decisions, C76): `serve` hands them to `PlanRouting.commit`, which commits them
    * to every feed of the team. Without it they are answered with `notSupported`.
    */
   plan?: (action: PlanAction) => ActionOutcome;
@@ -49,6 +50,11 @@ export type WsServerOptions = {
    * state. Without it the action is answered with `notSupported`.
    */
   endSession?: (action: EndSessionAction) => ActionOutcome;
+  /**
+   * Takes the planning round's `plans.prepare.*` (C62d, C73): `serve` hands them to the planning module, never to the UI
+   * state. Without it they are answered with `notSupported`.
+   */
+  prepare?: (action: PrepareAction) => ActionOutcome;
   /** The replay transport that `replayControl` messages drive; without it (a live feed), or when its `control` returns `false`, they are answered with `notSupported`. */
   replay?: { control(control: ReplayControl): boolean | undefined };
   /** Default `127.0.0.1`. */
@@ -159,10 +165,11 @@ export class WsServer {
       case 'uiAction': {
         // A pick is the feed pipeline's (a decision, C76), the other calibration actions the calibration store's (C62a),
         // a plan the plan routing's (a decision for the team's feeds, C76), ending a session the feed pipeline's (C59),
-        // every other one the UI state's.
+        // the planning round's the planning module's (C62d), every other one the UI state's.
         const { action } = message;
         // The driver-profile actions are the profile store's (C62c).
-        const owner = action.kind === 'calibration.choose'
+        const owner = isPrepareAction(action) ? this.options.prepare?.(action)
+          : action.kind === 'calibration.choose'
           ? this.options.choose?.(action)
           : isPlanAction(action) ? this.options.plan?.(action)
           : action.kind === 'session.end' ? this.options.endSession?.(action)

@@ -15,6 +15,7 @@ const healthyFeed: FeedStatus = {
   latePackets: 0,
   decodeErrors: 0,
   packetsPerSecond: 60,
+  betweenSessions: false,
   cadenceMs: 100,
   latencyMs: 12,
 };
@@ -36,6 +37,7 @@ const session: SessionState = {
   airTempC: 25,
   forecast: [],
   forecastAccuracy: 'perfect',
+  nextForecast: [],
   pitWindow: { idealLap: 0, latestLap: 0, rejoinPosition: 0 },
   settings: {
     safetyCar: 'standard',

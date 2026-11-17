@@ -209,6 +209,7 @@ export function startingPoint(spec: StartSpec): StartingPoint {
     drs: { rangeMs: 1_000, fromLap: 3 },
     interaction: spec.interaction ?? interaction(),
     lapModel: spec.lapModel ?? LAP_MODEL,
+    start: null,
   };
   return withLapsLeftBurn(start, cars.map((c) => c.fuelBurnKgPerLap));
 }

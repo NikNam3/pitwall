@@ -4,14 +4,15 @@ import type { MachineId } from '@pitwall/domain';
 import type { BehaviourTable } from '../shared/behaviour.ts';
 
 /**
- * `table`: the table's chances from the leader's current lap; `fromLapOne`: before the start, the chances from lap 1;
+ * `table`: the table's chances from the leader's current lap; `fromLapOne`: before the start, or on the ended qualifying
+ * session's planning view (C62d), the chances from lap 1;
  * `active`: a neutralisation is out, its laps left and no start while it lasts; `notApplicable`: no hazard (C14, or the
  * race over or stopped).
  */
 export type RaceHazardEffect = 'table' | 'fromLapOne' | 'active' | 'notApplicable';
 
 export const RACE_HAZARD_BEHAVIOUR: BehaviourTable<RaceHazardEffect> = {
-  'weekend-phase': { practice: 'notApplicable', qualifying: 'notApplicable', race: 'table', none: 'notApplicable' },
+  'weekend-phase': { practice: 'notApplicable', qualifying: 'fromLapOne', race: 'table', none: 'notApplicable' },
   'session-phase-race': {
     grid: 'fromLapOne',
     formation: 'fromLapOne',

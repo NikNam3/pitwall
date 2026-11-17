@@ -32,3 +32,4 @@ export type * from './tyre-model.ts';
 export type * from './tyre-wear.ts';
 export * from './undercut.ts';
 export type * from './weather.ts';
+export type * from './weekend-pace.ts';

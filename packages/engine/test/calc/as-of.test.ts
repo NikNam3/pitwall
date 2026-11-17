@@ -14,7 +14,7 @@ import { viewOf } from '../support/scheduler.ts';
 
 /** An as-of view of an empty race, with `outputs` before the units. */
 const viewWith = (outputs: AsOfView['outputs'] = new Map()): AsOfView => ({
-  fixed: { totalLaps: unknown('notReceived'), playerCar: unknown('notReceived'), teammateCar: unknown('notReceived'), aiDifficulty: unknown('notReceived'), safetyCar: unknown('notReceived'), setsNow: null, weatherNow: null },
+  fixed: { totalLaps: unknown('notReceived'), playerCar: unknown('notReceived'), teammateCar: unknown('notReceived'), aiDifficulty: unknown('notReceived'), safetyCar: unknown('notReceived'), carKeys: unknown('notReceived'), setsNow: null, weatherNow: null },
   history: history(),
   situation: { weekendPhase: { kind: 'race', format: 'grandPrix' }, byMachine: {} },
   frame: 'now',
@@ -96,6 +96,7 @@ describe('asOfStored', () => {
       aiDifficulty: known(95, 0),
       totalLaps: known(50, 0),
       projection,
+      cars: [],
       humanSpans: [{ startFrame: 1 }],
       track,
     };
@@ -124,6 +125,7 @@ describe('asOfStored: the situation at the session\'s end (Task 3b)', () => {
     aiDifficulty: known(95, 0),
     totalLaps: known(50, 0),
     projection,
+    cars: [],
     humanSpans: [{ startFrame: 1 }],
     track: unknown('notApplicable'),
   });

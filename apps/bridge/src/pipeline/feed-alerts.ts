@@ -27,9 +27,9 @@ export class FeedAlerts {
     return this.#book.active;
   }
 
-  /** The feed-health insights that hold for `feed` now (stale, packet loss, wrong format). */
-  feedChanged(feed: FeedMetricsView, at: SessionTime): InsightChange[] {
-    return this.#book.apply('feed', feedInsights(this.#feedId, feed, at), at);
+  /** The feed-health insights that hold for `feed` now (stale, packet loss, wrong format); between sessions none is stale. */
+  feedChanged(feed: FeedMetricsView, at: SessionTime, betweenSessions = false): InsightChange[] {
+    return this.#book.apply('feed', feedInsights(this.#feedId, feed, at, betweenSessions), at);
   }
 
   writeFailed(failure: WriteFailure, error: unknown, at: SessionTime): InsightChange[] {

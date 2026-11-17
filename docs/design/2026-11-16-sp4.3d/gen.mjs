@@ -5,7 +5,7 @@
 // throws when a line is wider than its panel or a cell wider than its column, so a misfit cannot ship.
 // Sample: Spa, 44 laps dry, 20 cars, L14/44; our cars KUH (Mercedes #12, P8, mediums since L1, sets left S H H I) and
 // LIN (Mercedes #63, P11). Every E[pos], ΔPOS and P(gain) is computed here from the distribution drawn next to it.
-// Spec: docs/superpowers/specs/2026-11-16-sp4.3d-planning-design.md §5–§7.
+// Spec: docs/specs/2026-11-16-sp4.3d-planning-design.md §5–§7.
 import { writeFileSync } from 'node:fs';
 import { DEFAULT_THEME, FONT_FAMILY } from '../../../apps/ui/src/theme/themes.ts';
 

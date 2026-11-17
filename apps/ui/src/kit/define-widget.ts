@@ -5,6 +5,7 @@ import type { Fold, TopicName, TopicValue, UiAction } from '@pitwall/contracts';
 import type {
   AnyDataDecl, ComponentLoader, DataDecl, OptionDecl, OptionalDecl, ParamsArg, RegisteredWidget, SizeMode, WidgetDecl,
 } from './types.ts';
+import type { WidgetCommandId } from './command-types.ts';
 
 const KEBAB_CASE = /^[a-z][a-z0-9]*(-[a-z0-9]+)*$/;
 
@@ -36,6 +37,8 @@ export function declareWidget<D extends Record<string, AnyDataDecl>, O extends R
   sizes: Record<string, SizeMode>;
   /** The uiAction kinds the widget sends (C74); none when omitted. */
   actions?: readonly UiAction['kind'][];
+  /** The shell commands the widget invokes by id with arguments (C72, C74); none when omitted. */
+  commands?: readonly WidgetCommandId[];
 }): WidgetDecl<D, O> {
   if (!KEBAB_CASE.test(w.name)) throw new Error(`widget name "${w.name}" is not kebab-case`);
   const modes = Object.entries(w.sizes);
@@ -45,7 +48,7 @@ export function declareWidget<D extends Record<string, AnyDataDecl>, O extends R
       throw new Error(`widget "${w.name}" size "${mode}" needs minCols and minRows of at least 1`);
     }
   }
-  return { name: w.name, title: w.title, data: w.data, options: w.options ?? ({} as O), sizes: w.sizes, actions: w.actions ?? [] };
+  return { name: w.name, title: w.title, data: w.data, options: w.options ?? ({} as O), sizes: w.sizes, actions: w.actions ?? [], commands: w.commands ?? [] };
 }
 
 /**

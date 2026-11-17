@@ -4,61 +4,89 @@
   // faint), then the DP's best plan per stop count with `→ slot` or `= <slot>`. Every number is `strategy`'s; rows.ts
   // selects and formats them (C65). A selection, the slot picker and the edit draft are window-local (C73); save,
   // activate and remove go through the panel (C74). Whether the actions are offered is the presentation table's (C66).
-  import type { Slot } from '@pitwall/domain';
+  // SP4.3d2 Task 12: the variant (presentation.ts `variantOf`): live draws `strategy.car`, planning the planning job's
+  // `plans.preview` with the race inputs line (GRID, LAPS, RAIN, N), the START column, the prefilled slots with
+  // `accept` and an empty game slot's entry; every planning control, and the race's prefill accept, invokes a shell
+  // command by id through the panel (C72, C74). The cell budget is layout.ts'.
+  import type { NoiseCompound, Slot } from '@pitwall/domain';
   import { PLAN_SLOTS } from '@pitwall/domain';
   import { getUiActions } from '../../kit/actions.ts';
+  import { getWidgetCommands } from '../../kit/commands.ts';
   import { COMPOUND_MARK } from '../../kit/compound/compound-mark.ts';
   import DistStrip from '../../kit/dist/DistStrip.svelte';
   import { placesHeader } from '../../kit/dist/places.ts';
   import type { WidgetProps } from '../../kit/types.ts';
+  import { formatCount, formatPercent, formatPosition, formatWhole } from '../../kit/values/format.ts';
   import TextCell from '../../kit/values/TextCell.svelte';
   import { role, roleOrUndefined } from '../../theme/index.ts';
   import * as draftOps from './draft.ts';
-  import { changedFields, COMPOUNDS, draftOf, policyOfDraft, type Changed, type Draft } from './draft.ts';
+  import { changedFields, COMPOUNDS, draftOf, entryOf, NEW_START, policyOfDraft, type Changed, type Draft } from './draft.ts';
   import { dimRole, headerRole, lineRole, rejectedRole } from './emphasis.ts';
-  import { actionsShown } from './presentation.ts';
+  import { blankAfterInputs, columnsOf, GAME_SLOTS, GAP, LEAD, widthOf } from './layout.ts';
+  import { actionsShown, variantOf } from './presentation.ts';
   import { boardRows, freeSlot, type BoardTable, type DpLine, type SlotLine, type StopCount } from './rows.ts';
   import * as text from './text.ts';
   import type { widget } from './widget.ts';
 
   let { data, options, size, link }: WidgetProps<typeof widget> = $props();
   const { send } = getUiActions();
+  const commands = getWidgetCommands();
 
-  /** The lead cell and the cell between two columns. */
-  const LEAD = ' ';
-  const GAP = ' ';
-  /** Column widths (gen.mjs `boardSpec`). */
-  const SLOT = 3;
-  const STOPS = { full: 23, compact: 15 } as const;
-  const EPOS = 9;
-  const DPOS = 6;
-  const DTIME = 6;
-  const ACT = 8;
-  /** The lap field's width in cells. */
+  /** The lap field's width in cells; the race laps field's. */
   const LAP = 2;
+  const RACE_LAPS = 3;
+
+  type Rejection = { message: string; changed: Changed };
 
   let selected = $state<Slot | null>(null);
   let pickFor = $state<StopCount | null>(null);
   let draft = $state<Draft | null>(null);
-  let rejected = $state<{ message: string; changed: Changed } | null>(null);
+  let rejected = $state<Rejection | null>(null);
+  /** The planning round's window-local drafts (C73): the race laps as typed, the entries of empty game slots. */
+  let lapsDraft = $state<string | null>(null);
+  let lapsRejected = $state<string | null>(null);
+  let entries = $state<Partial<Record<Slot, Draft>>>({});
+  let entryRejected = $state<Partial<Record<Slot, Rejection>>>({});
 
   const full = $derived(size.mode === 'full');
-  // The job's topic before its first result has no value: the panel frame shows its computing state.
-  const plan = $derived(data.plan as typeof data.plan | undefined);
-  const planning = $derived(options.source === 'planning');
-  const value = $derived<BoardTable | undefined>(!planning && plan?.value.known === true ? plan.value.value : undefined);
-  const view = $derived(value === undefined ? undefined : boardRows(value, full ? 'full' : 'compact'));
-  const places = $derived(view === undefined ? 0 : (view.slots[0]?.pmf.length ?? view.dp[0]?.pmf.length ?? 0));
-  const stopsWidth = $derived(full ? STOPS.full : STOPS.compact);
-  const width = $derived(
-    LEAD.length + SLOT + GAP.length + stopsWidth + GAP.length + EPOS + GAP.length + DPOS + (full ? 3 * GAP.length + DTIME + places + ACT : 0),
-  );
-  const acting = $derived(full && actionsShown(data.phase));
-  const sel = $derived(acting && selected !== null ? view?.slots.find((l) => l.slot === selected) : undefined);
+  const mode = $derived(full ? 'full' : 'compact');
+  const prepared = $derived(data.prepared as typeof data.prepared | undefined);
+  const variant = $derived(variantOf(options.source, prepared));
+  const planning = $derived(variant === 'planning');
+  const round = $derived(planning && prepared?.open === true ? prepared : undefined);
+  // The variant's job topic; before its first result it has no value: the panel frame shows its computing state.
+  const job = $derived(planning ? (data.preview as typeof data.preview | undefined) : (data.plan as typeof data.plan | undefined));
+  const reason = $derived(planning && round === undefined ? 'notApplicable' : job !== undefined && !job.value.known ? job.value.reason : undefined);
+  const value = $derived<BoardTable | undefined>(reason === undefined && job?.value.known === true ? job.value.value : undefined);
+  const view = $derived(value === undefined ? undefined : boardRows(value, mode));
+  const places = $derived(view === undefined ? 0 : (view.slots.find((l) => l.pmf.length > 0)?.pmf.length ?? view.dp[0]?.pmf.length ?? 0));
+  const cols = $derived(columnsOf(variant, mode));
+  const width = $derived(widthOf(cols, mode, places));
+  const acting = $derived(full && (planning || actionsShown(data.phase)));
+  const sel = $derived(acting && selected !== null ? view?.slots.find((l) => l.slot === selected && !l.prefill) : undefined);
   const free = $derived(value === undefined ? undefined : freeSlot(value));
+  /** Our car's prepared slots (the bridge's, `plans.prepared`). */
+  const preparedSlots = $derived(round?.cars[link.primary]?.slots ?? {});
+
+  /** Per slot its line, or in the planning round (full) an empty game slot's entry, in slot order. */
+  type Item = { kind: 'line'; line: SlotLine } | { kind: 'entry'; slot: Slot };
+  const items = $derived.by((): Item[] => {
+    if (view === undefined) return [];
+    const lines: Item[] = view.slots.map((line) => ({ kind: 'line', line }));
+    if (!planning || !full) return lines;
+    const empty = GAME_SLOTS.filter((s) => !view.slots.some((l) => l.slot === s) && preparedSlots[s] === undefined);
+    const order = (i: Item): number => {
+      const slot = i.kind === 'entry' ? i.slot : i.line.slot;
+      return slot === null ? -1 : PLAN_SLOTS.indexOf(slot);
+    };
+    return [...lines, ...empty.map((slot): Item => ({ kind: 'entry', slot }))].sort((a, b) => order(a) - order(b));
+  });
+  const blank = $derived(full && blankAfterInputs(items.length, size.rows));
+
+  const planningInputs = $derived(value?.planning ?? null);
 
   function select(line: SlotLine): void {
-    if (!acting || line.slot === null) return;
+    if (!acting || line.slot === null || line.prefill) return;
     selected = selected === line.slot ? null : line.slot;
     pickFor = null;
   }
@@ -73,13 +101,23 @@
     const line = view?.dp.find((l) => l.stopCount === pickFor);
     pickFor = null;
     if (line === undefined) return;
-    void send({ kind: 'plan.save', feedId: link.feedId, carId: link.primary, slot, policy: line.policy });
+    if (planning) void commands.invoke('plans.prepare.save', { feedId: link.feedId, carId: link.primary, slot, policy: line.policy });
+    else void send({ kind: 'plan.save', feedId: link.feedId, carId: link.primary, slot, policy: line.policy });
   }
   function activate(slot: Slot): void {
-    void send({ kind: 'plan.activate', feedId: link.feedId, carId: link.primary, slot });
+    if (planning) void commands.invoke('plans.prepare.activate', { feedId: link.feedId, carId: link.primary, slot });
+    else void send({ kind: 'plan.activate', feedId: link.feedId, carId: link.primary, slot });
   }
   function remove(slot: Slot): void {
-    void send({ kind: 'plan.remove', feedId: link.feedId, carId: link.primary, slot });
+    if (planning) void commands.invoke('plans.prepare.remove', { feedId: link.feedId, carId: link.primary, slot });
+    else void send({ kind: 'plan.remove', feedId: link.feedId, carId: link.primary, slot });
+  }
+  /** `accept` on a prefilled line: the prefill becomes the slot's plan (the round's or the race's command). */
+  function accept(line: SlotLine): void {
+    if (line.slot === null) return;
+    const args = { feedId: link.feedId, carId: link.primary, slot: line.slot, policy: line.policy };
+    if (planning) void commands.invoke('plans.prepare.accept', args);
+    else void commands.invoke('plan.accept', args);
   }
   function edit(line: SlotLine): void {
     if (line.slot === null) return;
@@ -106,24 +144,66 @@
     rejected = null;
   }
   const bad = (i: number, field: 'lap' | 'compound'): boolean => rejected?.changed[i]?.[field] === true;
+
+  // ---- the planning round's controls (C72, C73)
+  const entry = (slot: Slot): Draft => entries[slot] ?? entryOf(slot);
+  function changeEntry(next: Draft): void {
+    entries = { ...entries, [next.slot]: next };
+    entryRejected = { ...entryRejected, [next.slot]: undefined };
+  }
+  async function saveEntry(slot: Slot): Promise<void> {
+    const d = entry(slot);
+    const outcome = await commands.invoke('plans.prepare.save', { feedId: link.feedId, carId: link.primary, slot, policy: policyOfDraft(d) });
+    if (entries[slot] !== undefined && entries[slot] !== d) return;
+    if (outcome.ok) {
+      entries = { ...entries, [slot]: undefined };
+      entryRejected = { ...entryRejected, [slot]: undefined };
+    } else entryRejected = { ...entryRejected, [slot]: { message: outcome.message ?? text.rejectedNoReason, changed: changedFields(d) } };
+  }
+  const badEntry = (slot: Slot, i: number, field: 'lap' | 'compound'): boolean => entryRejected[slot]?.changed[i]?.[field] === true;
+
+  function typeLaps(v: string): void {
+    lapsDraft = v;
+    lapsRejected = null;
+  }
+  /** Commits the race laps field: one command with its number; the bridge validates it (C73). */
+  async function commitLaps(): Promise<void> {
+    const typed = lapsDraft;
+    if (typed === null) return;
+    if (typed.trim() === '') {
+      lapsDraft = null;
+      return;
+    }
+    const outcome = await commands.invoke('plans.prepare.laps', { feedId: link.feedId, laps: Number(typed.trim()) });
+    if (lapsDraft !== typed) return;
+    if (outcome.ok) {
+      lapsDraft = null;
+      lapsRejected = null;
+    } else lapsRejected = outcome.message ?? text.rejectedNoReason;
+  }
+  const entered = $derived(round?.laps.entered ?? null);
+  const suggested = $derived(round !== undefined && round.laps.suggested.known ? formatWhole(round.laps.suggested.value) : '');
 </script>
 
-{#snippet cells(l: SlotLine | DpLine, active: boolean, faint: boolean)}<TextCell
+{#snippet cells(l: SlotLine | DpLine, active: boolean, faint: boolean)}{#if cols.start > 0}<span data-testid={'key' in l ? `start-${l.key}` : undefined}
+      ><TextCell text={l.start} width={cols.start} /></span
+    >{GAP}{/if}<TextCell
     text={l.stops}
-    width={stopsWidth}
+    width={cols.stops}
+    role={'prefill' in l && l.prefill ? dimRole : undefined}
     title={'hover' in l ? l.hover : undefined}
-  />{GAP}<TextCell text={l.ePos} width={EPOS} align="right" />{GAP}<TextCell
+  />{GAP}<TextCell text={l.ePos} width={cols.ePos} align="right" />{GAP}<TextCell
     text={l.dPos}
-    width={DPOS}
+    width={cols.dPos}
     align="right"
     role={l.dPosRole}
-  />{#if full && view !== undefined}{GAP}<TextCell text={l.dTime} width={DTIME} align="right" />{GAP}<DistStrip
-      form="places"
-      pmf={l.pmf}
-      scale={view.scale}
-      ourPlace={view.ourPlace}
-      lit={active && !faint}
-    />{/if}{/snippet}
+  />{#if full && view !== undefined}{GAP}<TextCell text={l.dTime} width={cols.dTime} align="right" />{GAP}{#if l.pmf.length > 0}<DistStrip
+        form="places"
+        pmf={l.pmf}
+        scale={view.scale}
+        ourPlace={view.ourPlace}
+        lit={active && !faint}
+      />{:else}{' '.repeat(places)}{/if}{/if}{/snippet}
 
 {#snippet dpAct(l: DpLine)}{#if l.same !== null}<span data-testid="same-{l.stopCount}" style:color={role(dimRole)} title={text.sameAsHover}
       >{text.sameAs(l.same)}</span
@@ -131,13 +211,13 @@
       type="button"
       class="pw-button act"
       data-testid="to-slot-{l.stopCount}"
-      title={text.hover.save}
+      title={planning ? text.commandHover.save : text.hover.save}
       onclick={() => openPicker(l.stopCount)}>{text.toSlot}</button
     >{/if}{/snippet}
 
 {#snippet editor(d: Draft)}
   <div data-testid="editor">
-    <div class="line">{LEAD}<TextCell text={d.slot} width={SLOT} />{GAP}{#each d.stops as s, i (i)}{GAP}<span style:color={role(dimRole)}
+    <div class="line">{LEAD}<TextCell text={d.slot} width={cols.slot} />{GAP}{#each d.stops as s, i (i)}{GAP}<span style:color={role(dimRole)}
           >{text.lapPrefix}</span
         ><input
           type="text"
@@ -164,7 +244,7 @@
         >{GAP}{GAP}{/each}{GAP}<button type="button" class="pw-button act" data-testid="edit-add" onclick={() => change(draftOps.addStop(d))}
         >{text.addStop}</button
       ></div>
-    <div class="line">{LEAD}{' '.repeat(SLOT)}{GAP}<button
+    <div class="line">{LEAD}{' '.repeat(cols.slot)}{GAP}<button
         type="button"
         class="pw-button act"
         data-testid="edit-save"
@@ -180,69 +260,166 @@
   </div>
 {/snippet}
 
-{#if planning || (plan !== undefined && !plan.value.known)}
-  <div class="line"><TextCell text="" reason={plan !== undefined && !plan.value.known ? plan.value.reason : 'notApplicable'} /></div>
-{:else if view !== undefined}
-  <div class="block">
-    <div class="line" style:color={role(headerRole)}>{LEAD}{' '.repeat(SLOT)}{GAP}<TextCell text={text.headers.stops} width={stopsWidth} />{GAP}<TextCell
-        text={text.headers.ePos}
-        width={EPOS}
-        align="right"
-      />{GAP}<TextCell text={text.headers.dPos} width={DPOS} align="right" />{#if full}{GAP}<TextCell
-          text={text.headers.dTime}
-          width={DTIME}
+{#snippet entryLine(slot: Slot)}
+  {@const d = entry(slot)}
+  {@const no = entryRejected[slot]}
+  <div class="line" data-testid="entry-{slot}">{LEAD}<TextCell text={slot} width={cols.slot} />{GAP}<select
+      class="pw-input fld"
+      data-testid="entry-{slot}-start"
+      title={text.headers.start}
+      bind:value={() => d.start ?? NEW_START, (v: NoiseCompound) => changeEntry(draftOps.setStart(d, v))}
+    >
+      {#each COMPOUNDS as c (c)}<option value={c}>{COMPOUND_MARK[c].letter}</option>{/each}
+    </select>{GAP}{#each d.stops as s, i (i)}{GAP}<span style:color={role(dimRole)}>{text.lapPrefix}</span><input
+        type="text"
+        inputmode="numeric"
+        spellcheck="false"
+        class="pw-input fld"
+        data-testid="entry-{slot}-lap-{i}"
+        data-role={badEntry(slot, i, 'lap') ? rejectedRole : undefined}
+        title={badEntry(slot, i, 'lap') ? no?.message : undefined}
+        style:width="{LAP}ch"
+        style:color={badEntry(slot, i, 'lap') ? role(rejectedRole) : undefined}
+        bind:value={() => s.lap, (v: string) => changeEntry(draftOps.setLap(d, i, v))}
+      /> {text.arrow} <select
+        class="pw-input fld"
+        data-testid="entry-{slot}-compound-{i}"
+        data-role={badEntry(slot, i, 'compound') ? rejectedRole : undefined}
+        title={badEntry(slot, i, 'compound') ? no?.message : undefined}
+        style:color={badEntry(slot, i, 'compound') ? role(rejectedRole) : undefined}
+        bind:value={() => s.compound, (v: NoiseCompound) => changeEntry(draftOps.setCompound(d, i, v))}
+      >
+        {#each COMPOUNDS as c (c)}<option value={c}>{COMPOUND_MARK[c].letter}</option>{/each}
+      </select> <button type="button" class="pw-button act" data-testid="entry-{slot}-drop-{i}" onclick={() => changeEntry(draftOps.dropStop(d, i))}
+        >{text.dropStop}</button
+      >{/each}{GAP}<button type="button" class="pw-button act" data-testid="entry-{slot}-add" onclick={() => changeEntry(draftOps.addStop(d))}
+      >{text.addStop}</button
+    >{GAP}{GAP}<button
+      type="button"
+      class="pw-button act"
+      data-testid="entry-{slot}-save"
+      title={text.commandHover.save}
+      onclick={() => void saveEntry(slot)}>{text.saveTo(slot)}</button
+    ></div>
+{/snippet}
+
+{#snippet inputsLine()}
+  <div class="line" data-testid="inputs">{LEAD}<span style:color={role(headerRole)}>{text.inputs.grid}</span> {#if planningInputs !== null}<TextCell
+        text={planningInputs.gridPlace.known ? formatPosition(planningInputs.gridPlace.value) : ''}
+        reason={planningInputs.gridPlace.known ? undefined : planningInputs.gridPlace.reason}
+      />{/if}{GAP}{GAP}{GAP}<span style:color={role(headerRole)}>{text.inputs.laps}</span> <input
+      type="text"
+      inputmode="numeric"
+      spellcheck="false"
+      class="pw-input fld"
+      data-testid="laps"
+      placeholder={suggested}
+      data-role={lapsRejected !== null ? rejectedRole : undefined}
+      title={lapsRejected ?? text.commandHover.laps}
+      style:width="{RACE_LAPS}ch"
+      style:color={lapsRejected !== null ? role(rejectedRole) : undefined}
+      value={lapsDraft ?? (entered === null ? '' : formatWhole(entered))}
+      oninput={(e) => typeLaps(e.currentTarget.value)}
+      onchange={() => void commitLaps()}
+    />{GAP}{GAP}{GAP}<span style:color={role(headerRole)}>{text.inputs.rain}</span> {#if planningInputs !== null}<TextCell
+        text={planningInputs.rainPct.known ? formatPercent(planningInputs.rainPct.value) : ''}
+        reason={planningInputs.rainPct.known ? undefined : planningInputs.rainPct.reason}
+      />{/if}{GAP}{GAP}{GAP}<span style:color={role(headerRole)}>{text.inputs.n}</span> {#if value !== undefined}{formatCount(
+        value.scenarios,
+      )}{/if}{#if round?.running === true}{GAP}{GAP}{GAP}<span data-testid="computing" style:color={role(dimRole)} title={text.computingHover}
+        >{text.computing}</span
+      >{/if}</div>
+{/snippet}
+
+{#if reason !== undefined}
+  <div class="line"><TextCell text="" {reason} /></div>
+{:else}
+  {#if round !== undefined && full}
+    {@render inputsLine()}
+    {#if blank && view !== undefined}<div class="line"> </div>{/if}
+  {/if}
+  {#if view !== undefined}
+    <div class="block">
+      <div class="line" style:color={role(headerRole)}>{LEAD}{' '.repeat(cols.slot)}{GAP}{#if cols.start > 0}<TextCell
+            text={text.headers.start}
+            width={cols.start}
+          />{GAP}{/if}<TextCell text={text.headers.stops} width={cols.stops} />{GAP}<TextCell
+          text={text.headers.ePos}
+          width={cols.ePos}
           align="right"
-        />{GAP}<TextCell text={placesHeader(places)} />{/if}</div>
-    {#each view.slots as l (l.key)}
-      <div
-        class="line row"
-        class:active={l.active}
-        class:on={l.slot !== null && l.slot === sel?.slot}
-        data-testid="row-{l.key}"
-        style:color={roleOrUndefined(lineRole(l.active, l.faint))}
-        role="button"
-        tabindex="0"
-        onclick={() => select(l)}
-        onkeydown={onKey(l)}
-      >{LEAD}<TextCell text={l.label} width={SLOT} />{GAP}{@render cells(l, l.active, l.faint)}</div>
-    {/each}
-    <div class="line" style:color={role(headerRole)}>{text.dpRule(width)}</div>
-    {#each view.dp as l (l.stopCount)}
-      <div class="line" data-testid="dp-{l.stopCount}">{LEAD}{' '.repeat(SLOT)}{GAP}{@render cells(l, false, false)}{#if full}{GAP}{@render dpAct(l)}{/if}</div>
-    {/each}
-    {#if full}
-      {#if draft !== null && acting}
-        {@render editor(draft)}
-      {:else}
-        <div class="line"> </div>
-        {#if pickFor !== null && acting}
-          <div class="line" data-testid="picker">{LEAD}{' '.repeat(SLOT)}{GAP}{text.arrow}{#each PLAN_SLOTS as s (s)}{GAP}<button
+        />{GAP}<TextCell text={text.headers.dPos} width={cols.dPos} align="right" />{#if full}{GAP}<TextCell
+            text={text.headers.dTime}
+            width={cols.dTime}
+            align="right"
+          />{GAP}<TextCell text={placesHeader(places)} />{/if}</div>
+      {#each items as item (item.kind === 'entry' ? `entry-${item.slot}` : item.line.key)}
+        {#if item.kind === 'entry'}
+          {@render entryLine(item.slot)}
+        {:else}
+          {@const l = item.line}
+          <div
+            class="line row"
+            class:active={l.active}
+            class:on={l.slot !== null && l.slot === sel?.slot}
+            data-testid="row-{l.key}"
+            style:color={roleOrUndefined(lineRole(l.active, l.faint))}
+            role="button"
+            tabindex="0"
+            onclick={() => select(l)}
+            onkeydown={onKey(l)}
+          >{LEAD}<TextCell text={l.label} width={cols.slot} />{GAP}{@render cells(l, l.active, l.faint)}{#if l.prefill && acting}{GAP}<button
                 type="button"
                 class="pw-button act"
-                data-testid="pick-{s}"
-                title={text.hover.save}
-                onclick={() => pick(s)}>{s}</button
-              >{/each}</div>
-        {:else if sel !== undefined && sel.slot !== null}
-          {@const slot = sel.slot}
-          <div class="line" data-testid="actions">{LEAD}<span style:color={role(dimRole)}>{slot}</span>{#if !sel.active}{GAP}{GAP}<button
-                type="button"
-                class="pw-button act"
-                data-testid="activate"
-                title={text.hover.activate}
-                onclick={() => activate(slot)}>{text.activate}</button
-              >{/if}{GAP}{GAP}<button type="button" class="pw-button act" data-testid="edit" onclick={() => edit(sel)}>{text.edit}</button
-            >{#if !sel.active}{GAP}{GAP}<button
-                type="button"
-                class="pw-button act"
-                data-testid="remove"
-                title={text.hover.remove}
-                onclick={() => remove(slot)}>{text.remove}</button
+                data-testid="accept-{l.key}"
+                title={planning ? text.commandHover.accept : text.commandHover.raceAccept}
+                onclick={(e) => {
+                  e.stopPropagation();
+                  accept(l);
+                }}>{text.accept}</button
               >{/if}</div>
         {/if}
+      {/each}
+      <div class="line" style:color={role(headerRole)}>{text.dpRule(width)}</div>
+      {#each view.dp as l (l.stopCount)}
+        <div class="line" data-testid="dp-{l.stopCount}">{LEAD}{' '.repeat(cols.slot)}{GAP}{@render cells(l, false, false)}{#if full}{GAP}{@render dpAct(l)}{/if}</div>
+      {/each}
+      {#if full}
+        {#if draft !== null && acting && !planning}
+          {@render editor(draft)}
+        {:else}
+          <!-- the race: a blank, then the picker or the actions; the planning round: the last line holds them (layout.ts) -->
+          {#if !planning}<div class="line"> </div>{/if}
+          {#if pickFor !== null && acting}
+            <div class="line" data-testid="picker">{LEAD}{' '.repeat(cols.slot)}{GAP}{text.arrow}{#each PLAN_SLOTS as s (s)}{GAP}<button
+                  type="button"
+                  class="pw-button act"
+                  data-testid="pick-{s}"
+                  title={planning ? text.commandHover.save : text.hover.save}
+                  onclick={() => pick(s)}>{s}</button
+                >{/each}</div>
+          {:else if sel !== undefined && sel.slot !== null}
+            {@const slot = sel.slot}
+            <div class="line" data-testid="actions">{LEAD}<span style:color={role(dimRole)}>{slot}</span>{#if !sel.active}{GAP}{GAP}<button
+                  type="button"
+                  class="pw-button act"
+                  data-testid="activate"
+                  title={planning ? text.commandHover.activate : text.hover.activate}
+                  onclick={() => activate(slot)}>{text.activate}</button
+                >{/if}{#if !planning}{GAP}{GAP}<button type="button" class="pw-button act" data-testid="edit" onclick={() => edit(sel)}>{text.edit}</button
+                >{/if}{#if !sel.active}{GAP}{GAP}<button
+                  type="button"
+                  class="pw-button act"
+                  data-testid="remove"
+                  title={planning ? text.commandHover.remove : text.hover.remove}
+                  onclick={() => remove(slot)}>{text.remove}</button
+                >{/if}</div>
+          {:else if planning}
+            <div class="line"> </div>
+          {/if}
+        {/if}
       {/if}
-    {/if}
-  </div>
+    </div>
+  {/if}
 {/if}
 
 <style>

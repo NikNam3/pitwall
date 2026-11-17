@@ -49,15 +49,19 @@ beforeAll(async () => {
 /** A session the bridge stored: its key and its recording. */
 type StoredSession = { key: SessionKey; file: string };
 
-const packets = (uid: bigint, weekend: number) =>
-  new ScenarioBuilder({ sessionUid: uid, cars: 2 }).session({ weekendLinkIdentifier: weekend }).participants().frames(10, () => {}).event(FTLP).frames(10, () => {})
-    .packets().map(({ packet, receivedAtMs }) => ({ bytes: packetBytes(packet), receivedAtMs }));
+/** A session's datagrams; `ended` (default): it ends with the game's session end (SEND), as a session that ran to its end. */
+const packets = (uid: bigint, weekend: number, ended = true) => {
+  const run = new ScenarioBuilder({ sessionUid: uid, cars: 2 }).session({ weekendLinkIdentifier: weekend }).participants().frames(10, () => {}).event(FTLP).frames(10, () => {});
+  return (ended ? run.event({ code: 'SEND' }) : run).packets().map(({ packet, receivedAtMs }) => ({ bytes: packetBytes(packet), receivedAtMs }));
+};
 
 type LiveRun = {
   uid: number;
   weekend: number;
   at: number;
   version: string;
+  /** False: the recording holds no session end (SEND), as when the bridge was stopped mid-session. */
+  ended?: boolean;
   features?: typeof FEATURES;
   /** The live bridge's background rebuild, on the pipeline's database; every rebuild it starts is awaited before the database closes. */
   rebuild?: (db: Db) => (row: StoredSessionRow) => Promise<void>;
@@ -73,7 +77,7 @@ async function storeSession(dir: string, run: LiveRun): Promise<StoredSession> {
     const rebuilder = run.rebuild?.(db);
     const rebuild = rebuilder && ((row: StoredSessionRow) => { const p = rebuilder(row); started.push(p); return p; });
     const pipeline = new FeedPipeline({
-      feedId: F, source: new ArraySource(F, packets(BigInt(run.uid), run.weekend)), hub: new TopicHub({ now: () => 0 }),
+      feedId: F, source: new ArraySource(F, packets(BigInt(run.uid), run.weekend, run.ended ?? true)), hub: new TopicHub({ now: () => 0 }),
       features: run.features ?? FEATURES, log: silent, wallClock: () => run.at,
       storage: { db, recordingsDir: dirs.recordings, rulesVersion: run.version, ...(rebuild && { rebuild }) },
     });
@@ -175,7 +179,25 @@ describe('pitwall live: the stale sessions of the newest weekend are rebuilt at 
     expect(await rowOf(dir, earlier.key)).toMatchObject({ rules_version: OLD });
   });
 
-  it('an incomplete session of the newest weekend is rebuilt at start', async () => {
+  // Ported (SP4.3d2 Task 5 fixes, P1; C59, ruling R21): a recording without its session end is a session the bridge was
+  // stopped in; its rebuild replaces the log and leaves the row incomplete, so the feed's resume path continues it.
+  it('an incomplete session of the newest weekend whose recording holds no session end is rebuilt at start and stays incomplete', async () => {
+    const dir = tmp();
+    const session = await storeSession(dir, { uid: 21, weekend: 2, at: T0, version: current, ended: false });
+    // as if the bridge was killed mid-session: part of the log written, never marked complete
+    await withDb(dir, (db) => {
+      db.prepare('UPDATE sessions SET complete = 0').run();
+      db.prepare("DELETE FROM facts WHERE list = 'events' OR list LIKE 'spans:%'").run();
+    });
+    const lines = await startLive(dir);
+    expect(progressOf(lines).map((l) => l.line.includes(basename(session.file)))).toEqual([true]);
+    expect(await rowOf(dir, session.key)).toMatchObject({ rules_version: current, complete: 0, pwrec_path: session.file });
+    // the log is replaced from the recording: its events are there again
+    const lists = (await logOf(dir, session.key)).map((row) => (row as { list: string }).list);
+    expect(lists).toContain('events');
+  });
+
+  it('an incomplete session of the newest weekend whose recording holds its session end is rebuilt complete at start', async () => {
     const dir = tmp();
     const session = await storeSession(dir, { uid: 21, weekend: 2, at: T0, version: current });
     const complete = await withDb(dir, (db) => repoOf(db).projectionOf(session.key));

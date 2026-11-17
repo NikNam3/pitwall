@@ -5,6 +5,7 @@ import { TOPICS } from './topics/index.generated.ts';
 export { TOPICS };
 export type { TopicDef, TopicOwner } from './topic-def.ts';
 export type { FeedStatus } from './topics/feed.status.ts';
+export type { PlanningRound } from './topics/plans.prepared.ts';
 export type { ReplayJump, ReplayStatus } from './topics/replay.status.ts';
 export type { SessionInfo } from './topics/session.info.ts';
 export type { CarOverview } from './topics/cars.overview.ts';

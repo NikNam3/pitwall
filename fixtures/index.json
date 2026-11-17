@@ -881,6 +881,33 @@
         "OVTK x2, SPTP x2, BUTN x5",
         "duration 6784.093 ms; the leader crosses into lap 21 at 2253.262, outside the segment"
       ]
+    },
+    {
+      "file": "qualifying-texas-send.pwrec.gz",
+      "source": "oneShotQualifyingLiveTest",
+      "fromS": 95,
+      "toS": 105.2,
+      "records": 2492,
+      "features": [
+        "825 345 bytes; context Session and Participants in front; one-shot qualifying (session type 9, weekend structure [4, 9, 15]): it ends qualifying and plans the grand prix of raceTexasGrid",
+        "the last ~10 s of the session before SEND: car 19 finishing its lap, resultStatus 3 at 105.169, SEND at 105.199 (the last Session and Participants at 105.199), then the BUTN tail (UID 0)",
+        "no full lap; not in the acceptance gate (a segment)",
+        "duration 11278.646 ms"
+      ]
+    },
+    {
+      "file": "race-texas-grid.pwrec.gz",
+      "source": "raceLiveTestAbandoned",
+      "fromS": 0,
+      "toS": 1.6,
+      "records": 2175,
+      "features": [
+        "407 480 bytes; no context packets; first record is the race's first Session packet (session type 15, weekend structure zeros) at 0.000, Participants at 0.000 (the team known)",
+        "weekend structure [4, 9, 15] from the Session packet at 1.526 (frame 51): the first frame with the weekend phase (race, grandPrix) and the team known; safetyCarStatus 3 from 1.017",
+        "session time 0..1.6 also holds the formation-end reset (SCAR at 0.000, frame 5707), STLG x5, LGOT (frame 5927) and the race's first 1.2 s; no formation lap in between",
+        "the race of the weekend of qualifying-texas-send (practiceLiveTest, oneShotQualifyingLiveTest); not in the acceptance gate (a segment)",
+        "duration 167425.321 ms"
+      ]
     }
   ]
 }

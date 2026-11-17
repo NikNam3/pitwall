@@ -15,6 +15,8 @@ export type RivalStop = {
   switchLap: Known<number>;
   /** The tyre type it switches to on `switchLap`. */
   switchTo: Known<TyreType>;
+  /** Per start compound the first stop's window on it (SP4.3d spec §7.2); set only by the qualifying row (the planning round). */
+  byStartCompound?: Partial<Record<NoiseCompound, { lowLap: number; midLap: number; highLap: number }>>;
 };
 
 export type RivalStops = Record<CarId, RivalStop>;

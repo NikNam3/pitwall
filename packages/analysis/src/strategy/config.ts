@@ -41,6 +41,12 @@ export const STRATEGY_CONFIG = defineConfig('strategy', {
    */
   maxScenarioPolicies: 8000,
   /**
+   * The planning job's cap (SP4.3d2 Task 14, R34): the race's 8,000 took 7,985 ms per car's part on the planning round's
+   * grid start (long race as qualifying, 70 laps, five slots, quiet machine, 2026-11-17) against the strategy job's 7 s;
+   * ~0.9 ms per scenario-policy plus ~0.8 s DP gives ~6.2 s at 6,000, still above research 14's ~4,600 for good selection.
+   */
+  planningMaxScenarioPolicies: 6000,
+  /**
    * Round 1's share of `maxScenarioPolicies`, split over the cars planned; the final rankings share the rest (0: no round
    * 1). Source: SP4.3b Task 20d: round 1 only finds the other car's best; most of the cap to the final ranking.
    */

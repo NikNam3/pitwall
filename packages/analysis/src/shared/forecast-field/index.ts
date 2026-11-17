@@ -13,19 +13,24 @@ import {
   type CarNoise,
   type DriverNoise,
   type DrsZone,
+  type ForecastSample,
   type FrameNumber,
   type Known,
   type LapRecord,
   type MiniSectorCrossing,
   type NoiseCompound,
   type RaceInteraction,
+  type RivalStop,
   type RivalStops,
   type StartingPoint,
+  type StartOption,
   type StintRecord,
   type TrackWetness,
+  type TyreModelCar,
   type TyreModelCompound,
   type TyreModelOutput,
   type UnknownReason,
+  type WeekendPace,
 } from '@pitwall/domain';
 import { projectionAsOf, runAsOf, type AsOfUnit, type AsOfView, type CalculatorId, type DeepReadonly } from '@pitwall/engine/readers';
 import { degradationAsOf, degradationCalculator } from '../../degradation/calculator.ts';
@@ -34,7 +39,7 @@ import { fuelResolver } from '../../degradation/stint-fit.ts';
 import { driverNoiseCalculator } from '../../driver-noise/calculator.ts';
 import { GAPS, type GapsOutput } from '../../gaps/index.ts';
 import { DRIVER_NOISE, driverNoiseAsOf } from '../../driver-noise/index.ts';
-import { LAP_CLASSES_CONFIG } from '../../lap-classes/index.ts';
+import { classifyLap, LAP_CLASSES_CONFIG } from '../../lap-classes/index.ts';
 import { PER_LAP_RATE_CONFIG } from '../../per-lap-rate/index.ts';
 import { pitLossCalculator } from '../../pit-loss/calculator.ts';
 import { inLapSharePrior, PIT_LOSS, PIT_LOSS_CONFIG, pitLossAsOf, type PitLossOutput } from '../../pit-loss/index.ts';
@@ -50,6 +55,7 @@ import { TYRE_LIFE, tyreLifeAsOf } from '../../tyre-life/index.ts';
 import { tyreModelAsOf, tyreModelCalculator } from '../../tyre-model/calculator.ts';
 import { TYRE_MODEL } from '../../tyre-model/id.ts';
 import { worstWearRate } from '../../tyre-model/index.ts';
+import { WEEKEND_PACE, weekendPaceAsOf, weekendPaceCalculator } from '../../weekend-pace/index.ts';
 import { ourCars } from '@pitwall/domain';
 import { startLapOf } from '../../race-forecast/index.ts';
 import { configOf } from '../config-of.ts';
@@ -63,11 +69,12 @@ export * from './config.ts';
 export { lapModelParams } from './lap-model-params.ts';
 
 /**
- * The units whose as-of forms the starting point reads, as `runAsOf` runs them: degradation, pit-loss, track-wetness,
- * tyre-model, tyre-life, driver-noise, rival-stops, race-interaction.
+ * The units whose as-of forms the starting point reads, as `runAsOf` runs them: degradation, weekend-pace, pit-loss,
+ * track-wetness, tyre-model, tyre-life, driver-noise, rival-stops, race-interaction.
  */
 export const FORECAST_UNITS: readonly AsOfUnit[] = [
   { id: DEGRADATION, reads: degradationCalculator.reads, asOf: degradationAsOf },
+  { id: WEEKEND_PACE, reads: weekendPaceCalculator.reads, asOf: weekendPaceAsOf },
   { id: PIT_LOSS, reads: pitLossCalculator.reads, asOf: pitLossAsOf },
   { id: TRACK_WETNESS, reads: trackWetnessCalculator.reads, asOf: trackWetnessAsOf },
   { id: TYRE_MODEL, reads: tyreModelCalculator.reads, asOf: tyreModelAsOf },
@@ -116,7 +123,9 @@ class Needs {
  * The starting point at `view`'s frame from the units' `outputs`. Each car is placed by its newest crossing and the
  * time since at its current pace. A live build (`gaps`' output among `outputs`, SP4.3c Task 13, O10) takes the order
  * and the gaps at the last common crossing from `gaps` and carries each gap forward to the view's time; an as-of build
- * extrapolates both from the crossings. `notApplicable` before lap 1 is complete or outside the race.
+ * extrapolates both from the crossings. Before the leader's lap 2 the grid start (`buildGridStart`, SP4.3d2 Task 7)
+ * with the race's order, each car's fitted compound (`tyre-model`'s; unknown: drawn), nothing free. A car without a
+ * green race lap of its own takes `weekend-pace`'s pace where it knows one (call 9). `notApplicable` outside the race.
  */
 export function buildStartingPoint(view: AsOfView, outputs: ReadonlyMap<CalculatorId, unknown>): Known<StartingPoint> {
   if (view.situation.weekendPhase.kind !== 'race') return unknown('notApplicable');
@@ -139,8 +148,15 @@ export function buildStartingPoint(view: AsOfView, outputs: ReadonlyMap<Calculat
   const order = gaps === undefined ? orderOf(newest, retired) : orderByGaps(gaps, orderOf(newest, retired), retired);
   const leader = order[0] as number;
   const leaderNewest = newest[leader];
-  // before the leader has completed lap 1 there is no lap to start from
-  if (retired[leader] === 1 || leaderNewest === undefined || leaderNewest.lap < 2) return unknown('notApplicable');
+  if (retired[leader] === 1) return unknown('notApplicable');
+  const tyreModel = (outputs.get(TYRE_MODEL) as DeepReadonly<TyreModelOutput> | undefined) ?? {};
+  // before the leader's lap 2 the race starts from the grid (SP4.3d2 Task 7): the race's order, each car on its fitted
+  // compound where tyre-model knows it (a realism-hidden one drawn), nothing free
+  if (leaderNewest === undefined || leaderNewest.lap < 2) {
+    const grid = Array.from(order).filter((k) => retired[k] === 0) as CarId[];
+    const fittedCompound = (car: CarId): Known<NoiseCompound> => (tyreModel[car]?.fittedCompound as Known<NoiseCompound> | undefined) ?? unknown('notReceived');
+    return buildGridStart(view, outputs, { laps: fixed.totalLaps.value, grid, fittedCompound });
+  }
 
   const laps = view.history.laps as readonly LapRecord[];
   const newestLap = newestLaps(laps, cars);
@@ -153,10 +169,12 @@ export function buildStartingPoint(view: AsOfView, outputs: ReadonlyMap<Calculat
   const wetness = outputs.get(TRACK_WETNESS) as DeepReadonly<TrackWetness> | undefined;
   const pitLoss = outputs.get(PIT_LOSS) as DeepReadonly<PitLossOutput> | undefined;
   const interaction = outputs.get(RACE_INTERACTION) as RaceInteraction | undefined;
-  const tyreModel = (outputs.get(TYRE_MODEL) as DeepReadonly<TyreModelOutput> | undefined) ?? {};
+  const weekendPace = outputs.get(WEEKEND_PACE) as DeepReadonly<WeekendPace> | undefined;
   if (noise === undefined || interaction === undefined) return unknown('insufficientData');
   const lapModel = lapModelParams(view, outputs);
   const need = new Needs();
+  const lapsByCar = byCar(laps, cars);
+  const lapClasses = configOf(LAP_CLASSES_CONFIG, view);
 
   // a realism-hidden fuel load: degradation's rule (our car's at the same lap, C43)
   const player = fixed.playerCar;
@@ -171,62 +189,12 @@ export function buildStartingPoint(view: AsOfView, outputs: ReadonlyMap<Calculat
   });
 
   const lapsTotal = fixed.totalLaps.value;
-  const drsConfig = configOf(RACE_INTERACTION_CONFIG, view);
-  const f64= (): Float64Array => new Float64Array(cars);
-  const sp: StartingPoint = {
-    lap: leaderNewest.lap,
-    lapsTotal,
-    cars,
-    order,
-    gapMs: f64(),
-    lapFraction: f64(),
-    retired,
-    human: new Uint8Array(cars),
-    compound: new Uint8Array(cars),
-    tyreAge: new Int16Array(cars),
-    wearPct: f64(),
-    fuelKg: f64(),
-    fuelBurnKgPerLap: f64(),
-    paceMs: f64(),
-    paceSdMs: f64(),
-    sigmaMs: f64(),
-    rho: f64(),
-    mistakeRate: f64(),
-    mistakeMedianMs: f64(),
-    mistakeSigmaLog: f64(),
-    bigEventRate: f64(),
-    retireRate: f64(),
-    tyre: {
-      wearRatePct: new Float64Array(cars * NOISE_COMPOUNDS.length),
-      degMsPerLap: new Float64Array(cars * NOISE_COMPOUNDS.length),
-      degSdMs: new Float64Array(cars * NOISE_COMPOUNDS.length),
-      // no limit known yet (Task 12: tyre-model's)
-      lapsToLimit: new Int16Array(cars * NOISE_COMPOUNDS.length).fill(-1),
-    },
-    stopLow: new Int16Array(cars),
-    stopMid: new Int16Array(cars),
-    stopHigh: new Int16Array(cars),
-    owesStop: new Uint8Array(cars),
-    // filled from tyre-model (below)
-    fittedLapsToLimit: new Int16Array(cars).fill(-1),
-    // filled from rival-stops with the window (below)
-    nextOdds: Array.from({ length: cars }, () => null),
-    typeSwitch: Array.from({ length: cars }, () => null),
-    sets: {},
-    wetness: wetnessOf(wetness, config.priorWetnessSdMs),
-    // filled once the cars are placed (`weatherOf`)
-    weather: unknown('notReceived'),
-    track: trackOf(view, pitLoss, need, inLapSharePrior(view.track, configOf(PIT_LOSS_CONFIG, view).inLapShare)),
-    // the one DRS rule: race-interaction's (F7)
-    drs: { rangeMs: drsConfig.drsRangeMs, fromLap: drsConfig.drsFromLap },
-    interaction,
-    lapModel,
-  };
-
+  // a start inside the race (the grid start: `buildGridStart`)
+  const sp = allocated(view, { lap: leaderNewest.lap, lapsTotal, cars, order, retired, interaction, lapModel, wetness, pitLoss, need, start: null });
   // the declared stand-ins (C3, final review F4): an unknown compound's, an unknown driver's; a car without a lap takes
   // degradation's field stand-in (SP4.3c Task 13, R47, C43: which car's lap stands in is degradation's): its pace, and
   // the compound, tyre age and lap record of the car it names (`fromCarId`)
-  const unknownCompound: NoiseCompound = isNoiseCompound(config.unknownCompound) ? config.unknownCompound : (FORECAST_FIELD_CONFIG.defaults.unknownCompound as NoiseCompound);
+  const unknownCompound = unknownCompoundOf(config);
   const stintsBy = degradation?.stints ?? {};
   const standIn = degradation?.standIn.known === true ? degradation.standIn.value : undefined;
   const standInLap: LapRecord | undefined = standIn === undefined ? undefined : newestLap[standIn.fromCarId];
@@ -268,7 +236,13 @@ export function buildStartingPoint(view: AsOfView, outputs: ReadonlyMap<Calculat
     const stints = stintsBy[id] ?? [];
     const paced = [...stints].reverse().find((s) => s.basePaceMs.known);
     let fuelIncluded = false;
-    if (paced !== undefined && paced.basePaceMs.known) {
+    // a car without a green race lap of its own (call 9): `weekend-pace`'s pace where it knows one (fuel-free, on the
+    // reference compound), else the rules below as before
+    const early = weekendPace?.[id];
+    if (early?.known === true && !(lapsByCar[k] ?? []).some((l) => classifyLap(l, { isRace: true, ...lapClasses }).forBands)) {
+      sp.paceMs[k] = early.value.paceMs;
+      sp.paceSdMs[k] = early.value.sdMs;
+    } else if (paced !== undefined && paced.basePaceMs.known) {
       sp.paceMs[k] = paced.basePaceMs.value - offsetOf(lapModel.compoundOffsetMs, paced.visual);
       sp.paceSdMs[k] = paced.cov.known ? Math.sqrt(Math.max(0, paced.cov.value[0][0])) : config.fallbackPaceSdMs;
       fuelIncluded = paced.fuelIncluded;
@@ -284,55 +258,12 @@ export function buildStartingPoint(view: AsOfView, outputs: ReadonlyMap<Calculat
     // ν's sd per lap is degradation's (its current stint's posterior, else its default), per % of wear on each compound
     const current = stints.at(-1);
     const nuSd = current === undefined ? degConfig.defaultNuSdMs : current.cov.known ? Math.sqrt(Math.max(0, current.cov.value[1][1])) : need.of(current.nuSdMs);
-    // each compound its own terms: after a stop the car runs on the new compound's (`tyreIndex`)
-    for (let i = 0; i < NOISE_COMPOUNDS.length; i++) {
-      const c = NOISE_COMPOUNDS[i] as NoiseCompound;
-      const t = tyreIndex(k, i);
-      const terms = termsOf(c);
-      const r = c === compound ? rate : rateOf(c);
-      sp.tyre.wearRatePct[t] = r;
-      sp.tyre.degMsPerLap[t] = need.of(terms?.lossMsPerPct.value);
-      sp.tyre.degSdMs[t] = r > 0 ? nuSd / r : 0;
-      const limit = terms?.lapsToLimit;
-      sp.tyre.lapsToLimit[t] = limit?.known === true ? Math.floor(limit.value) : -1;
-    }
+    tyreTermsInto(sp, k, model, nuSd, need, compound, rate);
     // the fitted set's laps to the 70 % limit (tyre-model's, floored; at or past it 0); −1 while unknown
     const fittedLimit = model?.fittedLapsToLimit;
     sp.fittedLapsToLimit[k] = fittedLimit?.known === true ? Math.max(0, Math.floor(fittedLimit.value)) : -1;
-
-    sp.sigmaMs[k] = need.of(carNoise?.sigmaMs);
-    sp.rho[k] = need.of(carNoise?.rho);
-    sp.mistakeRate[k] = need.of(carNoise?.mistakeRatePerLap, noise.aiField.mistakeRatePerLap.known ? noise.aiField.mistakeRatePerLap.value : undefined);
-    const size = carNoise?.mistakeSize;
-    if (size?.known === true) {
-      sp.mistakeMedianMs[k] = size.value.medianMs;
-      sp.mistakeSigmaLog[k] = size.value.sigmaLog;
-    } else need.of(size === undefined ? undefined : unknown(size.reason));
-    sp.bigEventRate[k] = need.of(carNoise?.bigEventRatePerLap, noise.aiField.bigEventRatePerLap.known ? noise.aiField.bigEventRatePerLap.value : undefined);
-    sp.retireRate[k] = need.of(carNoise?.retireRatePerLap, noise.aiField.retireRatePerLap.known ? noise.aiField.retireRatePerLap.value : undefined);
-
-    // the next stop (rival-stops); a car without an entry stops not before the flag. An unknown window is the
-    // uninformative one, from the next lap to the flag; an unknown owesStop the config's assumption (C3, ruling R40)
-    const stop = stops[id];
-    if (stop === undefined) {
-      sp.stopLow[k] = lapsTotal;
-      sp.stopMid[k] = lapsTotal;
-      sp.stopHigh[k] = lapsTotal;
-    } else if (stop.window.known) {
-      sp.stopLow[k] = stop.window.value.lowLap;
-      sp.stopMid[k] = stop.window.value.midLap;
-      sp.stopHigh[k] = stop.window.value.highLap;
-    } else {
-      const low = Math.min(sp.lap + 1, lapsTotal);
-      sp.stopLow[k] = low;
-      sp.stopMid[k] = Math.floor((low + lapsTotal) / 2);
-      sp.stopHigh[k] = lapsTotal;
-    }
-    const owes = stop === undefined ? false : stop.owesStop.known ? stop.owesStop.value : config.assumeOwesStop;
-    sp.owesStop[k] = owes ? 1 : 0;
-    // its next compound's odds and its tyre-type switch from the game's delta (SP4.3c O9, O5); null while unknown
-    sp.nextOdds[k] = stop?.nextCompound.known === true ? { ...stop.nextCompound.value } : null;
-    sp.typeSwitch[k] = stop?.switchLap.known === true && stop.switchTo.known ? { lap: stop.switchLap.value, to: stop.switchTo.value } : null;
+    noiseInto(sp, k, carNoise, noise, need);
+    stopInto(sp, k, stops[id], stops[id]?.window.known === true ? stops[id].window.value : undefined, config.assumeOwesStop);
 
     lapMs[k] = lap.lapTimeMs;
   }
@@ -360,16 +291,314 @@ export function buildStartingPoint(view: AsOfView, outputs: ReadonlyMap<Calculat
 
   // the burn the simulators use (O15): the car's measured burn, else its fuel over its whole laps left from where it
   // starts (a whole count: the as-of and the live builds differ only in lap fraction and gap)
-  const burnOptions = { lapClasses: configOf(LAP_CLASSES_CONFIG, view), rate: configOf(PER_LAP_RATE_CONFIG, view) };
-  const lapsByCar: LapRecord[][] = Array.from({ length: cars }, () => []);
-  for (const l of laps) if (l.carId >= 0 && l.carId < cars) lapsByCar[l.carId]?.push(l);
+  const burnOptions = { lapClasses, rate: configOf(PER_LAP_RATE_CONFIG, view) };
   for (let k = 0; k < cars; k++) {
     sp.fuelBurnKgPerLap[k] = planBurnKgPerLap(burnPerLapKg(lapsByCar[k] ?? [], burnOptions), sp.fuelKg[k] ?? 0, lapsTotal - startLapOf(sp, k) + 1);
   }
 
   sp.sets = setsOf(view, tyreModel, cars);
-  sp.weather = weatherOf(view, sp.lap, lapsTotal, sp.lapFraction[leader] ?? 0, lapMs[leader] ?? 0);
+  const w = view.fixed.weatherNow;
+  sp.weather = weatherOf(w?.forecast, w?.forecastAccuracy, view.at, sp.lap, lapsTotal, sp.lapFraction[leader] ?? 0, lapMs[leader] ?? 0);
   return known(sp, at);
+}
+
+/** What the grid start needs beyond the view (SP4.3d2 Task 7): the race's laps, the grid, each car's start compound. */
+export type GridStartOptions = {
+  /** The race's laps (the entered ones in the planning round, the race's own on its grid). */
+  laps: number;
+  /** The cars on the grid, pole first; a car slot not on it is not run (retired). */
+  grid: readonly CarId[];
+  /** A car's start compound: known (fitted), `'free'` (our cars in the planning round: the policy's) or unknown (drawn). */
+  fittedCompound: (car: CarId) => Known<NoiseCompound> | 'free';
+};
+
+/** The dry compounds a rival's start compound is drawn from (`rivalStartOdds*`). */
+const START_COMPOUNDS = ['soft', 'medium', 'hard'] as const satisfies readonly NoiseCompound[];
+
+/**
+ * The race's starting point on the grid (SP4.3d2 Task 7, spec §7.2; the one builder, C50): lap 1, the cars in `grid`'s
+ * order, each `gridGapMsPerPlace` per place behind the leader, at the line; every car on a fresh set with the fuel for
+ * the race's laps at the shared burn (`planBurnKgPerLap`, C43: its measured burn, else our car's, else degradation's
+ * fallback); a `'free'` car's start compound its policy's (`start.freeCompound`), an unknown one's drawn from
+ * `start.odds` (the config's `rivalStartOdds*` restricted to the compounds it has a fresh set of where `tyre-model`
+ * shows its sets, each with `rival-stops`' `byStartCompound` window); each car's pace from `weekend-pace` (C43), else
+ * degradation's stand-in, else the build is `unknown('insufficientData')` (C3); the weather the race's forecast
+ * (qualifying's `nextForecast`, the race's own on its grid) mapped onto laps by the grid leader's pace.
+ */
+export function buildGridStart(view: AsOfView, outputs: ReadonlyMap<CalculatorId, unknown>, opts: GridStartOptions): Known<StartingPoint> {
+  const lapsTotal = opts.laps;
+  if (!(lapsTotal > 0) || opts.grid.length === 0) return unknown('insufficientData');
+  const config = configOf(FORECAST_FIELD_CONFIG, view);
+  const noise = outputs.get(DRIVER_NOISE) as DeepReadonly<DriverNoise> | undefined;
+  const interaction = outputs.get(RACE_INTERACTION) as RaceInteraction | undefined;
+  if (noise === undefined || interaction === undefined) return unknown('insufficientData');
+  const degradation = outputs.get(DEGRADATION) as DeepReadonly<DegradationOutput> | undefined;
+  const stops = (outputs.get(RIVAL_STOPS) as DeepReadonly<RivalStops> | undefined) ?? {};
+  const tyreModel = (outputs.get(TYRE_MODEL) as DeepReadonly<TyreModelOutput> | undefined) ?? {};
+  const pace = (outputs.get(WEEKEND_PACE) as DeepReadonly<WeekendPace> | undefined) ?? {};
+
+  // the session's slots (car-status's, C17) and the grid's; a slot not on the grid is not run
+  let cars = 0;
+  for (const [id, kind] of statusOf(view)) if (kind !== 'absent') cars = Math.max(cars, id + 1);
+  for (const k of opts.grid) cars = Math.max(cars, k + 1);
+  const onGrid = new Set<number>(opts.grid);
+  const retired = new Uint8Array(cars);
+  for (let k = 0; k < cars; k++) retired[k] = onGrid.has(k) ? 0 : 1;
+  const order = Int8Array.from([...opts.grid, ...Array.from({ length: cars }, (_, k) => k).filter((k) => !onGrid.has(k))]);
+
+  const need = new Needs();
+  const lapModel = lapModelParams(view, outputs);
+  const freeCompound = new Uint8Array(cars);
+  const odds: (StartOption[] | null)[] = Array.from({ length: cars }, () => null);
+  const sp = allocated(view, {
+    lap: 1,
+    lapsTotal,
+    cars,
+    order,
+    retired,
+    interaction,
+    lapModel,
+    wetness: outputs.get(TRACK_WETNESS) as DeepReadonly<TrackWetness> | undefined,
+    pitLoss: outputs.get(PIT_LOSS) as DeepReadonly<PitLossOutput> | undefined,
+    need,
+    start: { freeCompound, odds },
+  });
+
+  const unknownCompound = unknownCompoundOf(config);
+  const standIn = degradation?.standIn.known === true ? degradation.standIn.value : undefined;
+  const degConfig = configOf(DEGRADATION_CONFIG, view);
+  // the fuel: the car's measured burn, else our car's (degradation's rule for a hidden load, C43), else the fallback
+  const burnOptions = { lapClasses: configOf(LAP_CLASSES_CONFIG, view), rate: configOf(PER_LAP_RATE_CONFIG, view) };
+  const lapsByCar = byCar(view.history.laps as readonly LapRecord[], cars);
+  const player = view.fixed.playerCar;
+  const ourBurn = player.known && player.value < cars ? burnPerLapKg(lapsByCar[player.value] ?? [], burnOptions) : unknown('notApplicable');
+  const oddsConfig: Record<(typeof START_COMPOUNDS)[number], number> = { soft: config.rivalStartOddsSoft, medium: config.rivalStartOddsMedium, hard: config.rivalStartOddsHard };
+
+  opts.grid.forEach((id, place) => {
+    const k = id as number;
+    sp.gapMs[k] = place * config.gridGapMsPerPlace;
+    const model = tyreModel[id];
+    const stop = stops[id];
+    const fitted = opts.fittedCompound(id);
+    // the start compound: fitted, free (the policy's; the stand-in compound until then) or drawn (its likeliest option)
+    let compound: NoiseCompound = unknownCompound;
+    if (fitted === 'free') freeCompound[k] = 1;
+    else if (fitted.known) compound = fitted.value;
+    else {
+      const options = startOptionsOf(oddsConfig, model, stop, lapsTotal);
+      odds[k] = options;
+      compound = options.reduce((best, o) => (o.p > best.p ? o : best), options[0] as StartOption).compound;
+    }
+    sp.compound[k] = NOISE_COMPOUNDS.indexOf(compound);
+
+    const carNoise = noise.cars[id] as DeepReadonly<CarNoise> | undefined;
+    const driver = carNoise?.driver ?? 'unknown';
+    sp.human[k] = isHumanDriver(driver === 'unknown' ? undefined : driver, config.unknownDriverIsHuman) ? 1 : 0;
+
+    // pace on the reference compound, fuel-free: weekend-pace's (C43), else degradation's field stand-in (C3)
+    const own = pace[id];
+    let fuelIncluded = false;
+    if (own?.known === true) {
+      sp.paceMs[k] = own.value.paceMs;
+      sp.paceSdMs[k] = own.value.sdMs;
+    } else if (standIn !== undefined) {
+      sp.paceMs[k] = standIn.basePaceMs - offsetOf(lapModel.compoundOffsetMs, standIn.compound);
+      sp.paceSdMs[k] = config.fallbackPaceSdMs;
+      fuelIncluded = standIn.fuelIncluded;
+    } else need.of(unknown('insufficientData'));
+
+    const measured = burnPerLapKg(lapsByCar[k] ?? [], burnOptions);
+    const burn = planBurnKgPerLap(measured.known ? measured : ourBurn, lapsTotal * degConfig.fallbackBurnKgPerLap, lapsTotal);
+    sp.fuelBurnKgPerLap[k] = burn;
+    // a base pace that holds the car's fuel (`fuelIncluded`, B9) gets no fuel term on top
+    sp.fuelKg[k] = fuelIncluded ? 0 : lapsTotal * burn;
+
+    // a fresh set: age 0, no wear, the compound's laps to the limit; ν's sd degradation's default (no stint yet)
+    tyreTermsInto(sp, k, model, degConfig.defaultNuSdMs, need);
+    sp.fittedLapsToLimit[k] = fitted !== 'free' && fitted.known ? (sp.tyre.lapsToLimit[tyreIndex(k, sp.compound[k] as number)] ?? -1) : -1;
+    noiseInto(sp, k, carNoise, noise, need);
+    stopInto(sp, k, stop, windowOn(stop, fitted !== 'free' && fitted.known ? compound : undefined), config.assumeOwesStop);
+  });
+  for (let k = 0; k < cars; k++) if (retired[k] === 1) sp.compound[k] = NOISE_COMPOUNDS.indexOf(unknownCompound);
+  if (need.reason !== undefined) return unknown(need.reason);
+  // where the cars are: the leader at the line, each car behind it its gap at its pace short of the line (the lap
+  // before, as `startLapOf` reads a lap fraction past the leader's), so the forecast plays each car's laps 1 … laps
+  for (const id of opts.grid.slice(1)) {
+    const k = id as number;
+    const lapMs = sp.paceMs[k] ?? 0;
+    const short = lapMs > 0 ? (sp.gapMs[k] ?? 0) / lapMs : 0;
+    sp.lapFraction[k] = short > 0 && short < 1 ? 1 - short : 0;
+  }
+
+  sp.sets = setsOf(view, tyreModel, cars);
+  // the race's forecast: in qualifying the next session's samples (spec §7.3), on the race's grid its own
+  const w = view.fixed.weatherNow;
+  const samples = view.situation.weekendPhase.kind === 'race' ? w?.forecast : w?.nextForecast;
+  sp.weather = weatherOf(samples, w?.forecastAccuracy, view.at, 1, lapsTotal, 0, sp.paceMs[opts.grid[0] as number] ?? 0);
+  return known(sp, view.at);
+}
+
+/** A car's first stop window on `compound` (`rival-stops`' `byStartCompound`), else its window, else none (`stopInto`'s rule). */
+function windowOn(stop: DeepReadonly<RivalStop> | undefined, compound: NoiseCompound | undefined): DeepReadonly<Window> | undefined {
+  const on = compound === undefined ? undefined : stop?.byStartCompound?.[compound];
+  if (on !== undefined) return on;
+  return stop?.window.known === true ? stop.window.value : undefined;
+}
+
+/**
+ * A rival's start options on the grid: the config's chances (`odds`) of the compounds it has a fresh set of, where
+ * `tyre-model` shows its sets (a compound whose count is unknown is kept); without any, the compounds it has a fresh set
+ * of, evenly; without those, the config's chances as they are. Each option with its first stop's window on it
+ * (`windowOn`; the uninformative one from lap 2 to the flag without either). The chances sum to 1.
+ */
+function startOptionsOf(odds: Record<(typeof START_COMPOUNDS)[number], number>, model: DeepReadonly<TyreModelCar> | undefined, stop: DeepReadonly<RivalStop> | undefined, lapsTotal: number): StartOption[] {
+  const fresh = model?.freshSets;
+  const hasSet = (c: NoiseCompound): boolean => fresh === undefined || !fresh[c].known || fresh[c].value > 0;
+  const visibleSet = (c: NoiseCompound): boolean => fresh !== undefined && fresh[c].known && fresh[c].value > 0;
+  let chances = START_COMPOUNDS.filter((c) => odds[c] > 0 && hasSet(c)).map((c) => [c, odds[c]] as const);
+  if (chances.length === 0) chances = START_COMPOUNDS.filter(visibleSet).map((c) => [c, 1] as const);
+  if (chances.length === 0) chances = START_COMPOUNDS.filter((c) => odds[c] > 0).map((c) => [c, odds[c]] as const);
+  if (chances.length === 0) chances = START_COMPOUNDS.map((c) => [c, 1] as const);
+  const total = chances.reduce((s, [, p]) => s + p, 0);
+  return chances.map(([compound, p]) => {
+    const w = windowOn(stop, compound) ?? (stop === undefined ? { lowLap: lapsTotal, midLap: lapsTotal, highLap: lapsTotal } : openWindow(1, lapsTotal));
+    return { compound, p: p / total, stopLow: w.lowLap, stopMid: w.midLap, stopHigh: w.highLap };
+  });
+}
+
+/** The compound an unknown visual compound stands in with (the config's, a noise compound; else its default). */
+function unknownCompoundOf(config: (typeof FORECAST_FIELD_CONFIG)['defaults']): NoiseCompound {
+  return isNoiseCompound(config.unknownCompound) ? config.unknownCompound : (FORECAST_FIELD_CONFIG.defaults.unknownCompound as NoiseCompound);
+}
+
+/** The parts of a starting point its builder decides; `allocated` fills the rest with zeros and the shared terms. */
+type Frame = Pick<StartingPoint, 'lap' | 'lapsTotal' | 'cars' | 'order' | 'retired' | 'interaction' | 'lapModel' | 'start'> & {
+  wetness: DeepReadonly<TrackWetness> | undefined;
+  pitLoss: DeepReadonly<PitLossOutput> | undefined;
+  need: Needs;
+};
+
+/**
+ * A starting point of `f.cars` cars, every per-car term 0 (no limit known: −1; no odds or switch: null) for its builder
+ * to fill; the wetness (track-wetness's), the track (`trackOf`, its missing terms through `f.need`), the one DRS rule
+ * (race-interaction's, F7); the weather unknown until the cars are placed (`weatherOf`).
+ */
+function allocated(view: AsOfView, f: Frame): StartingPoint {
+  const { cars } = f;
+  const config = configOf(FORECAST_FIELD_CONFIG, view);
+  const drsConfig = configOf(RACE_INTERACTION_CONFIG, view);
+  const f64 = (): Float64Array => new Float64Array(cars);
+  return {
+    lap: f.lap,
+    lapsTotal: f.lapsTotal,
+    cars,
+    order: f.order,
+    gapMs: f64(),
+    lapFraction: f64(),
+    retired: f.retired,
+    human: new Uint8Array(cars),
+    compound: new Uint8Array(cars),
+    tyreAge: new Int16Array(cars),
+    wearPct: f64(),
+    fuelKg: f64(),
+    fuelBurnKgPerLap: f64(),
+    paceMs: f64(),
+    paceSdMs: f64(),
+    sigmaMs: f64(),
+    rho: f64(),
+    mistakeRate: f64(),
+    mistakeMedianMs: f64(),
+    mistakeSigmaLog: f64(),
+    bigEventRate: f64(),
+    retireRate: f64(),
+    tyre: {
+      wearRatePct: new Float64Array(cars * NOISE_COMPOUNDS.length),
+      degMsPerLap: new Float64Array(cars * NOISE_COMPOUNDS.length),
+      degSdMs: new Float64Array(cars * NOISE_COMPOUNDS.length),
+      lapsToLimit: new Int16Array(cars * NOISE_COMPOUNDS.length).fill(-1),
+    },
+    stopLow: new Int16Array(cars),
+    stopMid: new Int16Array(cars),
+    stopHigh: new Int16Array(cars),
+    owesStop: new Uint8Array(cars),
+    fittedLapsToLimit: new Int16Array(cars).fill(-1),
+    nextOdds: Array.from({ length: cars }, () => null),
+    typeSwitch: Array.from({ length: cars }, () => null),
+    sets: {},
+    wetness: wetnessOf(f.wetness, config.priorWetnessSdMs),
+    weather: unknown('notReceived'),
+    track: trackOf(view, f.pitLoss, f.need, inLapSharePrior(view.track, configOf(PIT_LOSS_CONFIG, view).inLapShare)),
+    drs: { rangeMs: drsConfig.drsRangeMs, fromLap: drsConfig.drsFromLap },
+    interaction: f.interaction,
+    lapModel: f.lapModel,
+    start: f.start,
+  };
+}
+
+/** Per car slot `0 … cars - 1` its records of `laps`, in their order. */
+function byCar(laps: readonly LapRecord[], cars: number): LapRecord[][] {
+  const out: LapRecord[][] = Array.from({ length: cars }, () => []);
+  for (const l of laps) if (l.carId >= 0 && l.carId < cars) out[l.carId]?.push(l);
+  return out;
+}
+
+/**
+ * Car `k`'s tyre terms from `tyre-model`, each compound its own (after a stop the car runs on the new compound's,
+ * `tyreIndex`): the wear rate at the worst corner, the loss per % of wear, ν's sd (`nuSd`) per % of wear, a fresh set's
+ * laps to the limit; `compound`'s rate `rate` where the caller has it already.
+ */
+function tyreTermsInto(sp: StartingPoint, k: number, model: DeepReadonly<TyreModelCar> | undefined, nuSd: number, need: Needs, compound?: NoiseCompound, rate?: number): void {
+  for (let i = 0; i < NOISE_COMPOUNDS.length; i++) {
+    const c = NOISE_COMPOUNDS[i] as NoiseCompound;
+    const t = tyreIndex(k, i);
+    const terms = model?.compounds[c];
+    const r = c === compound && rate !== undefined ? rate : need.of(worstOrUndefined(terms));
+    sp.tyre.wearRatePct[t] = r;
+    sp.tyre.degMsPerLap[t] = need.of(terms?.lossMsPerPct.value);
+    sp.tyre.degSdMs[t] = r > 0 ? nuSd / r : 0;
+    const limit = terms?.lapsToLimit;
+    sp.tyre.lapsToLimit[t] = limit?.known === true ? Math.floor(limit.value) : -1;
+  }
+}
+
+/** Car `k`'s driver terms from `driver-noise` (the AI field's where the car's own is unknown). */
+function noiseInto(sp: StartingPoint, k: number, carNoise: DeepReadonly<CarNoise> | undefined, noise: DeepReadonly<DriverNoise>, need: Needs): void {
+  sp.sigmaMs[k] = need.of(carNoise?.sigmaMs);
+  sp.rho[k] = need.of(carNoise?.rho);
+  sp.mistakeRate[k] = need.of(carNoise?.mistakeRatePerLap, noise.aiField.mistakeRatePerLap.known ? noise.aiField.mistakeRatePerLap.value : undefined);
+  const size = carNoise?.mistakeSize;
+  if (size?.known === true) {
+    sp.mistakeMedianMs[k] = size.value.medianMs;
+    sp.mistakeSigmaLog[k] = size.value.sigmaLog;
+  } else need.of(size === undefined ? undefined : unknown(size.reason));
+  sp.bigEventRate[k] = need.of(carNoise?.bigEventRatePerLap, noise.aiField.bigEventRatePerLap.known ? noise.aiField.bigEventRatePerLap.value : undefined);
+  sp.retireRate[k] = need.of(carNoise?.retireRatePerLap, noise.aiField.retireRatePerLap.known ? noise.aiField.retireRatePerLap.value : undefined);
+}
+
+/** A stop window as the starting point holds it. */
+type Window = { lowLap: number; midLap: number; highLap: number };
+
+/** The uninformative window: from the lap after `lap` to the flag. */
+function openWindow(lap: number, lapsTotal: number): Window {
+  const low = Math.min(lap + 1, lapsTotal);
+  return { lowLap: low, midLap: Math.floor((low + lapsTotal) / 2), highLap: lapsTotal };
+}
+
+/**
+ * Car `k`'s next stop (`rival-stops`): a car without an entry stops not before the flag; `window` its window, unknown
+ * the uninformative one from the next lap to the flag; an unknown owesStop the config's assumption (C3, ruling R40);
+ * its next compound's odds and its tyre-type switch from the game's delta (SP4.3c O9, O5), null while unknown.
+ */
+function stopInto(sp: StartingPoint, k: number, stop: DeepReadonly<RivalStop> | undefined, window: DeepReadonly<Window> | undefined, assumeOwesStop: boolean): void {
+  const lapsTotal = sp.lapsTotal;
+  const w = stop === undefined ? { lowLap: lapsTotal, midLap: lapsTotal, highLap: lapsTotal } : (window ?? openWindow(sp.lap, lapsTotal));
+  sp.stopLow[k] = w.lowLap;
+  sp.stopMid[k] = w.midLap;
+  sp.stopHigh[k] = w.highLap;
+  const owes = stop === undefined ? false : stop.owesStop.known ? stop.owesStop.value : assumeOwesStop;
+  sp.owesStop[k] = owes ? 1 : 0;
+  sp.nextOdds[k] = stop?.nextCompound.known === true ? { ...stop.nextCompound.value } : null;
+  sp.typeSwitch[k] = stop?.switchLap.known === true && stop.switchTo.known ? { lap: stop.switchLap.value, to: stop.switchTo.value } : null;
 }
 
 /** The rain chance `min` minutes ahead, linearly between the samples around it (`samples` by offset, not empty). */
@@ -391,19 +620,26 @@ function rainPctAt(samples: readonly { offsetMin: number; rainPct: number }[], m
  * `lap` on) takes the rain chance at its middle, linearly between the two samples around it (SP4.3b Task 19c: one
  * sample per lap put a perfect forecast's changes 1.7–3 laps late on the game's 5/15/30-minute grid); a middle before
  * the first sample takes the first's, one past the last the last's. Only where the view holds the forecast now
- * (`weatherNow`, the now path, R19); unknown otherwise (C3).
+ * (`weatherNow`, the now path, R19: `forecast` its samples, `accuracy` theirs); unknown otherwise (C3).
  */
-function weatherOf(view: AsOfView, lap: number, lapsTotal: number, leaderFraction: number, leaderLapMs: number): StartingPoint['weather'] {
-  const weather = view.fixed.weatherNow;
-  if (weather === null || weather.forecast.length === 0) return unknown('notReceived');
+function weatherOf(
+  forecast: DeepReadonly<ForecastSample[]> | undefined,
+  accuracy: 'perfect' | 'approximate' | undefined,
+  at: number,
+  lap: number,
+  lapsTotal: number,
+  leaderFraction: number,
+  leaderLapMs: number,
+): StartingPoint['weather'] {
+  if (forecast === undefined || accuracy === undefined || forecast.length === 0) return unknown('notReceived');
   if (!(leaderLapMs > 0)) return unknown('insufficientData');
-  const samples = [...weather.forecast].sort((a, b) => a.offsetMin - b.offsetMin);
+  const samples = [...forecast].sort((a, b) => a.offsetMin - b.offsetMin);
   const byLap: { lap: number; rainPct: number }[] = [];
   for (let l = lap; l <= lapsTotal; l++) {
     const inMin = ((l - lap + 0.5 - leaderFraction) * leaderLapMs) / 60_000;
     byLap.push({ lap: l, rainPct: rainPctAt(samples, inMin) });
   }
-  return known({ byLap, accuracy: weather.forecastAccuracy }, view.at);
+  return known({ byLap, accuracy }, at);
 }
 
 /**

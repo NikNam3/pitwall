@@ -17,7 +17,7 @@ import FeedStatus from './FeedStatus.svelte';
 afterEach(cleanup);
 
 const feed: FeedStatusValue = {
-  feedId: feedId('test'), connected: true, stale: false, lossPercent: 0, latePackets: 0, decodeErrors: 0, packetsPerSecond: 60,
+  feedId: feedId('test'), connected: true, stale: false, lossPercent: 0, latePackets: 0, decodeErrors: 0, packetsPerSecond: 60, betweenSessions: false,
 };
 const ZANDVOORT = 26;
 const session = { feedId: feedId('test'), sessionUid: '1', playerCar: carId(0), session: { trackId: ZANDVOORT }, realism: false } as unknown as SessionInfo;

@@ -11,7 +11,10 @@
 // The state is measured from dry (SP4.3b Task 19c): a slick stint with dry free-air laps against its own first dry ones;
 // every other stint against its car's own dry reference this session, else the field's (`dry-reference.ts`); each lap
 // on the slick scale through the lap model's terms. Without any dry reference the state is `insufficientData` (C3).
-import { known, unknown, type CarId, type EstimateSource, type Known, type Ms, type TrackWetness, type TyreType } from '@pitwall/domain';
+//
+// On the ended qualifying session's planning view (C62d, rulings R12, R13) the per-lap data stays over the session's own
+// laps and the state is the race's wetness at its start, from the race's forecast (`startState`).
+import { known, unknown, type CarId, type EstimateSource, type Known, type Ms, type TrackWetness, type TyreType, type Weather } from '@pitwall/domain';
 import type { AsOfView } from '@pitwall/engine/readers';
 import { tyreTypeOf } from '@pitwall/domain';
 import { DEGRADATION, DEGRADATION_CONFIG, fitStint, type DegradationOutput, type StintDegradation } from '../degradation/index.ts';
@@ -270,13 +273,11 @@ function rainNowPct(view: AsOfView): number | undefined {
   return nearest?.rainPct;
 }
 
-/** The field's common mode per completed leader lap and tyre type, and the filtered wetness state, as of `view`'s frame. */
-export function trackWetnessAsOf(view: AsOfView): TrackWetness {
-  const effect = sessionEffect(view);
-  if (effect.isRace !== true) return NOT_APPLICABLE;
-  const degradation = view.outputs.get(DEGRADATION) as DegradationOutput | undefined;
-  if (effect.started !== true || degradation === undefined) return NOT_YET;
-  const config = TRACK_WETNESS_CONFIG.read(view);
+/** What the session's laps measure: the common modes per lap, the state's measurement per lap, the dry reference and the lap model's terms. */
+type Measured = { byLap: TrackWetness['byLap']; measured: Measurement[]; dryRef: FieldReference | undefined; params: ReturnType<typeof lapModelParams> };
+
+/** The session's laps as of `view`'s frame, measured against `degradation`'s stints. */
+function measureLaps(view: AsOfView, degradation: DegradationOutput, config: Config): Measured {
   const free = freeAirLaps(view.history, DRIVER_NOISE_CONFIG.read(view).freeAirGapMs);
 
   let leaderLap = 0;
@@ -291,17 +292,63 @@ export function trackWetnessAsOf(view: AsOfView): TrackWetness {
 
   const params = lapModelParams(view, view.outputs);
   const { measured, dryRef } = measurementsOf(view, stints, nuOf, wet, leaderLap, config, slickScaleFrom(params));
-  const newestAt = measured.reduce<Ms | undefined>((at, z) => (z === undefined ? at : Math.max(at ?? 0, z.at)), undefined);
+  return { byLap, measured, dryRef, params };
+}
+
+/** The dry reference and the slick scale of `m`, as the output carries them. */
+const referenceFields = (m: Measured): Pick<TrackWetness, 'dryRefMs' | 'dryRefSource' | 'slickScale'> => ({
+  dryRefMs: m.dryRef === undefined ? unknown('insufficientData') : known(Math.round(m.dryRef.ms), m.dryRef.at),
+  dryRefSource: m.dryRef?.source ?? NO_DRY_REF,
+  slickScale: known(m.params.wetnessMsPerMs.slick, 0),
+});
+
+const RAIN: ReadonlySet<Weather> = new Set(['lightRain', 'heavyRain', 'storm']);
+
+/**
+ * The race's wetness at its start on the planning view (C62d, ruling R13): the earliest sample of the race's forecast
+ * (`nextForecast`) is rain → `startRainWetnessMs`, else dry, sd `initialSdMs`; unknown without `weatherNow` (a cut or
+ * stored view) or without a sample (C3).
+ */
+function startState(view: AsOfView, config: Config): TrackWetness['state'] {
+  const weather = view.fixed.weatherNow;
+  if (weather === null) return unknown('notReceived');
+  let first: (typeof weather.nextForecast)[number] | undefined;
+  for (const s of weather.nextForecast) if (first === undefined || s.offsetMin < first.offsetMin) first = s;
+  if (first === undefined) return unknown('insufficientData');
+  return known({ wetnessMs: RAIN.has(first.weather) ? config.startRainWetnessMs : 0, sdMs: config.initialSdMs }, view.at);
+}
+
+/**
+ * The planning view's output (C62d): the per-lap data over the session's own laps (`driver-noise`'s common mode), the
+ * state the race's wetness at its start.
+ */
+function planningOutput(view: AsOfView, config: Config): TrackWetness {
+  const degradation = view.outputs.get(DEGRADATION) as DegradationOutput | undefined;
+  const state = startState(view, config);
+  const wet: TrackWetness['wet'] = state.known ? known(isWet(state.value.wetnessMs, state.value.sdMs, config.wetSigmas), state.at) : state;
+  if (degradation === undefined) return { ...NOT_YET, state, wet };
+  const m = measureLaps(view, degradation, config);
+  return { byLap: m.byLap, state, wet, ...referenceFields(m) };
+}
+
+/** The field's common mode per completed leader lap and tyre type, and the filtered wetness state, as of `view`'s frame. */
+export function trackWetnessAsOf(view: AsOfView): TrackWetness {
+  const effect = sessionEffect(view);
+  if (effect.planning === true) return planningOutput(view, TRACK_WETNESS_CONFIG.read(view));
+  if (effect.isRace !== true) return NOT_APPLICABLE;
+  const degradation = view.outputs.get(DEGRADATION) as DegradationOutput | undefined;
+  if (effect.started !== true || degradation === undefined) return NOT_YET;
+  const config = TRACK_WETNESS_CONFIG.read(view);
+  const m = measureLaps(view, degradation, config);
+  const newestAt = m.measured.reduce<Ms | undefined>((at, z) => (z === undefined ? at : Math.max(at ?? 0, z.at)), undefined);
   // the forecast enters the prediction step only (ruling R19): the wet-lap pass and the common modes never read it
-  const filtered = runWetnessFilter(measured.map((z) => z?.value), config, rainNowPct(view));
+  const filtered = runWetnessFilter(m.measured.map((z) => z?.value), config, rainNowPct(view));
   const state: TrackWetness['state'] =
     filtered === undefined || newestAt === undefined ? unknown('insufficientData') : known({ wetnessMs: Math.round(filtered.wetnessMs), sdMs: Math.round(filtered.sdMs) }, newestAt);
   return {
-    byLap,
+    byLap: m.byLap,
     state,
     wet: state.known ? known(isWet(state.value.wetnessMs, state.value.sdMs, config.wetSigmas), state.at) : state,
-    dryRefMs: dryRef === undefined ? unknown('insufficientData') : known(Math.round(dryRef.ms), dryRef.at),
-    dryRefSource: dryRef?.source ?? NO_DRY_REF,
-    slickScale: known(params.wetnessMsPerMs.slick, 0),
+    ...referenceFields(m),
   };
 }

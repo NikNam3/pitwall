@@ -185,7 +185,12 @@ export const decodeUiAction = (raw: unknown): UiAction | undefined => {
     }
     case 'plan.clear':
       return isString(raw.feedId) && isCarSlot(raw.carId) ? { kind: raw.kind, feedId: raw.feedId as FeedId, carId: raw.carId as CarId } : undefined;
-    case 'plan.save': {
+    case 'plans.prepare.laps':
+      return isString(raw.feedId) && isInteger(raw.laps) && raw.laps >= 1 ? { kind: raw.kind, feedId: raw.feedId as FeedId, laps: raw.laps } : undefined;
+    case 'plan.save':
+    case 'plan.accept':
+    case 'plans.prepare.save':
+    case 'plans.prepare.accept': {
       const policy = decodePolicy(raw.policy);
       return isString(raw.feedId) && isCarSlot(raw.carId) && isSlot(raw.slot) && policy !== undefined
         ? { kind: raw.kind, feedId: raw.feedId as FeedId, carId: raw.carId as CarId, slot: raw.slot, policy }
@@ -193,6 +198,8 @@ export const decodeUiAction = (raw: unknown): UiAction | undefined => {
     }
     case 'plan.remove':
     case 'plan.activate':
+    case 'plans.prepare.remove':
+    case 'plans.prepare.activate':
       return isString(raw.feedId) && isCarSlot(raw.carId) && isSlot(raw.slot)
         ? { kind: raw.kind, feedId: raw.feedId as FeedId, carId: raw.carId as CarId, slot: raw.slot }
         : undefined;
@@ -236,13 +243,17 @@ const decodeStops = (raw: unknown): Policy['stops'] | undefined => {
 const isSlot = (value: unknown): value is Slot => (PLAN_SLOTS as readonly unknown[]).includes(value);
 
 /**
- * A plan's policy (SP4.3d spec §5.1): its stops, rebuilt from the known fields. An old client's or sidecar's `triggers`
+ * A plan's policy (SP4.3d spec §5.1): its stops and, before the start, its start compound (§7.2: one of
+ * `NOISE_COMPOUNDS`, else the policy is invalid), rebuilt from the known fields. An old client's or sidecar's `triggers`
  * field is accepted and dropped: old recordings replay, their triggers ignored.
  */
 const decodePolicy = (raw: unknown): Policy | undefined => {
   if (!isObject(raw)) return undefined;
   const stops = decodeStops(raw.stops);
-  return stops === undefined ? undefined : { stops };
+  if (stops === undefined) return undefined;
+  if (raw.startCompound === undefined) return { stops };
+  const startCompound = decodeCompound(raw.startCompound);
+  return startCompound === undefined ? undefined : { startCompound, stops };
 };
 
 const decodeCalibrationSource = (raw: unknown): CalibrationSource | undefined => {

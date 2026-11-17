@@ -40,6 +40,7 @@ export const openTieHover = 'near-tie unresolved at the cap';
 export const infeasible: Record<NonNullable<McRow['infeasible']>, string> = {
   stopLapPassed: 'infeasible: its stop lap has passed',
   noSetLeft: 'infeasible: no set of its compound left',
+  startCompound: 'infeasible: not the start compound',
 };
 /** The STOPS cell of a policy with no stops. */
 export const toTheFlag = 'to the flag';

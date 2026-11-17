@@ -65,6 +65,19 @@ export type UiAction =
   | { kind: 'plan.remove'; feedId: FeedId; carId: CarId; slot: Slot }
   /** Commits the policy saved in `slot`, naming the slot. */
   | { kind: 'plan.activate'; feedId: FeedId; carId: CarId; slot: Slot }
+  /** Saves `policy` in `slot` and commits it as the active plan, in one change (the prefill's accept, SP4.3d spec §7.1). */
+  | { kind: 'plan.accept'; feedId: FeedId; carId: CarId; slot: Slot; policy: Policy }
+  // The planning round (SP4.3d spec §7.1, §7.4, C62d): the team's prepared plans for the next race, bridge user state
+  // changed only by these (C70, C73); the only plan input between sessions (§7.0 rule 3). `carId` is a slot of the
+  // qualifying session.
+  /** The race's laps the engineer entered (a whole number of at least 1). */
+  | { kind: 'plans.prepare.laps'; feedId: FeedId; laps: number }
+  | { kind: 'plans.prepare.save'; feedId: FeedId; carId: CarId; slot: Slot; policy: Policy }
+  /** Saves `policy` in `slot` and makes it the car's active prepared plan. */
+  | { kind: 'plans.prepare.accept'; feedId: FeedId; carId: CarId; slot: Slot; policy: Policy }
+  | { kind: 'plans.prepare.remove'; feedId: FeedId; carId: CarId; slot: Slot }
+  /** Makes the prepared plan in `slot` the car's active one. */
+  | { kind: 'plans.prepare.activate'; feedId: FeedId; carId: CarId; slot: Slot }
   /** Ends the feed's session recording now (C59): the run finishes as at the session's end; the rest of that session is ignored. */
   | { kind: 'session.end'; feedId: FeedId };
 

@@ -11,10 +11,11 @@
   import { role } from '../../theme/index.ts';
   import StrategyChart from './StrategyChart.svelte';
   import { deltaHeader, footer, infoRow, listRows, type PlanTable } from './rows.ts';
+  import { variantOf } from './source.ts';
   import * as text from './text.ts';
   import type { widget } from './widget.ts';
 
-  let { data, size, link }: WidgetProps<typeof widget> = $props();
+  let { data, options, size, link }: WidgetProps<typeof widget> = $props();
   const { send } = getUiActions();
 
   /** Cells of the list beside the chart (bracket, #, SRC, STOPS, E[POS] and their gaps, gen.mjs `listSpecB`). */
@@ -36,8 +37,13 @@
 
   const full = $derived(size.mode === 'full');
   const cell = $derived({ w: size.px.width / Math.max(1, size.cols), h: size.px.height / Math.max(1, size.rows) });
-  // The job's topic before its first result has no value: the panel frame shows its computing state.
-  const plan = $derived(data.plan as typeof data.plan | undefined);
+  // The variant's job topic (`strategy.car` live, `plans.preview` in the planning round, SP4.3d2 Task 12); before its
+  // first result it has no value: the panel frame shows its computing state. `source: planning` outside the round:
+  // notApplicable.
+  const prepared = $derived(data.prepared as typeof data.prepared | undefined);
+  const variant = $derived(variantOf(options.source, prepared));
+  const outsideRound = $derived(variant === 'planning' && prepared?.open !== true);
+  const plan = $derived(variant === 'planning' ? (data.preview as typeof data.preview | undefined) : (data.plan as typeof data.plan | undefined));
   const value = $derived<PlanTable | undefined>(plan?.value.known === true ? plan.value.value : undefined);
   const rows = $derived<readonly McRow[]>(value?.rows ?? []);
   const hi = $derived(highlight !== null && highlight < rows.length ? highlight : null);
@@ -75,7 +81,9 @@
   };
 </script>
 
-{#if plan === undefined}
+{#if outsideRound}
+  <div class="line"><TextCell text="" reason="notApplicable" /></div>
+{:else if plan === undefined}
   <!-- computing: the panel frame's state -->
 {:else if !plan.value.known}
   <div class="line"><TextCell text="" reason={plan.value.reason} /></div>
@@ -140,7 +148,7 @@
             text={info.ePos}
             width={INFO.ePos}
             align="right"
-          /> <TextCell text={info.ePoints} width={INFO.ePts} align="right" /> <TextCell text={info.delta} width={INFO.delta} align="right" /> {#if info.button === 'clear'}<button
+          /> <TextCell text={info.ePoints} width={INFO.ePts} align="right" /> <TextCell text={info.delta} width={INFO.delta} align="right" /> {#if variant === 'planning'}<!-- the round's plans are saved on the plan board -->{:else if info.button === 'clear'}<button
               type="button"
               class="pw-button act"
               data-testid="clear"
@@ -159,7 +167,7 @@
               title={text.saveHover}
               onclick={() => (picking = !picking)}>{text.save}</button
             >{/if}</div>
-        {#if picking && info.button === 'save'}
+        {#if picking && info.button === 'save' && variant === 'live'}
           <div class="line" data-testid="picker"> {text.pickArrow}{#each PLAN_SLOTS as s (s)} <button
               type="button"
               class="pw-button act"

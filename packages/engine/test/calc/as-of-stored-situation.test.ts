@@ -22,6 +22,7 @@ const storedOf = (p: Projection): StoredDriverSession => ({
   aiDifficulty: known(95, 0),
   totalLaps: known(50, 0),
   projection: p,
+  cars: [],
   humanSpans: [{ startFrame: 1 }],
   track: unknown('notApplicable'),
 });

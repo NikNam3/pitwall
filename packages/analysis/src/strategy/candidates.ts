@@ -7,8 +7,8 @@
 // - rules (`rule`): mirror the nearest rival ahead and behind not of ours (the first stop on the lap and compound of
 //   `race-monte-carlo`'s one rival policy, `rivalPlainPolicy`, as a `bestWith` query of the first world that gives
 //   one).
-// A `bestWith` query that gives `null` gives no candidate. Inter and wet plans only where rain can come (Task 23a;
-// SP4.3c O3a). Every policy is `policyOf(plan)`; no policy twice. The committed row is the job's.
+// A `bestWith` query that gives `null` gives no candidate. Inter and wet plans (stops or a free start's start
+// compound) only where rain can come (Task 23a; SP4.3c O3a). The best plan is `bestPlanOf`'s, its one owner (C43). Every policy is `policyOf(plan)`; no policy twice. The committed row is the job's.
 import type { CarId, Policy, StartingPoint } from '@pitwall/domain';
 import { rivalPlainPolicy, type McCandidate } from '../race-monte-carlo/index.ts';
 import { startLapOf } from '../race-forecast/index.ts';
@@ -49,6 +49,24 @@ function rainCanCome(start: StartingPoint, fromLap: number, rainPct: number): bo
   return start.weather.known && rainComing(start.weather.value.byLap, fromLap, start.lapsTotal, rainPct);
 }
 
+/**
+ * The "rain can come" filter of car `car`'s plans (Task 23a; SP4.3c O3a): a plan that starts on (a free start's
+ * `startCompound`) or stops for inters or wets is allowed only where rain can come (`rainCanCome`).
+ */
+function allowedOf(start: StartingPoint, car: CarId, config: CandidatesConfig): (p: Pick<DpPlan, 'stops' | 'startCompound'>) => boolean {
+  const rain = rainCanCome(start, startLapOf(start, car), config.rainPct ?? RAIN_OUTLOOK_CONFIG.defaults.rainPct);
+  return (p) => rain || (!(p.startCompound !== undefined && WET.has(p.startCompound)) && !p.stops.some((s) => WET.has(s.compound)));
+}
+
+/**
+ * Car `car`'s best plan, the one owner of it (C43): the least `expectedMs` of its DP plans the rain filter allows, else
+ * continue. The candidates' first and the start compound of the job's reaction table (R31).
+ */
+export function bestPlanOf(start: StartingPoint, car: CarId, dp: DpResult, config: CandidatesConfig): DpPlan {
+  const allowed = allowedOf(start, car, config);
+  return [...dp.plans].sort((a, b) => a.expectedMs - b.expectedMs).find(allowed) ?? dp.continue;
+}
+
 /** `plans` per world and stop count, each group's best `max` by `expectedMs` (the bound within a stop count, B5). */
 function perStopCount(plans: readonly DpPlan[], max: number): DpPlan[] {
   const groups = new Map<string, DpPlan[]>();
@@ -60,8 +78,9 @@ function perStopCount(plans: readonly DpPlan[], max: number): DpPlan[] {
 }
 
 /**
- * Car `car`'s candidates from its DP result and its weather worlds' solves (`solutions[w]` world w's `solveWorld`, a
- * plan's `world` indexing it; queried with `bestWith`, never solved again; spec §5.4); the committed row is the job's.
+ * Car `car`'s candidates from its DP result and its solves (`solveAll`'s: per weather world, on a free start per start
+ * compound and world; a plan's `world` and `startCompound` name its solve; queried with `bestWith` on the best plan's
+ * start, never solved again; spec §5.4, SP4.3d spec §7.2); the committed row is the job's.
  */
 export function candidatesOf(start: StartingPoint, car: CarId, dp: DpResult, solutions: readonly DpSolution[], config: CandidatesConfig): McCandidate[] {
   const out: McCandidate[] = [];
@@ -72,11 +91,8 @@ export function candidatesOf(start: StartingPoint, car: CarId, dp: DpResult, sol
     seen.add(key);
     out.push({ policy, source, rule });
   };
-  const fromLap = startLapOf(start, car);
-  const ranked = [...dp.plans].sort((a, b) => a.expectedMs - b.expectedMs);
-  const rain = rainCanCome(start, fromLap, config.rainPct ?? RAIN_OUTLOOK_CONFIG.defaults.rainPct);
-  const allowed = (p: Pick<DpPlan, 'stops'>): boolean => rain || !p.stops.some((s) => WET.has(s.compound));
-  const best = ranked.find(allowed) ?? dp.continue;
+  const allowed = allowedOf(start, car, config);
+  const best = bestPlanOf(start, car, dp, config);
 
   // base: the best plan first, then every other base plan of each world and stop count, box this lap and continue
   add(policyOf(best), 'dp');
@@ -84,9 +100,14 @@ export function candidatesOf(start: StartingPoint, car: CarId, dp: DpResult, sol
     if (plan !== best && allowed(plan)) add(policyOf(plan), 'dp');
   }
 
-  /** `bestWith`'s plan of world `w` whose first stop is `stop`, where it is one and allowed. */
+  // the best plan's start: a free start's solves are per start compound and world (`solveAll`), queried on its start
+  const bestStart = best.startCompound ?? null;
+  const solveOf = (w: number): DpSolution | undefined => solutions.find((s) => s.world === w && s.start === bestStart);
+  const worlds = [...new Set(solutions.map((s) => s.world))].sort((a, b) => a - b);
+
+  /** `bestWith`'s plan of world `w` (on the best plan's start) whose first stop is `stop`, where it is one and allowed. */
   const query = (w: number, stop: Stop): DpPlan | null => {
-    const s = solutions[w];
+    const s = solveOf(w);
     const q = s === undefined ? null : bestWith(s, { stopLap: stop.lap, compound: stop.compound });
     return q !== null && allowed(q) ? q : null;
   };
@@ -107,7 +128,7 @@ export function candidatesOf(start: StartingPoint, car: CarId, dp: DpResult, sol
   for (const [rival, rule] of mirrors) {
     const stop = rival === undefined ? undefined : rivalPlainPolicy(start, rival, null).stops[0];
     if (stop === undefined) continue;
-    for (let w = 0; w < solutions.length; w++) {
+    for (const w of worlds) {
       const q = query(w, stop);
       if (q === null) continue;
       add(policyOf(q), 'rule', rule);

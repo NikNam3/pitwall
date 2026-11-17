@@ -39,6 +39,13 @@ export type DpWorld = {
 
 export type DpInput = {
   car: CarId;
+  /**
+   * The start compound (SP4.3d spec §7.2): `carParams.compound` for a car on its tyres; `null` on the grid where the
+   * start is free: the car starts on a new set of the compound the DP picks among those with a set left, that set
+   * counted in the sets used and the compound rule reading it as the car's compound; `carParams.compound`, `tyreAge`,
+   * `wearPct` and `fittedLapsToLimit` are then not read.
+   */
+  startCompound: NoiseCompound | null;
   fromLap: number;
   totalLaps: number;
   lap: LapModelParams;
@@ -56,8 +63,11 @@ export type DpInput = {
   worlds: DpWorld[];
 };
 
-/** One plan: its stops, its expected remaining race time and the world it was solved in. */
-export type DpPlan = { stops: { lap: number; compound: NoiseCompound }[]; expectedMs: number; world: number };
+/**
+ * One plan: its stops, its expected remaining race time and the world it was solved in; on a free start
+ * (`DpInput.startCompound` `null`) the compound it starts on, else no `startCompound`.
+ */
+export type DpPlan = { startCompound?: NoiseCompound; stops: { lap: number; compound: NoiseCompound }[]; expectedMs: number; world: number };
 
 /** Per lap the expected remaining race time boxing under a neutralisation and staying out: for `sc-call` (4.3b2). */
 export type DpTable = { boxUnderMs: Float64Array; stayMs: Float64Array };

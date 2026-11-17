@@ -137,6 +137,7 @@ export const commandGroups = {
   calibration: 'Calibration',
   drivers: 'Drivers',
   plan: 'Plan',
+  planning: 'Planning',
   session: 'Session',
   help: 'Help',
 } as const;
@@ -175,6 +176,14 @@ export const commandTitles = {
   planRemove: (car: number, slot: string): string => `Remove slot ${slot} of car ${car}`,
   planEdit: (car: number, slot: string): string => `Edit slot ${slot} of car ${car}`,
   sessionEnd: 'End session',
+  plansPrepareLaps: 'Enter the race laps',
+  plansPrepareSave: 'Save a prepared plan',
+  plansPrepareAccept: 'Accept a prefilled plan',
+  plansPrepareRemove: 'Remove a prepared plan',
+  plansPrepareActivate: 'Activate a prepared plan',
+  planAccept: 'Accept the grid prefill',
+  plansPrepareRemoveSlot: (car: number, slot: string): string => `Remove prepared slot ${slot} of car ${car}`,
+  plansPrepareActivateSlot: (car: number, slot: string): string => `Activate prepared slot ${slot} for car ${car}`,
 } as const;
 
 /** The session-start calibration prompt and the top bar's calibration segment (SP4.1a spec 3.3). */
@@ -262,7 +271,7 @@ export const topBar = {
   /** The player's current lap, of the session's total when it has one: `L23/62`. */
   lapOf: (lap: string, total: string | undefined): string => (total === undefined ? `L${lap}` : `L${lap}/${total}`),
   /** The session phase in the top bar (race control's situation); resting phases show nothing. */
-  phase: { formation: 'FORMATION', startLights: 'START', sc: 'SC', vsc: 'VSC', red: 'RED', finished: 'FINISHED', paused: 'PAUSED' },
+  phase: { formation: 'FORMATION', startLights: 'START', sc: 'SC', vsc: 'VSC', red: 'RED', finished: 'FINISHED', paused: 'PAUSED', planning: 'PLANNING' },
   /** The latest stage of a safety car period. */
   phaseStage: { deployed: 'deployed', returning: 'in this lap', returned: 'in', resume: 'resume' },
   /** The race moment's name (spec 7.2). */
@@ -276,6 +285,8 @@ export const topBar = {
   feedUnknown: 'feed —',
   feedDown: 'feed down',
   feedStale: 'feed stale',
+  /** The feed between a session's end and the next session's first packet (SP4.3d spec §7.0 rule 2). */
+  feedBetweenSessions: 'feed between sessions',
   lossUnknown: '—',
   feedOk: (loss: string): string => `feed ok · ${loss} loss`,
   playing: '⏵ playing',

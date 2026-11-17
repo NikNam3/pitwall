@@ -39,7 +39,9 @@ import type {
   WarnedDetail,
   ZoneFlagDetail,
 } from '@pitwall/domain';
-import type { StepResult } from '../../src/index.ts';
+import type { FeedId } from '@pitwall/domain';
+import { initialState, type StepResult } from '../../src/index.ts';
+import { buildPacket } from '../builders/index.ts';
 import type { Projection } from '../../src/log/types.ts';
 import type { SignalKey } from '../../src/signals/types.ts';
 import type { Situation } from '../../src/situations/situation.ts';
@@ -212,6 +214,20 @@ describe('the live state of every segment frame holds no C12 field (C13)', () =>
   it.each(SEGMENTS)('%s', async (file) => {
     const found = new Set<string>();
     await replaySegment(file, (state) => signalPaths(liveOf(state), [], found));
+    expect([...found].sort()).toEqual([]);
+  });
+
+  // SP4.3d2 Task 4: the session types choose the next session's samples (C8) and are kept nowhere (C13).
+  it("a sprint weekend's qualifying with the next session's forecast: no `sessionType` anywhere in the live state", () => {
+    const session = buildPacket('session', {
+      sessionType: 5, numSessionsInWeekend: 5, weekendStructure: { 0: 1, 1: 10, 2: 15, 3: 5, 4: 16 }, numWeatherForecastSamples: 4,
+      weatherForecastSamples: { 0: { sessionType: 5, timeOffset: 0, weather: 1 }, 1: { sessionType: 5, timeOffset: 5, weather: 2 },
+        2: { sessionType: 16, timeOffset: 0, weather: 3 }, 3: { sessionType: 16, timeOffset: 5, weather: 4 } },
+    });
+    const state = initialState({ feedId: 'test' as FeedId, sessionUid: 9n, session });
+    expect(state.session.nextForecast).toHaveLength(2);
+    const found = new Set<string>();
+    signalPaths(liveOf(state), [], found);
     expect([...found].sort()).toEqual([]);
   });
 });

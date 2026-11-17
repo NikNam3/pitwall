@@ -10,7 +10,7 @@ export { CalculatorRegistry, RegistryError, type RegistryErrorReason } from './c
 export { defineConfig, type ConfigKey, type ConfigShape, type ConfigValue } from './calc/config.ts';
 export { definePriors, priorsOf, type FallbackCtx, type PriorDecl, type PriorsCtx, type PriorsDecl, type StoredSource } from './calc/priors.ts';
 export { defineProfiles, driversOf, type ProfileCtx, type ProfileEntryDecl, type ProfilesDecl, type StoredDriverSession } from './calc/profiles.ts';
-export { asOfNow, asOfStored, runAsOf, type AsOfUnit, type AsOfView } from './calc/as-of.ts';
+export { asOfEnded, asOfNow, asOfStored, runAsOf, situationAtEnd, type AsOfUnit, type AsOfView } from './calc/as-of.ts';
 export { defineSimulator, type SimulatorMarker } from './calc/simulator.ts';
 export { openSpansOf } from './calc/situation.ts';
 export { InsightBook } from './calc/insight-book.ts';

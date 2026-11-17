@@ -17,15 +17,20 @@ const isStale = (feed: FeedMetricsView): boolean => feed.msSinceLastPacket >= FE
 const isLossy = (feed: FeedMetricsView): boolean =>
   feed.lossPercent > FEED_LOSS_PERCENT && (feed.lossWindowFrames ?? FEED_MIN_LOSS_FRAMES) >= FEED_MIN_LOSS_FRAMES;
 
-/**
- * `sessionEnded`: whether the feed's session ended and its packets are ignored (C59), as the pipeline knows it; a running
- * session's feature leaves it out (it reads as `false`).
- */
-export const feedStatusOf = (feedId: FeedId, feed: FeedMetricsView, sessionEnded?: boolean): FeedStatus => ({
+/** What the pipeline knows of the feed's sessions; a running session's feature leaves it out (both read as `false`). */
+export type FeedSessionState = {
+  /** The feed's session ended and its packets are ignored (C59). */
+  sessionEnded: boolean;
+  /** From a session's end until the next session's first packet: silence then is no stale feed (C52). */
+  betweenSessions: boolean;
+};
+
+export const feedStatusOf = (feedId: FeedId, feed: FeedMetricsView, sessions?: FeedSessionState): FeedStatus => ({
   feedId,
-  ...(sessionEnded !== undefined && { sessionEnded }),
+  ...(sessions !== undefined && { sessionEnded: sessions.sessionEnded }),
+  betweenSessions: sessions?.betweenSessions ?? false,
   connected: feed.connected,
-  stale: isStale(feed),
+  stale: sessions?.betweenSessions !== true && isStale(feed),
   lossPercent: feed.lossPercent,
   latePackets: feed.latePackets,
   decodeErrors: feed.decodeErrors,
@@ -43,8 +48,12 @@ const feedInsight = (
   params: Insight['params'],
 ): Insight => ({ key: kind, severity, category: 'feed', feedId, kind, params, raisedAt: at });
 
-/** Problems with the feed itself; they hold before any session opens, so they are not calculator insights. */
-export const feedInsights = (feedId: FeedId, feed: FeedMetricsView, at: SessionTime): Insight[] => {
+/**
+ * Problems with the feed itself; they hold before any session opens, so they are not calculator insights. Between
+ * sessions none is raised (C52), so one that held at the session's end is cleared then.
+ */
+export const feedInsights = (feedId: FeedId, feed: FeedMetricsView, at: SessionTime, betweenSessions = false): Insight[] => {
+  if (betweenSessions) return [];
   const insights: Insight[] = [];
   if (isStale(feed)) {
     insights.push(feedInsight(feedId, at, 'feed.stale', 'advisory', { msSinceLastPacket: feed.msSinceLastPacket }));

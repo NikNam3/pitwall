@@ -12,13 +12,18 @@ export type TrackWetnessEffect = {
   isRace?: boolean;
   /** The race has started (lights out): before it no lap is a racing lap, so there is nothing to measure. */
   started?: boolean;
+  /**
+   * The ended qualifying session's planning view (C62d): the race's wetness at its start from the race's forecast, the
+   * per-lap data over the session's own laps.
+   */
+  planning?: boolean;
 };
 
 const BEFORE_START: TrackWetnessEffect = { started: false };
 const STARTED: TrackWetnessEffect = { started: true };
 
 export const TRACK_WETNESS_BEHAVIOUR: BehaviourTable<TrackWetnessEffect> = {
-  'weekend-phase': RACE_LAP_PHASE_ROWS,
+  'weekend-phase': { ...RACE_LAP_PHASE_ROWS, qualifying: { isRace: false, planning: true } },
   'session-phase-race': {
     grid: BEFORE_START,
     formation: BEFORE_START,

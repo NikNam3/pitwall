@@ -1,7 +1,7 @@
 // The committed teammates of one car's call (SP4.3b2 Task 18f; C43): one rule for `strategy`, `pit-sweep`, `undercut`
 // and `sc-call`. A car of ours is certain input only when it is in the planned field (`plannedCars`) and committed; its
 // plan is followed as far as it can be (spec §8.2, `followable`). Pure (C2).
-import type { CarId, McRow, NoiseCompound, Policy, StartingPoint } from '@pitwall/domain';
+import { NOISE_COMPOUNDS, type CarId, type McRow, type NoiseCompound, type Policy, type StartingPoint } from '@pitwall/domain';
 import { startLapOf } from '../../race-forecast/index.ts';
 import { plannedCars, plannedField } from './dp-input.ts';
 import type { StrategyInput } from './input.ts';
@@ -15,6 +15,15 @@ type Infeasible = McRow['infeasible'];
 export function followable(start: StartingPoint, car: CarId, policy: Policy): { policy: Policy; infeasible: Infeasible } {
   const fromLap = startLapOf(start, car);
   let infeasible: Infeasible = null;
+  // on the race's grid (a grid start, the car not free, SP4.3d spec §7.1 step 8): a start compound other than the fitted
+  // one, or one without a fresh set, cannot be followed; the car starts on its fitted set
+  let startCompound = policy.startCompound;
+  if (startCompound !== undefined && start.start != null && start.start.freeCompound[car] !== 1) {
+    const fitted = NOISE_COMPOUNDS[start.compound[car] ?? -1];
+    const fresh = (start.sets[car] ?? []).some((s) => s.compound === startCompound && s.wearPct <= 0);
+    if (startCompound !== fitted || !fresh) infeasible = 'startCompound';
+    startCompound = undefined;
+  }
   const onLaps: Policy['stops'] = [];
   for (const s of policy.stops) {
     if (s.lap < fromLap) infeasible ??= 'stopLapPassed';
@@ -35,7 +44,8 @@ export function followable(start: StartingPoint, car: CarId, policy: Policy): { 
     left.set(s.compound, n - 1);
     stops.push(s);
   }
-  return { policy: infeasible === null ? policy : { stops }, infeasible };
+  if (infeasible === null) return { policy, infeasible };
+  return { policy: startCompound === undefined ? { stops } : { startCompound, stops }, infeasible };
 }
 
 /**

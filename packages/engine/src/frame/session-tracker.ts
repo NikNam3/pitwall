@@ -61,14 +61,19 @@ export class SessionTracker {
   }
 
   push(packet: Packet, receivedAtMs: number): TrackerEvent[] {
-    const events: TrackerEvent[] = [];
-    const expired = this.#current?.sendAt !== undefined && receivedAtMs - this.#current.sendAt > this.#graceMs;
-    if (expired) events.push(...this.#close('SEND'));
+    const events = this.expire(receivedAtMs);
     const current = this.#current;
     if (current === undefined) events.push(...this.#pushWithoutSession(packet, receivedAtMs));
     else if (current.sendAt === undefined) events.push(...this.#pushOpen(current, packet, receivedAtMs));
     else events.push(...this.#pushGrace(current, packet, receivedAtMs));
     return events;
+  }
+
+  /** Closes the current session once its SEND grace window has passed by `receivedAtMs`, whether or not a packet arrives (C59). */
+  expire(receivedAtMs: number): TrackerEvent[] {
+    const sendAt = this.#current?.sendAt;
+    if (sendAt === undefined || receivedAtMs - sendAt <= this.#graceMs) return [];
+    return this.#close('SEND');
   }
 
   /** Ends the stream: closes the current session and drops waiting UID-0 packets. */

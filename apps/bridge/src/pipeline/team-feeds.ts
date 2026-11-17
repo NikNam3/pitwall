@@ -12,13 +12,50 @@ type CarPlans = { slots: Map<Slot, Extract<PlanDecision, { kind: 'planSaved' }>>
 /** The key of one team in one session. */
 const teamKey = (seat: { sessionUid: string; team: TeamId }): string => `${seat.sessionUid}:${seat.team}`;
 
+/** What takes a feed's plan decisions: its running session (`FeedPipeline.commitPlan`). */
+export type PlanSink = { commitPlan(decision: PlanDecision): unknown };
+
 /**
  * The team's feeds (C1a): the feeds of one session uid whose player cars have the same team (Participants). Bookkeeping
- * of the bridge's feeds, no judgement (C43). Each `FeedPipeline` given it (option `teams`) tells it its session uid and its
- * player car's team as they change.
+ * of the bridge's feeds, no judgement (C43). Each `FeedPipeline` given it (option `teams`) connects itself as its feed's
+ * plan sink and tells it its session uid and its player car's team as they change.
  */
 export class TeamFeeds {
   readonly #seats = new Map<FeedId, FeedSeat>();
+  /** Per feed, its newest pipeline: the one a plan decision for the feed goes to. */
+  readonly #sinks = new Map<FeedId, PlanSink>();
+  /** The teams of a session whose race-start commit was claimed (C62d, C76): once per session uid and team. */
+  readonly #raceStarts = new Set<string>();
+
+  /** Feed `feedId`'s plan decisions go to `sink` from now on (a newer pipeline of the feed replaces the older). */
+  connect(feedId: FeedId, sink: PlanSink): void {
+    this.#sinks.set(feedId, sink);
+  }
+
+  /**
+   * Feed `feedId` reached its race's first frame with its team known: `true` for the first feed of its team in its
+   * session (it commits the prepared plans, C62d), `false` for every later one and for a feed without a team.
+   */
+  claimRaceStart(feedId: FeedId): boolean {
+    const seat = this.#seats.get(feedId);
+    if (seat === undefined || seat.team === null) return false;
+    const key = teamKey({ sessionUid: seat.sessionUid, team: seat.team });
+    if (this.#raceStarts.has(key)) return false;
+    this.#raceStarts.add(key);
+    return true;
+  }
+
+  /**
+   * `decisions`, in order, to every feed of `feedId`'s team then running (each its own engine's current frame and
+   * decisions sidecar, C76), each kept for a feed that joins later.
+   */
+  commitToTeam(feedId: FeedId, decisions: readonly PlanDecision[]): void {
+    for (const id of this.teamOf(feedId)) {
+      const sink = this.#sinks.get(id);
+      for (const decision of decisions) sink?.commitPlan(decision);
+    }
+    for (const decision of decisions) this.notePlan(feedId, decision);
+  }
   /**
    * Per team of a session and per car, the newest `planSaved` of each slot not removed since, and the newest
    * `planCommitted` or `planCleared` (C76): what a feed joining the team later is handed.

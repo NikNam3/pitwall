@@ -5,15 +5,16 @@ import type { BehaviourTable } from '../shared/behaviour.ts';
 
 /**
  * `plan`: the car is planned (a row that changes nothing); `notApplicable`: no plan for the car (C14: outside the
- * race phase; the race stopped or over; the car no longer competing or done with its race).
+ * race phase; the race stopped or over; the car no longer competing or done with its race); `prefill`: planned, and
+ * slots A and B prefilled (`prefillOf`, SP4.3d spec §7.1 step 7: before the start, SP4.3d2 Task 9).
  */
-export type StrategyEffect = 'plan' | 'notApplicable';
+export type StrategyEffect = 'plan' | 'prefill' | 'notApplicable';
 
 export const STRATEGY_BEHAVIOUR: BehaviourTable<StrategyEffect> = {
   'weekend-phase': { practice: 'notApplicable', qualifying: 'notApplicable', race: 'plan', none: 'notApplicable' },
   'session-phase-race': {
-    grid: 'plan',
-    formation: 'plan',
+    grid: 'prefill',
+    formation: 'prefill',
     startLights: 'plan',
     racing: 'plan',
     neutralised: 'plan',

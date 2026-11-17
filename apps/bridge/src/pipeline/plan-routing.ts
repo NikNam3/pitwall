@@ -4,7 +4,8 @@
 // the active plan for a feed that joins later. `plan.activate` reads the slot's policy by `planSlots` over the committing
 // feed's projection, never from the bridge's memory, so a `planSaved` a flashback voided is never activated (C27a). It
 // checks only the ranges (C73): the stop laps within the race's laps, compounds and slots from their closed lists, an
-// activated slot saved, a removed slot not the active one. Whether the plan can still be followed is `strategy`'s
+// activated slot saved, a removed slot not the active one. `plan.accept` (SP4.3d spec §7.1 step 7) is `plan.save` with its
+// checks, followed by `planCommitted` with the slot when the car has no active plan (`activePlan`). Whether the plan can still be followed is `strategy`'s
 // judgement (C43). Every other decision stays with its feed.
 import { activePlan, NOISE_COMPOUNDS, PLAN_SLOTS, planSlots, type DecisionRecord, type FeedId, type Policy } from '@pitwall/domain';
 import type { UiAction } from '@pitwall/contracts';
@@ -12,12 +13,12 @@ import type { DecisionResult, FeedPipeline } from './feed-pipeline.ts';
 import type { PlanDecision, TeamFeeds } from './team-feeds.ts';
 
 /** The plan uiActions as the bridge takes them. */
-export type PlanAction = Extract<UiAction, { kind: 'plan.commit' | 'plan.clear' | 'plan.save' | 'plan.remove' | 'plan.activate' }>;
+export type PlanAction = Extract<UiAction, { kind: 'plan.commit' | 'plan.clear' | 'plan.save' | 'plan.remove' | 'plan.activate' | 'plan.accept' }>;
 
 /** The pipeline's part the routing uses. */
 type PlanFeed = Pick<FeedPipeline, 'commitPlan' | 'totalLaps' | 'planDecisions'>;
 
-const PLAN_KINDS: ReadonlySet<UiAction['kind']> = new Set(['plan.commit', 'plan.clear', 'plan.save', 'plan.remove', 'plan.activate']);
+const PLAN_KINDS: ReadonlySet<UiAction['kind']> = new Set(['plan.commit', 'plan.clear', 'plan.save', 'plan.remove', 'plan.activate', 'plan.accept']);
 
 /** Whether `action` is one of the plan uiActions. */
 export const isPlanAction = (action: UiAction): action is PlanAction => PLAN_KINDS.has(action.kind);
@@ -35,8 +36,23 @@ function policyOutOfRange(policy: Policy, totalLaps: number): string | undefined
   return undefined;
 }
 
+/** The decisions `action` commits, in order, read against the committing feed's projected `decisions`; or why it is invalid (C73). */
+function planDecisions(action: PlanAction, decisions: Decisions, totalLaps: number): PlanDecision[] | string {
+  if (action.kind !== 'plan.accept') {
+    const one = planDecision(action, decisions, totalLaps);
+    return typeof one === 'string' ? one : [one];
+  }
+  // `plan.accept` (SP4.3d spec §7.1 step 7): `plan.save`'s checks, and activated when the car has no active plan
+  const saved = planDecision({ ...action, kind: 'plan.save' }, decisions, totalLaps);
+  if (typeof saved === 'string') return saved;
+  const history = { decisions: decisions as readonly DecisionRecord[] };
+  return activePlan(history, action.carId) === null
+    ? [saved, { kind: 'planCommitted', carId: action.carId, policy: structuredClone(action.policy), slot: action.slot }]
+    : [saved];
+}
+
 /** The decision `action` commits, read against the committing feed's projected `decisions`; or why it is invalid (C73). */
-function planDecision(action: PlanAction, decisions: Decisions, totalLaps: number): PlanDecision | string {
+function planDecision(action: Exclude<PlanAction, { kind: 'plan.accept' }>, decisions: Decisions, totalLaps: number): PlanDecision | string {
   const { carId } = action;
   if ('slot' in action && !(PLAN_SLOTS as readonly string[]).includes(action.slot)) return `unknown slot ${action.slot}`;
   if ('policy' in action) {
@@ -83,14 +99,16 @@ export class PlanRouting {
     const totalLaps = own.totalLaps();
     const decisions = own.planDecisions();
     if (totalLaps === undefined || decisions === undefined) return { ok: false, reason: 'notSupported', message: `feed ${action.feedId} runs no session` };
-    const decision = planDecision(action, decisions, totalLaps);
-    if (typeof decision === 'string') return { ok: false, reason: 'invalid', message: decision };
-    const answer = own.commitPlan(decision);
-    if (!answer.ok) return answer;
-    for (const id of this.#teams.teamOf(action.feedId)) {
-      if (id !== action.feedId) this.#pipelines.get(id)?.commitPlan(decision);
+    const committed = planDecisions(action, decisions, totalLaps);
+    if (typeof committed === 'string') return { ok: false, reason: 'invalid', message: committed };
+    for (const decision of committed) {
+      const answer = own.commitPlan(decision);
+      if (!answer.ok) return answer;
+      for (const id of this.#teams.teamOf(action.feedId)) {
+        if (id !== action.feedId) this.#pipelines.get(id)?.commitPlan(decision);
+      }
+      this.#teams.notePlan(action.feedId, decision);
     }
-    this.#teams.notePlan(action.feedId, decision);
-    return answer;
+    return { ok: true };
   }
 }
