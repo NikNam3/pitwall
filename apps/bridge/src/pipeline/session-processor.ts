@@ -39,7 +39,7 @@ import {
   type StepResult,
   type WeekendContext,
 } from '@pitwall/engine';
-import { priorsOf, type DeepReadonly } from '@pitwall/engine/readers';
+import { driversOf, priorsOf, type DeepReadonly, type EngineView } from '@pitwall/engine/readers';
 import type { TopicName } from '@pitwall/contracts';
 import { peekHeader, type SessionPacket } from '@pitwall/protocol';
 import type { CalcStats } from '../dev/calc-stats.ts';
@@ -148,6 +148,8 @@ export class SessionProcessor {
   #drivers: ProfileSnapshot | null | undefined;
   /** The human seats last handed to `onSeats`, as JSON: handed on only when they change. */
   #seats = '[]';
+  /** The weekend phase at the session's end (`end`), before `finish` closed its span; `undefined` while it runs. */
+  #endedPhase: WeekendPhase | undefined;
 
   constructor(opts: SessionProcessorOptions) {
     this.#o = opts;
@@ -222,9 +224,37 @@ export class SessionProcessor {
     return this.#runner.state.session.totalLaps;
   }
 
-  /** The session's weekend phase as the machine decided it (C14); `pending` until it has. */
+  /**
+   * The session's weekend phase as the machine decided it (C14); `pending` until it has. Fixed for the session, so once
+   * the session ended (`finish` closed its span, C18) it stays the one it had at its last applied frame.
+   */
   get weekendPhase(): WeekendPhase {
-    return situationOf(this.#runner.state).weekendPhase;
+    return this.#endedPhase ?? situationOf(this.#runner.state).weekendPhase;
+  }
+
+  /**
+   * The view as the scheduler builds it now (C39), with no change, an empty delta and no outputs: once the session has
+   * ended, the ended run's view as of its end (`finish` applied), the planning round's base (`asOfEnded`, C62d).
+   */
+  get view(): EngineView {
+    const { state } = this.#runner;
+    const lengths = projectionLengths(state.history);
+    const input = this.#schedulerInput(state, new Set(), { before: lengths, after: lengths });
+    return {
+      live: input.live,
+      // the session's weekend phase, also once it ended (C14)
+      situation: { ...input.situation, weekendPhase: this.weekendPhase },
+      history: input.history,
+      delta: input.delta,
+      changed: input.changed,
+      weekend: input.weekend,
+      config: input.config,
+      priors: priorsOf(input.history.decisions, input.priors),
+      track: input.track,
+      drivers: driversOf(input.drivers, input.live.cars.length),
+      feed: input.feed,
+      outputs: new Map(),
+    };
   }
 
   /** The newest applied frame's time on the engine's race clock (spec 3.3); undefined before the engine runs. */
@@ -286,6 +316,7 @@ export class SessionProcessor {
    */
   async end(receivedAtMs: number, opts: { interrupted?: boolean; unended?: boolean } = {}): Promise<void> {
     const unended = opts.unended === true;
+    this.#endedPhase = this.weekendPhase;
     if (unended) this.#o.storage?.finishUnended(this.#row(), this.#runner.state.log);
     this.#applying(undefined, () => this.#onClosed(this.#runner.finish(this.#onResult), opts.interrupted === true || unended));
     await this.#o.file?.close(receivedAtMs);

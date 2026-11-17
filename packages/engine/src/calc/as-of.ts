@@ -142,7 +142,7 @@ const asOpen = (span: DeepReadonly<Span>): DeepReadonly<OpenSpan> => {
  * the last applied frame (`situationAt`, the projection module's one rule, C26, C28) are presented open. Without spans:
  * an empty situation.
  */
-const situationAtEnd = (projection: Projection): Situation['byMachine'] => {
+export const situationAtEnd = (projection: Projection): Situation['byMachine'] => {
   let last = -Infinity;
   for (const spans of Object.values(projection.spans)) for (const s of spans) last = Math.max(last, s.endFrame);
   if (last === -Infinity) return {};
@@ -152,6 +152,24 @@ const situationAtEnd = (projection: Projection): Situation['byMachine'] => {
   }
   return byMachine;
 };
+
+/**
+ * The ended run's view as of its end (SP4.3d2 plan call 1, C62d): `asOfNow(view)` with the situation at the session's
+ * end (`situationAtEnd`: `finish` closed every span, C18), the ended run's live values, and `fixed.totalLaps` the race
+ * laps the engineer entered in place of the session's. The fields stay getters, as `asOfNow`'s (C41).
+ */
+export function asOfEnded(view: EngineView, laps: number): AsOfView {
+  const now = asOfNow(view);
+  const fixed = Object.defineProperties({} as AsOfFixed, {
+    ...Object.getOwnPropertyDescriptors(now.fixed),
+    totalLaps: { get: () => known(laps, view.live.sessionTime), enumerable: true },
+  });
+  return Object.defineProperties({} as AsOfView, {
+    ...Object.getOwnPropertyDescriptors(now),
+    situation: { get: () => ({ weekendPhase: view.situation.weekendPhase, byMachine: situationAtEnd(view.history) }), enumerable: true },
+    fixed: { value: fixed, enumerable: true },
+  });
+}
 
 /** A stored session's whole projection as an `AsOfView` (frame `'now'`), its situation the one at the session's end. */
 export function asOfStored(session: StoredDriverSession, ctx: ProfileCtx): AsOfView {

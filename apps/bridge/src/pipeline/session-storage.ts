@@ -13,7 +13,7 @@ import { WeekendRepository } from '../storage/weekend-repository.ts';
  */
 export type SessionRowInput = {
   sessionUid: SessionUid;
-  session: Pick<SessionState, 'link' | 'trackId' | 'settings'>;
+  session: Pick<SessionState, 'link' | 'trackId' | 'settings' | 'totalLaps'>;
   playerCar: CarId;
   /** The engine's `live.teammateCar` now; `null` when it placed none. */
   teammateCar: CarId | null;
@@ -31,7 +31,8 @@ export const sessionRowOf = (s: SessionRowInput): SessionRow => ({
   trackId: s.session.trackId,
   startedAt: s.startedAt,
   pwrecPath: s.pwrecPath,
-  settings: { ...s.session.settings },
+  // the race's laps with the settings (fixed for the session, ruling R17): the planning round suggests them (§7.1 step 3)
+  settings: { ...s.session.settings, totalLaps: s.session.totalLaps },
   cars: s.cars,
 });
 
