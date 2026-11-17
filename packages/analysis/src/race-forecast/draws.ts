@@ -47,3 +47,40 @@ export const normalOf = (stream: number, k: number): number => Math.sqrt(-2 * Ma
 
 /** A standard normal (Box-Muller) from the `k`-th pair of the stream `purpose` under `key`. */
 export const normal = (key: number, purpose: number, k: number): number => normalOf(mix(key, purpose), k);
+
+/** The draws a lap's start reads first, per car and lap, in this order in `ScenarioDraws.lap` (`LAP_DRAWS` a car's lap). */
+export const LAP_DRAW = { scatter: 0, mistake: 1, bigEvent: 2, retire: 3 } as const;
+export const LAP_DRAWS = 4;
+
+/**
+ * One scenario's draws under one base seed that every forecast of it reads alike: per car the pace and degradation
+ * normals, and per car and lap (`car × laps + lap`) the scatter's normal and the first uniform of the mistake, big-event
+ * and retirement streams (`LAP_DRAW`). They depend only on (base, scenario, car, lap), never on the policies or the
+ * scenario's neutralisations or wetness, so a planner's run keeps one per scenario for its candidates (common random
+ * numbers, C2) and the forecast fills it on first use (NaN: not drawn yet). Pure: a value read equals the value drawn.
+ */
+export type ScenarioDraws = { base: number; scenario: number; cars: number; laps: number; pace: Float64Array; deg: Float64Array; lap: Float64Array };
+
+/** An empty `ScenarioDraws` for scenario `scenario` under base seed `base`, `cars` car slots and `laps` lap numbers. */
+export function scenarioDrawsTable(base: number, scenario: number, cars: number, laps: number): ScenarioDraws {
+  return {
+    base,
+    scenario,
+    cars,
+    laps,
+    pace: new Float64Array(cars).fill(Number.NaN),
+    deg: new Float64Array(cars).fill(Number.NaN),
+    lap: new Float64Array(cars * laps * LAP_DRAWS).fill(Number.NaN),
+  };
+}
+
+/**
+ * Fills a car's lap draws into `to` at `at` (`LAP_DRAW` order; `at` is `(car × laps + lap) × LAP_DRAWS`) from its stream
+ * key `key` (`streamKey(draws, car, lap)`).
+ */
+export function drawLap(key: number, to: Float64Array, at: number): void {
+  to[at + LAP_DRAW.scatter] = normalOf(mix(key, PURPOSE.scatter), 0);
+  to[at + LAP_DRAW.mistake] = uniformOf(mix(key, PURPOSE.mistake), 0);
+  to[at + LAP_DRAW.bigEvent] = uniformOf(mix(key, PURPOSE.bigEvent), 0);
+  to[at + LAP_DRAW.retire] = uniformOf(mix(key, PURPOSE.retire), 0);
+}
