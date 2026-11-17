@@ -236,7 +236,6 @@ function withRecordedRealism(config: FeatureConfig, recordingPath: string, log: 
   return typeof enabled === 'boolean' ? { ...config, realism: { ...config.realism, enabled } } : config;
 }
 
-/** A decision or calibration edit that arrived during a restart's restore, as the pipeline was asked it. */
 /** A projected decision as the plan decision it was given as (without its frame); `undefined` for a calibration choice. */
 const planDecisionOf = (record: DecisionRecord): PlanDecision | undefined => {
   switch (record.kind) {
@@ -253,6 +252,7 @@ const planDecisionOf = (record: DecisionRecord): PlanDecision | undefined => {
   }
 };
 
+/** A decision or calibration edit that arrived during a restart's restore, as the pipeline was asked it. */
 type QueuedDecision =
   | { kind: 'pick'; setId: string | null }
   | { kind: 'edit'; setId: string }
