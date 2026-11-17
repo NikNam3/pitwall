@@ -39,14 +39,15 @@ import type { StrategyConfig } from './config.ts';
 type Infeasible = McRow['infeasible'];
 
 /** The search's settings from the config (spec §7.3, §11.1). */
-function mcConfigOf(config: StrategyConfig, points: number[]): McConfig {
+function mcConfigOf(config: StrategyConfig, points: number[], planning: boolean): McConfig {
   return {
     n0: config.n0,
     zDrop: config.zDrop,
     zTie: config.zTie,
     tieBand: config.tieBand,
     rescoreTop: config.rescoreTop,
-    maxScenarioPolicies: config.maxScenarioPolicies,
+    // the planning round's job runs on its own cap (R34: the race's 8,000 misses its 7 s per part on the grid start)
+    maxScenarioPolicies: planning ? config.planningMaxScenarioPolicies : config.maxScenarioPolicies,
     points,
   };
 }
@@ -154,7 +155,7 @@ export function candidatesForRun(input: StrategyInput, rng: Rng): { mc: McInput 
     committed[car] = plan.followed;
   }
   const { rivalRules, points } = mcSettingsFrom(input.config);
-  return { mc: { start: field, candidates, committed, hazard, rivalRules, config: mcConfigOf(config, points), reactions }, perCar, out };
+  return { mc: { start: field, candidates, committed, hazard, rivalRules, config: mcConfigOf(config, points, input.planning != null), reactions }, perCar, out };
 }
 
 /** The job's parts (C51): one per our car planned, in our cars' order, each `{ ...input, planCar }`; the input as it is when none can be planned. */
