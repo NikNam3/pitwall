@@ -26,7 +26,7 @@ import { isPaceLap, LAP_CLASSES_CONFIG, type LapClassOptions } from '../lap-clas
 import { configOf } from '../shared/config-of.ts';
 import { lapModelParams } from '../shared/forecast-field/lap-model-params.ts';
 import { median } from '../shared/stats.ts';
-import { PENDING_ROW, WEEKEND_PACE_BEHAVIOUR, type WeekendPaceEffect } from './behaviour.ts';
+import { PENDING_ROW, WEEKEND_PACE_BEHAVIOUR, type WeekendPaceAsEarlier, type WeekendPaceEffect } from './behaviour.ts';
 import { WEEKEND_PACE_CONFIG } from './config.ts';
 import { WEEKEND_PACE } from './id.ts';
 
@@ -115,12 +115,24 @@ function storedStints(session: DeepReadonly<StoredSession>, phase: WeekendPhase,
   return degradationAsOf(asOfStored(stored, { config: view.config, overrides: {} })).stints;
 }
 
-/** A stored session's evidence, by seat: its practice long runs or its qualifying bests (C62). */
+/**
+ * What a stored session of a weekend phase contributes, from its `weekend-phase` row's `asEarlier` (C44); a session
+ * without its span is pending and gets `PENDING_ROW`. A kind without a row throws (C3).
+ */
+function asEarlierOf(phase: WeekendPhase | undefined): WeekendPaceAsEarlier {
+  if (phase === undefined) return PENDING_ROW.asEarlier ?? 'none';
+  const rows = WEEKEND_PACE_BEHAVIOUR['weekend-phase'];
+  if (rows === undefined || !Object.hasOwn(rows, phase.kind)) throw new Error(`behaviour table: no row for weekend-phase ${phase.kind}`);
+  return rows[phase.kind]?.asEarlier ?? 'none';
+}
+
+/** A stored session's evidence, by seat: what its weekend phase's row says, its long runs or its qualifying bests (C44, C62). */
 function addStored(into: Evidence, session: DeepReadonly<StoredSession>, view: AsOfView, c: Correction, classes: LapClassOptions, config: Config): void {
   const phase = phaseOf(session.projection);
-  if (phase?.kind !== 'practice' && phase?.kind !== 'qualifying') return;
+  const asEarlier = asEarlierOf(phase);
+  if (phase === undefined || asEarlier === 'none') return;
   const seats = new Map(session.cars.map((s) => [s.carId, seatOf(s.carKey)]));
-  if (phase.kind === 'qualifying') {
+  if (asEarlier === 'qualifyingBest') {
     for (const [car, ms] of bestByCar(session.projection.laps, classes)) {
       const seat = seats.get(car);
       if (seat !== undefined) addBest(into.qualifying, seat, ms);
