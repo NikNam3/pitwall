@@ -27,6 +27,8 @@ import { recordingDecisions } from '../pipeline/decision-sidecars.ts';
 import { recordingProfiles } from '../pipeline/profile-sidecar.ts';
 import { ProfileStore } from '../drivers/store.ts';
 import { cliLogger, whenAborted, type CliIo } from './io.ts';
+import type { RebuildProgress } from './rebuild-database.ts';
+import { endedQualifyingsOf, restoreEndedSessions } from './startup-restore.ts';
 
 /** A recording served through a `ReplayController`; `controls` are applied (and any jump finished) before `listening` is printed. */
 export type ReplayInput = { feedId: FeedId; path: string; controls: readonly ReplayControl[]; unpaced: boolean };
@@ -34,8 +36,11 @@ export type ReplayInput = { feedId: FeedId; path: string; controls: readonly Rep
 /** What a feed is called in the `hello` message. */
 export type FeedLabel = Omit<FeedInfo, 'feedId' | 'team'>;
 
-/** One live feed (C1a): its packet source, which names its feed id, and what it is called in `hello`. */
-export type LiveFeed = { source: PacketSource; feed: FeedLabel };
+/**
+ * One live feed (C1a): its packet source, which names its feed id, what it is called in `hello`, and its UDP port (the
+ * meta `listenPort` of its recordings, by which the startup restore finds its sessions; unset: `0`).
+ */
+export type LiveFeed = { source: PacketSource; feed: FeedLabel; port?: number };
 
 /** One live feed (`source`), several (`sources`, one pipeline each, in `hello` in this order), or a replay. */
 export type ServeOptions = (
@@ -66,6 +71,11 @@ type ServeBase = {
   config?: FeatureConfig;
   /** Dev mode (`--dev`): times every calculator run and publishes the `dev.calcStats` and `dev.catalogue` topics. */
   dev?: boolean;
+  /**
+   * Live: the startup server still holding the WebSocket port (`pitwall live`): the startup restore reports its progress
+   * to it (C61), and `serve` closes it before its own server opens (also when it fails).
+   */
+  startup?: { progress: RebuildProgress; close: () => Promise<void> };
   io: CliIo;
 };
 
@@ -102,7 +112,15 @@ export async function serve(opts: ServeOptions): Promise<number> {
   // Live, with one source or several (`pitwall live` always passes `sources`); a replay is the one other run.
   const isLive = opts.replay === undefined;
   const undo: Array<() => void | Promise<void>> = [];
+  // The startup server frees the port before the WebSocket server takes it, or once a step before that fails.
+  let startupOpen = opts.startup !== undefined;
+  const closeStartup = async (): Promise<void> => {
+    if (!startupOpen) return;
+    startupOpen = false;
+    await opts.startup?.close();
+  };
   try {
+    undo.push(closeStartup);
     const { storage } = opts;
     if (storage) {
       undo.push(() => {
@@ -262,10 +280,11 @@ export async function serve(opts: ServeOptions): Promise<number> {
     const pipelineLog = cliLogger(io, 'info');
     // One job-worker limit for every feed, so all feeds together run at most MAX_JOB_WORKERS workers (Task 18b, C1a).
     const workerLimit = new WorkerLimit();
-    const makePipeline = (source: PacketSource): FeedPipeline => {
+    const makePipeline = (source: PacketSource, listenPort?: number): FeedPipeline => {
       const pipeline = new FeedPipeline({
       feedId: source.feedId,
       source,
+      ...(listenPort !== undefined && { listenPort }),
       teams,
       hub,
       features: FEATURES,
@@ -334,14 +353,35 @@ export async function serve(opts: ServeOptions): Promise<number> {
       finished = running.done.catch(failed);
     } else {
       // One pipeline per feed, all on the one hub (C1a); the run has finished once every feed's source is done.
-      const running = live.map(({ source }) => {
-        const pipeline = makePipeline(source);
-        pipeline.start();
+      const made = live.map(({ source, port }) => {
+        const pipeline = makePipeline(source, port);
         undo.push(() => pipeline.stop());
+        return { source, pipeline };
+      });
+      // Before input opens: each feed's ended qualifying is restored from its recording (C59, C61; spec §7.0 rule 4).
+      if (storage) {
+        const restoreLog = cliLogger(io, 'warn');
+        const rows = await endedQualifyingsOf(storage.db, live.map(({ source, port }) => ({ feedId: source.feedId, port })), restoreLog);
+        await restoreEndedSessions(
+          made.flatMap(({ source, pipeline }) => {
+            const row = rows.get(source.feedId);
+            return row === undefined ? [] : [{
+              row,
+              restore: (r: StoredSessionRow) => pipeline.restoreEnded(r).catch((error: unknown) => {
+                restoreLog.error({ feedId: source.feedId, sessionUid: r.sessionUid, pwrecPath: r.pwrecPath, err: error }, 'ended session not restored');
+              }),
+            }];
+          }),
+          { line: (text) => io.err(text), ...(opts.startup && { progress: opts.startup.progress }) },
+        );
+      }
+      const running = made.map(({ source, pipeline }) => {
+        pipeline.start();
         return pipeline.done.catch(failedFeed(source.feedId));
       });
       finished = Promise.all(running).then(() => opts.onDone?.());
     }
+    await closeStartup();
     const server = await startServer();
     await opts.bound?.();
     listening = true;

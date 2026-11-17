@@ -60,20 +60,22 @@ export async function run(_positionals: string[], values: { dev?: boolean | unde
   // Fixed for the run (a runtime change from the UI comes later); a config error stops the start before anything listens.
   const config = loadFeatureConfig(dirs.root, FEATURES);
   for (const port of ports) await assertUdpPortFree(port, udpHost);
-  // Until `serve` binds the port, windows see the startup rebuild's progress (C61); closed before `serve`, whatever happens.
+  // Until `serve` opens its own server, windows see the startup rebuild's and restore's progress (C61); `serve` closes it
+  // before its server opens, and so does a failed or interrupted rebuild here.
   const startup = await StartupServer.start({ port: wsPort });
   const progress = (done: number, total: number) => startup.progress(done, total);
   let opened: Storage | undefined;
   try {
     opened = await openStorage(dirs, config, io, progress);
   } finally {
-    await startup.close();
+    if (opened === undefined) await startup.close();
   }
   if (opened === undefined) return EXIT_INTERRUPTED;
   const { db, stale, version } = opened;
   const sources = ports.map((port) => ({ port, source: new UdpSource({ feedId: feedId(`udp-${port}`), port, host: udpHost }) }));
   return serve({
-    sources: sources.map(({ port, source }) => ({ source, feed: { kind: 'udp', label: `UDP port ${port}` } })),
+    sources: sources.map(({ port, source }) => ({ source, port, feed: { kind: 'udp', label: `UDP port ${port}` } })),
+    startup: { progress, close: () => startup.close() },
     wsPort,
     dumpsDir: dirs.dumps,
     uiDir: dirs.ui,

@@ -24,6 +24,7 @@ import {
   type SessionUid,
   type TrackData,
   type TrackFile,
+  type WeekendPhase,
 } from '@pitwall/domain';
 import {
   projectionLengths,
@@ -219,6 +220,11 @@ export class SessionProcessor {
   /** The race's laps as the live state holds them now (the Session packet's `totalLaps`). */
   get totalLaps(): number {
     return this.#runner.state.session.totalLaps;
+  }
+
+  /** The session's weekend phase as the machine decided it (C14); `pending` until it has. */
+  get weekendPhase(): WeekendPhase {
+    return situationOf(this.#runner.state).weekendPhase;
   }
 
   /** The newest applied frame's time on the engine's race clock (spec 3.3); undefined before the engine runs. */
