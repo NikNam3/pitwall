@@ -15,11 +15,16 @@
 import { mkdirSync, mkdtempSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { FeedStatus, ServerMessage, SessionInfo, TopicName } from '@pitwall/contracts';
 import type { FeedId } from '@pitwall/domain';
 import { decode, PacketId, peekHeader } from '@pitwall/protocol';
+import { main } from '../../src/cli/pitwall.ts';
+import type * as ProcessRecordingModule from '../../src/cli/process-recording.ts';
 import { processRecording } from '../../src/cli/process-recording.ts';
+import { dataDir } from '../../src/storage/data-dir.ts';
+import { rulesVersion } from '../../src/storage/rules-version.ts';
 import { sessionRebuilder } from '../../src/cli/rebuild-database.ts';
 import { serve } from '../../src/cli/serve.ts';
 import { effectiveConfig } from '../../src/feature-config.ts';
@@ -36,6 +41,15 @@ import type { PreparedPacket } from '../helpers/array-source.ts';
 import { ManualSource } from '../helpers/manual-source.ts';
 import { factRows } from '../storage/records.ts';
 
+// `processRecording` (what the startup rebuild runs for each stale recording) is observed; it is the real one.
+vi.mock('../../src/cli/process-recording.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof ProcessRecordingModule>();
+  return { ...actual, processRecording: vi.fn(actual.processRecording) };
+});
+const processed = vi.mocked(processRecording);
+
+const REPO = fileURLToPath(new URL('../../../../', import.meta.url));
+/** The rules version the earlier runs stored with; `pitwall live` computes its own (C61), so these sessions are stale there. */
 const RULES = 'unversioned';
 const PORT_A = 20_777;
 const PORT_B = 20_778;
@@ -343,5 +357,59 @@ describe('the ended qualifying run survives a restart (C59, C38; spec §7.0 rule
     await settle();
     expect(rowOf(place.db, uid).complete).toBe(0);
     await live.stop();
+  });
+});
+
+// SP4.3d2 Task 5 fix round (ruling R21, the double replay; C61): `pitwall live` picks each feed's restore rows before its
+// startup rebuild and leaves them out of it; `restoreEnded` replaces a stale row (incomplete, or of another rules
+// version), so an ended qualifying is replayed once at startup and stored under the current rules version.
+describe('pitwall live replays a stale ended qualifying once at startup (C61, C59)', { timeout: 300_000 }, () => {
+  /** A data dir as `pitwall live` reads it, its database open for the earlier runs. */
+  const livePlace = (): Place & { dir: string } => {
+    const dir = tmp();
+    const dirs = dataDir({ PITWALL_DATA_DIR: dir });
+    return { dir, dbPath: dirs.dbPath, db: openDatabase(dirs.dbPath), recordingsDir: dirs.recordings };
+  };
+
+  /** `pitwall live` on `dir` (one feed) until it listens, then stopped; the lines it wrote to stderr, in order. */
+  async function startLive(dir: string): Promise<string[]> {
+    const abort = new AbortController();
+    const err: string[] = [];
+    const out: string[] = [];
+    const io = { out: (line: string) => out.push(line), err: (line: string) => err.push(line), env: { PITWALL_WS_PORT: '0', PITWALL_UDP_PORT: '0', PITWALL_DATA_DIR: dir }, signal: abort.signal };
+    const exit = main(['live'], io);
+    await vi.waitFor(() => expect(out.some((line) => line.startsWith('listening'))).toBe(true), { timeout: 120_000, interval: 50 });
+    abort.abort();
+    expect(await exit).toBe(0);
+    return err;
+  }
+
+  let current: string;
+  beforeAll(async () => {
+    current = await rulesVersion(REPO);
+    expect(current).not.toBe(RULES);
+  });
+
+  it.each([
+    ['stored complete under an older rules version', true],
+    ['stored incomplete under an older rules version', false],
+  ])('an ended qualifying %s: replayed once (restored, not rebuilt), stored complete under the current rules version', async (_name, endByTimer) => {
+    const place = livePlace();
+    const { file, uid } = await earlierRun(texas, place, { wallMs: W0, endByTimer });
+    processed.mockClear();
+    const err = await startLive(place.dir);
+    // the startup rebuild did not replay it ...
+    expect(processed.mock.calls.map(([path]) => path)).not.toContain(file);
+    expect(err.filter((line) => /rebuilding \d+\/\d+: /.test(line) && line.includes(file))).toEqual([]);
+    // ... the restore did, once
+    expect(err.filter((line) => /restoring \d+\/\d+: /.test(line) && line.includes(file))).toHaveLength(1);
+    // stored as a rebuild under the current rules writes it
+    const row = place.db.prepare('SELECT rules_version, complete FROM sessions WHERE session_uid = ?').get(uid);
+    expect(row).toEqual({ rules_version: current, complete: 1 });
+    const reference = openDatabase(join(tmp(), 'reference.db'));
+    await processRecording(file, reference, createLogger({ level: 'silent' }), new AbortController().signal, effectiveConfig(FEATURES), current);
+    const replayed = factsOf(reference, uid);
+    expect(replayed.length).toBeGreaterThan(0);
+    expect(factsOf(place.db, uid)).toEqual(replayed);
   });
 });
