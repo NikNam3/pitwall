@@ -5,7 +5,9 @@
 // order and then `planCommitted` with the active slot's policy and slot, to every team feed then running (each engine's
 // current frame, each decisions sidecar), without the lap range check; a feed that joins later is handed them through
 // `TeamFeeds` (C76), never the file again. `plan.accept` saves the slot and, when the car has no active plan, activates
-// it, on the team's feeds, with `plan.save`'s range check (C73).
+// it, on the team's feeds, with `plan.save`'s range check (C73). After a bridge restart (Task 11 F1, C59, C76) a feed
+// whose recording continued keeps its team's plan decisions as its projection holds them (a voided one not, C27a), so a
+// teammate that joins later is handed them.
 //
 // No seam beyond Task 10's: every run is a live `serve` (manual sources, live-like) on a temporary data dir (C84), its
 // prepared plans written as the planning module stores them (`plans/<weekendId>/<format>/<team>.json`) or through the
@@ -77,6 +79,8 @@ type SessionSpec = {
   send?: boolean;
   /** Events per frame index, sent with that frame. */
   events?: (index: number) => ReadonlyArray<Parameters<ScenarioBuilder['event']>[0]>;
+  /** Frame indexes whose packets start with the Session and Participants again, as the game resends them. */
+  resendAt?: readonly number[];
 };
 
 const defaultLap = (index: number): number => 1 + Math.floor(index / LAP_FRAMES);
@@ -86,14 +90,16 @@ const sessionPackets = (s: SessionSpec): Packets => {
   const structure = s.structure ?? GP_WEEKEND;
   const participants = s.participants ?? TEAMS.map((teamId) => ({ teamId }));
   const lapOf = s.lapOf ?? defaultLap;
+  const session = {
+    sessionType: s.type, weekendStructure: [...structure], numSessionsInWeekend: structure.length,
+    weekendLinkIdentifier: WEEKEND, totalLaps: RACE_LAPS,
+  };
   const b = new ScenarioBuilder({ sessionUid: s.uid, cars: participants.length, player: s.player ?? 0 })
-    .session({
-      sessionType: s.type, weekendStructure: [...structure], numSessionsInWeekend: structure.length,
-      weekendLinkIdentifier: WEEKEND, totalLaps: RACE_LAPS,
-    })
+    .session(session)
     .participants({ participants: participants.map((p) => ({ ...p })) });
   const n = s.frames ?? 30;
   for (let i = 0; i < n; i++) {
+    if (i > 0 && s.resendAt?.includes(i)) b.session(session).participants({ participants: participants.map((p) => ({ ...p })) });
     for (const details of s.events?.(i) ?? []) b.event(details);
     b.frame((f) => {
       const lap = lapOf(i);
@@ -314,7 +320,11 @@ async function bridge(o: { dataDir?: string; feeds?: readonly FeedId[] } = {}) {
     if (!existsSync(path)) return [];
     return (JSON.parse(readFileSync(path, 'utf8')) as Array<{ decision: GivenDecision }>).map((e) => e.decision);
   };
-  return { dataDir, reader, send, prepared, round, player, play, playRaw, ended, endedSession, stored, decisions, voids, recording, sidecar, stop };
+  /** Whether the stored log of session `uid` (feed `playerCar`'s run) holds a lap `lap` of car `car`. */
+  const lapStored = (uid: bigint, playerCar: number, car: number, lap: number): boolean =>
+    (reader.prepare("SELECT record FROM facts WHERE session_uid = ? AND player_car = ? AND list = 'laps'").all(uid.toString(), playerCar) as Array<{ record: string }>)
+      .some((r) => { const l = JSON.parse(r.record) as { carId: number; lapNumber: number }; return l.carId === car && l.lapNumber === lap; });
+  return { dataDir, reader, send, prepared, round, player, play, playRaw, ended, endedSession, stored, decisions, voids, recording, sidecar, lapStored, stop };
 }
 
 type Bridge = Awaited<ReturnType<typeof bridge>>;
@@ -600,6 +610,90 @@ describe('the race-start commit (Task 11; C62d, C76, C1a)', { timeout: 120_000 }
       expect(b.sidecar(RACE, player), `feed of car ${player}: the sidecar`).toEqual([]);
     }
     expect(existsSync(join(b.dataDir, 'plans'))).toBe(false);
+  });
+
+  it('restart then join', async () => {
+    // the first bridge: feed A runs the race alone to lap 3, commits the prepared plans, then the engineer saves car 0's C
+    const first = await bridge();
+    writePrepared(first.dataDir, 'grandPrix', PREPARED);
+    // the game resends Session and Participants at frame 280: the restarted bridge's first packet continues the recording
+    const race = sessionPackets({ uid: RACE, type: 15, frames: 400, resendAt: [280] });
+    const a1 = first.player(race, A);
+    a1.to(250);
+    await decisionsReach(first, RACE, 0, COMMIT_COUNT);
+    expect(await first.send({ kind: 'plan.save', feedId: A, carId: 0, slot: 'C', policy: POLICY_C })).toEqual({ ok: true });
+    a1.to(280);
+    await decisionsReach(first, RACE, 0, COMMIT_COUNT + 1);
+    await first.stop();
+    // the file changes while the bridge is down: the joining feed is handed the team's plans, never the file
+    writePrepared(first.dataDir, 'grandPrix', { laps: RACE_LAPS, cars: [{ raceNumber: RACE_NUMBER(1), slots: { A: POLICY_X }, active: 'A' }] });
+
+    // the restarted bridge on the same data dir: feed A's recording continues (C59) and goes live past lap 3
+    const b = await bridge({ dataDir: first.dataDir });
+    const a = b.player(race.filter(({ packet }) => packet.header.frameIdentifier >= 280), A);
+    a.to(320);
+    await vi.waitFor(() => expect(b.lapStored(RACE, 0, 0, 3)).toBe(true), { timeout: 20_000 });
+    expect(b.decisions(RACE, 0)).toHaveLength(COMMIT_COUNT + 1);
+
+    // the teammate's feed joins at lap 4: per car its newest decision per slot and its active plan (C76)
+    const bb = b.player(sessionPackets({ uid: RACE, type: 15, frames: 60, player: 1, lapOf: () => 4 }), B);
+    bb.to(30);
+    await vi.waitFor(() => expect(b.stored(RACE, 1)).toBe(true), { timeout: 20_000 });
+    const car0: PreparedCar = { raceNumber: RACE_NUMBER(0), slots: { A: POLICY_A, B: POLICY_B, C: POLICY_C, G1: POLICY_G1 }, active: 'A' };
+    await vi.waitFor(() => expect(b.decisions(RACE, 1)).toHaveLength(committedFor(0, car0).length + committedFor(...CAR1).length), { timeout: 20_000 });
+    a.rest();
+    bb.rest();
+    await b.ended(2);
+    await b.stop();
+
+    const joined = b.decisions(RACE, 1);
+    expectCommitted(joined.map(given), [[0, car0], CAR1], 'the joining feed');
+    expect(new Set(joined.map((d) => d.frame)).size).toBe(1);
+    expectCommitted(b.sidecar(RACE, 1), [[0, car0], CAR1], 'the joining feed\'s sidecar');
+  });
+
+  it('restart then join, voided', async () => {
+    // the first bridge: feed A runs the race to lap 3 (frames 0–299) and commits the prepared plans at its start; at frame
+    // 250 the engineer saves car 0's C; then the game flashes back to frame 150: the save is voided (C27a), the commit stays
+    const first = await bridge();
+    writePrepared(first.dataDir, 'grandPrix', PREPARED);
+    const a1 = first.player(sessionPackets({ uid: RACE, type: 15, frames: 300, send: false }), A);
+    a1.to(250);
+    await decisionsReach(first, RACE, 0, COMMIT_COUNT);
+    expect(await first.send({ kind: 'plan.save', feedId: A, carId: 0, slot: 'C', policy: POLICY_C })).toEqual({ ok: true });
+    a1.rest();
+    await decisionsReach(first, RACE, 0, COMMIT_COUNT + 1);
+    // the fork from frame 151 on, Session and Participants resent at its frame 200, where the restarted bridge takes over
+    const fork = afterFlashback(sessionPackets({
+      uid: RACE, type: 15, frames: 400, resendAt: [200],
+      events: (i) => (i === 151 ? [{ code: 'FLBK', flashbackFrameIdentifier: 150, flashbackSessionTime: (150 * 16) / 1000 }] : []),
+    }), 151, 300);
+    const f1 = first.player(fork, A);
+    f1.to(200);
+    await vi.waitFor(() => expect(first.voids(RACE, 0).length).toBeGreaterThan(0), { timeout: 20_000 });
+    await vi.waitFor(() => expect(first.decisions(RACE, 0)).toHaveLength(COMMIT_COUNT), { timeout: 20_000 });
+    await first.stop();
+    // the voided save is still in A's decisions sidecar (a recording keeps every decision it got, C76)
+    expect(first.sidecar(RACE, 0)).toContainEqual({ kind: 'planSaved', carId: carId(0), slot: 'C', policy: POLICY_C });
+
+    // the restarted bridge: feed A's recording continues (C59) and goes live past lap 3 again
+    const b = await bridge({ dataDir: first.dataDir });
+    const a = b.player(fork.filter(({ packet }) => packet.header.frameIdentifier >= 200), A);
+    a.to(320);
+    await vi.waitFor(() => expect(b.lapStored(RACE, 0, 0, 3)).toBe(true), { timeout: 20_000 });
+
+    // the teammate's feed joins: it is handed the commit, never the voided save (the projection's decisions, C27a, C28)
+    const bb = b.player(sessionPackets({ uid: RACE, type: 15, frames: 60, player: 1, lapOf: () => 4 }), B);
+    bb.to(30);
+    await vi.waitFor(() => expect(b.stored(RACE, 1)).toBe(true), { timeout: 20_000 });
+    await decisionsReach(b, RACE, 1, COMMIT_COUNT);
+    a.rest();
+    bb.rest();
+    await b.ended(2);
+    await b.stop();
+
+    expectCommitted(b.decisions(RACE, 1).map(given), [CAR0, CAR1], 'the joining feed');
+    expectCommitted(b.sidecar(RACE, 1), [CAR0, CAR1], 'the joining feed\'s sidecar');
   });
 
   it('segment pair', async () => {
