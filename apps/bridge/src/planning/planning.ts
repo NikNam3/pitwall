@@ -15,7 +15,9 @@ import type { TopicHub } from '../hub/topic-hub.ts';
 import { JobRunner, type ComputedFor, type JobResult } from '../jobs/job-runner.ts';
 import type { WorkerLimit } from '../jobs/worker-limit.ts';
 import type { Logger } from '../log.ts';
-import type { EndedSession, PlanningHooks } from '../pipeline/feed-pipeline.ts';
+import type { EndedSession, PlanningHooks, RaceStart } from '../pipeline/feed-pipeline.ts';
+import type { PlanDecision } from '../pipeline/team-feeds.ts';
+import { raceStartDecisions } from './race-start.ts';
 import { roundSeatOf, type RoundSeat } from './round.ts';
 import { MAX_RACE_LAPS, type PreparedStore, type RaceKey } from './store.ts';
 
@@ -90,6 +92,15 @@ export class Planning implements PlanningHooks {
       this.#run(round);
     }
     this.#publishPrepared(feedId);
+  }
+
+  /**
+   * A live race's first frame with its team known, on the team's first feed (C62d, C76; §7.0 rules 7–8): the team's
+   * prepared plans for the race, read once, as the plan decisions the team's feeds commit (`raceStartDecisions`).
+   */
+  raceStarted(race: RaceStart): PlanDecision[] {
+    const plans = this.#o.store.read({ weekendId: race.weekendId, format: race.format, team: race.team });
+    return raceStartDecisions(plans, race.team, race.slots);
   }
 
   /**

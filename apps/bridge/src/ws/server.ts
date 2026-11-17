@@ -41,7 +41,7 @@ export type WsServerOptions = {
    */
   choose?: (action: ChooseAction) => ActionOutcome;
   /**
-   * Takes `plan.commit` and `plan.clear` (decisions, C76): `serve` hands them to `PlanRouting.commit`, which commits them
+   * Takes the `plan.*` uiActions, `plan.accept` included (decisions, C76): `serve` hands them to `PlanRouting.commit`, which commits them
    * to every feed of the team. Without it they are answered with `notSupported`.
    */
   plan?: (action: PlanAction) => ActionOutcome;
@@ -168,9 +168,7 @@ export class WsServer {
         // the planning round's the planning module's (C62d), every other one the UI state's.
         const { action } = message;
         // The driver-profile actions are the profile store's (C62c).
-        // `plan.accept` has no owner yet (SP4.3d2 Task 11): `notSupported`.
-        const owner = action.kind === 'plan.accept' ? undefined
-          : isPrepareAction(action) ? this.options.prepare?.(action)
+        const owner = isPrepareAction(action) ? this.options.prepare?.(action)
           : action.kind === 'calibration.choose'
           ? this.options.choose?.(action)
           : isPlanAction(action) ? this.options.plan?.(action)
