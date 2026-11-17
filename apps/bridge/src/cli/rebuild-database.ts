@@ -4,7 +4,7 @@ import { loadFeatureConfig, recordingConfig, type FeatureConfig } from '../featu
 import { FEATURES } from '../features/index.generated.ts';
 import type { Logger } from '../log.ts';
 import type { DataDir } from '../storage/data-dir.ts';
-import { openDatabase, SCHEMA_VERSION, SchemaVersionError, type Db, type StoredSessionRow } from '../storage/db.ts';
+import { openDatabase, SCHEMA_VERSION, SchemaVersionError, type Db, type SessionKey, type StoredSessionRow } from '../storage/db.ts';
 import { WeekendRepository } from '../storage/weekend-repository.ts';
 import { cliLogger, type CliIo } from './io.ts';
 import { processRecording } from './process-recording.ts';
@@ -130,7 +130,7 @@ function openCurrent(path: string): Db | undefined {
   }
 }
 
-const keyText = (row: StoredSessionRow): string => `${row.sessionUid}/${row.weekendId}/${row.playerCar}`;
+const keyText = (row: SessionKey): string => `${row.sessionUid}/${row.weekendId}/${row.playerCar}`;
 const hasRecording = (row: StoredSessionRow): row is StoredSessionRow & { pwrecPath: string } => row.pwrecPath !== null && existsSync(row.pwrecPath);
 const rowFields = (row: StoredSessionRow) => ({ sessionUid: row.sessionUid, weekendId: row.weekendId, playerCar: row.playerCar, pwrecPath: row.pwrecPath });
 
@@ -163,13 +163,17 @@ export class StaleSessions {
    * At bridge start, before input opens: rebuilds every stale session of the newest stored session's weekend, one
    * progress line per recording, and `onProgress` before the first and after each recording (rebuilt or failed). False
    * when `io.signal` stopped it (the sessions not rebuilt keep their stored logs and stay stale), and the user has been
-   * told so.
+   * told so. A session whose recording holds no end (the bridge was stopped in it) is rebuilt as the stopped live run
+   * left it and stays incomplete (C59): the feed that receives its packets continues its recording, and a later rebuild
+   * (the stale sweep, a first read) may still finish it. `skip`: the sessions the startup restore replays itself
+   * (`FeedPipeline.restoreEnded`), left out so each is replayed once.
    */
-  async rebuildNewestWeekend(onProgress?: RebuildProgress): Promise<boolean> {
+  async rebuildNewestWeekend(onProgress?: RebuildProgress, skip: readonly SessionKey[] = []): Promise<boolean> {
     const repo = new WeekendRepository(this.#db, { rulesVersion: this.#rulesVersion });
     const weekendId = repo.newestWeekendId();
     if (weekendId === undefined) return true;
-    const stale = repo.staleSessionsOf(weekendId).filter((row) => !this.#handled.has(keyText(row)));
+    const skipped = new Set(skip.map(keyText));
+    const stale = repo.staleSessionsOf(weekendId).filter((row) => !this.#handled.has(keyText(row)) && !skipped.has(keyText(row)));
     for (const row of stale) {
       this.#handled.add(keyText(row));
       if (!hasRecording(row)) this.#log.warn(rowFields(row), 'stored session stale and its recording is missing: kept, not served');
@@ -180,7 +184,7 @@ export class StaleSessions {
     for (const [i, file] of files.entries()) {
       this.#io.err(`pitwall: rebuilding ${i + 1}/${files.length}: ${file}`);
       try {
-        await this.#process(file);
+        await this.#process(file, { keepUnendedOpen: true });
         rebuilt.add(file);
       } catch (error) {
         if (this.#io.signal.aborted) {
@@ -191,9 +195,15 @@ export class StaleSessions {
       }
       onProgress?.(i + 1, files.length);
     }
-    // a recording that no longer yields one of its sessions
     for (const row of repo.staleSessionsOf(weekendId)) {
-      if (row.pwrecPath !== null && rebuilt.has(row.pwrecPath)) this.#log.warn(rowFields(row), 'stored session not rebuilt from its recording: kept, not served');
+      if (row.pwrecPath === null || !rebuilt.has(row.pwrecPath)) continue;
+      // kept open (C59): rebuilt under this rules version and left incomplete; a later rebuild may still finish it
+      if (!row.complete && row.rulesVersion === this.#rulesVersion) {
+        this.#handled.delete(keyText(row));
+        continue;
+      }
+      // a recording that no longer yields one of its sessions
+      this.#log.warn(rowFields(row), 'stored session not rebuilt from its recording: kept, not served');
     }
     return true;
   }
@@ -218,8 +228,8 @@ export class StaleSessions {
     return rebuilt;
   };
 
-  #process(file: string): Promise<void> {
-    return processRecording(file, this.#db, this.#log, this.#io.signal, recordingConfig(file, FEATURES, this.#config, this.#log), this.#rulesVersion);
+  #process(file: string, opts: { keepUnendedOpen?: boolean } = {}): Promise<void> {
+    return processRecording(file, this.#db, this.#log, this.#io.signal, recordingConfig(file, FEATURES, this.#config, this.#log), this.#rulesVersion, opts);
   }
 }
 

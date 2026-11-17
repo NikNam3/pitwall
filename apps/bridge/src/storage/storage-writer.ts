@@ -109,15 +109,17 @@ export class StorageWriter {
 
   /**
    * A rebuild (C24, C61): in one transaction, deletes the session's fact and car rows and writes `log` whole, the cars
-   * and the row, complete, with `rulesVersion`. A failure leaves the old log and row as they were.
+   * and the row with `rulesVersion`, complete unless `complete` is false (a recording without its session end: the row
+   * stays incomplete, so the live run that continues its recording appends to it, C59). A failure leaves the old log and
+   * row as they were.
    */
-  replaceLog(row: SessionRow, log: DeepReadonly<Log>, rulesVersion: string): void {
+  replaceLog(row: SessionRow, log: DeepReadonly<Log>, rulesVersion: string, opts: { complete: boolean } = { complete: true }): void {
     const key = keyParams(row);
     const rows = logRows(log, () => 0);
     this.#guarded(() => {
       this.#db.transaction(() => {
         this.#statements.deleteFacts.run(key);
-        this.#writeRow(row, rulesVersion, true);
+        this.#writeRow(row, rulesVersion, opts.complete);
         for (const fact of rows) this.#statements.insertFact.run({ ...key, ...fact });
       })();
       const written = new Map<string, number>();
