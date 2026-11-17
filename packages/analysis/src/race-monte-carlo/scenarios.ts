@@ -5,7 +5,7 @@
 // the policies carry (`start.ts`).
 import type { ForecastResult, NoiseCompound, Policy, Scenario, StartingPoint } from '@pitwall/domain';
 import type { Rng } from '@pitwall/engine/readers';
-import { drawsInto, streamKey, uniform, type Draws } from '../race-forecast/draws.ts';
+import { drawsInto, scenarioDrawsTable, streamKey, uniform, type Draws, type ScenarioDraws } from '../race-forecast/draws.ts';
 import { raceForecast } from '../race-forecast/index.ts';
 import { MC_PURPOSE } from './constants.ts';
 import { hasStopAhead, rivalPlan, rivalStops } from './rivals.ts';
@@ -90,6 +90,8 @@ export type Run = {
   forecastBase: number;
   mcBase: number;
   scenarios: Map<number, ScenarioEntry>;
+  /** Per scenario id: its draws under `forecastBase`, shared by every forecast of it (`ScenarioDraws`, C2). */
+  draws: Map<number, ScenarioDraws>;
   /** `raceForecast` calls made: each counts against the cap (spec §7.3). */
   calls: number;
   /** The `raceForecast` calls one evaluation may take: 2 with the rivals' cover rule (a traced run to our stop first). */
@@ -114,6 +116,7 @@ export function createRun(start: StartingPoint, hazard: McInput['hazard'], rules
     forecastBase,
     mcBase,
     scenarios: new Map(),
+    draws: new Map(),
     calls: 0,
     cost: rules.coverRule ? 2 : 1,
     reactions,
@@ -156,7 +159,16 @@ const withStart = (policy: Policy, compound: NoiseCompound | null): Policy => (c
 /** One `raceForecast` call, counted; every car whose policy carries a `startCompound` fitted on a new set of it (`start.ts`). */
 export function forecast(run: Run, policies: readonly Policy[], scenario: Scenario, opts?: { trace?: boolean; toLap?: number }): ForecastResult {
   run.calls++;
-  return raceForecast(fittedStart(run.start, policies), policies, scenario, run.forecastRng, opts);
+  return raceForecast(fittedStart(run.start, policies), policies, scenario, run.forecastRng, { ...opts, draws: drawsOf(run, scenario.id) });
+}
+
+/** Scenario `id`'s draws table of the run (`Run.draws`), made on its first forecast. */
+function drawsOf(run: Run, id: number): ScenarioDraws {
+  const had = run.draws.get(id);
+  if (had !== undefined) return had;
+  const table = scenarioDrawsTable(run.forecastBase, id, run.start.cars, run.start.lapsTotal + 2);
+  run.draws.set(id, table);
+  return table;
 }
 
 /**
