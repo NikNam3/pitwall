@@ -44,6 +44,7 @@ import { RIVAL_STOPS } from '../../../src/rival-stops/index.ts';
 import { TRACK_WETNESS } from '../../../src/track-wetness/index.ts';
 import { TYRE_LIFE } from '../../../src/tyre-life/index.ts';
 import { SLICK_CONFIG, TYRE_MODEL } from '../../../src/tyre-model/index.ts';
+import { WEEKEND_PACE } from '../../../src/weekend-pace/index.ts';
 import {
   buildStartingPoint,
   FORECAST_FIELD_CONFIG,
@@ -118,9 +119,9 @@ function expectFinite(sp: StartingPoint): void {
 
 describe('forecast-field (Task 16)', () => {
   it('at every crossing frame the as-of build equals the live build, but lap fraction and gap within placementToleranceMs; the crossing car exactly', () => {
-    // the eight units, run in their reads' order (SP4.3c Task 12: tyre-model among them)
+    // the nine units, run in their reads' order (SP4.3c Task 12: tyre-model among them; SP4.3d2 Task 7: weekend-pace)
     expect(FORECAST_UNITS.map((u) => u.id).sort()).toEqual(
-      [DEGRADATION, PIT_LOSS, TYRE_MODEL, TYRE_LIFE, TRACK_WETNESS, DRIVER_NOISE, RIVAL_STOPS, RACE_INTERACTION].sort(),
+      [DEGRADATION, PIT_LOSS, TYRE_MODEL, TYRE_LIFE, TRACK_WETNESS, DRIVER_NOISE, RIVAL_STOPS, RACE_INTERACTION, WEEKEND_PACE].sort(),
     );
     const cars = PARAMS.cars;
     let checked = 0;

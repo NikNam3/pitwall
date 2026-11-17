@@ -53,4 +53,22 @@ export const FORECAST_FIELD_CONFIG = defineConfig('forecast-field', {
   unknownCompound: 'medium' as string,
   /** Whether a car whose driver is unknown (no car-driver span yet) is modelled as a human. Source: pitwall estimate (the AI, the field's majority; final review F4). */
   unknownDriverIsHuman: false as boolean,
+  /**
+   * The grid start's gap per grid place behind the leader, in ms (SP4.3d2 Task 7, spec §7.2). Source: the first-lap
+   * crossing gaps of the stored races (Task 7, measured once): the gap to the leader at the end of lap 1 against the
+   * place, a slope through 0 pooled over 7 races (Singapore wet, Zandvoort, Mexico, Miami, Texas, Spa, Shanghai; 133
+   * gaps): 633 ms (per race 547–740 ms; the median gap between neighbours 513 ms).
+   */
+  gridGapMsPerPlace: 630,
+  /**
+   * A rival's start compound on the grid when it is unknown (`rivalStartOdds*`, the chances of soft, medium and hard;
+   * restricted to the compounds it has a fresh set of where its sets are visible). Source: the AI's start compounds in
+   * the stored dry races (Task 7, measured once): 5 races (Singapore, Zandvoort, Texas, Spa, Shanghai; a league restart
+   * and a reused session uid counted once), 94 AI starts: 61 soft, 33 medium, 0 hard.
+   */
+  rivalStartOddsSoft: 0.65,
+  /** See `rivalStartOddsSoft`. Source: as there (33 of 94). */
+  rivalStartOddsMedium: 0.35,
+  /** See `rivalStartOddsSoft`. Source: as there (0 of 94). */
+  rivalStartOddsHard: 0,
 });
