@@ -3,7 +3,7 @@
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { ConfigEffectiveValue } from '@pitwall/contracts';
-import { asOfEnded, copyPlain, type AsOfView, type DeepReadonly } from '@pitwall/engine/readers';
+import { asOfEnded, CAR_STATUS, carsInSessionOf, copyPlain, type AsOfView, type DeepReadonly, type EngineView } from '@pitwall/engine/readers';
 import { carId, carKeyOf, sessionUidString, toSessionTime, type CalibrationActiveValue, type CarKey, type RaceFormat, type DecisionRecord, type FeedId, type Known, type LiveSeat, type PriorsSnapshot, type ProfileSnapshot, type RunPriors, type SessionRef, type SessionTime, type TeamId, type TrackFile, type WeekendPhase } from '@pitwall/domain';
 import type { CalibrationStore } from '../calibration/store.ts';
 import type { ProfileStore, SlotIdentity } from '../drivers/store.ts';
@@ -170,6 +170,17 @@ export type PlanningHooks = {
 /** A race as the race-start commit reads it: its weekend, its format, our team, and each car slot's team and race number. */
 export type RaceStart = { weekendId: string; format: RaceFormat; team: TeamId; slots: ReadonlyArray<CarKey | undefined> };
 
+/**
+ * The race's car slots by team and race number (C62): the live state's identity (values) of the slots car-status has
+ * in the session (C43); `undefined` for every other slot and for one Participants has not filled yet.
+ */
+const raceSlotsOf = (view: EngineView): Array<CarKey | undefined> => {
+  const inSession = new Set<number>(carsInSessionOf(view.situation.byMachine[CAR_STATUS]));
+  return view.live.cars.map((car, slot) =>
+    inSession.has(slot) && car.updatedAt.participants !== undefined ? carKeyOf(car.identity) : undefined,
+  );
+};
+
 /** A feed's session uid and its player car's team (`null` before Participants), as reported to `teams`. */
 type Seat = { sessionUid: string; team: TeamId | null };
 
@@ -315,8 +326,6 @@ export class FeedPipeline {
   #decisions: SessionDecisions | undefined;
   /** The newest session's seat as last reported to `teams`. */
   #seat: Seat | undefined;
-  /** The newest session's car slots by team and race number, from its newest Participants (C62). */
-  #slots: CarKey[] = [];
   /** The newest session reached its race's first frame with its team known (the race-start commit's moment, C62d). */
   #raceStarted = false;
   /** Live: a stored session's recording being restored (C59); set from its first Session packet until it is live. */
@@ -947,7 +956,6 @@ export class FeedPipeline {
   #updateTeam(frame: Frame): void {
     const seat = this.#seat;
     const packet = frame.participants;
-    if (packet !== undefined) this.#slots = packet.participants.slice(0, packet.numActiveCars).map(carKeyOf);
     const team = packet?.participants[frame.playerCarIndex]?.teamId;
     if (seat === undefined || team === undefined || team === seat.team) return;
     this.#reportSeat({ sessionUid: seat.sessionUid, team });
@@ -978,7 +986,7 @@ export class FeedPipeline {
     this.#raceStarted = true;
     if (teams === undefined || !teams.claimRaceStart(this.#feedId)) return;
     if (this.#o.recorded !== undefined || this.#replaying || planning === undefined) return;
-    const race: RaceStart = { weekendId: session.key.weekendId, format: phase.format, team: seat.team, slots: this.#slots };
+    const race: RaceStart = { weekendId: session.key.weekendId, format: phase.format, team: seat.team, slots: raceSlotsOf(session.view) };
     this.#guarded('race-start commit', () => teams.commitToTeam(this.#feedId, planning.raceStarted?.(race) ?? []));
   }
 
@@ -988,7 +996,6 @@ export class FeedPipeline {
     this.#ended = undefined;
     this.#closedKey = undefined;
     this.#betweenSessions = false;
-    this.#slots = [];
     this.#raceStarted = false;
     this.#reportSeat({ sessionUid: String(event.sessionUid), team: null });
     this.#alerts.clearWriteFailures(this.#sessionTime());

@@ -50,11 +50,12 @@ const feedInsight = (
 
 /**
  * Problems with the feed itself; they hold before any session opens, so they are not calculator insights. Between
- * sessions the feed is not stale (C52); packet loss and a wrong format still hold.
+ * sessions none is raised (C52), so one that held at the session's end is cleared then.
  */
 export const feedInsights = (feedId: FeedId, feed: FeedMetricsView, at: SessionTime, betweenSessions = false): Insight[] => {
+  if (betweenSessions) return [];
   const insights: Insight[] = [];
-  if (!betweenSessions && isStale(feed)) {
+  if (isStale(feed)) {
     insights.push(feedInsight(feedId, at, 'feed.stale', 'advisory', { msSinceLastPacket: feed.msSinceLastPacket }));
   }
   if (isLossy(feed)) {
