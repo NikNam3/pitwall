@@ -5,11 +5,12 @@
 import { carId, known, unknown, type LapRecord, type OpenSpan, type WeekendPhase } from '@pitwall/domain';
 import { asOfNow, type AsOfView, type EngineView } from '@pitwall/engine/readers';
 import { describe, expect, it } from 'vitest';
-import { engineView, lap } from '../../../../test-support/builders/index.ts';
-import { raceHazardAsOf, type RaceHazardOutput } from '../../src/race-hazard/index.ts';
+import { engineView, lap, neutralisation } from '../../../../test-support/builders/index.ts';
+import { guardedView } from '../../../engine/test/support/scheduler.ts';
+import { RACE_HAZARD, raceHazardAsOf, type RaceHazardOutput } from '../../src/race-hazard/index.ts';
 import { RACE_HAZARD_BEHAVIOUR } from '../../src/race-hazard/behaviour.ts';
 import { NONE, openSpan, PRACTICE, QUALIFYING } from '../situated.ts';
-import { chanceOn, HAZARD, TRACK } from './support.ts';
+import { chanceOn, HAZARD, READS, TRACK } from './support.ts';
 
 /** The race's laps as the user entered them in the planning round. */
 const RACE_LAPS = 44;
@@ -90,6 +91,26 @@ describe("race-hazard's qualifying row (SP4.3d2 Task 6)", () => {
     expect(raceHazardAsOf(planningView(endedSession({ track: unknown('notApplicable') })))).toEqual(unknown('notApplicable'));
     const now = asOfNow(endedSession());
     expect(raceHazardAsOf({ ...now, fixed: { ...now.fixed, totalLaps: unknown('notReceived') } })).toEqual(unknown('insufficientData'));
+  });
+
+  it("the qualifying row reads no session phase: a guarded view (C41) with a qualifying red flag gives lastNeutralised null (F1)", () => {
+    const base = endedSession();
+    // a confirmed red flag of qualifying's own session phase, closed before the end (C20: in the projection's spans)
+    const red = neutralisation({ kind: 'red', machine: 'session-phase-qualifying', start: 200_000, end: 400_000, startFrame: 200, endFrame: 400 });
+    // the race's laps in the live session, so the as-of view's getters stay lazy under the guard (C41)
+    const view: EngineView = {
+      ...base,
+      live: { ...base.live, session: { ...base.live.session, totalLaps: RACE_LAPS } },
+      history: { ...base.history, spans: { ...base.history.spans, 'session-phase-qualifying': [red] } },
+    };
+    const value = valueOf(raceHazardAsOf(asOfNow(guardedView(view, READS, { unit: RACE_HAZARD }))));
+    // lastNeutralised null: no lap blocked, every lap the track file's chance from lap 1
+    expect(value.active).toBeNull();
+    expect(value.byLap.map((e) => e.lap)).toEqual(Array.from({ length: RACE_LAPS }, (_, i) => i + 1));
+    for (const e of value.byLap) {
+      expect(e.sc, `sc on lap ${e.lap}`).toBeCloseTo(chanceOn(HAZARD, e.lap, RACE_LAPS, 'sc'), 12);
+      expect(e.vsc, `vsc on lap ${e.lap}`).toBeCloseTo(chanceOn(HAZARD, e.lap, RACE_LAPS, 'vsc'), 12);
+    }
   });
 
   it('practice rows unchanged: a practice or none session stays notApplicable, also with the race laps set', () => {
