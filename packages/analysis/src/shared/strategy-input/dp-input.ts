@@ -168,10 +168,12 @@ export function toDpInput(input: StrategyInput, car: CarId): DpInput {
 
 /**
  * A car's SC/VSC reaction table (SP4.3d spec §5.2): its DP input's heaviest weather world's solve (`boxThisLap`'s);
- * `solutions` the worlds' solves in the input's order.
+ * `solutions` the solves `solveAll` gives. On a free start (§7.2) the solve of start compound `start` (the DP's best
+ * plan's), else the heaviest world's first.
  */
-export function reactionOf(dp: DpInput, solutions: readonly DpSolution[]): ReactionTable {
-  const solution = solutions[heaviest(dp)];
+export function reactionOf(dp: DpInput, solutions: readonly DpSolution[], start: NoiseCompound | null = null): ReactionTable {
+  const w = heaviest(dp);
+  const solution = solutions.find((s) => s.world === w && s.start === start) ?? solutions.find((s) => s.world === w);
   if (solution === undefined) throw new Error(`reactionOf: no solve of car ${dp.car}'s heaviest world`);
   return reactionTable(solution);
 }

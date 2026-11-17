@@ -60,8 +60,9 @@ function perStopCount(plans: readonly DpPlan[], max: number): DpPlan[] {
 }
 
 /**
- * Car `car`'s candidates from its DP result and its weather worlds' solves (`solutions[w]` world w's `solveWorld`, a
- * plan's `world` indexing it; queried with `bestWith`, never solved again; spec §5.4); the committed row is the job's.
+ * Car `car`'s candidates from its DP result and its solves (`solveAll`'s: per weather world, on a free start per start
+ * compound and world; a plan's `world` and `startCompound` name its solve; queried with `bestWith` on the best plan's
+ * start, never solved again; spec §5.4, SP4.3d spec §7.2); the committed row is the job's.
  */
 export function candidatesOf(start: StartingPoint, car: CarId, dp: DpResult, solutions: readonly DpSolution[], config: CandidatesConfig): McCandidate[] {
   const out: McCandidate[] = [];
@@ -84,9 +85,14 @@ export function candidatesOf(start: StartingPoint, car: CarId, dp: DpResult, sol
     if (plan !== best && allowed(plan)) add(policyOf(plan), 'dp');
   }
 
-  /** `bestWith`'s plan of world `w` whose first stop is `stop`, where it is one and allowed. */
+  // the best plan's start: a free start's solves are per start compound and world (`solveAll`), queried on its start
+  const bestStart = best.startCompound ?? null;
+  const solveOf = (w: number): DpSolution | undefined => solutions.find((s) => s.world === w && s.start === bestStart);
+  const worlds = [...new Set(solutions.map((s) => s.world))].sort((a, b) => a - b);
+
+  /** `bestWith`'s plan of world `w` (on the best plan's start) whose first stop is `stop`, where it is one and allowed. */
   const query = (w: number, stop: Stop): DpPlan | null => {
-    const s = solutions[w];
+    const s = solveOf(w);
     const q = s === undefined ? null : bestWith(s, { stopLap: stop.lap, compound: stop.compound });
     return q !== null && allowed(q) ? q : null;
   };
@@ -107,7 +113,7 @@ export function candidatesOf(start: StartingPoint, car: CarId, dp: DpResult, sol
   for (const [rival, rule] of mirrors) {
     const stop = rival === undefined ? undefined : rivalPlainPolicy(start, rival, null).stops[0];
     if (stop === undefined) continue;
-    for (let w = 0; w < solutions.length; w++) {
+    for (const w of worlds) {
       const q = query(w, stop);
       if (q === null) continue;
       add(policyOf(q), 'rule', rule);
