@@ -27,8 +27,9 @@
 //    the bridge's message as its hover; the other fields have no `data-role="warning"`;
 //  - compact: the slot and DP lines only (`rows.ts` compact), no strip, no ΔTIME, no buttons;
 //  - the presentation table: under a phase whose row hides the actions (`finished`), the lines stay and no button is drawn;
-//  - option `source: planning` (4.3d2): the kit's notApplicable mark with its reason on hover, no lines, full and compact;
-//    an unknown `plan.value` the same; no `plan` (computing): nothing drawn (the panel frame shows its state).
+//  - option `source: planning` outside the planning round (`plans.prepared` closed, SP4.3d2 Task 12): the kit's
+//    notApplicable mark with its reason on hover, no lines, full and compact; an unknown `plan.value` the same (the
+//    planning round itself: PlanBoard.planning.test.ts); no `plan` (computing): nothing drawn (the panel frame shows its state).
 // `send` comes from the panel (kit `getUiActions`); test/kit/ActionsHarness.svelte stands in for it with the widget's
 // declared actions (C74), and the panel's resolved link is a non-default feed (the action carries `link.feedId`, R24).
 // Needs `PlanBoard.svelte` (implementation): fails until it exists.
@@ -53,7 +54,7 @@ const SIZES = { compact: { cols: 37, rows: 7 }, full: { cols: 82, rows: 13 } } a
 const LINK: ResolvedLink = { group: 1, feedId: feedId('20778'), primary: carId(0), compare: [], window: { kind: 'live' } };
 
 type Data = Partial<(typeof cases)[keyof typeof cases]>;
-type Opts = { mode?: keyof typeof SIZES; source?: 'live' | 'planning'; respond?: () => Promise<ActionOutcome> };
+type Opts = { mode?: keyof typeof SIZES; source?: 'auto' | 'live' | 'planning'; respond?: () => Promise<ActionOutcome> };
 
 function mount(data: Data, { mode = 'full', source = 'live', respond = () => Promise.resolve({ ok: true }) }: Opts = {}) {
   vi.stubEnv('DEV', true);
@@ -144,9 +145,11 @@ describe('plan board: rows and states per the mockup', () => {
     expect(textOf(get(c, 'dp-1'))).toContain('7.86±.18');
   });
 
-  it('notApplicable and planning: the kit\'s mark with its reason, no lines; computing: nothing drawn', () => {
+  // SP4.3d2 Task 12: `source: planning` renders the planning round (PlanBoard.planning.test.ts); outside the round it
+  // is notApplicable, whatever the live data
+  it('notApplicable and planning outside the round: the kit\'s mark with its reason, no lines; computing: nothing drawn', () => {
     for (const mode of ['full', 'compact'] as const) {
-      for (const [data, source] of [[cases.notApplicable, 'live'], [cases.planning, 'planning']] as const) {
+      for (const [data, source] of [[cases.notApplicable, 'live'], [cases.planningNotApplicable, 'planning']] as const) {
         const { container: c } = mount(data, { mode, source });
         expect(textOf(c), `${mode} ${source}`).toBe(unknownMark.notApplicable);
         expect(hovers(c.querySelector('[title]') ?? c), `${mode} ${source}`).toContain(unknownReason.notApplicable);

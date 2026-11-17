@@ -8,8 +8,8 @@
 // Needs `presentation.ts` (implementation): fails at typecheck until it exists.
 import { sessionPhaseRaceSpans } from '@pitwall/domain';
 import { describe, expect, it } from 'vitest';
-import { phaseSpans } from './fixtures.ts';
-import { actionsShown, presentation } from './presentation.ts';
+import { CLOSED, phaseSpans, round } from './fixtures.ts';
+import { actionsShown, presentation, variantOf } from './presentation.ts';
 
 const KINDS = sessionPhaseRaceSpans.kinds;
 const HIDDEN = ['finished', 'postSession'];
@@ -22,6 +22,26 @@ describe('the plan-board presentation table: session-phase-race', () => {
   it('hides the actions once the race is finished; shows them under every other kind', () => {
     const rows = presentation.situations['session-phase-race'] as Record<string, { actions: string }>;
     for (const kind of KINDS) expect(rows[kind], kind).toEqual({ actions: HIDDEN.includes(kind) ? 'hidden' : 'shown' });
+  });
+});
+
+// SP4.3d2 Task 12 (C66): the table also maps the planning round's state (`plans.prepared.open`) to the board's variant;
+// `variantOf(source, prepared: PlanningRound | undefined): 'live' | 'planning'`: `live` and `planning` as chosen; `auto`
+// the round state's row: planning while the round is open, live when it is closed or the topic has no value.
+describe('the plan-board presentation table: the planning round', () => {
+  it('has a row for each round state, and no other: open → planning, closed → live', () => {
+    expect(Object.keys(presentation.round).sort()).toEqual(['closed', 'open']);
+    expect(presentation.round).toEqual({ open: { variant: 'planning' }, closed: { variant: 'live' } });
+  });
+
+  it('variantOf: auto follows the round state\'s row; live and planning as chosen', () => {
+    expect(variantOf('auto', round())).toBe('planning');
+    expect(variantOf('auto', CLOSED)).toBe('live');
+    expect(variantOf('auto', undefined)).toBe('live');
+    for (const prepared of [round(), CLOSED, undefined]) {
+      expect(variantOf('live', prepared)).toBe('live');
+      expect(variantOf('planning', prepared)).toBe('planning');
+    }
   });
 });
 
