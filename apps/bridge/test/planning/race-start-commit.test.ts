@@ -81,6 +81,10 @@ type SessionSpec = {
   events?: (index: number) => ReadonlyArray<Parameters<ScenarioBuilder['event']>[0]>;
   /** Frame indexes whose packets start with the Session and Participants again, as the game resends them. */
   resendAt?: readonly number[];
+  /** The Participants packet's `numActiveCars` (default: every slot of `participants`). */
+  numActiveCars?: number;
+  /** Per slot, its LapData result status on every frame (the game's code: 1 inactive, 2 active, 7 retired; default 2). */
+  resultStatusOf?: (car: number) => number;
 };
 
 const defaultLap = (index: number): number => 1 + Math.floor(index / LAP_FRAMES);
@@ -94,18 +98,23 @@ const sessionPackets = (s: SessionSpec): Packets => {
     sessionType: s.type, weekendStructure: [...structure], numSessionsInWeekend: structure.length,
     weekendLinkIdentifier: WEEKEND, totalLaps: RACE_LAPS,
   };
+  const participantsPacket = () => ({
+    participants: participants.map((p) => ({ ...p })),
+    ...(s.numActiveCars !== undefined && { numActiveCars: s.numActiveCars }),
+  });
   const b = new ScenarioBuilder({ sessionUid: s.uid, cars: participants.length, player: s.player ?? 0 })
     .session(session)
-    .participants({ participants: participants.map((p) => ({ ...p })) });
+    .participants(participantsPacket());
   const n = s.frames ?? 30;
   for (let i = 0; i < n; i++) {
-    if (i > 0 && s.resendAt?.includes(i)) b.session(session).participants({ participants: participants.map((p) => ({ ...p })) });
+    if (i > 0 && s.resendAt?.includes(i)) b.session(session).participants(participantsPacket());
     for (const details of s.events?.(i) ?? []) b.event(details);
     b.frame((f) => {
       const lap = lapOf(i);
-      for (const car of f.lapData.lapData.slice(0, participants.length)) {
+      f.lapData.lapData.slice(0, participants.length).forEach((car, index) => {
         Object.assign(car, { currentLapNum: lap, lapDistance: ((i % LAP_FRAMES) * 50) + 10, totalDistance: i * 50 + 10 });
-      }
+        if (s.resultStatusOf !== undefined) car.resultStatus = s.resultStatusOf(index);
+      });
     });
   }
   if (s.send ?? true) b.event({ code: 'SEND' });
@@ -728,5 +737,46 @@ describe('the race-start commit (Task 11; C62d, C76, C1a)', { timeout: 120_000 }
       { kind: 'planSaved', carId: raceCar, slot: 'A', policy: POLICY_A },
       { kind: 'planCommitted', carId: raceCar, policy: POLICY_A, slot: 'A' },
     ]), { timeout: 20_000 });
+  });
+});
+
+// SP4.3d2 final review F1 (C13, C43; ruling R36): the race's slots are the slots car-status has in the session (not
+// `absent`), with their live-state identity (team and race number), never a slice by the Participants signal
+// `numActiveCars`. car-status counts a car out of the race (retired) as one more slot in use than `numActiveCars`.
+describe('the race-start commit takes the race slots from car-status (final review F1; C13, C43)', { timeout: 120_000 }, () => {
+  it('slot past numActiveCars', async () => {
+    const b = await bridge({ feeds: [A] });
+    // eight slots, slot 3 retired: numActiveCars counts 7, car-status has 8 slots in use; race number 20 drives slot 7
+    const race: Participant[] = [
+      { teamId: TEAM, raceNumber: 1 }, { teamId: 4, raceNumber: 2 }, { teamId: 4, raceNumber: 3 }, { teamId: 5, raceNumber: 4 },
+      { teamId: 5, raceNumber: 5 }, { teamId: 6, raceNumber: 6 }, { teamId: 6, raceNumber: 7 }, { teamId: TEAM, raceNumber: 20 },
+    ];
+    const prepared: PreparedPlans = {
+      laps: RACE_LAPS,
+      cars: [PREPARED.cars[0]!, { raceNumber: 20, slots: { C: POLICY_C }, active: 'C' }],
+    };
+    writePrepared(b.dataDir, 'grandPrix', prepared);
+    b.play(sessionPackets({ uid: RACE, type: 15, participants: race, numActiveCars: 7, resultStatusOf: (car) => (car === 3 ? 7 : 2), frames: 60 }));
+    await b.ended(1);
+    await b.stop();
+
+    // slot 7 competes (car-status), so race number 20's plans are committed to it
+    expectCommitted(b.decisions(RACE, 0).map(given), [CAR0, [7, prepared.cars[1]!]], 'the log');
+    expectCommitted(b.sidecar(RACE, 0), [CAR0, [7, prepared.cars[1]!]], 'the sidecar');
+  });
+
+  it('absent slot', async () => {
+    const b = await bridge({ feeds: [A] });
+    writePrepared(b.dataDir, 'grandPrix', PREPARED);
+    // slot 1 (race number 2, team 3) lies below numActiveCars but is inactive: car-status has it absent
+    b.play(sessionPackets({ uid: RACE, type: 15, resultStatusOf: (car) => (car === 1 ? 1 : 2), frames: 60 }));
+    await b.ended(1);
+    await b.stop();
+
+    // car 0 is committed; the absent slot gets nothing
+    const decisions = b.decisions(RACE, 0).map(given);
+    expectCommitted(decisions, [CAR0], 'the log');
+    expect(ofCar(decisions, 1)).toEqual([]);
+    expectCommitted(b.sidecar(RACE, 0), [CAR0], 'the sidecar');
   });
 });
