@@ -1,7 +1,8 @@
 // The planning job's budget (SP4.3d2 Task 9 row 6; SP4.3d spec §8 "the planning job inside the strategy job's budget
 // per car"; C51): on the long-race builder (70 laps, 20 cars) recast as the ended qualifying session
 // (`./planning-support.ts`), the race's laps entered as 70, five prepared slots per car (A, B, C, G1, G2, each with a
-// start compound; A active), each car's part at the config's `maxScenarioPolicies` within 5 s single thread. The cap is
+// start compound; A active), each car's part at the config's `maxScenarioPolicies` within the strategy job's per-part
+// budget (`JOB_MS` of `strategy.budget.test.ts`, 7 s; ruling R29) single thread. The cap is
 // a count (C2): a miss lowers the count, never raises the budget. Best of warm passes (docs/testing.md).
 import type { CarId, Policy, Slot } from '@pitwall/domain';
 import { createRng } from '@pitwall/engine/readers';
@@ -13,8 +14,11 @@ import { planningParts, qualifyingAsOf, type PreparedRound } from './planning-su
 import { LONG_RACE_OURS_SETS, OURS } from './support.ts';
 
 const LAPS = 70;
-/** One car's part of the planning job. */
-const PART_MS = 5_000;
+/**
+ * One car's part of the planning job: the strategy job's `JOB_MS` (`strategy.budget.test.ts`), mirrored; spec §8 "the
+ * planning job inside the strategy job's budget per car" (R29).
+ */
+const PART_MS = 7_000;
 
 /** Five prepared slots, each from the start: its start compound and its stops. */
 const SLOTS: Record<Slot, Policy> = {
@@ -26,7 +30,7 @@ const SLOTS: Record<Slot, Policy> = {
 };
 
 describe('planning budget (SP4.3d2 Task 9)', () => {
-  it('6: budget: five slots per car, each car\'s part within 5 s on the long-race builder', () => {
+  it('6: budget: five slots per car, each car\'s part within the strategy job\'s 7 s on the long-race builder', () => {
     const cap = STRATEGY_CONFIG.defaults.maxScenarioPolicies;
     const asOf = qualifyingAsOf(longRace(), { laps: LAPS, sets: LONG_RACE_OURS_SETS, config: { maxScenarioPolicies: cap } });
     const prepared = Object.fromEntries(OURS.map((car) => [car, { saved: { ...SLOTS }, active: 'A' }])) as PreparedRound;
