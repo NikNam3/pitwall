@@ -4,7 +4,7 @@ import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { ConfigEffectiveValue } from '@pitwall/contracts';
 import { asOfEnded, type AsOfView, type DeepReadonly } from '@pitwall/engine/readers';
-import { carId, sessionUidString, toSessionTime, type CalibrationActiveValue, type DecisionRecord, type FeedId, type Known, type LiveSeat, type PriorsSnapshot, type ProfileSnapshot, type RunPriors, type SessionRef, type SessionTime, type TeamId, type TrackFile, type WeekendPhase } from '@pitwall/domain';
+import { carId, carKeyOf, sessionUidString, toSessionTime, type CalibrationActiveValue, type CarKey, type RaceFormat, type DecisionRecord, type FeedId, type Known, type LiveSeat, type PriorsSnapshot, type ProfileSnapshot, type RunPriors, type SessionRef, type SessionTime, type TeamId, type TrackFile, type WeekendPhase } from '@pitwall/domain';
 import type { CalibrationStore } from '../calibration/store.ts';
 import type { ProfileStore, SlotIdentity } from '../drivers/store.ts';
 import { profilesSidecarPath, recordingProfiles } from './profile-sidecar.ts';
@@ -160,7 +160,15 @@ export type EndedSession = { weekendId: string; trackId: number; phase: WeekendP
 export type PlanningHooks = {
   sessionStarted(feedId: FeedId): void;
   sessionEnded(feedId: FeedId, ended: EndedSession): void;
+  /**
+   * A live race's first frame with its team known, on the team's first feed (C62d, C76): the prepared plans for the
+   * race as the plan decisions the team's feeds commit; none without prepared plans.
+   */
+  raceStarted?(race: RaceStart): PlanDecision[];
 };
+
+/** A race as the race-start commit reads it: its weekend, its format, our team, and each car slot's team and race number. */
+export type RaceStart = { weekendId: string; format: RaceFormat; team: TeamId; slots: ReadonlyArray<CarKey | undefined> };
 
 /** A feed's session uid and its player car's team (`null` before Participants), as reported to `teams`. */
 type Seat = { sessionUid: string; team: TeamId | null };
@@ -291,6 +299,10 @@ export class FeedPipeline {
   #decisions: SessionDecisions | undefined;
   /** The newest session's seat as last reported to `teams`. */
   #seat: Seat | undefined;
+  /** The newest session's car slots by team and race number, from its newest Participants (C62). */
+  #slots: CarKey[] = [];
+  /** The newest session reached its race's first frame with its team known (the race-start commit's moment, C62d). */
+  #raceStarted = false;
   /** Live: a stored session's recording being restored (C59); set from its first Session packet until it is live. */
   #restore: Restore | undefined;
   /** The continued session's first run, while its recording replays: the session the replay starts takes it. */
@@ -340,6 +352,7 @@ export class FeedPipeline {
     this.#sweep = this.#ownSweep();
     this.done = this.#done.promise;
     this.done.catch(() => {});
+    opts.teams?.connect(opts.feedId, this);
   }
 
   /**
@@ -875,6 +888,8 @@ export class FeedPipeline {
         if (this.#session === undefined) return;
         this.#updatePosition(event.frame);
         this.#updateTeam(event.frame);
+        // Before the frame, like the late join's: the frame carries the commit, and a replay places it on the same frame (C76).
+        this.#raceStart();
         this.#session?.push(event.frame);
         return;
       case 'sessionEnded':
@@ -897,7 +912,9 @@ export class FeedPipeline {
    */
   #updateTeam(frame: Frame): void {
     const seat = this.#seat;
-    const team = frame.participants?.participants[frame.playerCarIndex]?.teamId;
+    const packet = frame.participants;
+    if (packet !== undefined) this.#slots = packet.participants.slice(0, packet.numActiveCars).map(carKeyOf);
+    const team = packet?.participants[frame.playerCarIndex]?.teamId;
     if (seat === undefined || team === undefined || team === seat.team) return;
     this.#reportSeat({ sessionUid: seat.sessionUid, team });
     // A continued recording's replay (C59) has them in its decisions sidecar, like a replay.
@@ -910,12 +927,35 @@ export class FeedPipeline {
     this.#o.teams?.report(this.#feedId, seat.sessionUid, seat.team);
   }
 
+  /**
+   * The race-start commit (C62d, C76; SP4.3d spec §7.0 rules 7–8): at the session's first frame with its weekend phase
+   * `race` (as the machine decided it up to the frame before) and its team known, the team's first feed in the session commits the prepared plans for (weekend, the race's
+   * format, team) to every team feed then running (`TeamFeeds.commitToTeam`), once; a feed that joins later is handed
+   * them by `#updateTeam`. A replay, also a continued recording's (C59), never reads the file: its decisions sidecar holds
+   * them; it still claims the commit, so no teammate commits it a second time.
+   */
+  #raceStart(): void {
+    const session = this.#session;
+    const seat = this.#seat;
+    const { teams, planning } = this.#o;
+    if (this.#raceStarted || session === undefined || seat === undefined || seat.team === null) return;
+    const phase = session.weekendPhase;
+    if (phase.kind !== 'race') return;
+    this.#raceStarted = true;
+    if (teams === undefined || !teams.claimRaceStart(this.#feedId)) return;
+    if (this.#o.recorded !== undefined || this.#replaying || planning === undefined) return;
+    const race: RaceStart = { weekendId: session.key.weekendId, format: phase.format, team: seat.team, slots: this.#slots };
+    this.#guarded('race-start commit', () => teams.commitToTeam(this.#feedId, planning.raceStarted?.(race) ?? []));
+  }
+
   /** A new session: every topic of the feed starts over, apart from the feed's own insights that still hold. */
   #startSession(event: SessionStarted): void {
     const { feedId, hub, log, dumpsDir } = this.#o;
     this.#ended = undefined;
     this.#closedKey = undefined;
     this.#betweenSessions = false;
+    this.#slots = [];
+    this.#raceStarted = false;
     this.#reportSeat({ sessionUid: String(event.sessionUid), team: null });
     this.#alerts.clearWriteFailures(this.#sessionTime());
     hub.resetFeed(feedId);
