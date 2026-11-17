@@ -186,3 +186,9 @@ Recording `2026-11-16_23-49-46_5929b668ce223b5d_car19.pwrec.gz` (726 MB; the bri
 - **Workbooks** reset to the shipped defaults via `workbook.reset` (backups `*.bak-2026-11-17`).
 - **A session without an end never reaches the driver profile (contract gap, C59, C62c).** Singapore 2026-11-16 (game crash one lap before the flag) is stored with all its facts, but its car-driver `human` span for car 19 never closed, so DR's profile does not count the race. A session ends only by its end signal's grace window (C59); a crash sends none. Proposal for the user: a session also ends when its recording stops without an end signal (a long feed silence live, end of file in a replay).
 - DR also linked to Ferrari #2 (the human "david‑reinhardt" in four Japan sessions of 2026-11-10).
+
+### 2026-11-17: Texas weekend, live notes (DR feed 20777 car 1, Asymetrisch feed 20778 car 0, both Mercedes)
+
+- **Race numbers are the players' own:** Asymetrisch Mercedes #64 (game name "Spieler:in"), DR Mercedes #2 ("david‑reinhardt"). DR's #63 link did not match; Mercedes #2 linked during practice, so DR ran practice without a profile (takes effect at qualifying).
+- **Human cars show the game name, not the person (user, 2026-11-17).** Asymetrisch's car reads "SPI" (from "Spieler:in"). Wanted: a linked human car shows its person's name (e.g. ASY), in every display and on the track maps.
+- Practice: both cars on 7-lap hard stints first.
