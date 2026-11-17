@@ -184,3 +184,5 @@ Recording `2026-11-16_23-49-46_5929b668ce223b5d_car19.pwrec.gz` (726 MB; the bri
 - **Singapore's +6 s pit loss vs real F1 is not a game-wide offset:** Texas F1 25 ≈ 19.2–19.9 s vs 20.2 s real.
 - **Driver links:** DR → Mercedes #63 (and Ferrari #44); Asymetrisch → Mercedes #12, #64. The 224 old #63 sessions (Japan, Asymetrisch) are excluded from DR. Gap (C62c): a seat link covers every session, so those laps cannot count for Asymetrisch.
 - **Workbooks** reset to the shipped defaults via `workbook.reset` (backups `*.bak-2026-11-17`).
+- **A session without an end never reaches the driver profile (contract gap, C59, C62c).** Singapore 2026-11-16 (game crash one lap before the flag) is stored with all its facts, but its car-driver `human` span for car 19 never closed, so DR's profile does not count the race. A session ends only by its end signal's grace window (C59); a crash sends none. Proposal for the user: a session also ends when its recording stops without an end signal (a long feed silence live, end of file in a replay).
+- DR also linked to Ferrari #2 (the human "david‑reinhardt" in four Japan sessions of 2026-11-10).
