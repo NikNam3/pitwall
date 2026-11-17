@@ -1,13 +1,16 @@
 // One scenario (SP4.3b spec §7.1): its neutralisations drawn from `race-hazard`'s tables, and every car's policy in it
 // (our cars' stop lists, SP4.3d spec §5.1, with their SC/VSC reaction, §5.2, `reaction.ts`). Every draw is keyed by (scenario, car, lap, purpose) under the
-// run's base seed (C2, S25), so a scenario is the same for every candidate (common random numbers).
-import type { ForecastResult, Policy, Scenario, StartingPoint } from '@pitwall/domain';
+// run's base seed (C2, S25), so a scenario is the same for every candidate (common random numbers). On a grid start
+// (SP4.3d spec §7.2) the rivals' start draws are the scenario's too, and every forecast fits the start compounds
+// the policies carry (`start.ts`).
+import type { ForecastResult, NoiseCompound, Policy, Scenario, StartingPoint } from '@pitwall/domain';
 import type { Rng } from '@pitwall/engine/readers';
 import { drawsInto, streamKey, uniform, type Draws } from '../race-forecast/draws.ts';
 import { raceForecast } from '../race-forecast/index.ts';
 import { MC_PURPOSE } from './constants.ts';
 import { hasStopAhead, rivalPlan, rivalStops } from './rivals.ts';
 import { reactedPolicy } from './reaction.ts';
+import { drawStarts, fittedStart, freeAtStart } from './start.ts';
 import type { McInput, Reactions, RivalRules } from './types.ts';
 import { drawWeather, wetnessPath, type WeatherLap } from './weather.ts';
 
@@ -68,9 +71,10 @@ export function drawNeutralisations(start: StartingPoint, hazard: McInput['hazar
 
 /**
  * One scenario as every candidate shares it: its neutralisations and wetness path, the rivals' policies (and their dry
- * stop laps, -1 none), its rain timeline (`null` without a forecast).
+ * stop laps, -1 none), its rain timeline (`null` without a forecast), and its starting point with the rivals' drawn
+ * starts (`start.ts`; the run's own without any).
  */
-export type ScenarioEntry = { scenario: Scenario; rivals: Policy[]; rivalLaps: Int16Array; weather: WeatherLap[] | null };
+export type ScenarioEntry = { scenario: Scenario; rivals: Policy[]; rivalLaps: Int16Array; weather: WeatherLap[] | null; start: StartingPoint };
 
 /** A run's fixed parts: the starting point, our cars, the two base seeds, the scenarios drawn so far, the calls made. */
 export type Run = {
@@ -125,10 +129,14 @@ export function scenarioOf(run: Run, id: number): ScenarioEntry {
   const scenario: Scenario = { id, plain: false, neutralisations: drawNeutralisations(start, run.hazard, draws) };
   const weather = drawWeather(start, draws);
   if (weather !== null) scenario.wetnessByLap = wetnessPath(weather);
+  // the rivals' grid starts: a drawn start's compound and stop window (`start.ts`), before their stops are drawn
+  const { start: drawnStart, drawn } = drawStarts(start, run.ours, draws);
   const rivalLaps = new Int16Array(start.cars);
-  rivalStops(start, run.ours, scenario, run.rules, draws, rivalLaps);
-  const rivals = Array.from({ length: start.cars }, (_, k) => (run.ours.has(k) ? NONE : rivalPlan(start, k, rivalLaps[k] ?? -1, weather, scenario.neutralisations, run.rules.reactionLaps)));
-  const entry: ScenarioEntry = { scenario, rivals, rivalLaps, weather };
+  rivalStops(drawnStart, run.ours, scenario, run.rules, draws, rivalLaps);
+  const rivals = Array.from({ length: start.cars }, (_, k) =>
+    run.ours.has(k) ? NONE : withStart(rivalPlan(drawnStart, k, rivalLaps[k] ?? -1, weather, scenario.neutralisations, run.rules.reactionLaps), drawn[k] ?? null),
+  );
+  const entry: ScenarioEntry = { scenario, rivals, rivalLaps, weather, start: drawnStart };
   run.scenarios.set(id, entry);
   return entry;
 }
@@ -142,10 +150,13 @@ export function drawnScenario(input: McInput, rng: Rng, id: number): { weather: 
   return { weather, rivals: entry.rivals };
 }
 
-/** One `raceForecast` call, counted. */
+/** `policy` with the start compound `compound` (`null`: as it is). */
+const withStart = (policy: Policy, compound: NoiseCompound | null): Policy => (compound === null ? policy : { startCompound: compound, stops: policy.stops });
+
+/** One `raceForecast` call, counted; every car whose policy carries a `startCompound` fitted on a new set of it (`start.ts`). */
 export function forecast(run: Run, policies: readonly Policy[], scenario: Scenario, opts?: { trace?: boolean; toLap?: number }): ForecastResult {
   run.calls++;
-  return raceForecast(run.start, policies, scenario, run.forecastRng, opts);
+  return raceForecast(fittedStart(run.start, policies), policies, scenario, run.forecastRng, opts);
 }
 
 /**
@@ -162,7 +173,9 @@ export function policiesIn(run: Run, id: number, car: number, policy: Policy | n
     const own = c === car && policy !== null ? policy : (run.fixed[c] ?? NONE);
     const table = run.reactions[c];
     const played = table === undefined || neutralisations.length <= skip ? own : reactedPolicy(table, run.start, c, own, neutralisations, skip);
-    policies[c] = { stops: played.stops.map((s) => ({ lap: s.lap, compound: s.compound })) };
+    const stops = played.stops.map((s) => ({ lap: s.lap, compound: s.compound }));
+    // a free start's car starts on its policy's compound; any other car on its fitted one
+    policies[c] = withStart({ stops }, freeAtStart(run.start, c) ? (own.startCompound ?? null) : null);
   }
   if (run.rules.coverRule) cover(run, policies, entry);
   return policies;
@@ -174,8 +187,8 @@ export function policiesIn(run: Run, id: number, car: number, policy: Policy | n
  * last stop finds the gaps.
  */
 function cover(run: Run, policies: Policy[], drawn: ScenarioEntry): void {
-  const { scenario, rivalLaps, weather } = drawn;
-  const { start } = run;
+  // the scenario's starting point: a rival's drawn start (its compound, its window) stays its own when it covers
+  const { scenario, rivalLaps, weather, start } = drawn;
   let last = -1;
   for (const c of run.ours) for (const s of policies[c]?.stops ?? []) if (s.lap >= start.lap && s.lap + 1 < start.lapsTotal) last = Math.max(last, s.lap);
   if (last === -1) return;
@@ -192,7 +205,7 @@ function cover(run: Run, policies: Policy[], drawn: ScenarioEntry): void {
         const planned = rivalLaps[k] ?? -1;
         const now = policies[k]?.stops[0]?.lap ?? planned;
         if (now !== -1 && now <= s.lap + 1) continue;
-        policies[k] = rivalPlan(start, k, s.lap + 1, weather, scenario.neutralisations, run.rules.reactionLaps);
+        policies[k] = withStart(rivalPlan(start, k, s.lap + 1, weather, scenario.neutralisations, run.rules.reactionLaps), policies[k]?.startCompound ?? null);
       }
     }
   }

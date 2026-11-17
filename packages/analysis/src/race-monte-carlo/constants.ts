@@ -9,7 +9,7 @@
 export const RESCORE_SHARE = 0.25;
 
 /** The draws' purposes of the scenario streams (spec §7.1); apart from `race-forecast`'s, which use another base seed. */
-export const MC_PURPOSE = { scStart: 1, scLength: 2, vscStart: 3, vscLength: 4, activeLength: 5, rivalLap: 6, rivalSc: 7, rain: 8, forecastShift: 9 } as const;
+export const MC_PURPOSE = { scStart: 1, scLength: 2, vscStart: 3, vscLength: 4, activeLength: 5, rivalLap: 6, rivalSc: 7, rain: 8, forecastShift: 9, startOption: 10 } as const;
 
 // The rain timeline's wetness dynamics are `weather-paths`' (SP4.3c O3b); the scenario draws its `u` and its shift.
 

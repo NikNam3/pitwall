@@ -261,6 +261,11 @@ export class FeedPipeline {
    * session of another key starts.
    */
   #closedKey: SessionKey | undefined;
+  /**
+   * From a session's end (grace expiry, `session.end`, the source's end) until the next session's first packet: the feed
+   * has no session, so its silence is not stale (C52).
+   */
+  #betweenSessions = false;
   /** Live, continuing recordings: the run's stale sweep (`staleSweep`, or the feed's own). */
   readonly #sweep: Pick<StaleSweep, 'request' | 'sessionSeen'> | undefined;
   /** The feed has received its first Session packet (told to the sweep). */
@@ -435,7 +440,7 @@ export class FeedPipeline {
     if (staleCheck !== undefined) {
       // While a restart's restore replays a recording, the packets wait in its buffer: the feed is not silent.
       this.#staleTimer = setInterval(() => this.#guarded('stale check', () => {
-        if (this.#restore === undefined) this.#checkFeed(staleCheck.clock());
+        if (this.#restore === undefined) this.#tick(staleCheck.clock());
       }), staleCheck.everyMs);
     }
     this.#finish().then(this.#done.resolve, this.#done.reject);
@@ -616,6 +621,7 @@ export class FeedPipeline {
     const { sessionUid, weekendId, playerCar } = stored.row;
     const restore: Restore = { key: { sessionUid, weekendId, playerCar }, trackId: stored.row.trackId, buffer: [first], decisions: [], done: Promise.resolve() };
     this.#restore = restore;
+    this.#betweenSessions = false;
     restore.done = this.#replayStored(stored, first.receivedAtMs)
       .catch((error: unknown) => {
         this.#log.error({ feedId: this.#feedId, sessionUid: stored.row.sessionUid, pwrecPath: stored.path, err: error }, 'stored recording not continued');
@@ -698,6 +704,15 @@ export class FeedPipeline {
     }
   }
 
+  /**
+   * The live stale timer at `nowMs` (the receive clock): a session whose SEND grace window has passed ends now, whether or
+   * not another packet arrives (C59), exactly as the next packet would end it; then the feed's health is checked.
+   */
+  #tick(nowMs: number): void {
+    for (const event of this.#tracker.expire(nowMs)) this.#handle(event, nowMs);
+    this.#checkFeed(nowMs);
+  }
+
   /** One datagram: decoded, pushed through the tracker, recorded in the session file, and the feed's health checked. */
   #process({ receivedAtMs, bytes }: RawPacket): void {
     this.#lastReceivedAtMs = receivedAtMs;
@@ -775,6 +790,7 @@ export class FeedPipeline {
     const { feedId, hub, log, dumpsDir } = this.#o;
     this.#ended = undefined;
     this.#closedKey = undefined;
+    this.#betweenSessions = false;
     this.#reportSeat({ sessionUid: String(event.sessionUid), team: null });
     this.#alerts.clearWriteFailures(this.#sessionTime());
     hub.resetFeed(feedId);
@@ -938,6 +954,7 @@ export class FeedPipeline {
     if (session === undefined) return;
     this.#session = undefined;
     this.#ended = session;
+    this.#betweenSessions = true;
     // A session that ended runs no seat any more (C62c).
     this.#reportHumanSeats([]);
     this.#jobs.sessionEnded();
@@ -948,12 +965,13 @@ export class FeedPipeline {
   /** Publishes `feed.status` and the feed-health insights as they stand at `nowMs`. */
   #checkFeed(nowMs: number, metrics: FrameMetrics = this.#tracker.metrics): void {
     const view = this.#monitor.view(metrics, nowMs);
-    const status = feedStatusOf(this.#feedId, view, this.#closedKey !== undefined);
+    const between = this.#betweenSessions;
+    const status = feedStatusOf(this.#feedId, view, { sessionEnded: this.#closedKey !== undefined, betweenSessions: between });
     // The pre-session producer: the feed is watched before any session exists, so the pipeline publishes it per
     // datagram. Inside a session the `feed-status` feature also publishes the same value per frame. Two producers
     // by decision, until a feed-level binding kind replaces this one (sub-project 2).
     this.#o.hub.publishState(this.#feedId, 'feed.status', () => status);
-    this.#publishInsights(this.#alerts.feedChanged(view, this.#sessionTime()));
+    this.#publishInsights(this.#alerts.feedChanged(view, this.#sessionTime(), between));
   }
 
   /** A result only ever arrives for the running session: `#endSession` drops the runs of an ended one. */
