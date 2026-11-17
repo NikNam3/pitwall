@@ -21,7 +21,7 @@ import { DEFAULT_WORKBOOKS_DIR, seedDefaultWorkbooks } from '../ui-state/default
 import { UiState } from '../ui-state/ui-state.ts';
 import { StartupError } from '../startup-error.ts';
 import type { Db, SessionKey, StoredSessionRow } from '../storage/db.ts';
-import { WeekendRepository } from '../storage/weekend-repository.ts';
+import { isStale, WeekendRepository } from '../storage/weekend-repository.ts';
 import { WsServer, type ActionOutcome, type ChooseAction, type EndSessionAction } from '../ws/server.ts';
 import { recordingDecisions } from '../pipeline/decision-sidecars.ts';
 import { recordingProfiles } from '../pipeline/profile-sidecar.ts';
@@ -59,9 +59,17 @@ type ServeBase = {
   uiDir?: string;
   /**
    * Opened by the caller, closed by `serve` (also when it fails). `rulesVersion`: the logs are stored with it (C61);
-   * `rebuild`: rebuilds a stored session found incomplete, in the background.
+   * `rebuild`: rebuilds a stored session found incomplete, in the background. `restore`: live, each feed's session to
+   * restore at startup as the caller picked it before its startup rebuild (`pitwall live`); unset, `serve` picks them
+   * (`endedQualifyingsOf`).
    */
-  storage?: { db: Db; recordingsDir: string; rulesVersion: string; rebuild?: (row: StoredSessionRow) => Promise<void> };
+  storage?: {
+    db: Db;
+    recordingsDir: string;
+    rulesVersion: string;
+    rebuild?: (row: StoredSessionRow) => Promise<void>;
+    restore?: ReadonlyMap<FeedId, StoredSessionRow>;
+  };
   staleCheck?: FeedPipelineOptions['staleCheck'];
   /** For a source that binds a socket: resolves once it is bound, rejects with a `StartupError` if it cannot be. */
   bound?: () => Promise<void>;
@@ -156,13 +164,24 @@ export async function serve(opts: ServeOptions): Promise<number> {
       rulesVersion: storage.rulesVersion,
       track: (row) => (row.pwrecPath === null ? loadTrackFile(row.trackId, TRACKS_DIR) : recordingTrack(row.pwrecPath, row.trackId, TRACKS_DIR)),
     });
+    // Live, each feed's session to restore at startup (C59, C61): picked before the stores open, so none of their reads
+    // rebuilds it; the restore replays it once.
+    const restoreRows: ReadonlyMap<FeedId, StoredSessionRow> = isLive && storage
+      ? storage.restore ?? await endedQualifyingsOf(storage.db, live.map(({ source, port }) => ({ feedId: source.feedId, port })), cliLogger(io, 'warn'))
+      : new Map();
+    let restoring: readonly SessionKey[] = [...restoreRows.values()];
     // A session a feed is running (or restoring) right now is no stale session: it is never rebuilt under it (C59). The
-    // bridge's rebuilds run one at a time, each checked when it starts: a restore may begin while it waits.
-    const running = (): Array<SessionKey | undefined> => [...pipelines.values()].map((pipeline) => pipeline.runningSession());
+    // bridge's rebuilds run one at a time, each checked when it starts: a restore may begin while it waits, and a session
+    // stored fresh meanwhile (a restore replaced it) is not rebuilt again.
+    const running = (): Array<SessionKey | undefined> => [...restoring, ...[...pipelines.values()].map((pipeline) => pipeline.runningSession())];
     const isRunning = (row: SessionKey): boolean => running().some((key) => key !== undefined && sameSession(row, key));
+    const isFresh = (row: SessionKey): boolean => {
+      const stored = calibrationRepo?.sessionOf(row);
+      return stored !== undefined && storage !== undefined && !isStale(stored, storage.rulesVersion);
+    };
     let rebuilds: Promise<void> = Promise.resolve();
     const checkedRebuild = rebuild && ((row: StoredSessionRow): Promise<void> => {
-      const turn = rebuilds.then(() => (isRunning(row) ? undefined : rebuild(row)));
+      const turn = rebuilds.then(() => (isRunning(row) || isFresh(row) ? undefined : rebuild(row)));
       rebuilds = turn.catch(() => {});
       return turn;
     });
@@ -361,19 +380,23 @@ export async function serve(opts: ServeOptions): Promise<number> {
       // Before input opens: each feed's ended qualifying is restored from its recording (C59, C61; spec §7.0 rule 4).
       if (storage) {
         const restoreLog = cliLogger(io, 'warn');
-        const rows = await endedQualifyingsOf(storage.db, live.map(({ source, port }) => ({ feedId: source.feedId, port })), restoreLog);
-        await restoreEndedSessions(
-          made.flatMap(({ source, pipeline }) => {
-            const row = rows.get(source.feedId);
-            return row === undefined ? [] : [{
-              row,
-              restore: (r: StoredSessionRow) => pipeline.restoreEnded(r).catch((error: unknown) => {
-                restoreLog.error({ feedId: source.feedId, sessionUid: r.sessionUid, pwrecPath: r.pwrecPath, err: error }, 'ended session not restored');
-              }),
-            }];
-          }),
-          { line: (text) => io.err(text), ...(opts.startup && { progress: opts.startup.progress }) },
-        );
+        try {
+          await restoreEndedSessions(
+            made.flatMap(({ source, pipeline }) => {
+              const row = restoreRows.get(source.feedId);
+              return row === undefined ? [] : [{
+                row,
+                restore: (r: StoredSessionRow) => pipeline.restoreEnded(r).catch((error: unknown) => {
+                  restoreLog.error({ feedId: source.feedId, sessionUid: r.sessionUid, pwrecPath: r.pwrecPath, err: error }, 'ended session not restored');
+                }),
+              }];
+            }),
+            { line: (text) => io.err(text), ...(opts.startup && { progress: opts.startup.progress }) },
+          );
+        } finally {
+          // Restored (stored fresh) or not: from now on a stale one is rebuilt as any other.
+          restoring = [];
+        }
       }
       const running = made.map(({ source, pipeline }) => {
         pipeline.start();

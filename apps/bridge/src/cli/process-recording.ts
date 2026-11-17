@@ -88,12 +88,22 @@ export async function runToEnd(pipeline: FeedPipeline, path: string, signal: Abo
  * Runs one recording through the pipeline as fast as possible, storing its sessions in `db`: each session's log is
  * written once, at its end, and replaces the stored one in one transaction (C24, C61; a run stopped early writes
  * nothing). Nobody listens to the hub. An aborted `signal` (also one aborted before the call) stops the run, and it
- * throws a `StartupError`.
+ * throws a `StartupError`. `keepUnendedOpen` (the live bridge's startup rebuild, C59): a session the recording holds no
+ * end of is stored as the stopped live run left it, its row incomplete, so the feed that continues it appends to it.
  */
-export async function processRecording(path: string, db: Db, log: Logger, signal: AbortSignal, config: FeatureConfig, rulesVersion: string): Promise<void> {
+export async function processRecording(
+  path: string,
+  db: Db,
+  log: Logger,
+  signal: AbortSignal,
+  config: FeatureConfig,
+  rulesVersion: string,
+  opts: { keepUnendedOpen?: boolean } = {},
+): Promise<void> {
   if (signal.aborted) throw new StartupError('interrupted');
   let pipeline: FeedPipeline | undefined = undefined;
   const hub = recordingHub(() => pipeline);
-  pipeline = recordingPipeline({ path, hub, log, config, storage: { db, sourcePath: path, rulesVersion, mode: 'replace' } });
+  const storage = { db, sourcePath: path, rulesVersion, mode: 'replace' as const, ...(opts.keepUnendedOpen === true && { keepUnendedOpen: true }) };
+  pipeline = recordingPipeline({ path, hub, log, config, storage });
   await runToEnd(pipeline, path, signal);
 }

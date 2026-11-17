@@ -279,10 +279,15 @@ export class SessionProcessor {
    * Participants and closes every open span (`finish`, so the log is complete). The closing result goes to storage (the
    * closing spans are written, then the session is complete) and to the topics (the situation topics publish the spans
    * closed, C54). Then the session file is closed. `interrupted`: the input was stopped before its end (a rebuild then
-   * leaves the stored log as it was, and the topics are not published again). `demandChanged()` still answers afterwards.
+   * leaves the stored log as it was, and the topics are not published again). `unended`: a rebuild's recording ended
+   * without the session's end (C59): its log as it stands, before any closing span, replaces the stored one with the row
+   * left incomplete (`finishUnended`), and the session ends as an interrupted one. `demandChanged()` still answers
+   * afterwards.
    */
-  async end(receivedAtMs: number, opts: { interrupted?: boolean } = {}): Promise<void> {
-    this.#applying(undefined, () => this.#onClosed(this.#runner.finish(this.#onResult), opts.interrupted === true));
+  async end(receivedAtMs: number, opts: { interrupted?: boolean; unended?: boolean } = {}): Promise<void> {
+    const unended = opts.unended === true;
+    if (unended) this.#o.storage?.finishUnended(this.#row(), this.#runner.state.log);
+    this.#applying(undefined, () => this.#onClosed(this.#runner.finish(this.#onResult), opts.interrupted === true || unended));
     await this.#o.file?.close(receivedAtMs);
   }
 

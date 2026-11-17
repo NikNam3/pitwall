@@ -127,6 +127,15 @@ export class SessionStorage {
   }
 
   /**
+   * A rebuild of a recording that holds no session end (C59, C61): `log` is the log as the stopped live run left it (no
+   * closing span applied), and it replaces the stored one whole with the row left incomplete, so the live run that
+   * continues the recording appends to it (C24, C38). Only a rebuild (`replace`) writes; live, the log is already stored.
+   */
+  finishUnended(row: SessionRow, log: DeepReadonly<EngineState['log']>): void {
+    if (this.#o.mode === 'replace') this.#access?.writer.replaceLog(row, log, this.#o.rulesVersion, { complete: false });
+  }
+
+  /**
    * The player's earlier sessions of the weekend (C62); `undefined` when storage is off. Stale ones (not complete, or of
    * another rules version) are left out and handed to `rebuild`, in the background.
    */

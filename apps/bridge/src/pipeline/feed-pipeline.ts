@@ -23,7 +23,7 @@ import { readPwrec, readPwrecMeta } from '../pwrec/reader.ts';
 import { PwrecWriter } from '../pwrec/writer.ts';
 import type { Db, SessionKey, StoredSessionRow } from '../storage/db.ts';
 import { SessionFile, sessionRecordingName } from '../storage/session-files.ts';
-import { WeekendRepository } from '../storage/weekend-repository.ts';
+import { isStale, WeekendRepository } from '../storage/weekend-repository.ts';
 import { loadTrackFile, recordingTrack, TRACKS_DIR, trackSidecarPath } from '../track-files/load.ts';
 import { decisionsSidecarPath, noRunPriors, priorsSidecarPath, readSidecar, recordingDecisions, writeSidecar, type GivenDecision, type RecordedDecision, type RecordedRun } from './decision-sidecars.ts';
 import { RecordedPlacement } from './decision-placement.ts';
@@ -77,6 +77,12 @@ export type FeedPipelineOptions = {
     recordingsDir?: string;
     sourcePath?: string;
     rebuild?: (row: StoredSessionRow) => Promise<void>;
+    /**
+     * A rebuild (`replace`) that keeps an unended session open (C59, C61): when the recording ends without its last
+     * session's end, that session is written as the stopped live run left it (no closing span, the frame still being
+     * assembled not applied), its row incomplete, so the live run that continues the recording appends to it.
+     */
+    keepUnendedOpen?: boolean;
     /** Live: called once a session's log is stored complete (`serve` recomputes the calibration store, ruling R14). */
     onStored?: () => void;
   };
@@ -151,6 +157,12 @@ export type FeedPosition = { sessionTimeMs: number; playerLap: number };
 
 type SessionStarted = Extract<TrackerEvent, { type: 'sessionStarted' }>;
 
+/**
+ * How frame assembly ended a session (C5): at its end (`SEND`), by the next session (`replaced`) or at the end of the
+ * input (`streamEnd`).
+ */
+export type SessionEndReason = Extract<TrackerEvent, { type: 'sessionEnded' }>['reason'];
+
 /** A starting session's storage key, as its first Session packet gives it. */
 const keyOfStart = (event: SessionStarted): SessionKey => ({
   sessionUid: sessionUidString(event.sessionUid),
@@ -216,7 +228,8 @@ type Restore = { key: SessionKey; trackId: number; buffer: RawPacket[]; decision
 
 /**
  * A startup restore of an ended session under way (`restoreEnded`): its key starts a run even when stored complete, and
- * its storage reads (`read`, stored complete) or replaces the stored log at its end (`replace`, stored incomplete).
+ * its storage reads (`read`, stored complete under the run's rules version) or replaces the stored log at its end
+ * (`replace`, stored stale).
  */
 type EndedRestore = { key: SessionKey; mode: Extract<StorageMode, 'read' | 'replace'> };
 
@@ -285,6 +298,8 @@ export class FeedPipeline {
   #sawSession = false;
   /** A startup restore of an ended session under way (`restoreEnded`). */
   #restoringEnded: EndedRestore | undefined;
+  /** How the newest session that ended ended, as frame assembly split it (`sessionEnded`'s reason). */
+  #newestEnd: SessionEndReason | undefined;
 
   constructor(opts: FeedPipelineOptions) {
     this.#o = opts;
@@ -499,11 +514,21 @@ export class FeedPipeline {
     while (this.#restore !== undefined) await this.#restore.done;
     clearInterval(this.#staleTimer);
     this.#guarded('stream end', () => {
-      for (const event of this.#tracker.end()) {
+      const events = this.#tracker.end();
+      // A rebuild that keeps an unended session open (C59): the recording ended before its session did, so the session
+      // ends as the stopped live run's did.
+      const unended = !this.#stopped && this.#o.storage?.keepUnendedOpen === true
+        && events.some((event) => event.type === 'sessionEnded' && event.reason === 'streamEnd');
+      for (const event of events) {
         // A stop ends the session before its input did (C59): a frame still being assembled never closed, so it is not
         // applied; the run that continues the recording applies it once its packets are all there.
-        if (event.type === 'frame' && this.#stopped) continue;
-        this.#handle(event, this.#lastReceivedAtMs);
+        if (event.type === 'frame' && (this.#stopped || unended)) continue;
+        if (event.type === 'sessionEnded' && unended) {
+          this.#newestEnd = event.reason;
+          this.#endSession(this.#lastReceivedAtMs, { unended: true });
+        } else {
+          this.#handle(event, this.#lastReceivedAtMs);
+        }
       }
     });
     // A feed that stopped runs no seat (C62c).
@@ -736,9 +761,10 @@ export class FeedPipeline {
    * At startup, before `start` (C59, C61; SP4.3d spec §7.0 rule 4): the stored session `row` (an ended one: its recording
    * holds its end) is replayed from its recording with its sidecars, as a restart's restore replays it, and ends at the
    * recording's end; the run stays as the feed's ended session (its topics answer as after a live end, `feed.status`
-   * between sessions). Stored incomplete, its log is finished and replaces the stored one, as a rebuild of the recording
-   * would write it (C24, C61); stored complete, nothing is written. The recording is not touched. A row without its
-   * recording is left as it is.
+   * between sessions). Stored stale (`isStale`: incomplete, or of another rules version), its log is finished and
+   * replaces the stored one, as a rebuild of the recording would write it (C24, C61), so the startup rebuild leaves it
+   * out and it is replayed once; stored complete under the run's rules version, nothing is written. The recording is not
+   * touched. A row without its recording is left as it is.
    */
   async restoreEnded(row: StoredSessionRow): Promise<void> {
     if (this.#started) throw new Error('FeedPipeline: restoreEnded after start');
@@ -748,7 +774,8 @@ export class FeedPipeline {
       return;
     }
     const { sessionUid, weekendId, playerCar } = row;
-    this.#restoringEnded = { key: { sessionUid, weekendId, playerCar }, mode: row.complete ? 'read' : 'replace' };
+    const mode = isStale(row, this.#o.storage?.rulesVersion) ? 'replace' : 'read';
+    this.#restoringEnded = { key: { sessionUid, weekendId, playerCar }, mode };
     try {
       await this.#replayRecording(path, undefined, 0);
       this.#guarded('restored session end', () => {
@@ -765,6 +792,14 @@ export class FeedPipeline {
   /** The running session's weekend phase as the machine decided it (C14); `undefined` without a running session. */
   weekendPhase(): WeekendPhase | undefined {
     return this.#session?.weekendPhase;
+  }
+
+  /**
+   * How the newest session that ended ended, as the engine's frame assembly split the stream (C5, C13: the bridge reads
+   * no signal); `undefined` before any session ended. Still readable after the source ended.
+   */
+  newestSessionEnd(): SessionEndReason | undefined {
+    return this.#newestEnd;
   }
 
   /**
@@ -818,6 +853,7 @@ export class FeedPipeline {
         this.#session?.push(event.frame);
         return;
       case 'sessionEnded':
+        this.#newestEnd = event.reason;
         this.#endSession(receivedAtMs);
         return;
     }
@@ -1013,7 +1049,8 @@ export class FeedPipeline {
     }
   }
 
-  #endSession(receivedAtMs: number): void {
+  /** `unended`: a rebuild's recording ended before the session did (`keepUnendedOpen`, C59). */
+  #endSession(receivedAtMs: number, opts: { unended?: boolean } = {}): void {
     const session = this.#session;
     if (session === undefined) return;
     this.#session = undefined;
@@ -1022,7 +1059,7 @@ export class FeedPipeline {
     // A session that ended runs no seat any more (C62c).
     this.#reportHumanSeats([]);
     this.#jobs.sessionEnded();
-    const closing = session.end(receivedAtMs, { interrupted: this.#stopped }).finally(() => this.#closing.delete(closing));
+    const closing = session.end(receivedAtMs, { interrupted: this.#stopped, unended: opts.unended === true }).finally(() => this.#closing.delete(closing));
     this.#closing.add(closing);
   }
 
