@@ -156,7 +156,7 @@ function qualifyingView(o: { nextForecast?: ForecastSample[]; weatherNow?: null 
 }
 
 /** The units' outputs on the qualifying view: plain values of their declared types; `weekend-pace` as given (absent: none). */
-function qualifyingOutputs(pace: WeekendPace | undefined = weekendPace()): Map<CalculatorId, unknown> {
+function qualifyingOutputs(pace: WeekendPace | null = weekendPace()): Map<CalculatorId, unknown> {
   const tyreModel = Object.fromEntries(
     Array.from({ length: CARS }, (_, k) => {
       const fresh = FRESH[k]!;
@@ -171,7 +171,7 @@ function qualifyingOutputs(pace: WeekendPace | undefined = weekendPace()): Map<C
     [RIVAL_STOPS, rivalStops()],
     [DEGRADATION, degradation],
   ]);
-  if (pace !== undefined) out.set(WEEKEND_PACE, pace);
+  if (pace !== null) out.set(WEEKEND_PACE, pace);
   return out;
 }
 
@@ -281,7 +281,15 @@ describe('the grid start (SP4.3d2 Task 7)', () => {
       expect(r.trace!.map((t) => t.lap), `scenario ${id}`).toEqual(Array.from({ length: LAPS }, (_, i) => i + 1));
       // our car's race time is its `laps` lap times
       const laps = r.trace!.map((t) => t.lapTimeMs[PLAYER]!);
-      expect(laps.every((ms) => ms > 0), `scenario ${id}: every lap played`).toBe(true);
+      // every lap played until the car finishes (lapped) or retires; none after (C3: 0 only past its race)
+      const end = laps.findIndex((ms) => ms === 0);
+      expect(laps.slice(0, end === -1 ? laps.length : end).every((ms) => ms > 0), `scenario ${id}: laps played`).toBe(true);
+      if (end !== -1) expect(laps.slice(end).every((ms) => ms === 0), `scenario ${id}: nothing after its end`).toBe(true);
+      // a retired car (plainNoise's retire rate) has no race time; it must have stopped playing laps
+      if (r.raceTimeMs[PLAYER] === 0) {
+        expect(end, `scenario ${id}: retired`).not.toBe(-1);
+        continue;
+      }
       expect(r.raceTimeMs[PLAYER], `scenario ${id}`).toBeGreaterThan(LAPS * 0.9 * PACE[PLAYER]!.paceMs);
       expect(r.raceTimeMs[PLAYER], `scenario ${id}`).toBeLessThan(LAPS * 1.2 * PACE[PLAYER]!.paceMs);
     }
@@ -304,7 +312,7 @@ describe('the grid start (SP4.3d2 Task 7)', () => {
   it("6b: pace: a car without weekend-pace's pace and without degradation's stand-in makes the grid start unknown('insufficientData'), never 0 (C3)", () => {
     const missing = buildGridStart(qualifyingView(), qualifyingOutputs(weekendPace([3])), { laps: LAPS, grid: GRID, fittedCompound: planningCompound });
     expect(missing).toEqual(unknown('insufficientData'));
-    const none = buildGridStart(qualifyingView(), qualifyingOutputs(undefined), { laps: LAPS, grid: GRID, fittedCompound: planningCompound });
+    const none = buildGridStart(qualifyingView(), qualifyingOutputs(null), { laps: LAPS, grid: GRID, fittedCompound: planningCompound });
     expect(none).toEqual(unknown('insufficientData'));
   });
 
