@@ -31,6 +31,16 @@ export type StrategyInput = {
   config: EngineView['config'];
   /** The one car of ours a part plans (SP4.3b Q4 D, Task 25); absent: every car planned, one after another. */
   planCar?: CarId;
+  /**
+   * Whether the job prefills slots A and B (`prefillOf`, SP4.3d spec §7.1 steps 5, 7): the planning job always, the
+   * race's job by `strategy`'s behaviour table (its `prefill` rows: on the grid, in the formation lap, C44); absent: no.
+   */
+  prefill?: boolean;
+  /**
+   * The planning round's facts (§7.1, `planningInputFrom`): the race's entered laps, per our car its grid place, the
+   * race forecast's highest rain chance; absent in the race.
+   */
+  planning?: { laps: number; gridPlace: Record<CarId, Known<number>>; rainPct: Known<number> };
 };
 
 const OWN_READS: Dependency[] = [
@@ -81,6 +91,8 @@ export function strategyInputFrom(view: EngineView): StrategyInput {
     if (position !== undefined) positions[car] = position;
   }
   const hazard = (view.outputs.get(RACE_HAZARD) as RaceHazard | undefined) ?? unknown('insufficientData');
-  const planned = cars.filter((car) => behaviourFor(STRATEGY_BEHAVIOUR, view, car).every((row) => row === 'plan'));
-  return { start: startOf(view), hazard, ourCars: cars, planned, committed, slots, positions, config: view.config };
+  const planned = cars.filter((car) => behaviourFor(STRATEGY_BEHAVIOUR, view, car).every((row) => row !== 'notApplicable'));
+  // the session's rows (C44): on the grid and in the formation lap the job prefills slots A and B
+  const prefill = behaviourFor(STRATEGY_BEHAVIOUR, view).includes('prefill');
+  return { start: startOf(view), hazard, ourCars: cars, planned, committed, slots, positions, config: view.config, prefill };
 }
