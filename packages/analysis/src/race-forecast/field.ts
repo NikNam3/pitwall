@@ -290,7 +290,7 @@ const tableLap = (f: Field, lap: number): number => Math.min(lap, f.wetByLap.len
 export const wetnessOn = (f: Field, lap: number): number => f.wetnessMsByLap[tableLap(f, lap)] ?? f.start.wetness.wetnessMs;
 
 /** Whether the track is wet on lap `lap`, from the field's table (`pathWetOn`). */
-export const wetOn = (f: Field, lap: number): boolean => f.wetByLap[tableLap(f, lap)] === 1;
+export const wetOn = (f: Field, lap: number): boolean => (lap < 0 ? f.start.wetness.wet : f.wetByLap[tableLap(f, lap)] === 1);
 
 export const lineIndex = (f: Field, car: number, lap: number): number => car * (f.start.lapsTotal + 2) + lap;
 
