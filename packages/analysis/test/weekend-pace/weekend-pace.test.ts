@@ -5,7 +5,8 @@
 // slope (`view.priors`, C62a), else the stint's own fitted slope; else its best valid qualifying lap plus
 // `raceTrimOffsetMs` with `qualifyingPaceSdMs`; else `unknown('insufficientData')` (C3).
 //
-// Rows (plan Task 6b Step 1): 1 long run, 2 short run, 3 no practice, 4 same car, 5 planning view, 5b priors, 6 contract.
+// Rows (plan Task 6b Step 1): 1 long run, 2 short run, 3 no practice, 4 same car, 5 planning view, 5b priors, 6 contract (with review F1: earlier
+// sessions by the behaviour table's `asEarlier`).
 //
 // The fuel basis is degradation's (`lapTimeMs − γ · fuelKg`, its `basePaceMs`): the grid start (Task 7) puts its own
 // race-start fuel on top through the lap model (`fuelKg × fuelMsPerKg`), so the pace here holds no fuel. Every stint runs
@@ -15,9 +16,9 @@ import { carId, SPAN_DECLARATIONS, unknown, type CarId, type CarKey, type FrameN
 import { asOfNow, type AsOfView, type EngineView, type Projection, type QuickCalculator, type StoredSession, type WeekendContext } from '@pitwall/engine/readers';
 import { describe, expect, it } from 'vitest';
 import { carState, history, lap } from '../../../../test-support/builders/index.ts';
-import { degradationCalculator, DEGRADATION, WEEKEND_PACE, WEEKEND_PACE_BEHAVIOUR, WEEKEND_PACE_CONFIG, weekendPaceAsOf, weekendPaceCalculator } from '../../src/index.ts';
+import { degradationCalculator, DEGRADATION, PENDING_ROW, WEEKEND_PACE, WEEKEND_PACE_BEHAVIOUR, WEEKEND_PACE_CONFIG, weekendPaceAsOf, weekendPaceCalculator } from '../../src/index.ts';
 import { GAMMA,priorsSnapshot, stintLaps, stintRecord, viewPriors } from '../degradation/support.ts';
-import { guardedQuick, PRACTICE, QUALIFYING, RACE, situatedView } from '../situated.ts';
+import { guardedQuick, NONE, PRACTICE, QUALIFYING, RACE, situatedView } from '../situated.ts';
 import { CALCULATORS } from '../units.ts';
 
 /** The calculator through its guarded view (C41): a read it does not declare throws. Built per call, so each row fails on its own until it exists. */
@@ -140,6 +141,11 @@ const practice = (uid: string, runs: { laps: LapRecord[]; stint: ReturnType<type
 const qualifying = (uid: string, laps: LapRecord[], seatsOf = seats(6), phase: WeekendPhase = { kind: 'qualifying', format: 'grandPrix', segment: 3 }): StoredSession =>
   stored(uid, phase, seatsOf, { laps });
 
+/** What a stored earlier session of a weekend-phase kind contributes (review F1): its row's `asEarlier`. */
+type AsEarlier = 'longRun' | 'qualifyingBest' | 'none';
+type WithAsEarlier = { asEarlier?: AsEarlier };
+const asEarlierOf = (kind: string): AsEarlier | undefined => (WEEKEND_PACE_BEHAVIOUR['weekend-phase']?.[kind] as WithAsEarlier | undefined)?.asEarlier;
+
 describe('weekend-pace: each car`s race pace from the weekend (Task 6b)', () => {
   it('1. long run: a 10-lap practice stint gives source longRun, its pace the corrected median within 50 ms', () => {
     const run = longRun(3);
@@ -259,6 +265,37 @@ describe('weekend-pace: each car`s race pace from the weekend (Task 6b)', () => 
         const out = calc.compute(viewOf({ seats: seats(6), phase, weekend }));
         expect(Object.keys(out).length, phase.kind).toBeGreaterThan(0);
         for (const [car, pace] of Object.entries(out)) expect(pace, `${phase.kind}: car ${car}`).toEqual(unknown('notApplicable'));
+      }
+    });
+
+    it('F1: every weekend-phase row, pending included, says what a stored session of its kind contributes (asEarlier, C44)', () => {
+      expect(asEarlierOf('practice')).toBe('longRun');
+      expect(asEarlierOf('qualifying')).toBe('qualifyingBest');
+      expect(asEarlierOf('race')).toBe('none');
+      expect(asEarlierOf('none')).toBe('none');
+      expect((PENDING_ROW as WithAsEarlier).asEarlier, 'pending').toBe('none');
+    });
+
+    it('F1: a stored session contributes what its weekend-phase row`s asEarlier says (C44)', () => {
+      const phases: Record<string, WeekendPhase> = { practice: PRACTICE, qualifying: QUALIFYING, race: RACE, none: NONE };
+      for (const [kind, phase] of Object.entries(phases)) {
+        const run = longRun(3);
+        // car 3: a long run with its stint; car 2: one valid lap, no stint
+        const session = stored(`s-${kind}`, phase, seats(6), { laps: [...run.laps, qualiLap(2, 1, 88_000)], stints: [run.stint] });
+        const out = calc.compute(viewOf({ seats: seats(6), weekend: weekendOf([session]) }));
+        const as = asEarlierOf(kind);
+        expect(as, `${kind}: its row has asEarlier`).toBeDefined();
+        if (as === 'longRun') {
+          expect(valueOf(out, 3).source, kind).toBe('longRun');
+          expect(out[carId(2)], kind).toEqual(unknown('insufficientData'));
+        } else if (as === 'qualifyingBest') {
+          expect(valueOf(out, 3).source, kind).toBe('qualifying');
+          expect(valueOf(out, 2).paceMs, kind).toBe(88_000 + raceTrimOffsetMs);
+        } else {
+          // a stored race (or none) session's laps never count
+          expect(out[carId(3)], kind).toEqual(unknown('insufficientData'));
+          expect(out[carId(2)], kind).toEqual(unknown('insufficientData'));
+        }
       }
     });
 
