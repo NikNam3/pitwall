@@ -32,7 +32,7 @@ import { RAIN_OUTLOOK_CONFIG } from '../rain-outlook/config.ts';
 import { raceMonteCarlo, type McCandidate, type McConfig, type McInput, type McResult, type Reactions } from '../race-monte-carlo/index.ts';
 import { committedField, dpInputOn, followable, mcSettingsFrom, notPlannedWhy, plannedCars, plannedField, reactionOf, roadWorlds, strategyConfigOf, toMcHazard, worldsOf, type StrategyInput } from '../shared/strategy-input/index.ts';
 import { solveAll, solveDp } from '../strategy-dp/index.ts';
-import { candidatesOf } from './candidates.ts';
+import { bestPlanOf, candidatesOf } from './candidates.ts';
 import { prefillOf } from './prefill.ts';
 import type { StrategyConfig } from './config.ts';
 
@@ -144,9 +144,10 @@ export function candidatesForRun(input: StrategyInput, rng: Rng): { mc: McInput 
     // per world, and on a free start (the planning round's grid start) per start compound too (SP4.3d spec §7.2)
     const solutions = solveAll(dpInput);
     const dp = solveDp(dpInput, solutions);
-    const best = [...dp.plans].sort((a, b) => a.expectedMs - b.expectedMs)[0] ?? dp.continue;
-    reactions[car] = reactionOf(dpInput, solutions, best.startCompound ?? null);
-    const own = candidatesOf(field, car, dp, solutions, { ...config, rainPct: RAIN_OUTLOOK_CONFIG.read(input).rainPct });
+    const candidatesConfig = { ...config, rainPct: RAIN_OUTLOOK_CONFIG.read(input).rainPct };
+    // the reaction table on the candidates' best plan's start compound, its one owner (R31; C43)
+    reactions[car] = reactionOf(dpInput, solutions, bestPlanOf(field, car, dp, candidatesConfig).startCompound ?? null);
+    const own = candidatesOf(field, car, dp, solutions, candidatesConfig);
     const plan = carPlanOf(field, car, own, input.committed[car] ?? null, input.slots?.[car]);
     perCar.set(car, plan);
     candidates[car] = plan.candidates;
