@@ -87,8 +87,9 @@ export function raceHazardAsOf(view: AsOfView): RaceHazard {
   const config = RACE_HAZARD_CONFIG.read(view);
   const lobbyFactor = { off: 0, reduced: config.reducedFactor, standard: 1, increased: config.increasedFactor }[lobby.value];
 
-  // the last closed SC or VSC, confirmed only (C18, C20: closed spans in the projection)
-  const lastNeutralised = lastNeutralisation(view.history, view.situation, ['SC', 'VSC']);
+  // the last closed SC or VSC, confirmed only (C18, C20: closed spans in the projection); qualifying's row reads no
+  // session phase, its race has had none yet (C41, C62d)
+  const lastNeutralised = phaseEffect === 'fromLapOne' ? null : lastNeutralisation(view.history, view.situation, ['SC', 'VSC']);
 
   // the SC or VSC out now (a row `active`), from the one owner of the neutralisation kind
   const now = effect === 'active' ? openNeutralisation(view) : null;
