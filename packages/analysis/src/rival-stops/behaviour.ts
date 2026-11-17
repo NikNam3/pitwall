@@ -17,13 +17,19 @@ export type RivalStopsEffect = {
   rule?: 'required' | 'waived';
   /** The weekend phase is not the race: every field `notApplicable` (C14). */
   notApplicable?: boolean;
+  /**
+   * The ended qualifying session's planning view (C62d): no race stop seen, the race row's fields `notApplicable`, and
+   * per dry start compound the first stop's window on a fresh set of it from lap 1 (`byStartCompound`).
+   */
+  fromGrid?: boolean;
 };
 
 const IN: RivalStopsEffect = {};
 const NOT_RACE: RivalStopsEffect = { notApplicable: true };
+const FROM_GRID: RivalStopsEffect = { fromGrid: true };
 
 export const RIVAL_STOPS_BEHAVIOUR: BehaviourTable<RivalStopsEffect> = {
-  'weekend-phase': { practice: NOT_RACE, qualifying: NOT_RACE, race: IN, none: NOT_RACE },
+  'weekend-phase': { practice: NOT_RACE, qualifying: FROM_GRID, race: IN, none: NOT_RACE },
   'car-status': {
     competing: { inSession: true },
     retired: { inSession: true, notCompeting: true },

@@ -16,7 +16,8 @@ const NOT_APPLICABLE: RaceInteractionEffect = { notApplicable: true };
 const EXCLUDES: RaceInteractionEffect = { excludesLap: true };
 
 export const RACE_INTERACTION_BEHAVIOUR: BehaviourTable<RaceInteractionEffect> = {
-  'weekend-phase': { practice: NOT_APPLICABLE, qualifying: NOT_APPLICABLE, race: NONE, none: NOT_APPLICABLE },
+  // qualifying: the ended session's planning view (C62d) gives the priors and defaults; none of its laps is a race lap
+  'weekend-phase': { practice: NOT_APPLICABLE, qualifying: EXCLUDES, race: NONE, none: NOT_APPLICABLE },
   'session-phase-race': {
     grid: EXCLUDES,
     formation: EXCLUDES,

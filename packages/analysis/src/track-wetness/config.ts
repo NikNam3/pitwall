@@ -20,4 +20,11 @@ export const TRACK_WETNESS_CONFIG = defineConfig('track-wetness', {
    * refitted on its dry ones. Source: pitwall estimate.
    */
   wetSigmas: 2,
+  /**
+   * The race's wetness at its start on the planning view (C62d, ruling R13): the first sample of the race's forecast
+   * (`nextForecast`) is rain (`lightRain`, `heavyRain`, `storm`) → this wetness with sd `initialSdMs`, else a dry track
+   * (0 ms). Source: `weather-paths`' one rain lap (`WETNESS_RISE_MS_PER_LAP`, spike 4.3b-defaults, research 19 wetness:
+   * Singapore's rain onset, 8,501 ± 109 ms/lap); track-wetness's own value, not imported.
+   */
+  startRainWetnessMs: 8_500,
 });

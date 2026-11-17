@@ -16,7 +16,8 @@
 //    `byLap`.
 //  - One tyre type only (every car on slicks): the slick common mode carries the state; the other types have none.
 //  - No free-air car on a type: that type's common mode is `insufficientData` (C3).
-//  - Outside the race phase the output is `notApplicable` (its `weekend-phase` row, C14, C44).
+//  - Outside the race and qualifying phases the output is `notApplicable` (its `weekend-phase` row, C14, C44); the
+//    qualifying row is `qualifying.test.ts`'s (SP4.3d2 Task 6).
 //
 // Races come from the test-race generator (spec 6.4), each generated once per file in `beforeAll`, at the smallest size
 // that shows its row (plan review P8).
@@ -29,7 +30,7 @@ import { degradationCalculator } from '../../src/degradation/calculator.ts';
 import { DEGRADATION } from '../../src/degradation/index.ts';
 import { trackWetnessCalculator } from '../../src/track-wetness/calculator.ts';
 import { TRACK_WETNESS, trackWetnessAsOf, type TrackWetnessOutput } from '../../src/track-wetness/index.ts';
-import { guardedQuick, NONE, PRACTICE, QUALIFYING } from '../situated.ts';
+import { guardedQuick, NONE, PRACTICE } from '../situated.ts';
 import { CALCULATORS, loadUnitFolders } from '../units.ts';
 import { withAppendFrames } from './support.ts';
 
@@ -212,7 +213,8 @@ describe('track-wetness (spec 5.1)', () => {
       const spans = view.situation.byMachine['weekend-phase'] ?? [];
       return { ...view, situation: { weekendPhase: phase, byMachine: { ...view.situation.byMachine, 'weekend-phase': spans.map((s) => ({ ...s, kind, detail })) } } };
     };
-    for (const phase of [PRACTICE, QUALIFYING, NONE]) {
+    // ported in SP4.3d2 Task 6: qualifying has its own row (the race's forecast, `qualifying.test.ts`)
+    for (const phase of [PRACTICE, NONE]) {
       expect(calc.compute(inPhase(phase)), phase.kind).toMatchObject({ byLap: [], state: unknown('notApplicable') });
     }
   });

@@ -17,7 +17,8 @@
 //  - `RACE_INTERACTION_PRIORS`: a band's entries aggregate the episodes of every source in that band (the source's
 //    `aiDifficulty`) whose follower is the source stint's car, pooled, fitted from the config's default with its
 //    shrinkage.
-//  - Outside the race phase (`weekend-phase` row): `band`, `heldLossMsPerLap` and `rejoinPushBackMs` are `notApplicable`.
+//  - Outside the race and qualifying phases (`weekend-phase` row): `band`, `heldLossMsPerLap` and `rejoinPushBackMs` are
+//    `notApplicable`; the qualifying row is `qualifying.test.ts`'s (SP4.3d2 Task 6).
 import { carId, currentLaps, known, unknown, type LapRecord, type PassCurve, type PriorsSnapshot } from '@pitwall/domain';
 import { projectionLengths, type StoredSource } from '@pitwall/engine/readers';
 import { describe, expect, it } from 'vitest';
@@ -35,7 +36,7 @@ import {
   type FollowingEpisode,
   type LapFilterCtx,
 } from '../../src/race-interaction/index.ts';
-import { guardedQuick, QUALIFYING } from '../situated.ts';
+import { guardedQuick, PRACTICE } from '../situated.ts';
 import { CALCULATORS, loadUnitFolders } from '../units.ts';
 import { cutAt, laps, projectionOf, raceView, scene, TRACK, type Scene } from './scene.ts';
 
@@ -94,7 +95,8 @@ describe('race-interaction', () => {
   });
 
   it('notApplicable outside the race phase (weekend-phase row)', () => {
-    const out = calc.compute(raceView(scene([]), { phase: QUALIFYING }));
+    // ported in SP4.3d2 Task 6: qualifying has its own row (priors and defaults, `qualifying.test.ts`)
+    const out = calc.compute(raceView(scene([]), { phase: PRACTICE }));
     expect(out.band).toEqual(unknown('notApplicable'));
     expect(out.heldLossMsPerLap).toEqual(unknown('notApplicable'));
     expect(out.rejoinPushBackMs).toEqual(unknown('notApplicable'));

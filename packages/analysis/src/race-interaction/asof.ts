@@ -5,7 +5,8 @@
 //    (spec 4.4, as `pit-loss`'s). The curve's DRS factor is fitted with it, its prior the config's `drsPassFactor`
 //    (SP4.3b Task 10).
 //  - The DRS pass factor's prior (`drsPassFactor`) and straight gain, the minimum gap and dirty air are the config's; the O14 values too, until the
-//    pooled fit's check (Task 13), and `notApplicable` outside the race (the `weekend-phase` row, C14).
+//    pooled fit's check (Task 13), and `notApplicable` in practice and `none` (the `weekend-phase` row, C14).
+//  - Qualifying's row (the planning view, C62d): the priors and defaults, no lap holds an episode.
 import { known, unknown, type EstimateSource, type Known, type PassCurve, type RaceInteraction } from '@pitwall/domain';
 import type { AsOfView } from '@pitwall/engine/readers';
 import { DRIVER_NOISE_CONFIG } from '../driver-noise/config.ts';
@@ -46,7 +47,8 @@ const episodesWord = (n: number): string => (n === 1 ? '1 episode' : `${n} episo
 export function raceInteractionAsOf(view: AsOfView): RaceInteraction {
   const config = configOf(view.config);
   const bands = parseBands(config.difficultyBands);
-  const applicable = phaseRow(view).notApplicable !== true;
+  const row = phaseRow(view);
+  const applicable = row.notApplicable !== true;
   let band: Known<number> = unknown('notApplicable');
   if (applicable) {
     const difficulty = difficultyOf(view);
@@ -54,7 +56,8 @@ export function raceInteractionAsOf(view: AsOfView): RaceInteraction {
     band = !difficulty.known ? difficulty : index < 0 ? unknown('notApplicable') : known(index, difficulty.at);
   }
   const freeAirGapMs = DRIVER_NOISE_CONFIG.read(view).freeAirGapMs;
-  const episodes = band.known && view.track.known ? episodesOf({ history: view.history, situation: view.situation }, view.track.value, config, freeAirGapMs) : [];
+  // a weekend phase whose every lap is excluded (qualifying) holds no episode: its bands are their priors
+  const episodes = band.known && view.track.known && row.excludesLap !== true ? episodesOf({ history: view.history, situation: view.situation }, view.track.value, config, freeAirGapMs) : [];
   const passes = episodes.reduce((n, e) => n + e.zones.filter((z) => z.passed).length, 0);
 
   return {

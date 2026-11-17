@@ -20,7 +20,7 @@ import { DRIVER_NOISE, driverNoiseAsOf } from '../../src/driver-noise/index.ts';
 import { CAR_STATUS_READS } from '../../src/shared/car-status.ts';
 import type { BuilderRace } from '../../../../test-support/builders/long-race.ts';
 import { generateRace, GENERATOR_DEFAULTS, type GeneratorCar, type GeneratorParams } from '../../../../test-support/race-generator/index.ts';
-import { guardedQuick, NONE, PRACTICE, QUALIFYING } from '../situated.ts';
+import { guardedQuick, NONE, PRACTICE } from '../situated.ts';
 import { CALCULATORS, loadUnitFolders } from '../units.ts';
 import { lapConfirmedFrame, leaderCrossings, viewAt, withAppendFrames } from './support.ts';
 
@@ -218,7 +218,8 @@ describe('driver-noise on generated races (spec 5.2)', () => {
       return { ...view, situation: { weekendPhase: phase, byMachine: { ...view.situation.byMachine, 'weekend-phase': spans.map((s) => ({ ...s, kind, detail })) } } };
     };
     const na = unknown('notApplicable');
-    for (const phase of [PRACTICE, QUALIFYING, NONE]) {
+    // ported in SP4.3d2 Task 6: qualifying has its own row (`qualifying.test.ts`)
+    for (const phase of [PRACTICE, NONE]) {
       const out = calc.compute(inPhase(phase));
       expect(out.aiField, phase.kind).toEqual({ mistakeRatePerLap: na, bigEventRatePerLap: na, retireRatePerLap: na });
       for (const [car, noise] of Object.entries(out.cars)) expect(noise.sigmaMs, `${phase.kind} car ${car}`).toEqual(na);

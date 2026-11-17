@@ -67,13 +67,15 @@ function leaderLaps(
 export function raceHazardAsOf(view: AsOfView): RaceHazard {
   const notApplicable = unknown('notApplicable');
   const weekendPhase = view.situation.weekendPhase.kind;
-  if (weekendPhase === 'pending' || rowOf('weekend-phase', weekendPhase) === 'notApplicable') return notApplicable;
+  const phaseEffect = weekendPhase === 'pending' ? 'notApplicable' : rowOf('weekend-phase', weekendPhase);
+  if (phaseEffect === 'notApplicable') return notApplicable;
   const track = view.track;
   if (!track.known || !track.value.defaults.hazard.known) return notApplicable;
   const hazard = track.value.defaults.hazard.value.value;
 
-  // one open span per session-scoped machine (C15); none yet reads as on the grid (C14)
-  const open = (view.situation.byMachine[PHASES] ?? [])[0];
+  // qualifying's row (the planning view, C62d): the race from lap 1, its session phase not the race's; in the race one
+  // open span per session-scoped machine (C15), none yet reads as on the grid (C14)
+  const open = phaseEffect === 'fromLapOne' ? undefined : (view.situation.byMachine[PHASES] ?? [])[0];
   const effect: RaceHazardEffect = open === undefined ? 'fromLapOne' : rowOf(PHASES, open.kind);
   if (effect === 'notApplicable') return notApplicable;
 
@@ -85,8 +87,9 @@ export function raceHazardAsOf(view: AsOfView): RaceHazard {
   const config = RACE_HAZARD_CONFIG.read(view);
   const lobbyFactor = { off: 0, reduced: config.reducedFactor, standard: 1, increased: config.increasedFactor }[lobby.value];
 
-  // the last closed SC or VSC, confirmed only (C18, C20: closed spans in the projection)
-  const lastNeutralised = lastNeutralisation(view.history, view.situation, ['SC', 'VSC']);
+  // the last closed SC or VSC, confirmed only (C18, C20: closed spans in the projection); qualifying's row reads no
+  // session phase, its race has had none yet (C41, C62d)
+  const lastNeutralised = phaseEffect === 'fromLapOne' ? null : lastNeutralisation(view.history, view.situation, ['SC', 'VSC']);
 
   // the SC or VSC out now (a row `active`), from the one owner of the neutralisation kind
   const now = effect === 'active' ? openNeutralisation(view) : null;

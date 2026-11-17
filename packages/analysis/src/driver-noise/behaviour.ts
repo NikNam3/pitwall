@@ -22,13 +22,18 @@ export type DriverNoiseEffect = {
    * what it gives for each kind the unit reads.
    */
   noTimeLoss?: boolean;
+  /**
+   * The ended qualifying session's planning view (C62d): the models give values for the race to come, a human's from the
+   * session's laps (as non-race laps) towards its prior, an AI car's and the AI field's the config's AI values.
+   */
+  planning?: boolean;
 };
 
 const COUNTS: DriverNoiseEffect = { noTimeLoss: false };
 const NO_TIME_LOSS: DriverNoiseEffect = { noTimeLoss: true };
 
 export const DRIVER_NOISE_BEHAVIOUR: BehaviourTable<DriverNoiseEffect> = {
-  'weekend-phase': RACE_LAP_PHASE_ROWS,
+  'weekend-phase': { ...RACE_LAP_PHASE_ROWS, qualifying: { ...RACE_LAP_PHASE_ROWS.qualifying, planning: true } },
   'car-driver': { ai: { model: 'ai' }, human: { model: 'human' } },
   'car-status': {
     competing: { inSession: true, retirement: false },
@@ -61,8 +66,18 @@ export function rowOf(machine: MachineId, kind: string): DriverNoiseEffect {
  * a stored session, whose spans are all closed) the row of the situation's weekend phase, a pending one the race's (C14).
  */
 export function isRaceAt(view: Pick<AsOfView, 'situation'>): boolean {
+  return phaseRowsAt(view).every((row) => row.isRace === true);
+}
+
+/** Whether the view's frame lies in qualifying, read as the race's planning view (C62d): its weekend-phase rows, as `isRaceAt`. */
+export function isPlanningAt(view: Pick<AsOfView, 'situation'>): boolean {
+  return phaseRowsAt(view).every((row) => row.planning === true);
+}
+
+/** The weekend-phase rows at the view's frame: the open spans', else the situation's weekend phase's (C14). */
+function phaseRowsAt(view: Pick<AsOfView, 'situation'>): DriverNoiseEffect[] {
   const open = view.situation.byMachine['weekend-phase'] ?? [];
-  if (open.length > 0) return open.every((s) => rowOf('weekend-phase', s.kind).isRace === true);
+  if (open.length > 0) return open.map((s) => rowOf('weekend-phase', s.kind));
   const phase: DeepReadonly<WeekendPhase> = view.situation.weekendPhase;
-  return lapPhaseRowOf(RACE_LAP_PHASE_ROWS, phase.kind).isRace;
+  return [phase.kind === 'pending' ? lapPhaseRowOf(RACE_LAP_PHASE_ROWS, phase.kind) : rowOf('weekend-phase', phase.kind)];
 }

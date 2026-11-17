@@ -7,7 +7,7 @@ import type { AsOfView, DeepReadonly } from '@pitwall/engine/readers';
 import { DAMAGE_CONFIG } from '../damage/config.ts';
 import { INCIDENTS_CONFIG } from '../incidents/config.ts';
 import { median } from '../shared/stats.ts';
-import { isRaceAt } from './behaviour.ts';
+import { isPlanningAt, isRaceAt } from './behaviour.ts';
 import { DRIVER_NOISE_CONFIG } from './config.ts';
 import { carModelsOf, type CarModels, type Model, type ModelEstimates, type ResidualConfig } from './residuals.ts';
 import { shrink, type Prior, type SessionEstimate } from './shrink.ts';
@@ -128,17 +128,40 @@ function carNoiseOf(car: CarModels, model: ModelEstimates, priors: Priors, c: Co
 /** The model a car's entry reports: its driver's; a car without a car-driver span the AI's. */
 const reportedModel = (car: CarModels): Model => (car.driver === 'human' ? 'human' : 'ai');
 
-/** Every car's models and what their entries share: the config, the AI priors, the AI field's rates. */
-type Field = { c: Config; cars: Map<CarId, CarModels>; ai: Priors; aiField: DriverNoise['aiField'] };
+/**
+ * Every car's models and what their entries share: the config, the AI priors, the AI field's rates; `planning`: the
+ * planning view (qualifying, C62d), `estimatesOf`.
+ */
+type Field = { c: Config; cars: Map<CarId, CarModels>; ai: Priors; aiField: DriverNoise['aiField']; planning: boolean };
 
-/** The field as of `view`'s frame; outside the race `undefined`. */
+/** A model without session estimates: every value its prior (`shrink` without a session estimate). */
+const NO_ESTIMATES: ModelEstimates = {
+  laps: 0,
+  allLaps: 0,
+  paceLaps: 0,
+  sigmaMs: undefined,
+  rho: undefined,
+  mistakes: 0,
+  mistakeBase: 0,
+  mistakeMedianMs: undefined,
+  mistakeSigmaLog: undefined,
+  bigEvents: 0,
+  retirements: 0,
+  at: undefined,
+};
+
+/**
+ * The field as of `view`'s frame; outside the race and its planning view `undefined`. On the planning view (qualifying,
+ * C62d) the AI cars' and the AI field's values are the config's AI values: qualifying's AI laps are no race laps.
+ */
 function fieldOf(view: AsOfView, c: Config, cars: Map<CarId, CarModels>): Field | undefined {
-  if (!isRaceAt(view)) return undefined;
+  const planning = isPlanningAt(view);
+  if (!planning && !isRaceAt(view)) return undefined;
   // the AI field: its own median σ (the AI prior's σ) and its pooled rates
   const aiSigmas: number[] = [];
   const pooled = { mistakes: 0, mistakeBase: 0, bigEvents: 0, paceLaps: 0, retirements: 0, allLaps: 0 };
   let fieldAt = 0;
-  for (const car of cars.values()) {
+  for (const car of planning ? [] : cars.values()) {
     const ai = car.models.ai;
     if (ai.sigmaMs !== undefined) aiSigmas.push(ai.sigmaMs.value);
     pooled.mistakes += ai.mistakes;
@@ -156,14 +179,26 @@ function fieldOf(view: AsOfView, c: Config, cars: Map<CarId, CarModels>): Field 
     bigEventRatePerLap: known(shrink(rateOf(pooled.bigEvents, pooled.paceLaps), ai.bigEventRate, k).value, fieldAt),
     retireRatePerLap: known(shrink(rateOf(pooled.retirements, pooled.allLaps), ai.retireRate, k).value, fieldAt),
   };
-  return { c, cars, ai, aiField };
+  return { c, cars, ai, aiField, planning };
 }
 
 /** One car's entry with `model`'s values. */
 function entryOf(view: AsOfView, field: Field, id: CarId, car: CarModels, model: Model): CarNoise {
   const profile = model === 'human' ? profileOf(view, id) : undefined;
   const priors = model === 'human' ? humanPriors(profile, field.c) : field.ai;
-  return carNoiseOf(car, car.models[model], priors, field.c);
+  return carNoiseOf(car, estimatesOf(field, car, model), priors, field.c);
+}
+
+/**
+ * The session estimates `model`'s entry rests on. On the planning view (C62d) an AI car has none (its values the config's)
+ * and a human no mistakes: qualifying's time-loss events are not counted (they are the race's, `carModelsOf`), so its
+ * mistake rate and size are its prior's; its σ, ρ and big events rest on the session's laps.
+ */
+function estimatesOf(field: Field, car: CarModels, model: Model): ModelEstimates {
+  const own = car.models[model];
+  if (!field.planning) return own;
+  if (model === 'ai') return NO_ESTIMATES;
+  return { ...own, mistakes: 0, mistakeBase: 0, mistakeMedianMs: undefined, mistakeSigmaLog: undefined };
 }
 
 /** Every car's noise model and the AI field's rates, as of `view`'s frame. */
