@@ -213,8 +213,9 @@ export function partFinalCall(input: StrategyInput, rng: Rng): { final: FinalCal
     return { car: c, mc: { ...all, start: { ...all.start, sets: callSets }, candidates: { [c]: own.candidates }, committed, config: { ...all.config, maxScenarioPolicies: cap } } };
   };
 
-  // the cap (a count, C2) is the part's whole: round 1 its share rounded down, the final call the rest
-  const total = config.maxScenarioPolicies;
+  // the cap (a count, C2) is the part's whole, the one `mcConfigOf` chose (the planning round's its own, R34): round 1
+  // its share rounded down, the final call the rest
+  const total = all.config.maxScenarioPolicies;
   const mate = [...cars.keys()].find((c) => c !== car);
   if (mate === undefined) return done(callOf(car, total));
   // the committed teammate as every job models it (C43, `committedField`): its followed commit, as `perCar` holds it

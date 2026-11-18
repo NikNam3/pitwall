@@ -47,6 +47,12 @@ export type TyreModelCar = {
   fittedLifeSpanLaps: Known<number>;
   /** Our car's used sets left with their wear (the starting point's `sets`); a rival's `unknown('notApplicable')`. */
   usedSets: Known<{ compound: NoiseCompound; wearPct: number }[]>;
+  /**
+   * Our car's sets for the next race (SP4.3e Task 3b): every set available now (the fitted one included) plus those
+   * reserved for it (`TyreSet.forNextRace`), with their wear; a rival's `unknown('notApplicable')`. Absent reads as
+   * `unknown('notReceived')`.
+   */
+  raceSets?: Known<{ compound: NoiseCompound; wearPct: number }[]>;
 };
 
 /** `tyre-model`'s output: every car's model. */
