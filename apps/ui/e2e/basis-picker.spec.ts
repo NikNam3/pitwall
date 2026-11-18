@@ -25,8 +25,13 @@ test.afterEach(async () => {
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
-/** Plays the bridge's replay feed and resolves once it is at its end. */
-async function playToEnd(port: number): Promise<void> {
+/**
+ * Plays the bridge's replay feed slowly (0.02x: the 1.6 s segment lasts about 80 s) and resolves once its `basis.active`
+ * names a qualifying (the race's preselection, at the first frame with the team known). The session keeps running with
+ * frames arriving, so a basis choice is a decision of it and enters at the next frame (C62, C76; a replay at its end
+ * has ended its session, a paused one applies no decision).
+ */
+async function playSlowlyUntilBasis(port: number): Promise<void> {
   const socket = new WebSocket(`ws://127.0.0.1:${port}`);
   const messages: Array<{ type: string; id?: string; value?: unknown; feeds?: Array<{ feedId: string; kind: string }> }> = [];
   socket.addEventListener('message', (event) => messages.push(JSON.parse(String(event.data)) as (typeof messages)[number]));
@@ -42,14 +47,16 @@ async function playToEnd(port: number): Promise<void> {
       if (feedId === undefined) await sleep(POLL_MS);
     }
     if (feedId === undefined) throw new Error('the bridge offers no replay feed');
+    socket.send(JSON.stringify({ type: 'subscribe', id: 'basis', topic: 'basis.active', params: {}, feedId }));
+    socket.send(JSON.stringify({ type: 'replayControl', id: 'speed', control: { kind: 'speed', factor: 0.02 } }));
     socket.send(JSON.stringify({ type: 'replayControl', id: 'play', control: { kind: 'play' } }));
-    socket.send(JSON.stringify({ type: 'subscribe', id: 'status', topic: 'replay.status', params: {}, feedId }));
     while (Date.now() < deadline) {
-      const last = messages.filter((m) => m.id === 'status' && (m.type === 'snapshot' || m.type === 'update')).at(-1);
-      if ((last?.value as { atEnd?: boolean } | undefined)?.atEnd === true) return;
+      const last = messages.filter((m) => m.id === 'basis' && (m.type === 'snapshot' || m.type === 'update')).at(-1);
+      const qualifying = (last?.value as { basis?: { qualifying?: unknown } } | undefined)?.basis?.qualifying;
+      if (qualifying !== undefined && qualifying !== null) return;
       await sleep(POLL_MS);
     }
-    throw new Error('the replay did not reach its end');
+    throw new Error('the replay published no basis with a qualifying');
   } finally {
     socket.close();
   }
@@ -79,7 +86,7 @@ test('confirming a basis and a plan in the picker updates the top bar', async ()
   // database (a recording without a basis sidecar, C62; R21).
   const bridge = await startBridge({ recording: RACE, dataDir });
   cleanups.push(() => bridge.stop());
-  await playToEnd(bridge.wsPort);
+  await playSlowlyUntilBasis(bridge.wsPort);
   const app = await launchPitwall({ wsPort: bridge.wsPort, dataDir });
   cleanups.push(() => app.close());
   const page = await app.window('main');
