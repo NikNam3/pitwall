@@ -6,6 +6,7 @@ import { CONTRACT_VERSION, TOPICS, decodeClientMessage, encodeMessage } from '@p
 import type { ClientMessage, FeedInfo, ReplayControl, ServerMessage, UiAction } from '@pitwall/contracts';
 import { isCalibrationAction, type CalibrationStore } from '../calibration/store.ts';
 import { isDriverAction, type ProfileStore } from '../drivers/store.ts';
+import { isBasisAction, type BasisAction } from '../pipeline/basis-routing.ts';
 import { isPlanAction, type PlanAction } from '../pipeline/plan-routing.ts';
 import { isPrepareAction, type PrepareAction } from '../planning/planning.ts';
 import type { Logger } from '../log.ts';
@@ -55,6 +56,12 @@ export type WsServerOptions = {
    * state. Without it they are answered with `notSupported`.
    */
   prepare?: (action: PrepareAction) => ActionOutcome;
+  /**
+   * Takes the `basis.*` uiActions (decisions of the team's running sessions, C1a, C62, C76): `serve` hands them to
+   * `BasisRouting.choose`, which answers once the named sessions are current and the choice is committed. Without it
+   * they are answered with `notSupported`.
+   */
+  basis?: (action: BasisAction) => Promise<ActionOutcome>;
   /** The replay transport that `replayControl` messages drive; without it (a live feed), or when its `control` returns `false`, they are answered with `notSupported`. */
   replay?: { control(control: ReplayControl): boolean | undefined };
   /** Default `127.0.0.1`. */
@@ -167,6 +174,16 @@ export class WsServer {
         // a plan the plan routing's (a decision for the team's feeds, C76), ending a session the feed pipeline's (C59),
         // the planning round's the planning module's (C62d), every other one the UI state's.
         const { action } = message;
+        // A basis choice is the basis routing's (C62, C76): answered once its sessions are current and it is committed.
+        if (isBasisAction(action)) {
+          const { basis } = this.options;
+          const answer = basis === undefined ? Promise.resolve<ActionOutcome>({ ok: false, reason: 'notSupported' }) : basis(action);
+          answer.then(
+            (result) => send({ type: 'actionResult', id: message.id, ...result }),
+            () => send({ type: 'actionResult', id: message.id, ok: false, reason: 'notSupported' }),
+          );
+          return;
+        }
         // The driver-profile actions are the profile store's (C62c).
         const owner = isPrepareAction(action) ? this.options.prepare?.(action)
           : action.kind === 'calibration.choose'

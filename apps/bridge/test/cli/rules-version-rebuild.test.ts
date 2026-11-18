@@ -2,7 +2,7 @@
 // the rules version once, when they open the database. A session is stale when its rules version differs or its log is
 // not complete. Nothing is rebuilt at bridge start (SP4.3e Task 7d: `no-startup-rebuild.test.ts`; the rebuild service,
 // `test/storage/rebuild-*.test.ts`, holds the startup rebuild's ported tests); a stale session is rebuilt when first
-// read; the sessions a session start's weekend context skips are rebuilt in the background. A session whose recording
+// read (a running session's stale basis sessions: `test/pipeline/basis-replay.test.ts`). A session whose recording
 // no longer yields it is kept, never served, and warned about once. `pitwall replay` and `pitwall dev` open no
 // database. Every data dir and database here is a temp one (C84).
 import { copyFileSync, existsSync, mkdtempSync, readdirSync } from 'node:fs';
@@ -11,20 +11,18 @@ import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { FeedId, SessionUid } from '@pitwall/domain';
-import type { QuickCalculator } from '@pitwall/engine';
 import { ScenarioBuilder, packetBytes } from '../../../../packages/engine/test/builders/index.ts';
 import type { CliIo } from '../../src/cli/io.ts';
 import { cliLogger } from '../../src/cli/io.ts';
 import { main } from '../../src/cli/pitwall.ts';
 import { rebuildDatabase, sessionRebuilder } from '../../src/cli/rebuild-database.ts';
 import { loadFeatureConfig } from '../../src/feature-config.ts';
-import { defineFeature } from '../../src/features/feature.ts';
 import { FEATURES } from '../../src/features/index.generated.ts';
 import { TopicHub } from '../../src/hub/topic-hub.ts';
 import { createLogger } from '../../src/log.ts';
 import { FeedPipeline } from '../../src/pipeline/feed-pipeline.ts';
 import { dataDir } from '../../src/storage/data-dir.ts';
-import { openDatabase, type Db, type SessionKey, type StoredSessionRow } from '../../src/storage/db.ts';
+import { openDatabase, type Db, type SessionKey } from '../../src/storage/db.ts';
 import { rulesVersion } from '../../src/storage/rules-version.ts';
 import { WeekendRepository } from '../../src/storage/weekend-repository.ts';
 import { ArraySource } from '../helpers/array-source.ts';
@@ -62,9 +60,6 @@ type LiveRun = {
   version: string;
   /** False: the recording holds no session end (SEND), as when the bridge was stopped mid-session. */
   ended?: boolean;
-  features?: typeof FEATURES;
-  /** The live bridge's background rebuild, on the pipeline's database; every rebuild it starts is awaited before the database closes. */
-  rebuild?: (db: Db) => (row: StoredSessionRow) => Promise<void>;
 };
 
 /** A live session stored into `dir`'s database and recorded into its recordings, as the live bridge does. */
@@ -73,17 +68,13 @@ async function storeSession(dir: string, run: LiveRun): Promise<StoredSession> {
   const db = openDatabase(dirs.dbPath);
   try {
     const before = new Set(readdirSync(dirs.recordings));
-    const started: Array<Promise<void>> = [];
-    const rebuilder = run.rebuild?.(db);
-    const rebuild = rebuilder && ((row: StoredSessionRow) => { const p = rebuilder(row); started.push(p); return p; });
     const pipeline = new FeedPipeline({
       feedId: F, source: new ArraySource(F, packets(BigInt(run.uid), run.weekend, run.ended ?? true)), hub: new TopicHub({ now: () => 0 }),
-      features: run.features ?? FEATURES, log: silent, wallClock: () => run.at,
-      storage: { db, recordingsDir: dirs.recordings, rulesVersion: run.version, ...(rebuild && { rebuild }) },
+      features: FEATURES, log: silent, wallClock: () => run.at,
+      storage: { db, recordingsDir: dirs.recordings, rulesVersion: run.version },
     });
     pipeline.start();
     await pipeline.done;
-    await Promise.all(started);
     const file = readdirSync(dirs.recordings).find((name) => name.endsWith('.pwrec.gz') && !before.has(name));
     return { key: { sessionUid: String(run.uid) as SessionUid, weekendId: String(run.weekend), playerCar: 0 as SessionKey['playerCar'] }, file: join(dirs.recordings, file!) };
   } finally {
@@ -180,31 +171,6 @@ describe('stale sessions are rebuilt when first read (C61)',{ timeout: 60_000 },
     expect(projection?.events.length).toBeGreaterThan(0);
     expect(await rowOf(dir, earlier.key)).toMatchObject({ rules_version: current, complete: 1 });
     expect(await logOf(dir, earlier.key)).toEqual(log);
-  });
-
-  it('a session skipped by weekendContext is rebuilt in the background; the running session keeps its context', async () => {
-    const dir = tmp();
-    const practice = await storeSession(dir, { uid: 20, weekend: 2, at: T0, version: OLD });
-    const qualifying = await storeSession(dir, { uid: 21, weekend: 2, at: T0 + HOUR, version: OLD });
-    const logs = [await logOf(dir, practice.key), await logOf(dir, qualifying.key)];
-    const seen: unknown[] = [];
-    const probe: QuickCalculator<number> = { kind: 'quick', id: 'probe.basis', reads: ['session'], cadence: 'frame',
-      compute: ({ basis }) => { seen.push(basis === undefined ? undefined : structuredClone(basis)); return seen.length; }, insights: () => [] };
-    const { io, lines } = memoryIo();
-    const asked: string[] = [];
-    await storeSession(dir, {
-      uid: 22, weekend: 2, at: T0 + 2 * HOUR, version: current,
-      features: [...FEATURES, defineFeature({ name: 'probe-weekend', calculators: [probe], topics: [] })],
-      rebuild: (db) => { const rebuilder = sessionRebuilder(db, config(), io, current); return (row) => { asked.push(row.sessionUid); return rebuilder(row); }; },
-    });
-    expect(asked.sort()).toEqual(['20', '21']);
-    // the running session started without them: its basis holds no stale session
-    expect(seen.at(-1)).toEqual({ basis: { practice: [], qualifying: null }, player: { teamId: 0, raceNumber: 1 }, sessions: [] });
-    expect(await rowOf(dir, practice.key)).toMatchObject({ rules_version: current, complete: 1 });
-    expect(await rowOf(dir, qualifying.key)).toMatchObject({ rules_version: current, complete: 1 });
-    expect([await logOf(dir, practice.key), await logOf(dir, qualifying.key)]).toEqual(logs);
-    // each background rebuild is logged
-    for (const stored of [practice, qualifying]) expect(lines.filter((l) => l.stream === 'err' && l.line.includes(basename(stored.file)))).not.toEqual([]);
   });
 
   it('a rebuild whose recording no longer yields the session keeps the stored row and log, never serves it, and warns once (C24)', async () => {

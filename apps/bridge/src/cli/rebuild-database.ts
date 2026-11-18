@@ -151,9 +151,13 @@ export class StaleSessions {
     this.#io = io;
     this.#service = createRebuildService({ db, config, rulesVersion, log: cliLogger(io, 'warn'), ...(opts.running && { running: opts.running }) });
   }
+  /** The one rebuild service itself, for readers that ask with a priority (a running session's basis, C61, C62). */
+  get rebuildService(): Pick<RebuildService, 'ensureCurrent'> {
+    return this.#service;
+  }
+
   /**
-   * Rebuilds one stale session (C61), for a first read or in the background for a session start whose weekend context
-   * skipped it: through the one rebuild service, one session at a time. A session whose recording is missing, or whose
+   * Rebuilds one stale session (C61), for a first read: through the one rebuild service, one session at a time. A session whose recording is missing, or whose
    * recording no longer yields it, is kept as it is (C24), never served, and warned about once.
    */
   readonly rebuild = (row: StoredSessionRow): Promise<void> => {
