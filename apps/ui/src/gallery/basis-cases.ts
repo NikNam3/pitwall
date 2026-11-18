@@ -2,7 +2,7 @@
 // contracts. The gallery draws each as the picker overlay (`shell/basis-picker/<name>`, `cells.ts`); the top bar's
 // basis segment is drawn under `none` and `laps-differ` (`topbar-cases.ts` `basis-none`, `basis-laps-differ`).
 // fit.spec checks every cell.
-import type { BasisActive, FeedStatus, PlanningRoundState, TopicValue } from '@pitwall/contracts';
+import type { BasisActive, FeedStatus, PlanningRoundState, SessionInfo, TopicValue } from '@pitwall/contracts';
 import { carId, feedId, type SessionRef } from '@pitwall/domain';
 import type { GalleryOverride } from './gallery-connection.ts';
 
@@ -56,7 +56,10 @@ const inSession: FeedStatus = {
   packetsPerSecond: 60,
   betweenSessions: false,
 };
+/** A running session (only its feed and cars matter to the picker): the in-session picker shows (SP4.3f Task 6). */
+const SESSION: SessionInfo = { feedId: feedId('gallery'), sessionUid: '1', playerCar: carId(0), teammateCar: carId(1), realism: false } as SessionInfo;
 const of = (value: BasisActive): GalleryOverride[] => [
+  { topic: 'session.info', value: SESSION },
   { topic: 'basis.active', value },
   { topic: 'plans.prepared', value: SAVED },
   { topic: 'feed.status', value: inSession },
