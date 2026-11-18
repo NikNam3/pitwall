@@ -12,8 +12,10 @@
 //   without waiting; the stale ones and the preselection's others are queued (`runningBasis`) and the preselection enters
 //   by a `basisChosen` once current, unless its decisions hold a choice.
 // - A recording without a sidecar, or a run without the preselection's inputs: the seat's earlier sessions of the weekend.
-// - The plan (C62d, R20): in a race or sprint `basis.active.plan` is the newest plan choice that reached the feed
-//   (`choosePlan`, recorded in the sidecar's `plans` at its record index); a replay shows the recorded ones (`showRecorded`).
+// - The plan (C62d, R20, R22): in a race or sprint `basis.active.plan` is the newest plan choice of the current timeline,
+//   as committed (`choosePlan`, recorded in the sidecar's `plans` at its record index with the frame its decisions
+//   describe); a later edit of the saved plan changes nothing of it; after a flashback it is the newest choice at or
+//   before the frame restored to (C27a, C33); a replay shows the recorded ones (`showRecorded`).
 import type { BasisActive } from '@pitwall/contracts';
 import { NO_BASIS, type BasisSidecar, type CarKey, type FeedId, type SessionBasis, type SessionRef, type TeamId, type TrackId, type WeekendPhase } from '@pitwall/domain';
 import type { BasisContext, DeepReadonly } from '@pitwall/engine/readers';
@@ -86,8 +88,15 @@ export class BasisRun {
   /** The basis in use at the newest applied frame. */
   #inUse: SessionBasis | undefined;
   #raceLaps: number | null = null;
-  /** The plan the session chose (C62d): the newest plan choice that reached the feed; `null` before any or for none. */
+  /**
+   * The plan the session chose (C62d, R22): the newest plan choice of the current timeline, as committed; `null` before
+   * any or for none.
+   */
   #plan: ShownPlan = null;
+  /** The plan choices of the current timeline, in order, each with the frame its decisions describe (C27a). */
+  #timeline: Array<Pick<PlanEntry, 'frame' | 'plan'>> = [];
+  /** The frame number of the newest applied frame (C26); 0 before the first. */
+  #frame = 0;
   /**
    * The basis sidecar's start and preselection as the session file holds them (a live session's as it wrote them, a
    * continued recording's as its first run left them); `undefined` until written (a plan choice before then is written
@@ -187,8 +196,19 @@ export class BasisRun {
       );
   }
 
-  /** After each applied frame: the basis in use there and the race laps (`null` outside a race), for `basis.active`. */
-  applied(o: { basis: DeepReadonly<SessionBasis> | undefined; phase: DeepReadonly<WeekendPhase>; totalLaps: number }): void {
+  /**
+   * After each applied frame (number `frameNumber`, C26): the basis in use there and the race laps (`null` outside a
+   * race), for `basis.active`. After a flashback (`rewound`) the frames after the one restored to (`frameNumber - 1`,
+   * the flashback's frame counting on from it) never happened: the plan shown is the newest choice at or before it
+   * (C27a, C33), as in a run that never saw them.
+   */
+  applied(o: { basis: DeepReadonly<SessionBasis> | undefined; phase: DeepReadonly<WeekendPhase>; totalLaps: number; frameNumber: number; rewound: boolean }): void {
+    this.#frame = o.frameNumber;
+    if (o.rewound) {
+      const restored = o.frameNumber - 1;
+      this.#timeline = this.#timeline.filter((entry) => entry.frame <= restored);
+      this.#plan = this.#timeline.at(-1)?.plan ?? null;
+    }
     if (this.#start === undefined) return;
     // The state's basis is read-only and only read here (published as it is, C54).
     this.#inUse = (o.basis as SessionBasis | undefined) ?? this.#start;
@@ -208,28 +228,28 @@ export class BasisRun {
   }
 
   /**
-   * A plan choice reached the feed (C62d, R20): the race-start commit of the team's last chosen or saved plan, a later
-   * `basis.choose` with a plan (`null`: none), or a rename or delete of the shown plan. `basis.active` shows it, and the
-   * basis sidecar records it at record index `at`, where the choice reached the feed.
+   * A plan choice reached the feed (C62d, R20, R22): the race-start commit of the team's last chosen or saved plan, or a
+   * later `basis.choose` with a plan (`null`: none), as committed. `basis.active` shows it, and the basis sidecar records
+   * it at record index `at`, where the choice reached the feed, with the frame its decisions describe: the session's
+   * next frame, which carries them to the runner. A later edit of the saved plan changes nothing of it (C62d, C75).
    */
   choosePlan(at: number, plan: ShownPlan): void {
     if (this.#closed) return;
-    this.#plans.push({ at, plan: plan === null ? null : { ...plan } });
+    const entry: PlanEntry = { at, frame: this.#frame + 1, plan: plan === null ? null : { ...plan } };
+    this.#plans.push(entry);
     this.#writeSidecar();
-    this.#plan = plan;
-    this.#publish();
-  }
-
-  /** The saved plan `id` changed (renamed: `plan`; deleted: `null`): a choice of the shown plan, else nothing (C62d). */
-  planChanged(at: number, id: string, plan: ShownPlan): void {
-    if (this.#plan?.id !== id || JSON.stringify(this.#plan) === JSON.stringify(plan)) return;
-    this.choosePlan(at, plan);
+    this.#show(entry);
   }
 
   /** A replay or reprocess reached a recorded plan choice (C38, R20): `basis.active` shows it; nothing is written. */
-  showRecorded(plan: ShownPlan): void {
+  showRecorded(entry: Pick<PlanEntry, 'frame' | 'plan'>): void {
     if (this.#closed) return;
-    this.#plan = plan;
+    this.#show(entry);
+  }
+
+  #show(entry: Pick<PlanEntry, 'frame' | 'plan'>): void {
+    this.#timeline.push({ frame: entry.frame, plan: entry.plan });
+    this.#plan = entry.plan;
     this.#publish();
   }
 

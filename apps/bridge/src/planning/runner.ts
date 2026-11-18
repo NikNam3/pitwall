@@ -43,11 +43,6 @@ export type PlanningRunnerOptions = {
   log: Pick<Logger, 'info' | 'warn' | 'error'>;
   /** The time a plan is saved at (ISO). Default: now. */
   now?: () => string;
-  /**
-   * A saved plan was overwritten or renamed (`plan`: as stored now) or deleted (`undefined`): the running races showing
-   * it show the change (C62d, `basis.active`).
-   */
-  planChanged?: (id: string, plan: SavedPlan | undefined) => void;
 };
 
 /** A round to open: the feed, the qualifying (of the feed's seat), the practice basis and the race assumptions. */
@@ -359,7 +354,6 @@ export function createPlanningRunner(o: PlanningRunnerOptions): PlanningRunner {
       const last = o.lastChoice.read(round.team, round.trackId);
       o.lastChoice.write(round.team, { trackId: round.trackId, basis: last?.basis ?? {}, plan: { id: plan.id, at: savedAt } });
       republishTeam(round.team);
-      if (replaces !== undefined) o.planChanged?.(plan.id, plan);
       return { ok: true };
     },
 
@@ -368,7 +362,6 @@ export function createPlanningRunner(o: PlanningRunnerOptions): PlanningRunner {
       if (typeof plan === 'string') return invalid(plan);
       o.store.rename(id, name);
       republishTeam(plan.team);
-      o.planChanged?.(id, o.store.read(id));
       return { ok: true };
     },
 
@@ -377,7 +370,6 @@ export function createPlanningRunner(o: PlanningRunnerOptions): PlanningRunner {
       if (typeof plan === 'string') return invalid(plan);
       o.store.delete(id);
       republishTeam(plan.team);
-      o.planChanged?.(id, undefined);
       return { ok: true };
     },
 

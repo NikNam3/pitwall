@@ -323,12 +323,14 @@ type QueuedDecision =
   | { kind: 'plan'; decision: PlanDecision }
   | { kind: 'basis'; basis: SessionBasis }
   | { kind: 'shown'; plan: ShownPlan }
-  | { kind: 'planChanged'; id: string; plan: ShownPlan }
   | { kind: 'end' };
 
+/** A recorded plan choice: the plan as committed and the frame its decisions describe (R22). */
+type RecordedPlan = Pick<PlanEntry, 'frame' | 'plan'>;
+
 /** Recorded plan choices as the placement module hands them out, before the record each reached the live feed at (R20). */
-const placedPlans = (basis: RecordedBasis | null | undefined): Array<{ recordIndex: number; decision: ShownPlan }> =>
-  (basis?.plans ?? []).map(({ at, plan }: PlanEntry) => ({ recordIndex: at, decision: plan }));
+const placedPlans = (basis: RecordedBasis | null | undefined): Array<{ recordIndex: number; decision: RecordedPlan }> =>
+  (basis?.plans ?? []).map(({ at, frame, plan }: PlanEntry) => ({ recordIndex: at, decision: { frame, plan } }));
 
 /**
  * A restart's restore under way: the packets that arrive meanwhile wait in `buffer`, the decisions and calibration
@@ -404,7 +406,7 @@ export class FeedPipeline {
   /** A replay's recorded decisions by the record index they go before. */
   readonly #recorded: RecordedPlacement<GivenDecision>;
   /** A replay's recorded plan choices (the basis sidecar's `plans`, R20) by the record index they go before. */
-  readonly #recordedPlans: RecordedPlacement<ShownPlan>;
+  readonly #recordedPlans: RecordedPlacement<RecordedPlan>;
   /** The newest session's decisions (kept once it ended: a pick then only marks its set used). */
   #decisions: SessionDecisions | undefined;
   /** The newest session's seat as last reported to `teams`. */
@@ -588,20 +590,6 @@ export class FeedPipeline {
     const session = this.#session;
     if (session === undefined) return;
     this.#guarded('plan shown', () => this.#basisRun?.choosePlan(session.place(plan).recordIndex, plan));
-  }
-
-  /**
-   * The saved plan `id` was renamed (`plan`) or deleted (`null`, C62d): a running session showing it shows the change,
-   * recorded in its basis sidecar like a choice (R20). An ended session keeps what it recorded.
-   */
-  savedPlanChanged(id: string, plan: ShownPlan): void {
-    if (this.#restore !== undefined) {
-      this.#queue({ kind: 'planChanged', id, plan });
-      return;
-    }
-    const session = this.#session;
-    if (session === undefined) return;
-    this.#guarded('saved plan change', () => this.#basisRun?.planChanged(session.place(plan).recordIndex, id, plan));
   }
 
   /**
@@ -956,10 +944,6 @@ export class FeedPipeline {
         }
         if (entry.kind === 'shown') {
           this.showPlan(entry.plan);
-          return;
-        }
-        if (entry.kind === 'planChanged') {
-          this.savedPlanChanged(entry.id, entry.plan);
           return;
         }
         const result = entry.kind === 'pick' ? this.commitDecision(entry.setId)
