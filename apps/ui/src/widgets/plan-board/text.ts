@@ -1,6 +1,6 @@
 // Wording of the plan board (mockup docs/design/2026-11-16-sp4.3d/plan-board.html, gen.mjs `TEXT.board`); text shared
 // with the kit lives in kit/text.ts. No sentence in the panel; hovers may be phrases.
-import type { McRow, Slot } from '@pitwall/domain';
+import type { McRow, Slot, Weather } from '@pitwall/domain';
 
 /** Column headers: the slot column has none, `START` (the planning round), `STOPS`, `E[POS]`, `ΔPOS`, `ΔTIME`. */
 export const headers = { start: 'START', stops: 'STOPS', ePos: 'E[POS]', dPos: 'ΔPOS', dTime: 'ΔTIME' } as const;
@@ -49,6 +49,22 @@ export const commandHover = {
   remove: 'plans.prepare.remove',
   raceAccept: 'plan.accept',
 } as const;
+/**
+ * SP4.3f Task 7, the race's conditions (mockup plan-board-conditions.html, gen.mjs `CT`): the RAIN button's mark, the
+ * source label (`imported · Q 17 Nov` while no row is overridden, `edited` once one is), the editor's header and buttons,
+ * an overridden row's mark, the weather names.
+ */
+export const conditions = {
+  more: '▸',
+  imported: (day: string): string => `imported · Q ${day}`,
+  edited: 'edited',
+  head: { at: '+MIN', weather: 'WEATHER', rain: 'RAIN' },
+  reset: 'reset',
+  done: 'done',
+  add: '+ row',
+  percent: '%',
+  weather: { clear: 'clear', lightCloud: 'light cloud', overcast: 'overcast', lightRain: 'light rain', heavyRain: 'heavy rain', storm: 'storm' },
+} as const satisfies { weather: Record<Weather, string> } & Record<string, unknown>;
 /** A rejection without the bridge's message. */
 export const rejectedNoReason = 'rejected';
 export const rejected = (message: string): string => `rejected: ${message}`;

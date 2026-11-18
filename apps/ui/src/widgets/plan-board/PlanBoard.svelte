@@ -8,24 +8,28 @@
   // `plans.preview` with the race inputs line (GRID, LAPS, RAIN, N), the START column, the prefilled slots with
   // `accept` and an empty game slot's entry; every planning control, and the race's prefill accept, invokes a shell
   // command by id through the panel (C72, C74). The cell budget is layout.ts'. SP4.3e Task 8: a rejected outcome of a
-  // command or action that marks no field shows the bridge's message on the board's last line (C73).
+  // command or action that marks no field shows the bridge's message on the board's last line (C73). SP4.3f Task 7
+  // (mockup docs/design/2026-11-18-sp4.3f/plan-board-conditions.html): the inputs line shows whenever the round is open
+  // (full), its RAIN button opens the race's conditions in place of the plan rows (window-local); a committed field, `+ row`
+  // once its rain is typed, and reset each invoke `plans.race.set` (conditions.ts builds the list; C72–C74).
   import type { ActionOutcome } from '@pitwall/contracts';
-  import type { NoiseCompound, RaceAssumptions, Slot } from '@pitwall/domain';
-  import { PLAN_SLOTS } from '@pitwall/domain';
+  import type { NoiseCompound, RaceAssumptions, Slot, Weather } from '@pitwall/domain';
+  import { IMPORTED, PLAN_SLOTS } from '@pitwall/domain';
   import { getUiActions } from '../../kit/actions.ts';
   import { getWidgetCommands } from '../../kit/commands.ts';
   import { COMPOUND_MARK } from '../../kit/compound/compound-mark.ts';
   import DistStrip from '../../kit/dist/DistStrip.svelte';
   import { placesHeader } from '../../kit/dist/places.ts';
   import type { WidgetProps } from '../../kit/types.ts';
-  import { formatCount, formatPercent, formatPosition, formatWhole } from '../../kit/values/format.ts';
+  import { formatCount, formatDay, formatOffsetMinutes, formatPercent, formatPosition, formatWhole } from '../../kit/values/format.ts';
   import TextCell from '../../kit/values/TextCell.svelte';
   import { role, roleOrUndefined } from '../../theme/index.ts';
+  import { anyOverridden, changeRow, conditionRows, draftOf, enteredFrom, WEATHERS, withAdded, type DraftRow, type RowChange } from './conditions.ts';
   import * as draftOps from './draft.ts';
-  import { changedFields, COMPOUNDS, draftOf, entryOf, NEW_START, policyOfDraft, type Changed, type Draft } from './draft.ts';
+  import { changedFields, COMPOUNDS, draftOf as slotDraftOf, entryOf, NEW_START, policyOfDraft, type Changed, type Draft } from './draft.ts';
   import { dimRole, headerRole, lineRole, rejectedRole } from './emphasis.ts';
-  import { blankAfterInputs, columnsOf, GAME_SLOTS, GAP, LEAD, widthOf } from './layout.ts';
-  import { actionsShown, variantOf } from './presentation.ts';
+  import { addRowFits, blankAfterInputs, columnsOf, CONDITIONS_COLS, GAME_SLOTS, GAP, LEAD, widthOf } from './layout.ts';
+  import { actionsShown, conditionShown, variantOf } from './presentation.ts';
   import { boardRows, freeSlot, type BoardTable, type DpLine, type SlotLine, type StopCount } from './rows.ts';
   import * as text from './text.ts';
   import type { widget } from './widget.ts';
@@ -139,7 +143,7 @@
   }
   function edit(line: SlotLine): void {
     if (line.slot === null) return;
-    draft = draftOf(line.slot, line.policy);
+    draft = slotDraftOf(line.slot, line.policy);
     rejected = null;
   }
   /** One edit of the draft; the next edit after a rejection clears it. */
@@ -216,6 +220,91 @@
   }
   /** The round's race laps: the bridge's suggestion until entered; `null` while neither is known. */
   const entered = $derived(round?.race.laps ?? null);
+
+  // ---- SP4.3f Task 7: the race's conditions (mockup plan-board-conditions.html; C3, C73)
+  /** The editor's window-local state (C73): open or not, the draft rows while an edit is not committed, the typed rain. */
+  let conditionsOpen = $state(false);
+  let conditionsDraft = $state<DraftRow[] | null>(null);
+  let rainTyped = $state<Partial<Record<number, string>>>({});
+  let conditionRejected = $state<{ index: number; field: 'weather' | 'rain'; message: string } | null>(null);
+  /** Counts the editor's changes, so an outcome applies only to the latest one. */
+  let conditionsEdit = 0;
+
+  const forecast = $derived(round?.forecast);
+  const shownRows = $derived(forecast === undefined ? undefined : conditionRows(forecast));
+  /** The editor's rows: the draft while one is held, else the round's (one row to enter at +0 with none known). */
+  const drafts = $derived(conditionsDraft ?? (forecast === undefined ? [] : draftOf(forecast)));
+  const editing = $derived(full && round !== undefined && conditionsOpen);
+  /** The source label: `edited` once a row is overridden, `imported · Q <day>` while none is; none with the rows unknown. */
+  const sourceLabel = $derived(
+    forecast === undefined || !forecast.rows.known
+      ? null
+      : anyOverridden(forecast)
+        ? text.conditions.edited
+        : text.conditions.imported(formatDay(forecast.source.startedAt)),
+  );
+
+  const rowShown = (i: number) => conditionShown(shownRows?.known === true && shownRows.value[i]?.overridden === true);
+  const badCondition = (i: number, field: 'weather' | 'rain'): boolean => conditionRejected?.index === i && conditionRejected.field === field;
+
+  function toggleConditions(): void {
+    conditionsOpen = !conditionsOpen;
+    conditionsEdit++;
+    conditionsDraft = null;
+    rainTyped = {};
+    conditionRejected = null;
+    actionRejected = null;
+  }
+  function typeRain(i: number, v: string): void {
+    rainTyped = { ...rainTyped, [i]: v };
+    if (conditionRejected?.index === i) conditionRejected = null;
+  }
+  /**
+   * Commits a row's change: the whole list as `entered`, one command with the round's laps and sets; the bridge validates
+   * it (C73). While a row's rain is still to enter, or the round has no laps yet, the change stays in the draft.
+   */
+  async function commitRow(index: number, field: 'weather' | 'rain', change: RowChange): Promise<void> {
+    if (round === undefined) return;
+    const rows = changeRow(drafts, index, change);
+    const conditions = enteredFrom(rows);
+    const laps = round.race.laps;
+    conditionsDraft = rows;
+    conditionRejected = null;
+    actionRejected = null;
+    const edit = ++conditionsEdit;
+    if (conditions === null || laps === null) return;
+    const outcome = await commands.invoke('plans.race.set', { feedId: link.feedId, race: { laps, sets: round.race.sets, conditions } });
+    // a later edit (or closing the editor) supersedes this outcome
+    if (edit !== conditionsEdit) return;
+    if (outcome.ok) {
+      conditionsDraft = null;
+      rainTyped = {};
+    } else conditionRejected = { index, field, message: outcome.message ?? text.rejectedNoReason };
+  }
+  function commitRain(i: number): void {
+    const typed = rainTyped[i];
+    if (typed === undefined) return;
+    if (typed.trim() === '') {
+      rainTyped = { ...rainTyped, [i]: undefined };
+      return;
+    }
+    void commitRow(i, 'rain', { rainPct: Number(typed.trim()) });
+  }
+  function addRow(): void {
+    conditionsEdit++;
+    conditionsDraft = withAdded(drafts);
+    conditionRejected = null;
+  }
+  /** Reset: the imported rows again, one command with the round's laps and sets. */
+  function resetConditions(): void {
+    const laps = round?.race.laps ?? null;
+    if (round === undefined || laps === null) return;
+    conditionsEdit++;
+    conditionsDraft = null;
+    rainTyped = {};
+    conditionRejected = null;
+    void outcomeOf(commands.invoke('plans.race.set', { feedId: link.feedId, race: { laps, sets: round.race.sets, conditions: IMPORTED } }));
+  }
 </script>
 
 {#snippet cells(l: SlotLine | DpLine, active: boolean, faint: boolean)}{#if cols.start > 0}<span data-testid={'key' in l ? `start-${l.key}` : undefined}
@@ -370,23 +459,86 @@
       onchange={(e) => void commitSets(e.currentTarget.value as RaceAssumptions['sets'])}
     >
       {#each RACE_SETS as s (s)}<option value={s}>{text.sets[s]}</option>{/each}
-    </select>{GAP}{GAP}{GAP}<span style:color={role(headerRole)}>{text.inputs.rain}</span> {#if planningInputs !== null}<TextCell
-        text={planningInputs.rainPct.known ? formatPercent(planningInputs.rainPct.value) : ''}
-        reason={planningInputs.rainPct.known ? undefined : planningInputs.rainPct.reason}
-      />{/if}{GAP}{GAP}{GAP}<span style:color={role(headerRole)}>{text.inputs.n}</span> {#if value !== undefined}{formatCount(
+    </select>{GAP}{GAP}{GAP}<span style:color={role(headerRole)}>{text.inputs.rain}</span> <button
+      type="button"
+      class="pw-button"
+      class:on={editing}
+      data-testid="rain"
+      onclick={toggleConditions}
+      >{@render rainValue()} {text.conditions.more}</button
+    >{#if sourceLabel !== null} <span data-testid="conditions-source" style:color={role(dimRole)}>{sourceLabel}</span>{/if}{GAP}{GAP}{GAP}<span style:color={role(headerRole)}>{text.inputs.n}</span> {#if value !== undefined}{formatCount(
         value.scenarios,
       )}{/if}{#if round?.running === true}{GAP}{GAP}{GAP}<span data-testid="computing" style:color={role(dimRole)} title={text.computingHover}
         >{text.computing}</span
       >{/if}</div>
 {/snippet}
 
-{#if reason !== undefined}
+<!-- RAIN: the rain chance of the planning job (the rows' highest); the rows' mark while they are unknown, never 0 % (C3);
+     nothing before the job's first result, as the other inputs. -->
+{#snippet rainValue()}{#if shownRows !== undefined && !shownRows.known}<TextCell text="" reason={shownRows.reason} />{:else if planningInputs !== null}<TextCell
+      text={planningInputs.rainPct.known ? formatPercent(planningInputs.rainPct.value) : ''}
+      reason={planningInputs.rainPct.known ? undefined : planningInputs.rainPct.reason}
+    />{/if}{/snippet}
+
+<!-- The conditions editor in place of the plan rows (gen.mjs `conditionLines`): the header with reset and done, one line per
+     row (its offset, weather and rain; an overridden row bright with `edited`), `+ row`; window-local until a field commits. -->
+{#snippet conditionsEditor()}
+  <div class="block" data-testid="conditions">
+    <div class="line"><span style:color={role(headerRole)}
+        >{LEAD}<TextCell text={text.conditions.head.at} width={CONDITIONS_COLS.at} align="right" />{GAP}{GAP}<TextCell
+          text={text.conditions.head.weather}
+          width={CONDITIONS_COLS.weather}
+        />{GAP}{GAP}<TextCell text={text.conditions.head.rain} width={CONDITIONS_COLS.rain} /></span
+      >{#if shownRows?.known === true}<button type="button" class="pw-button act" data-testid="cond-reset" title={text.commandHover.laps} onclick={resetConditions}
+          >{text.conditions.reset}</button
+        >{GAP}{GAP}{/if}<button type="button" class="pw-button act" data-testid="cond-done" onclick={toggleConditions}>{text.conditions.done}</button></div>
+    {#each drafts as r, i (i)}
+      {@const shown = rowShown(i)}
+      <div class="line" data-testid="cond-{i}" data-role={shown.role} style:color={role(shown.role)}>{LEAD}<span data-testid="cond-{i}-at"
+          ><TextCell text={formatOffsetMinutes(r.offsetMs)} width={CONDITIONS_COLS.at} align="right" /></span
+        >{GAP}{GAP}<select
+          class="pw-input fld"
+          data-testid="cond-{i}-weather"
+          data-role={badCondition(i, 'weather') ? rejectedRole : undefined}
+          title={badCondition(i, 'weather') ? conditionRejected?.message : text.commandHover.laps}
+          style:color={badCondition(i, 'weather') ? role(rejectedRole) : undefined}
+          value={r.weather}
+          onchange={(e) => void commitRow(i, 'weather', { weather: e.currentTarget.value as Weather })}
+        >
+          {#each WEATHERS as w (w)}<option value={w}>{text.conditions.weather[w]}</option>{/each}
+        </select>{GAP}{GAP}<input
+          type="text"
+          inputmode="numeric"
+          spellcheck="false"
+          class="pw-input fld"
+          data-testid="cond-{i}-rain"
+          data-role={badCondition(i, 'rain') ? rejectedRole : undefined}
+          title={badCondition(i, 'rain') ? conditionRejected?.message : text.commandHover.laps}
+          style:width="{CONDITIONS_COLS.rainField}ch"
+          style:color={badCondition(i, 'rain') ? role(rejectedRole) : undefined}
+          value={rainTyped[i] ?? (r.rainPct === null ? '' : formatWhole(r.rainPct))}
+          oninput={(e) => typeRain(i, e.currentTarget.value)}
+          onchange={() => commitRain(i)}
+        /> {text.conditions.percent}{#if shown.mark}{GAP}{GAP}{text.conditions.edited}{/if}</div>
+    {/each}
+    {#if addRowFits(drafts.length, size.rows)}
+      <div class="line">{LEAD}{' '.repeat(CONDITIONS_COLS.at)}{GAP}{GAP}<button type="button" class="pw-button act" data-testid="cond-add" onclick={addRow}
+          >{text.conditions.add}</button
+        ></div>
+    {/if}
+    {#if actionRejected !== null}{@render rejectionLine()}{/if}
+  </div>
+{/snippet}
+
+{#if round !== undefined && full}
+  {@render inputsLine()}
+{/if}
+{#if editing}
+  {@render conditionsEditor()}
+{:else if reason !== undefined}
   <div class="line"><TextCell text="" {reason} /></div>
 {:else}
-  {#if round !== undefined && full}
-    {@render inputsLine()}
-    {#if blank && view !== undefined}<div class="line"> </div>{/if}
-  {/if}
+  {#if round !== undefined && full && blank && view !== undefined}<div class="line"> </div>{/if}
   {#if view !== undefined}
     <div class="block">
       <div class="line" style:color={role(headerRole)}>{LEAD}{' '.repeat(cols.slot)}{GAP}{#if cols.start > 0}<TextCell
@@ -485,7 +637,8 @@
     font-weight: var(--pw-weight-bold);
     box-shadow: inset var(--pw-bar-px) 0 0 var(--pw-text);
   }
-  .row.on {
+  .row.on,
+  .pw-button.on {
     background: var(--pw-bgBand);
   }
   .act {
