@@ -37,7 +37,7 @@ import {
   type Frame,
   type SchedulerInput,
   type StepResult,
-  type WeekendContext,
+  type BasisContext,
 } from '@pitwall/engine';
 import { driversOf, priorsOf, type DeepReadonly, type EngineView } from '@pitwall/engine/readers';
 import type { TopicName } from '@pitwall/contracts';
@@ -111,7 +111,7 @@ const ACTIVE_AT = 0;
 /**
  * Runs one session (spec 5.4, 7.3). The runner holds the frames until the first Participants packet, which names the
  * player's car (its team and race number) and so the weekend context (C61, C62); this processor supplies that context
- * from storage (`contextFor`). The scheduler is attached to the runner, so a flashback rewinds its bookkeeping with the state
+ * from storage (`basis.start`). The scheduler is attached to the runner, so a flashback rewinds its bookkeeping with the state
  * (C27). An exception on a frame skips that frame, also among the held frames the runner releases after its identity
  * wait (the rest stay queued for the next call); a topic that fails to publish is marked errored while the other topics
  * go out. Either way the failure is logged and, up to `MAX_DUMPS_PER_SESSION` times, the frame is dumped with its place
@@ -165,7 +165,11 @@ export class SessionProcessor {
     this.#scheduler = new Scheduler(registry, { freezeOutputs, ...(opts.calcStats && { onCalculatorRun: opts.calcStats.hook }) });
     this.#runner = new SessionRunner(
       { feedId, sessionUid, session, realism: opts.config.realism?.enabled === true },
-      { attach: this.#scheduler, contextFor: (participants) => this.#contextFor(participants) },
+      {
+        attach: this.#scheduler,
+        // The session-start basis is today's weekend context; a chosen basis is registered by SP4.3e Task 7a-2.
+        basis: { start: (participants) => this.#contextFor(participants), registered: () => undefined },
+      },
     );
     const { storage } = opts;
     if (storage !== undefined) this.#storeRow((row) => storage.start(row, { continued: opts.continued === true }));
@@ -247,7 +251,7 @@ export class SessionProcessor {
       history: input.history,
       delta: input.delta,
       changed: input.changed,
-      weekend: input.weekend,
+      basis: input.basis,
       config: input.config,
       priors: priorsOf(input.history.decisions, input.priors),
       track: input.track,
@@ -336,7 +340,7 @@ export class SessionProcessor {
   }
 
   /** The player's earlier sessions of the weekend (C62): those whose player car had this player's team and race number; none without Participants. */
-  #contextFor(participants: ParticipantsValues | undefined): WeekendContext | undefined {
+  #contextFor(participants: ParticipantsValues | undefined): BasisContext | undefined {
     const player = participants?.cars.find((c) => c.carId === participants.playerCar)?.carKey;
     return player && this.#o.storage?.weekendContext(this.#row(), player);
   }
@@ -490,7 +494,7 @@ export class SessionProcessor {
       history: state.history,
       changed,
       delta,
-      weekend: state.weekend,
+      basis: state.basis,
       feed: this.#o.feedView(),
       config: this.#o.config,
       priors: this.#priors,

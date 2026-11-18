@@ -32,7 +32,7 @@ const feedOf = () => {
       history: { laps: [...laps], crossings: [...crossings], decisions: [] } as never,
       changed: changed as never,
       delta: { before: len(before), after: len({ laps: laps.length, crossings: crossings.length }) },
-      weekend: undefined,
+      basis: undefined,
       feed,
       config: {},
       priors: NO_PRIORS,

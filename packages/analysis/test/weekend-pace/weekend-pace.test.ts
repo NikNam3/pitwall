@@ -1,5 +1,5 @@
 // `weekend-pace` (SP4.3d2 Task 6b, plan call 9; contract C3, C25, C41, C43, C44, C47, C62, C62a): each car's race pace
-// before its first race lap, from the weekend's earlier sessions (`view.weekend`, the car matched by team and race
+// before its first race lap, from the weekend's earlier sessions (`view.basis`, the car matched by team and race
 // number, C62). A car's practice long run (a stint of at least `minLongRunLaps` green `forPace` laps) gives its median
 // pace, fuel-corrected by `lapModelParams`' `fuelMsPerKg` and tyre-age-corrected to age 0 by the priors' degradation
 // slope (`view.priors`, C62a), else the stint's own fitted slope; else its best valid qualifying lap plus
@@ -13,7 +13,7 @@
 // on mediums, the lap model's reference compound (offset 0), so no compound offset enters the expected values. Config
 // values are read from the config declaration, never as literals.
 import { carId, SPAN_DECLARATIONS, unknown, type CarId, type CarKey, type FrameNumber, type Known, type LapRecord, type Span, type WeekendPace, type WeekendPhase } from '@pitwall/domain';
-import { asOfNow, type AsOfView, type EngineView, type Projection, type QuickCalculator, type StoredSession, type WeekendContext } from '@pitwall/engine/readers';
+import { asOfNow, type AsOfView, type EngineView, type Projection, type QuickCalculator, type StoredSession, type BasisContext } from '@pitwall/engine/readers';
 import { describe, expect, it } from 'vitest';
 import { carState, history, lap } from '../../../../test-support/builders/index.ts';
 import { degradationCalculator, DEGRADATION, PENDING_ROW, WEEKEND_PACE, WEEKEND_PACE_BEHAVIOUR, WEEKEND_PACE_CONFIG, weekendPaceAsOf, weekendPaceCalculator } from '../../src/index.ts';
@@ -101,6 +101,7 @@ function stored(uid: string, phase: WeekendPhase, seats: Record<number, CarKey>,
   const spans = { 'weekend-phase': [closed('weekend-phase', kind, detail)], 'car-status': slots.map((s) => closed('car-status', 'competing', undefined, s)) };
   return {
     sessionUid: uid,
+    weekendId: 'w1',
     playerCar: carId(0),
     cars: slots.map((s) => ({ carId: carId(s), carKey: seats[s]! })),
     projection: history({ ...lists, spans: { ...lists.spans, ...spans } }),
@@ -108,17 +109,17 @@ function stored(uid: string, phase: WeekendPhase, seats: Record<number, CarKey>,
 }
 
 /** The weekend context of a session whose player car has seat `KEY(0)`, with `sessions` before it. */
-const weekendOf = (sessions: StoredSession[]): WeekendContext => ({ weekendId: 'w1', player: KEY(0), sessions });
+const weekendOf = (sessions: StoredSession[]): BasisContext => ({ basis: { practice: [], qualifying: null }, player: KEY(0), sessions });
 
 /**
  * The view of the current session (default: the race before its first lap): `seats` as the live state's identities
  * (Participants received), its own `lists`, the weekend context, the priors, `degradation`'s output on it (the
  * calculator reads it for `lapModelParams`).
  */
-function viewOf(o: { seats: Record<number, CarKey>; weekend?: WeekendContext; phase?: WeekendPhase; lists?: Partial<Projection>; priors?: EngineView['priors']; status?: Record<number, string> }): EngineView {
+function viewOf(o: { seats: Record<number, CarKey>; weekend?: BasisContext; phase?: WeekendPhase; lists?: Partial<Projection>; priors?: EngineView['priors']; status?: Record<number, string> }): EngineView {
   const cars = Object.entries(o.seats).map(([slot, k]) => carState({ id: carId(Number(slot)), identity: { teamId: k.teamId, raceNumber: k.raceNumber }, updatedAt: { participants: 0 } }));
   const base = situatedView({ cars, phase: o.phase ?? RACE, history: o.lists ?? {}, ...(o.priors !== undefined && { priors: o.priors }), ...(o.status !== undefined && { status: o.status }) });
-  const view: EngineView = { ...base, weekend: o.weekend };
+  const view: EngineView = { ...base, basis: o.weekend };
   return { ...view, outputs: new Map([[DEGRADATION, degradationCalculator.compute(view)]]) };
 }
 

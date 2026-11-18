@@ -438,7 +438,7 @@ export function engineView({
   const slots = Array.from({ length: Math.max(MAX_CARS, ...cars.map((c) => c.id + 1)) }, (_, i) => base.cars[i] ?? createCarState(carId(i)));
   for (const c of cars) slots[c.id] = c;
   const full: Projection = { ...emptyProjection(), ...history };
-  const { open: _open, log: _log, history: _history, weekend: _weekend, signals: _signals, frameNumber: _frameNumber, ...live } = {
+  const { open: _open, log: _log, history: _history, basis: _basis, signals: _signals, frameNumber: _frameNumber, ...live } = {
     ...base,
     cars: slots,
     session: merge(base.session, session) as SessionState,
@@ -452,7 +452,7 @@ export function engineView({
     history: full,
     changed: new Set(),
     delta: delta ?? { before: projectionLengths(emptyProjection()), after: lengths },
-    weekend: undefined,
+    basis: undefined,
     feed: { ...IDLE_FEED, ...feed },
     outputs,
     config,

@@ -49,7 +49,7 @@ async function endedView(file: string): Promise<EngineView> {
     history: state.history,
     changed,
     delta,
-    weekend: state.weekend,
+    basis: state.basis,
     feed: IDLE_FEED,
     config: {},
     priors: known(priors(), 0),

@@ -136,7 +136,7 @@ describe('guardedView throws on an undeclared read and passes a declared one (C4
   it('delta, changed, weekend, config and track are every unit\'s', () => {
     const view = { ...raceView(), config: { k: { a: 1 } } };
     const g = guardedBy([], view);
-    expect([g.delta, [...g.changed], g.weekend, g.config, g.track]).toEqual([view.delta, [...view.changed], view.weekend, view.config, view.track]);
+    expect([g.delta, [...g.changed], g.basis, g.config, g.track]).toEqual([view.delta, [...view.changed], view.basis, view.config, view.track]);
   });
 
   // Generic: every unit the harness, the analysis and the bridge completeness tests run gets this guard (C87), so a

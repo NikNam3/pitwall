@@ -169,7 +169,7 @@ describe('no domain type has a C12 field (C13)', () => {
 
 /** The live state of a step's state, as `LiveState` cuts it from the engine state. */
 const liveOf = (state: StepResult['state']) => {
-  const { open: _open, history: _history, weekend: _weekend, signals: _signals, log: _log, frameNumber: _frameNumber, ...live } = state;
+  const { open: _open, history: _history, basis: _basis, signals: _signals, log: _log, frameNumber: _frameNumber, ...live } = state;
   expectTypeOf<keyof typeof live>().toEqualTypeOf<keyof LiveState>();
   return live;
 };

@@ -16,8 +16,10 @@ import {
   type PitStopRecord,
   type PitWindow,
   type PitWindowSet,
+  type ForecastSample,
   type Span,
   type StintRecord,
+  type TrackWetness,
   type TyreSet,
   type VisualCompound,
   type WeekendPhase,
@@ -28,6 +30,8 @@ import { describe, expect, it } from 'vitest';
 import { PIT_WINDOW_BEHAVIOUR } from '../../src/pit-window/behaviour.ts';
 import { pitWindowCalculator } from '../../src/pit-window/calculator.ts';
 import { PIT_WINDOW, PIT_WINDOW_CONFIG, type PitWindowOutput } from '../../src/pit-window/index.ts';
+import { RAIN_OUTLOOK, RAIN_OUTLOOK_CONFIG, type RainOutlook } from '../../src/rain-outlook/index.ts';
+import { TRACK_WETNESS } from '../../src/track-wetness/index.ts';
 import { TYRE_LIFE, type TyreLife, type TyreLifeOutput } from '../../src/tyre-life/index.ts';
 import { TYRE_MODEL } from '../../src/tyre-model/index.ts';
 import { carState, lap } from '../../../../test-support/builders/index.ts';
@@ -111,6 +115,11 @@ type Case = {
   /** The live state's tyre sets (default `notReceived`: pit-window reads `tyre-model`'s `freshSets`, never these). */
   liveSets?: CarTyreSets;
   flag?: number;
+  /**
+   * The weather (SP4.3e Task 4): the forecast's rain chance on every sample 0–120 min ahead (in the session and in
+   * `rain-outlook`'s output) and whether `track-wetness` calls the track wet. Default: 0 %, dry.
+   */
+  weather?: { rainPct: number; wet: boolean };
 };
 type CarTyreSets = ReturnType<typeof carState>['tyres']['sets'];
 
@@ -135,6 +144,36 @@ function ourLaps(c: Required<Pick<Case, 'lap' | 'fromLap' | 'fitted' | 'previous
     });
   });
 }
+
+/** One forecast sample `offsetMin` minutes ahead with `rainPct` % rain chance; the other fields as a dry sample has them. */
+const forecastSample = (offsetMin: number, rainPct: number): ForecastSample => ({
+  offsetMin,
+  weather: 'overcast',
+  trackTempC: 30,
+  trackTempTrend: 'flat',
+  airTempC: 22,
+  airTempTrend: 'flat',
+  rainPct,
+});
+
+/** `rain-outlook`'s output on `forecast` (its rule: the first sample ahead at its threshold or above, else `notApplicable`). */
+function rainOutlookOf(forecast: ForecastSample[]): RainOutlook {
+  const { rainPct, horizonMin } = RAIN_OUTLOOK_CONFIG.defaults;
+  const index = forecast.findIndex((s) => s.rainPct >= rainPct);
+  const first = forecast[index];
+  if (first === undefined) return { firstRain: unknown('notApplicable'), withinHorizon: false, samplesAhead: forecast };
+  return { firstRain: known({ index, offsetMin: first.offsetMin, rainPct: first.rainPct }, 0), withinHorizon: first.offsetMin <= horizonMin, samplesAhead: forecast };
+}
+
+/** `track-wetness`'s output: a dry track, or a wet one (600 ms slower than dry, sd 0). */
+const wetnessOf = (wet: boolean): TrackWetness => ({
+  byLap: [],
+  state: known({ wetnessMs: wet ? 600 : 0, sdMs: wet ? 0 : 300 }, 0),
+  wet: known(wet, 0),
+  dryRefMs: unknown('insufficientData'),
+  dryRefSource: { kind: 'session', sessionShare: 1, parts: 'slick laps' },
+  slickScale: unknown('insufficientData'),
+});
 
 /** The view of `c`: our car and a rival, `tyre-life`'s output for both, the compound rule and our car's activity. */
 function view(c: Case): EngineView {
@@ -184,15 +223,19 @@ function view(c: Case): EngineView {
   const lives = (c.lives ?? LIVES) as Partial<Record<NoiseCompound, number>>;
   const tyreLifeOut: TyreLifeOutput = { [carId(US)]: tyreLife(lapsToLimit), [carId(RIVAL)]: tyreLife(lapsToLimit) };
   const model = plainModelCar({ lives, freshSets: c.freshSets ?? freshCounts(specs) });
+  const weather = c.weather ?? { rainPct: 0, wet: false };
+  const forecast = Array.from({ length: 25 }, (_, i) => forecastSample(5 * i, weather.rainPct));
   return situatedView({
     phase: c.phase ?? RACE,
     cars: [us, rival],
-    session: { totalLaps: c.flag ?? FLAG },
+    session: { totalLaps: c.flag ?? FLAG, forecast, forecastAccuracy: 'perfect' },
     history: { laps: ourLaps({ lap: c.lap, fromLap, fitted, previous }), stints, pitStops, spans: closed },
     spans,
     outputs: new Map<string, unknown>([
       [TYRE_LIFE, tyreLifeOut],
       [TYRE_MODEL, { [carId(US)]: model, [carId(RIVAL)]: model }],
+      [RAIN_OUTLOOK, rainOutlookOf(forecast)],
+      [TRACK_WETNESS, wetnessOf(weather.wet)],
     ]),
     sessionTime: (c.lap - 1) * LAP_MS + 30_000,
   });
@@ -287,8 +330,9 @@ describe('pit-window calculator', () => {
   });
 
   // 5
+  // SP4.3e Task 4 (ported): on a wet track, as an inter stint runs on (the wet rule lets a wet set in)
   it('inter fitted: an unused wet set is sameType, the dry sets are not; window follows only the wet row', () => {
-    const c: Case = { lap: 23, fitted: 'inter', rule: 'waived', sets: [{ compound: 'wet' }, { compound: 'hard' }, { compound: 'medium' }, { compound: 'soft' }] };
+    const c: Case = { lap: 23, fitted: 'inter', rule: 'waived', sets: [{ compound: 'wet' }, { compound: 'hard' }, { compound: 'medium' }, { compound: 'soft' }], weather: { rainPct: 0, wet: true } };
     const w = ours(c);
     expect(row(w, 'wet').sameType).toBe(true);
     for (const dry of ['hard', 'medium', 'soft'] as const) expect(row(w, dry).sameType).toBe(false);
@@ -300,6 +344,23 @@ describe('pit-window calculator', () => {
     expect(ours({ ...c, lap: 25 }).window).toMatchObject(v('lead'));
     // without a reaching wet set there is no window, whatever the dry sets do
     expect(ours({ ...c, lives: { ...LIVES, wet: 10 } }).window).toMatchObject(v('none'));
+  });
+
+  // SP4.3e Task 4 (spec §4.4 item 4; planner report F3c; C43): pit-window reads the one wet rule (`shared/wet-allowed.ts`)
+  // over `rain-outlook`'s and `track-wetness`'s outputs. "Rain 1 %": every forecast sample at 1 %, below the threshold.
+  it('dry, rain 1 %, fresh inters available: no inter or wet in the window', () => {
+    expect(pitWindowCalculator.reads, 'it reads the wet rule\'s inputs').toEqual(expect.arrayContaining([{ calculator: 'rain-outlook' }, { calculator: 'track-wetness' }]));
+    const sets: SetSpec[] = [...DEFAULT_SETS, { compound: 'inter' }, { compound: 'inter' }, { compound: 'wet' }];
+    const c: Case = { lap: 23, rule: 'waived', sets, weather: { rainPct: 1, wet: false } };
+    const w = ours(c);
+    for (const r of w.sets) expect(['inter', 'wet'], `the ${r.compound} row`).not.toContain(r.compound);
+    // the dry rows stay, the window on them
+    expect(compounds(w)).toEqual(expect.arrayContaining(['hard', 'medium', 'soft']));
+    expect(w.windowCompound).toMatchObject(v('hard'));
+    // where rain can come (rain forecast, or a wet track), the inter and wet rows are there
+    for (const weather of [{ rainPct: 100, wet: false }, { rainPct: 0, wet: true }]) {
+      expect(compounds(ours({ ...c, weather })), JSON.stringify(weather)).toEqual(expect.arrayContaining(['inter', 'wet']));
+    }
   });
 
   // 6

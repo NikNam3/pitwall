@@ -1,7 +1,7 @@
 // `track-wetness` measured from dry (SP4.3b Task 19c; contract C3, C33, C39, C43, C62): research 19's wetness spike found
 // the state taken against each stint's own first laps, so a race that starts wet reads as dry (Miami ≤ 0.9 s on a
 // track at 17–26 s). The wetness is now measured against a dry reference per car: (a) its own dry slick laps this
-// session, else (b) its dry laps in the weekend's earlier sessions (`view.weekend`, the car matched by team and race
+// session, else (b) its dry laps in the weekend's earlier sessions (`view.basis`, the car matched by team and race
 // number, C62), else (c) the field's dry reference from the same sources. A lap on inters or wets is put on the slick
 // scale through the lap model's inter/wet terms (forecast-field's config: `interOffsetMs`, `interMsPerWetnessMs`,
 // `wetOffsetMs`, `wetMsPerWetnessMs`): w = (excess − offset) / slope. No dry reference at all: `insufficientData`, never 0.
@@ -19,7 +19,7 @@
 // rain's `wetnessMs`, i.e. a slick-scale wetness of `wetnessMs / interMsPerWetnessMs`. No car runs slicks in the rain
 // of rows 1, 2 and 4, so the truth is one wetness on one scale.
 import { carId, unknown, type Known, type OpenSpan, type Span } from '@pitwall/domain';
-import type { EngineView, Projection, StoredSession, WeekendContext } from '@pitwall/engine/readers';
+import type { EngineView, Projection, StoredSession, BasisContext } from '@pitwall/engine/readers';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { generateRace, GENERATOR_DEFAULTS, type GeneratorCar, type GeneratorParams } from '../../../../test-support/race-generator/index.ts';
 import type { BuilderRace } from '../../../../test-support/builders/long-race.ts';
@@ -62,10 +62,10 @@ const params = (cars: GeneratorCar[], over: Partial<GeneratorParams>): Generator
 const WET_START_RAIN_MS = 6_000;
 
 /** The view after `frame`, with `degradation`'s output of the scheduled run on it, and the weekend context `weekend`. */
-const viewOf = (race: BuilderRace, frame: number, o: { weekend?: WeekendContext; from?: number; config?: EngineView['config'] } = {}): EngineView => {
+const viewOf = (race: BuilderRace, frame: number, o: { weekend?: BasisContext; from?: number; config?: EngineView['config'] } = {}): EngineView => {
   const outputs = new Map([[DEGRADATION, degradationCalculator.compute(race.viewAt(frame))]]);
   const view = race.viewAt(frame, { outputs, ...(o.from !== undefined && { from: o.from }) });
-  return { ...view, weekend: o.weekend, ...(o.config !== undefined && { config: { ...view.config, ...o.config } }) };
+  return { ...view, basis: o.weekend, ...(o.config !== undefined && { config: { ...view.config, ...o.config } }) };
 };
 
 /** The frame the leader starts lap `n` on. */
@@ -89,13 +89,13 @@ function storedPractice(session: BuilderRace, race: BuilderRace, uid: string): S
   const history = final.history as Projection;
   const projection: Projection = { ...history, spans: { ...history.spans, 'weekend-phase': practiceSpans } };
   const cars = race.viewAt(1).live.cars.map((c) => ({ carId: c.id, carKey: { teamId: c.identity.teamId, raceNumber: c.identity.raceNumber } }));
-  return { sessionUid: uid, playerCar: carId(0), cars, projection };
+  return { sessionUid: uid, weekendId: 'w1', playerCar: carId(0), cars, projection };
 }
 
 /** The weekend context of `race` with `sessions` before it. */
-function weekendOf(race: BuilderRace, sessions: StoredSession[]): WeekendContext {
+function weekendOf(race: BuilderRace, sessions: StoredSession[]): BasisContext {
   const player = race.viewAt(1).live.cars[0]!.identity;
-  return { weekendId: 'w1', player: { teamId: player.teamId, raceNumber: player.raceNumber }, sessions };
+  return { basis: { practice: [], qualifying: null }, player: { teamId: player.teamId, raceNumber: player.raceNumber }, sessions };
 }
 
 /** A wet start: the field on inters from lap 1 in rain on every lap, no stop. */

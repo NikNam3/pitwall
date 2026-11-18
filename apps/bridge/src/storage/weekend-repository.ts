@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
-import { known, unknown, type CarId, type CarKey, type Known, type SessionUid, type TrackData, type WeekendPhase } from '@pitwall/domain';
+import { known, unknown, type CarId, type CarKey, type Known, type SessionBasis, type SessionUid, type TrackData, type WeekendPhase } from '@pitwall/domain';
 import { projectionOfLog } from '@pitwall/engine/log';
-import type { DeepReadonly, Projection, ProjectionState, StoredSession, WeekendContext } from '@pitwall/engine/readers';
+import type { DeepReadonly, Projection, ProjectionState, BasisContext, StoredSession } from '@pitwall/engine/readers';
 import { createLogger, type Logger } from '../log.ts';
 import type { Db, SessionKey, SessionRow, StoredSessionRow } from './db.ts';
 import { logOfRows, type StoredFact } from './log-rows.ts';
@@ -18,6 +18,12 @@ type SessionDbRow = {
   settings: string;
   rules_version: string;
   complete: number;
+};
+
+/** The basis that names `sessions` (C62): per session its weekend-phase span's kind; the practice ones and the newest qualifying. */
+const basisOf = (sessions: readonly StoredSession[]): SessionBasis => {
+  const ofKind = (kind: string) => sessions.filter((s) => s.projection.spans['weekend-phase']?.[0]?.kind === kind).map((s) => ({ sessionUid: s.sessionUid, weekendId: s.weekendId }));
+  return { practice: ofKind('practice'), qualifying: ofKind('qualifying').at(-1) ?? null };
 };
 
 type CarDbRow = { car_id: number; team_id: number; race_number: number; name: string | null };
@@ -212,17 +218,18 @@ export class WeekendRepository {
   }
 
   /**
-   * The weekend context of the session `before` (C39, C62): the weekend's sessions that started before it whose player
+   * The session-start basis of the session `before` (C39, C62; until SP4.3e Task 7a-2's preselection): the weekend's sessions that started before it whose player
    * car had `player`'s team and race number, oldest first, each with its cars by car id and its projection. A stale
    * session (`isStale`) is skipped with a warning and its key returned in `incomplete`, so the caller rebuilds it.
-   * `startedAt` stands for `before`'s start when its row is not stored yet (a rebuild writes it at the end).
+   * `startedAt` stands for `before`'s start when its row is not stored yet (a rebuild writes it at the end). The context's
+   * `basis` names the loaded sessions by their weekend-phase span: the practice ones, and the newest qualifying.
    */
   weekendContext(
     weekendId: string,
     player: CarKey,
     before: SessionKey,
     opts: { startedAt?: string } = {},
-  ): { context: WeekendContext; incomplete: SessionKey[] } {
+  ): { context: BasisContext; incomplete: SessionKey[] } {
     const startedAt = opts.startedAt ?? (this.#statements.startedAt.get(keyParams(before)) as string | undefined);
     const rows =
       startedAt === undefined
@@ -239,9 +246,9 @@ export class WeekendRepository {
       }
       // Only the slots' team and race number reach the view (C39, C62); the driver name is the calibration panel's.
       const cars = this.#carsOf(key).map(({ carId, carKey }) => ({ carId, carKey }));
-      sessions.push({ sessionUid: key.sessionUid, playerCar: key.playerCar, cars, projection: this.#projectionOfStored(key) });
+      sessions.push({ sessionUid: key.sessionUid, weekendId: key.weekendId, playerCar: key.playerCar, cars, projection: this.#projectionOfStored(key) });
     }
-    return { context: { weekendId, player: { teamId: player.teamId, raceNumber: player.raceNumber }, sessions }, incomplete };
+    return { context: { basis: basisOf(sessions), player: { teamId: player.teamId, raceNumber: player.raceNumber }, sessions }, incomplete };
   }
 
   #canRebuild(row: StoredSessionRow): boolean {

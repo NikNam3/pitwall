@@ -2,7 +2,7 @@
 // the game reports twice or in a frame with an unexpected id.
 import { carId, toSessionTime, type SessionUid } from '@pitwall/domain';
 import { describe, expect, it } from 'vitest';
-import { SessionRunner, type Frame, type WeekendContext } from '../../src/index.ts';
+import { SessionRunner, type Frame, type BasisContext } from '../../src/index.ts';
 import { ScenarioBuilder } from '../builders/index.ts';
 import { initFor } from '../support/run.ts';
 import { after, applyOne, flashbacks, runAll, shown, STEP, timeline } from '../support/runner.ts';
@@ -49,15 +49,15 @@ describe('SessionRunner retention', () => {
     expect(r.retained.snapshots).toBeLessThanOrEqual(35);
   });
 
-  it('carries the read-only weekend context over a rewind by reference', () => {
+  it('carries the read-only session-start basis over a rewind by reference', () => {
     const original = timeline(300, [100, 250]);
     const player = { teamId: 0, raceNumber: 1 };
     const projection = { laps: [], stints: [], pitStops: [], crossings: [], events: [], penalties: [], decisions: [], clock: [], spans: {}, appendedAt: {} };
-    const weekend: WeekendContext = { weekendId: 'w', player, sessions: [{ sessionUid: '1' as SessionUid, playerCar: carId(0), cars: [{ carId: carId(0), carKey: player }], projection }] };
-    const r = new SessionRunner(initFor(original), { contextFor: () => weekend });
+    const weekend: BasisContext = { basis: { practice: [], qualifying: null }, player, sessions: [{ sessionUid: '1' as SessionUid, weekendId: 'w', playerCar: carId(0), cars: [{ carId: carId(0), carKey: player }], projection }] };
+    const r = new SessionRunner(initFor(original), { basis: { start: () => weekend, registered: () => undefined } });
     runAll(r, original);
     expect(applyOne(r, { ...original[201]!, overallFrameId: 300 }).delta.rewound).toBeDefined();
-    expect(r.state.weekend).toBe(weekend);
+    expect(r.state.basis).toBe(weekend);
   });
 });
 

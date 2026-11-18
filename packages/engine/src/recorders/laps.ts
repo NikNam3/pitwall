@@ -1,19 +1,21 @@
-import { known, MAX_CARS, unknown, type ConfirmedLap, type FactRef, type Kg, type Known, type LapRecord, type FrameNumber, type SessionTime } from '@pitwall/domain';
+import { known, MAX_CARS, unknown, type ConfirmedLap, type FactRef, type Kg, type Known, type LapRecord, type FrameNumber, type Metres, type SessionTime } from '@pitwall/domain';
 import type { LogWriter } from '../log/types.ts';
 import type { LapCorrection, Recorder, RecorderInput, StepOutput } from '../step/types.ts';
 import type { DeepReadonly } from '../util/deep-readonly.ts';
 import { carsInSession, carsWithLapData, type LiveCar } from './cars.ts';
 import { lapMarkOf, lapNotBegun, lapStepOf, markActivity } from './lap-boundary.ts';
 import type { LapCursor } from './lap-cursor.ts';
+import { crossesLine } from './line-crossing.ts';
 import { emptyChannels, lapEndSamples, lapStartSamples, observeLapFrame, unknownLapEnd } from './lap-samples.ts';
 import { initialRaceStartMark, raceStartStep, type RaceStartMark } from './race-start.ts';
 import { activityOf, finishOpened, lapInvalid, neutralisedBy, recordsNoLap, type SituationSpan } from './spans.ts';
 
 /**
  * A lap that has a record: its provisional one with the id the log gave it (C21) until Session History confirms it, and
- * whether it is confirmed.
+ * whether it is confirmed. `completed: false`: the lap number rose without a crossing of the line (`notCompleted`); the
+ * lap never completed, so it gets no record, neither provisional nor confirmed.
  */
-export type RecordedLap = { provisional?: { lap: LapRecord; id: FactRef }; confirmed: boolean };
+export type RecordedLap = { provisional?: { lap: LapRecord; id: FactRef }; confirmed: boolean; completed?: false };
 
 /** The laps recorder's own open state (C10); per-car arrays are indexed by `CarId`. */
 export type LapsOwn = {
@@ -154,7 +156,17 @@ type LapsPass = {
   log: LogWriter;
   out: StepOutput;
   appended: boolean;
+  /** The session's track length (live state), for the crossing of the line. */
+  trackLengthM: Metres;
 };
+
+/**
+ * A lap-number rise that completes no lap: the lap distance rose across it without a crossing of the line. On real data
+ * every lap completes with a crossing at the rise; at an early session end the game raises the lap number while the
+ * lap distance keeps rising (planner report §1). A fall of the distance or an unchanged one still completes the lap.
+ */
+const notCompleted = (beforeM: Metres, nowM: Metres, trackLengthM: Metres): boolean =>
+  nowM > beforeM && !crossesLine(beforeM, nowM, trackLengthM);
 
 /**
  * The car's lap on this frame, with its activity span (`activity`, none without an activity sub-machine) and whether its
@@ -192,8 +204,10 @@ const addFrame = (own: LapsOwn, car: LiveCar, cursor: LapCursor, completed: bool
   const recorded = own.recorded[car.id];
   // Laps a lost frame swallowed have no provisional; Session History can still supply them.
   if (recorded) for (let skipped = cursor.lap; skipped < lapNumber; skipped++) recorded[skipped] ??= { confirmed: false };
-  // Session History may already have confirmed this lap (a final lap the game never rolled over).
-  if (!recorded?.[lapNumber]?.confirmed) {
+  if (notCompleted(cursor.lapDistanceM, timing.lapDistanceM, f.trackLengthM)) {
+    if (recorded && !recorded[lapNumber]?.confirmed) recorded[lapNumber] = { confirmed: false, completed: false };
+  } else if (!recorded?.[lapNumber]?.confirmed) {
+    // Session History may already have confirmed this lap (a final lap the game never rolled over).
     const provisional = lapFromCursor(car, cursor, lapNumber, timing.lastLapTimeMs, at, f.frameNumber);
     const id = f.log.append('laps', provisional);
     f.appended = true;
@@ -249,6 +263,7 @@ const unconfirmedLap = (
 ): { lap: LapRecord; reported: boolean; supersedes?: FactRef } | undefined => {
   const { lapNumber } = entry;
   const slot = own.recorded[car.id]?.[lapNumber];
+  if (slot?.completed === false) return undefined;
   if (slot?.provisional !== undefined) return { lap: slot.provisional.lap, reported: true, supersedes: slot.provisional.id };
   const cursor = own.cursors[car.id];
   if (cursor?.lap === lapNumber) return { lap: lapFromCursor(car, cursor, lapNumber, entry.lapTimeMs, at, frame), reported: false };
@@ -312,7 +327,9 @@ export const lapsRecorder: Recorder<LapsOwn> = {
     const start = raceStartStep(own.raceStart, situation);
     own.raceStart = start.mark;
     if (start.started) restartLaps(own, input);
-    const f: LapsPass = { at, frameNumber: input.frameNumber, neutralised: neutralisedBy(situation), log, out, appended: false };
+    const f: LapsPass = {
+      at, frameNumber: input.frameNumber, neutralised: neutralisedBy(situation), log, out, appended: false, trackLengthM: live.session.trackLengthM,
+    };
     for (const car of carsWithLapData(input)) {
       if (recordsNoLap(situation, car.id, input.frameNumber)) continue;
       const activity = activityOf(situation, car.id);

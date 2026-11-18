@@ -42,7 +42,7 @@ async function lastRun(file: string): Promise<LastRun> {
   const scheduler = new Scheduler(CalculatorRegistry.build(units.map((u) => guarded(u))), { freezeOutputs: true });
   scheduler.setNeeded([BATTLE]);
   const { state, changed, delta } = last;
-  const scheduled = scheduler.run({ live: state, situation: situationOf(state), history: state.history, changed, delta, weekend: state.weekend, feed: IDLE_FEED, config: {}, priors: NO_PRIORS, drivers: NO_DRIVERS, track: unknown('notApplicable') });
+  const scheduled = scheduler.run({ live: state, situation: situationOf(state), history: state.history, changed, delta, basis: state.basis, feed: IDLE_FEED, config: {}, priors: NO_PRIORS, drivers: NO_DRIVERS, track: unknown('notApplicable') });
   expect(scheduled.errors).toEqual([]);
   expect(scheduled.ran).toContain(BATTLE);
   return { cards: scheduled.outputs.get(BATTLE) as BattleOutput, state };

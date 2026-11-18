@@ -2,8 +2,10 @@
 // `candidate`, `residual` and `lapUse`. Stored sources and set entries are built here and passed explicitly (C84).
 import { carId, known, unknown, type LapUse } from '@pitwall/domain';
 import type { PriorsCtx } from '@pitwall/engine/readers';
+import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 import { DEGRADATION_CONFIG, DEGRADATION_PRIORS, fitStint } from '../../src/degradation/index.ts';
+import { DEGRADATION_COMPOUNDS } from '../../src/degradation/priors.ts';
 import { degradationCalculator } from '../../src/degradation/calculator.ts';
 import { carState } from '../../../../test-support/builders/index.ts';
 import { guardedQuick, PRACTICE, situatedView } from '../situated.ts';
@@ -130,5 +132,88 @@ describe('degradation priors', () => {
     // no source, no sample; a source the aggregate cannot fit is never counted
     expect(entry('degradation.nuMsPerLap.medium').samples!([], CTX)).toBe(0);
     expect(entry('degradation.nuMsPerLap.medium').samples!([oneLap], CTX)).toBe(0);
+  });
+
+  // SP4.3e Task 5 (C43, C62a; planner report 2026-11-17 §5 (a)): a compound's α offset is the pool of paired differences:
+  // per (session, car) the compound's α minus that car's medium α in the same session. A driver's own pace cancels.
+  describe('α offsets as paired differences', () => {
+    const NU = DEGRADATION_CONFIG.defaults.defaultNuMsPerLap;
+    const VISUAL_ACTUAL = { soft: 'C4', medium: 'C3', hard: 'C2' } as const;
+    /** A 9-lap practice stint of `car` in `session` on `visual`, `paceMs` slower than the base; `alternating(amp)` noise. */
+    const stint = (o: { car: number; session: string; visual: 'soft' | 'medium' | 'hard'; paceMs: number; from: number; amp?: number }) =>
+      storedSource(
+        stintLaps({ car: o.car, from: o.from, to: o.from + 8, nu: NU, actual: VISUAL_ACTUAL[o.visual], visual: o.visual, noise: (i) => o.paceMs + alternating(o.amp ?? 0)(i) }),
+        { phase: PRACTICE, sessionUid: o.session, car: o.car },
+      );
+    const alpha = (compound: string, sources: Parameters<NonNullable<ReturnType<typeof entry>['aggregate']>>[0]) =>
+      entry(`degradation.alphaOffsetMs.${compound}`).aggregate!(sources, CTX);
+    const value = (k: ReturnType<typeof alpha>): number => {
+      if (!k.known) throw new Error(`unknown: ${k.reason}`);
+      return k.value;
+    };
+
+    it('two drivers 3 s apart: hard +1,500 and soft −300, independent of the second driver`s pace', () => {
+      // driver A (car 0): medium, then hard 1,500 ms slower; driver B (car 1), 3,000 ms slower than A: medium, then soft 300 ms faster
+      const a = [stint({ car: 0, session: '1', visual: 'medium', paceMs: 0, from: 1, amp: 60 }), stint({ car: 0, session: '1', visual: 'hard', paceMs: 1_500, from: 10, amp: 60 })];
+      const b = (gapMs: number) => [
+        stint({ car: 1, session: '1', visual: 'medium', paceMs: gapMs, from: 1, amp: 60 }),
+        stint({ car: 1, session: '1', visual: 'soft', paceMs: gapMs - 300, from: 10, amp: 60 }),
+      ];
+      const sources = [...a, ...b(3_000)];
+      expect(Math.abs(value(alpha('hard', sources)) - 1_500)).toBeLessThanOrEqual(30);
+      expect(Math.abs(value(alpha('soft', sources)) - -300)).toBeLessThanOrEqual(30);
+      expect(value(alpha('medium', sources))).toBe(0);
+      // B's pace does not move the offsets
+      for (const gapMs of [0, -2_000, 4_500]) {
+        const other = [...a, ...b(gapMs)];
+        expect(alpha('hard', other)).toEqual(alpha('hard', sources));
+        expect(alpha('soft', other)).toEqual(alpha('soft', sources));
+      }
+      // the aggregate changed, so its version did (C62a: the priors store recomputes it)
+      for (const c of DEGRADATION_COMPOUNDS) expect(entry(`degradation.alphaOffsetMs.${c}`).version).toBe(2);
+    });
+
+    it('a source with no medium pair gives no offset but still a ν', () => {
+      const aMedium = stint({ car: 0, session: '1', visual: 'medium', paceMs: 0, from: 1 });
+      const aHard = stint({ car: 0, session: '1', visual: 'hard', paceMs: 1_500, from: 10 });
+      // car 2 drove hard only; car 0 drove hard in session 2 with its medium in session 1
+      const lonelyHard = stint({ car: 2, session: '1', visual: 'hard', paceMs: 4_000, from: 1 });
+      const otherSession = stint({ car: 0, session: '2', visual: 'hard', paceMs: -2_500, from: 1 });
+
+      expect(alpha('hard', [aMedium, lonelyHard])).toEqual(unknown('insufficientData'));
+      expect(alpha('hard', [aMedium, otherSession])).toEqual(unknown('insufficientData'));
+      // unpaired sources leave the paired offset as it is
+      expect(alpha('hard', [aMedium, aHard, lonelyHard, otherSession])).toEqual(alpha('hard', [aMedium, aHard]));
+      expect(Math.abs(value(alpha('hard', [aMedium, aHard])) - 1_500)).toBeLessThanOrEqual(30);
+      // they still give ν
+      for (const unpaired of [lonelyHard, otherSession]) {
+        const nu = entry('degradation.nuMsPerLap.hard').aggregate!([aMedium, unpaired], CTX);
+        expect(Math.abs(value(nu) - NU)).toBeLessThanOrEqual(5);
+        expect(entry('degradation.nuSdMs.hard').aggregate!([aMedium, unpaired], CTX).known).toBe(true);
+      }
+    });
+
+    it('property: with one true offset per compound, any driver mix pools to it', () => {
+      const compoundSet = fc.subarray(['soft', 'medium', 'hard'] as const, { minLength: 1 });
+      const driver = fc.record({ paceMs: fc.integer({ min: -4_000, max: 4_000 }), session: fc.constantFrom('1', '2'), compounds: compoundSet });
+      fc.assert(
+        fc.property(fc.integer({ min: -2_000, max: 0 }), fc.integer({ min: 0, max: 3_000 }), fc.array(driver, { minLength: 1, maxLength: 5 }), (softMs, hardMs, drivers) => {
+          const offset = { soft: softMs, medium: 0, hard: hardMs } as const;
+          const sources = drivers.flatMap((d, car) =>
+            d.compounds.map((visual, k) => stint({ car, session: d.session, visual, paceMs: d.paceMs + offset[visual], from: 1 + 9 * k })),
+          );
+          for (const compound of ['soft', 'hard'] as const) {
+            const paired = drivers.some((d) => d.compounds.includes('medium') && d.compounds.includes(compound));
+            const got = alpha(compound, sources);
+            if (!paired) {
+              expect(got).toEqual(unknown('insufficientData'));
+              continue;
+            }
+            expect(Math.abs(value(got) - offset[compound]), `${compound}: ${JSON.stringify(got)}`).toBeLessThanOrEqual(5);
+          }
+        }),
+        { numRuns: 60 },
+      );
+    });
   });
 });

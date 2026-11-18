@@ -55,7 +55,7 @@ export async function replayScheduled(
   scheduler.setNeeded(calculators.map((c) => c.id));
   return replayRunner(path, (r, f) => {
     if (r.delta.rewound !== undefined) scheduler.reset();
-    const scheduled = scheduler.run({ live: r.state, situation: situationOf(r.state), history: r.state.history, changed: r.changed, delta: r.delta, weekend: r.state.weekend, feed: IDLE_FEED, config, priors: NO_PRIORS, drivers: NO_DRIVERS, track: unknown('notApplicable') });
+    const scheduled = scheduler.run({ live: r.state, situation: situationOf(r.state), history: r.state.history, changed: r.changed, delta: r.delta, basis: r.state.basis, feed: IDLE_FEED, config, priors: NO_PRIORS, drivers: NO_DRIVERS, track: unknown('notApplicable') });
     onStep(r, scheduled, f);
   });
 }

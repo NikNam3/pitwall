@@ -1,4 +1,4 @@
-import type { FrameNumber, GivenDecision, Ms, ParticipantsValues, SessionTime } from '@pitwall/domain';
+import type { CarKey, DecisionRecord, FrameNumber, GivenDecision, Ms, ParticipantsValues, SessionBasis, SessionTime } from '@pitwall/domain';
 import type { Frame } from '../frame/frame.ts';
 import { logWriter, voidFactOf } from '../log/log.ts';
 import { projectionLengths } from '../log/projection.ts';
@@ -6,7 +6,7 @@ import type { HistoryDelta, LogVoidFact } from '../log/types.ts';
 import { onRaceClock, rewindMarkOf } from '../situations/clock/clock.ts';
 import { closeSession, situationOf } from '../situations/run.ts';
 import type { EngineState } from '../state/engine-state.ts';
-import type { WeekendContext } from '../state/weekend-context.ts';
+import type { BasisContext } from '../state/basis-context.ts';
 import { participantsValuesOf } from '../step/state-update/identity.ts';
 import { initialState } from '../step/state-update/initial.ts';
 import { ALL_CHANGE_TAGS, projectionTrackerOf, step, type ChangeTag, type ClockFall, type ClockJump, type FlashbackReport, type LapCorrection } from '../step/step.ts';
@@ -47,12 +47,25 @@ export type SessionRunnerOptions = {
    * handed out and with each snapshot, and restores it with the state on a flashback, as it stood after the target.
    */
   attach?: Snapshotable<unknown>;
-  /** The weekend context of the session's player, asked once when the identity wait ends (the caller reads storage). */
-  contextFor?: (participants: ParticipantsValues | undefined) => WeekendContext | undefined;
+  /**
+   * The basis of the session's player (C62; the caller reads storage). `start`: the session-start basis, asked once when
+   * the identity wait ends. `registered`: the loaded context of a basis a `basisChosen` decision names, asked once per
+   * such decision in the projection; `undefined` when none of its sessions is loaded.
+   */
+  basis?: {
+    start: (participants: ParticipantsValues | undefined) => BasisContext | undefined;
+    registered: (basis: SessionBasis) => BasisContext | undefined;
+  };
+};
+
+/** The newest `basisChosen` decision in the projection's decisions (C28: a voided one is not there). */
+const newestBasisChoice = (decisions: readonly DecisionRecord[]): Extract<DecisionRecord, { kind: 'basisChosen' }> | undefined => {
+  const chosen = decisions.findLast((d) => d.kind === 'basisChosen');
+  return chosen?.kind === 'basisChosen' ? chosen : undefined;
 };
 
 /**
- * Frames held until the first Participants packet names the player's driver (and so the weekend context): about 10 s
+ * Frames held until the first Participants packet names the player's driver (and so the session-start basis): about 10 s
  * at 60 Hz. Then the session starts without one.
  */
 export const IDENTITY_WAIT_FRAMES = 600;
@@ -94,7 +107,9 @@ type Kept = Given & { report?: FlashbackReport; number: FrameNumber; at: Session
 
 /**
  * Runs one session's frames through `step` and handles flashbacks (spec 5.4). Frames wait until the first Participants
- * packet, at most `IDENTITY_WAIT_FRAMES`, so the weekend context (`contextFor`) is known before the first step (C61).
+ * packet, at most `IDENTITY_WAIT_FRAMES`, so the session-start basis (`basis.start`) is known before the first step (C61).
+ * On every applied frame the state's `basis` is the context of the projection's newest `basisChosen` decision
+ * (`basis.registered`), else the session-start basis (C62), so a rewind that voids a decision restores the basis before it.
  * The runner takes a snapshot every `SNAPSHOT_EVERY_MS` of session time and keeps the frames of the last
  * `REPLAY_WINDOW_MS`. A flashback restores the newest snapshot at or before the target, appends one void fact over what
  * the log gained since (C27; nothing is removed), replays the kept frames up to the target and restores the attached
@@ -110,7 +125,13 @@ export class SessionRunner {
   readonly #snapshots: SnapshotStore;
   readonly #snapshotEveryFrames = framesIn(SNAPSHOT_EVERY_MS);
   readonly #attach: Snapshotable<unknown> | undefined;
-  readonly #contextFor: SessionRunnerOptions['contextFor'];
+  readonly #basisSource: SessionRunnerOptions['basis'];
+  /** The session-start basis, once the identity wait ended. */
+  #startBasis: BasisContext | undefined;
+  /** The player's team and race number, once the identity wait ended: the player of a chosen basis that is not loaded. */
+  #player: CarKey | undefined;
+  /** The context of the last `basisChosen` decision resolved, so `registered` is asked once per decision. */
+  #chosen: { decision: DecisionRecord; context: BasisContext | undefined } | undefined;
   /** The identity wait lasts: frames are held until Participants or `IDENTITY_WAIT_FRAMES`. */
   #waiting = true;
   /**
@@ -139,7 +160,7 @@ export class SessionRunner {
   constructor(init: Parameters<typeof initialState>[0], opts: SessionRunnerOptions = {}) {
     this.#state = initialState(init);
     this.#attach = opts.attach;
-    this.#contextFor = opts.contextFor;
+    this.#basisSource = opts.basis;
     const window = { ms: REPLAY_WINDOW_MS, frames: framesIn(REPLAY_WINDOW_MS) };
     this.#snapshots = new SnapshotStore(this.#state, -1, window, this.#attach?.snapshot());
     this.#lastOverallFrameId = init.session.header.overallFrameIdentifier;
@@ -176,7 +197,7 @@ export class SessionRunner {
     this.#drain(onResult);
   }
 
-  /** The session ended: the frames still held (no Participants came) are applied, with no weekend context. */
+  /** The session ended: the frames still held (no Participants came) are applied, with no session-start basis. */
   end(onResult?: OnResult): void {
     if (this.#waiting && this.#queue.length > 0) this.#endWait(undefined);
     if (!this.#waiting) this.#drain(onResult);
@@ -202,11 +223,31 @@ export class SessionRunner {
     return { state: this.#state, changed, corrections: [], delta };
   }
 
-  /** Asks `contextFor` once: the held frames are then applied. */
+  /** Asks `basis.start` once: the held frames are then applied. */
   #endWait(participants: ParticipantsValues | undefined): void {
     this.#waiting = false;
-    const weekend = this.#contextFor?.(participants);
-    if (weekend !== undefined) this.#state.weekend = weekend;
+    this.#startBasis = this.#basisSource?.start(participants);
+    this.#player = this.#startBasis?.player ?? participants?.cars.find((c) => c.carId === participants.playerCar)?.carKey;
+    this.#resolveBasis();
+  }
+
+  /**
+   * Sets the state's basis from the projection (C28, C62): the context `basis.registered` gives for the newest
+   * `basisChosen` decision, or the named basis with no sessions when none is loaded; else the session-start basis.
+   */
+  #resolveBasis(): void {
+    const chosen = newestBasisChoice(this.#state.history.decisions);
+    let basis = this.#startBasis;
+    if (chosen !== undefined) {
+      if (this.#chosen?.decision !== chosen) {
+        const registered = this.#basisSource?.registered(chosen.basis);
+        const context = registered ?? (this.#player && { basis: chosen.basis, player: this.#player, sessions: [] });
+        this.#chosen = { decision: chosen, context };
+      }
+      basis = this.#chosen?.context;
+    }
+    if (basis === undefined) delete this.#state.basis;
+    else this.#state.basis = basis;
   }
 
   /** Applies the queued frames in order; each leaves the queue before its step. */
@@ -237,6 +278,7 @@ export class SessionRunner {
     // The runner's decision on the frame: its own rewind, an undone tick's just before it, or a report it did not take.
     const report: FlashbackReport | undefined = left ? { rewound: left } : (this.#undoneReport ?? (reported && {}));
     const { changed, corrections, clockFall, clockJump } = step(this.#state, frame, report, decisions);
+    this.#resolveBasis();
     this.#undoneReport = undefined;
     this.#applied = true;
     this.#lastOverallFrameId = frame.overallFrameId;
@@ -296,8 +338,8 @@ export class SessionRunner {
     // A target older than the window has no kept frames after its snapshot: the snapshot's state stands for it.
     const replayed = this.#frames.filter(({ frame: f, number }) => number > snapshot.state.frameNumber && f.frameId <= replayTo);
     this.#frames = this.#frames.filter(({ frame: f }) => f.frameId <= replayTo);
-    const { log, history, weekend } = this.#state;
-    this.#state = { ...copyPlainSharingKnown(snapshot.state), log, history, ...(weekend && { weekend }) };
+    const { log, history } = this.#state;
+    this.#state = { ...copyPlainSharingKnown(snapshot.state), log, history };
     // The frame restored to: the last replayed one, or the snapshot's when the target is older than the window. Its
     // frame number: the snapshot's, counted on by each replayed frame (C26).
     const last = replayed.at(-1);
@@ -306,6 +348,8 @@ export class SessionRunner {
     // The new void fact projects the log again (C30), before the replayed frames extend it.
     projectionTrackerOf(this.#state).update(situationOf(this.#state), this.#state.frameNumber);
     for (const { frame: f, report, decisions } of replayed) step(this.#state, f, report, decisions);
+    // The basis from the projection after the replay: a voided decision no longer names it (C27a, C62).
+    this.#resolveBasis();
     this.#attach?.restore(last === undefined ? snapshot.attached : last.attached);
     const targetSessionTime = target.sessionTime === undefined ? this.#state.sessionTime : onRaceClock(this.#state, target.sessionTime);
     const flashback = {

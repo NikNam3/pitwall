@@ -120,7 +120,7 @@ describe('tyre-model as of frame N (row 8)', () => {
             priors: view.priors,
             drivers: view.drivers,
             track: view.track,
-            weekend: view.weekend,
+            basis: view.basis,
             outputs,
             fixed: { ...now.fixed, setsNow: null, weatherNow: null },
           };
@@ -152,7 +152,7 @@ describe('tyre-model as of frame N (row 8)', () => {
       priors: base.priors,
       drivers: base.drivers,
       track: base.track,
-      weekend: base.weekend,
+      basis: base.basis,
       outputs: new Map(),
       fixed: { ...now.fixed, setsNow: null, weatherNow: null },
     });
