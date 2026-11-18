@@ -22,7 +22,7 @@ import { WorkerLimit } from '../jobs/worker-limit.ts';
 import { FeedPipeline, type FeedPipelineOptions } from '../pipeline/feed-pipeline.ts';
 import { PlanRouting, type PlanAction } from '../pipeline/plan-routing.ts';
 import { BasisRouting, type BasisAction } from '../pipeline/basis-routing.ts';
-import { recordingBasis } from '../pipeline/basis-sidecar.ts';
+import { recordingBasis, shownPlanOf } from '../pipeline/basis-sidecar.ts';
 import { createLastChoiceStore } from '../pipeline/last-choice.ts';
 import type { LastChoiceStore, PlanChoice } from '../pipeline/last-choice-types.ts';
 import type { RebuildService } from '../storage/rebuild-service-types.ts';
@@ -277,6 +277,7 @@ export async function serve(opts: ServeOptions): Promise<number> {
       feeds: {
         feeds: () => [...pipelines.entries()].map(([feedId, pipeline]) => ({ feedId, target: () => pipeline.planTarget() })),
         commitToTeam: (feedId, decisions) => teams.commitToTeam(feedId as FeedId, decisions),
+        showToTeam: (feedId, plan) => teams.showToTeam(feedId as FeedId, plan),
       },
       store: savedPlans,
     }));
@@ -410,6 +411,8 @@ export async function serve(opts: ServeOptions): Promise<number> {
         sessions: calibrationRepo,
         seatOf: (feedId) => planning?.seatOf(feedId),
         log: pipelineLog,
+        // A rename or delete of the plan a race shows reaches every feed showing it (C1a, C62d).
+        planChanged: (id, plan) => teams.savedPlanChanged(id, plan === undefined ? null : shownPlanOf(plan)),
       });
       planning = new Planning({
         runner,

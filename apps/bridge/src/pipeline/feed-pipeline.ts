@@ -4,12 +4,12 @@ import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { ConfigEffectiveValue } from '@pitwall/contracts';
 import { CAR_STATUS, carsInSessionOf, copyPlain, type BasisContext, type DeepReadonly, type EngineView } from '@pitwall/engine/readers';
-import { carId, carKeyOf, sessionUidString, toSessionTime, type BasisSidecar, type CalibrationActiveValue, type CarId, type CarKey, type DecisionRecord, type FeedId, type Known, type LiveSeat, type PriorsSnapshot, type ProfileSnapshot, type RunPriors, type SessionBasis, type StoredSessionRef, type SessionTime, type TeamId, type TrackFile, type TrackId, type WeekendPhase } from '@pitwall/domain';
+import { carId, carKeyOf, sessionUidString, toSessionTime, type CalibrationActiveValue, type CarId, type CarKey, type DecisionRecord, type FeedId, type Known, type LiveSeat, type PriorsSnapshot, type ProfileSnapshot, type RunPriors, type SavedPlan, type SessionBasis, type StoredSessionRef, type SessionTime, type TeamId, type TrackFile, type TrackId, type WeekendPhase } from '@pitwall/domain';
 import type { CalibrationStore } from '../calibration/store.ts';
 import type { ProfileStore, SlotIdentity } from '../drivers/store.ts';
 import { profilesSidecarPath, recordingProfiles } from './profile-sidecar.ts';
 import { BasisRun, type BasisInputs, type BasisProgress } from './basis-run.ts';
-import { recordingBasis } from './basis-sidecar.ts';
+import { recordingBasis, shownPlanOf, type PlanEntry, type RecordedBasis, type ShownPlan } from './basis-sidecar.ts';
 import { CalculatorRegistry, SessionTracker, type Frame, type FrameMetrics, type InsightChange, type TrackerEvent } from '@pitwall/engine';
 import { decode, PacketId, peekHeader, type Packet } from '@pitwall/protocol';
 import { effectiveConfig, overriddenFields, recordingConfig, sessionConfigPath, sessionConfigSidecar, type FeatureConfig } from '../feature-config.ts';
@@ -124,8 +124,9 @@ export type FeedPipelineOptions = {
   /**
    * A replay or reprocess: the recording's basis sidecar (`recordingBasis`, C38); every session starts on its `start`,
    * never preselects and never commits; `null`: a recording without one (the seat's earlier sessions of the weekend, C62).
+   * Its recorded plan choices (`plans`, R20) are shown in `basis.active` before the record they reached the live feed at.
    */
-  recordedBasis?: BasisSidecar | null;
+  recordedBasis?: RecordedBasis | null;
   /** Where debug dumps go; without it none are written. */
   dumpsDir?: string;
   /** Names the session files and dates live sessions. Default `Date.now`. */
@@ -206,10 +207,13 @@ export type PlanningHooks = {
   seatKnown?(feedId: FeedId, seat: CarKey, trackId: TrackId): void;
   /**
    * A live race's first frame with its team known, on the team's first feed (C62d, C76): the team's last chosen or
-   * saved plan on the track as the plan decisions the team's feeds commit; none for "none".
+   * saved plan on the track (`undefined` for "none") and its plan decisions, which the team's feeds commit.
    */
-  raceStarted?(race: PlanTarget): PlanDecision[];
+  raceStarted?(race: PlanTarget): RaceStartPlan;
 };
+
+/** The race-start commit (C62d): the team's last chosen or saved plan (`undefined`: none) and its plan decisions. */
+export type RaceStartPlan = { plan: SavedPlan | undefined; decisions: PlanDecision[] };
 
 /**
  * The race's slots of `team` by race number (C62): the live state's identity (values) of the slots car-status has in
@@ -278,7 +282,7 @@ type Continuation = {
   decisions: RecordedDecision[];
   profiles: ProfileSnapshot | null;
   /** The first run's basis sidecar (C62); `null` for a recording without one. */
-  basis: BasisSidecar | null;
+  basis: RecordedBasis | null;
 };
 
 /**
@@ -318,7 +322,13 @@ type QueuedDecision =
   | { kind: 'edit'; setId: string }
   | { kind: 'plan'; decision: PlanDecision }
   | { kind: 'basis'; basis: SessionBasis }
+  | { kind: 'shown'; plan: ShownPlan }
+  | { kind: 'planChanged'; id: string; plan: ShownPlan }
   | { kind: 'end' };
+
+/** Recorded plan choices as the placement module hands them out, before the record each reached the live feed at (R20). */
+const placedPlans = (basis: RecordedBasis | null | undefined): Array<{ recordIndex: number; decision: ShownPlan }> =>
+  (basis?.plans ?? []).map(({ at, plan }: PlanEntry) => ({ recordIndex: at, decision: plan }));
 
 /**
  * A restart's restore under way: the packets that arrive meanwhile wait in `buffer`, the decisions and calibration
@@ -393,6 +403,8 @@ export class FeedPipeline {
   #stopped = false;
   /** A replay's recorded decisions by the record index they go before. */
   readonly #recorded: RecordedPlacement<GivenDecision>;
+  /** A replay's recorded plan choices (the basis sidecar's `plans`, R20) by the record index they go before. */
+  readonly #recordedPlans: RecordedPlacement<ShownPlan>;
   /** The newest session's decisions (kept once it ended: a pick then only marks its set used). */
   #decisions: SessionDecisions | undefined;
   /** The newest session's seat as last reported to `teams`. */
@@ -445,6 +457,7 @@ export class FeedPipeline {
     this.#tracks = opts.tracks ?? ((trackId) => loadTrackFile(trackId, TRACKS_DIR, opts.log));
     this.#sessionClock = sessionClock({ sourcePath: opts.storage?.sourcePath, wallClock: this.#wallClock, log: opts.log });
     this.#recorded = new RecordedPlacement(opts.recorded?.decisions ?? []);
+    this.#recordedPlans = new RecordedPlacement(placedPlans(opts.recordedBasis));
     this.#sweep = this.#ownSweep();
     this.done = this.#done.promise;
     this.done.catch(() => {});
@@ -560,6 +573,35 @@ export class FeedPipeline {
     run.decisions.push(session.place(decision));
     if (run.file !== undefined) this.#writeSidecar(decisionsSidecarPath(run.file), run.decisions);
     return { ok: true };
+  }
+
+  /**
+   * A plan choice reached the feed (C62d; ruling R20), as `TeamFeeds.showToTeam` hands it with the choice's plan
+   * decisions: `basis.active` shows it, and the basis sidecar records it at the session's record index, where its
+   * decisions were placed. Without a running session nothing changes; during a restart's restore it waits for the run.
+   */
+  showPlan(plan: ShownPlan): void {
+    if (this.#restore !== undefined) {
+      this.#queue({ kind: 'shown', plan });
+      return;
+    }
+    const session = this.#session;
+    if (session === undefined) return;
+    this.#guarded('plan shown', () => this.#basisRun?.choosePlan(session.place(plan).recordIndex, plan));
+  }
+
+  /**
+   * The saved plan `id` was renamed (`plan`) or deleted (`null`, C62d): a running session showing it shows the change,
+   * recorded in its basis sidecar like a choice (R20). An ended session keeps what it recorded.
+   */
+  savedPlanChanged(id: string, plan: ShownPlan): void {
+    if (this.#restore !== undefined) {
+      this.#queue({ kind: 'planChanged', id, plan });
+      return;
+    }
+    const session = this.#session;
+    if (session === undefined) return;
+    this.#guarded('saved plan change', () => this.#basisRun?.planChanged(session.place(plan).recordIndex, id, plan));
   }
 
   /**
@@ -780,9 +822,13 @@ export class FeedPipeline {
   #deliver(packet: RawPacket): void {
     // A replay's decisions go to the running session before the record they were committed at (C76): the frame they
     // land on is the one their live pick landed on. The placement module owns that order.
-    this.#recorded.deliver(packet, {
-      decide: (decision) => this.#guarded('recorded decision', () => this.#session?.decide(decision)),
-      process: (record) => this.#process(record),
+    // The recorded plan choices likewise go before the record they reached the live feed at (R20).
+    this.#recordedPlans.deliver(packet, {
+      decide: (plan) => this.#guarded('recorded plan', () => this.#basisRun?.showRecorded(plan)),
+      process: (record) => this.#recorded.deliver(record, {
+        decide: (decision) => this.#guarded('recorded decision', () => this.#session?.decide(decision)),
+        process: (r) => this.#process(r),
+      }),
     });
   }
 
@@ -908,6 +954,14 @@ export class FeedPipeline {
           this.calibrationEdited(entry.setId);
           return;
         }
+        if (entry.kind === 'shown') {
+          this.showPlan(entry.plan);
+          return;
+        }
+        if (entry.kind === 'planChanged') {
+          this.savedPlanChanged(entry.id, entry.plan);
+          return;
+        }
         const result = entry.kind === 'pick' ? this.commitDecision(entry.setId)
           : entry.kind === 'plan' ? this.commitPlan(entry.decision)
           : entry.kind === 'basis' ? this.commitBasis(entry.basis)
@@ -959,13 +1013,18 @@ export class FeedPipeline {
       basis: recordingBasis(path, log),
     };
     const placement = new RecordedPlacement(recorded.decisions);
+    const recordedPlans = placedPlans(this.#continuation.basis);
+    const plans = new RecordedPlacement(recordedPlans);
     let records = 0;
     this.#replaying = true;
     try {
       for await (const record of readPwrec(path)) {
-        placement.deliver(record, {
-          decide: (decision) => this.#guarded('recorded decision', () => this.#session?.decide(decision)),
-          process: (r) => this.#process({ feedId: this.#feedId, receivedAtMs: r.t + originMs, bytes: r.payload }),
+        plans.deliver(record, {
+          decide: (plan) => this.#guarded('recorded plan', () => this.#basisRun?.showRecorded(plan)),
+          process: (rec) => placement.deliver(rec, {
+            decide: (decision) => this.#guarded('recorded decision', () => this.#session?.decide(decision)),
+            process: (r) => this.#process({ feedId: this.#feedId, receivedAtMs: r.t + originMs, bytes: r.payload }),
+          }),
         });
         records++;
       }
@@ -974,6 +1033,9 @@ export class FeedPipeline {
     }
     for (const { recordIndex, decision } of recorded.decisions) {
       if (recordIndex >= records) this.#guarded('recorded decision', () => this.#session?.decide(decision));
+    }
+    for (const { recordIndex, decision } of recordedPlans) {
+      if (recordIndex >= records) this.#guarded('recorded plan', () => this.#basisRun?.showRecorded(decision));
     }
   }
 
@@ -1087,6 +1149,9 @@ export class FeedPipeline {
       this.#basisRun?.enter(basis, { teamId: team, raceNumber }, () => teams.basisOf(this.#feedId) === basis);
     }
     for (const decision of teams.plansOf(this.#feedId)) this.commitPlan(decision);
+    // The team's newest plan choice goes with them (C62d, R20).
+    const shown = teams.shownOf(this.#feedId);
+    if (shown !== undefined) this.showPlan(shown);
   }
 
   /**
@@ -1132,7 +1197,13 @@ export class FeedPipeline {
     if (teams === undefined || !teams.claimRaceStart(this.#feedId)) return;
     if (this.#o.recorded !== undefined || this.#replaying || planning === undefined) return;
     const race: PlanTarget = { team: seat.team, trackId: session.trackId, cars: teamCarsOf(session.view, seat.team), decisions: session.decisions };
-    this.#guarded('race-start commit', () => teams.commitToTeam(this.#feedId, planning.raceStarted?.(race) ?? []));
+    this.#guarded('race-start commit', () => {
+      const start = planning.raceStarted?.(race);
+      if (start === undefined) return;
+      teams.commitToTeam(this.#feedId, start.decisions);
+      // The plan the race chose, shown on each team feed where its decisions reached it (C62d, R20); none shows nothing new.
+      if (start.plan !== undefined) teams.showToTeam(this.#feedId, shownPlanOf(start.plan));
+    });
   }
 
   /** A new session: every topic of the feed starts over, apart from the feed's own insights that still hold. */
@@ -1211,7 +1282,8 @@ export class FeedPipeline {
       storage,
       ...(live && { live }),
       ...(recorded !== undefined && { recorded }),
-      ...(file !== undefined && continued === undefined && { file }),
+      // A continued recording's run writes no new start, but adds its plan choices to the first run's sidecar (R20).
+      ...(file !== undefined && { file }),
       writeSidecar: (path, value) => this.#writeSidecar(path, value),
       commit: (basis) => {
         if (this.#basisRun !== run) return;

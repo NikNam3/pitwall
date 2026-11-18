@@ -12,6 +12,8 @@
 //   without waiting; the stale ones and the preselection's others are queued (`runningBasis`) and the preselection enters
 //   by a `basisChosen` once current, unless its decisions hold a choice.
 // - A recording without a sidecar, or a run without the preselection's inputs: the seat's earlier sessions of the weekend.
+// - The plan (C62d, R20): in a race or sprint `basis.active.plan` is the newest plan choice that reached the feed
+//   (`choosePlan`, recorded in the sidecar's `plans` at its record index); a replay shows the recorded ones (`showRecorded`).
 import type { BasisActive } from '@pitwall/contracts';
 import { NO_BASIS, type BasisSidecar, type CarKey, type FeedId, type SessionBasis, type SessionRef, type TeamId, type TrackId, type WeekendPhase } from '@pitwall/domain';
 import type { BasisContext, DeepReadonly } from '@pitwall/engine/readers';
@@ -19,7 +21,7 @@ import type { TopicHub } from '../hub/topic-hub.ts';
 import type { Logger } from '../log.ts';
 import type { SessionKey, SessionRow, StoredSessionRow } from '../storage/db.ts';
 import type { RebuildService } from '../storage/rebuild-service-types.ts';
-import { basisSidecarPath } from './basis-sidecar.ts';
+import { basisSidecarPath, type PlanEntry, type RecordedBasis, type ShownPlan } from './basis-sidecar.ts';
 import type { LastChoice, LastChoiceStore } from './last-choice-types.ts';
 import { preselect, type PreselectInput } from './session-basis.ts';
 import type { SessionStorage } from './session-storage.ts';
@@ -38,8 +40,11 @@ export type BasisRunOptions = {
   /** Live, preselecting: the preselection's inputs; with `recorded`, a continued recording's queue only. */
   live?: BasisInputs;
   /** The recording's basis sidecar (a replay, a reprocess, a continued recording); `null`: the recording has none. */
-  recorded?: BasisSidecar | null;
-  /** The session file's recording, where a live session writes its basis sidecar; none without a session file. */
+  recorded?: RecordedBasis | null;
+  /**
+   * The session file's recording, where a live session writes its basis sidecar and a live or continued one adds its
+   * plan choices (R20); none without a session file.
+   */
   file?: string;
   /** Writes a sidecar of the session file (a failure is the file's write failure). */
   writeSidecar: (path: string, value: unknown) => void;
@@ -81,6 +86,16 @@ export class BasisRun {
   /** The basis in use at the newest applied frame. */
   #inUse: SessionBasis | undefined;
   #raceLaps: number | null = null;
+  /** The plan the session chose (C62d): the newest plan choice that reached the feed; `null` before any or for none. */
+  #plan: ShownPlan = null;
+  /**
+   * The basis sidecar's start and preselection as the session file holds them (a live session's as it wrote them, a
+   * continued recording's as its first run left them); `undefined` until written (a plan choice before then is written
+   * with them).
+   */
+  #sidecar: BasisSidecar | undefined;
+  /** Every plan choice that reached the feed in the session, in order (R20): the sidecar's `plans`. */
+  #plans: PlanEntry[] = [];
   #rebuilding: BasisProgress = null;
   /** The named sessions' rows by `refText`, read once each. */
   readonly #rows = new Map<string, StoredSessionRow | null>();
@@ -94,6 +109,10 @@ export class BasisRun {
 
   constructor(opts: BasisRunOptions) {
     this.#o = opts;
+    if (opts.recorded !== undefined && opts.recorded !== null) {
+      this.#sidecar = { start: opts.recorded.start, preselected: opts.recorded.preselected };
+      this.#plans = [...(opts.recorded.plans ?? [])];
+    }
   }
 
   /** The player's seat, once the session started. */
@@ -188,6 +207,32 @@ export class BasisRun {
     this.#publish();
   }
 
+  /**
+   * A plan choice reached the feed (C62d, R20): the race-start commit of the team's last chosen or saved plan, a later
+   * `basis.choose` with a plan (`null`: none), or a rename or delete of the shown plan. `basis.active` shows it, and the
+   * basis sidecar records it at record index `at`, where the choice reached the feed.
+   */
+  choosePlan(at: number, plan: ShownPlan): void {
+    if (this.#closed) return;
+    this.#plans.push({ at, plan: plan === null ? null : { ...plan } });
+    this.#writeSidecar();
+    this.#plan = plan;
+    this.#publish();
+  }
+
+  /** The saved plan `id` changed (renamed: `plan`; deleted: `null`): a choice of the shown plan, else nothing (C62d). */
+  planChanged(at: number, id: string, plan: ShownPlan): void {
+    if (this.#plan?.id !== id || JSON.stringify(this.#plan) === JSON.stringify(plan)) return;
+    this.choosePlan(at, plan);
+  }
+
+  /** A replay or reprocess reached a recorded plan choice (C38, R20): `basis.active` shows it; nothing is written. */
+  showRecorded(plan: ShownPlan): void {
+    if (this.#closed) return;
+    this.#plan = plan;
+    this.#publish();
+  }
+
   /** The session ended: nothing more is committed or published. */
   close(): void {
     this.#closed = true;
@@ -207,9 +252,18 @@ export class BasisRun {
     // The session starts on the preselection's current sessions (C61, C62).
     const current = (storage?.seatRowsOf(refsOf(preselected), player) ?? []).filter((r) => !storage?.isStale(r));
     this.#start = within(preselected, current);
-    const { file } = this.#o;
-    if (file !== undefined) this.#o.writeSidecar(basisSidecarPath(file), { start: this.#start, preselected } satisfies BasisSidecar);
+    this.#sidecar = { start: this.#start, preselected };
+    this.#writeSidecar();
     this.#queue(preselected, this.#start, live);
+  }
+
+  /** The basis sidecar to the session file, with the plan choices so far (none: no `plans`); nothing before it is known. */
+  #writeSidecar(): void {
+    const { file } = this.#o;
+    const sidecar = this.#sidecar;
+    if (file === undefined || sidecar === undefined) return;
+    const value: RecordedBasis = { ...sidecar, ...(this.#plans.length > 0 && { plans: this.#plans }) };
+    this.#o.writeSidecar(basisSidecarPath(file), value);
   }
 
   /**
@@ -248,7 +302,8 @@ export class BasisRun {
       basis,
       start: this.#start,
       sessions: this.#sessionsOf([basis, this.#start, ...(this.#lastChoice === null ? [] : [this.#lastChoice.basis])]),
-      plan: null,
+      // outside a race or sprint no plan is shown (C62d)
+      plan: this.#raceLaps === null ? null : this.#plan,
       raceLaps: this.#raceLaps,
       rebuilding: this.#rebuilding,
       lastChoice: this.#lastChoice,
