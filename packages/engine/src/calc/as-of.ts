@@ -2,7 +2,7 @@
 // and the situation at N, with the run's fixed inputs; its scheduled run calls it at the current frame (`asOfNow`).
 // `runAsOf` runs several such units in dependency order, so a profile aggregate or the scoreboard can rebuild a past
 // frame's outputs.
-import { known, unknown, type CarId, type CarKey, type FrameNumber, type GameSettings, type Known, type MachineId, type OpenSpan, type SessionTime, type Span } from '@pitwall/domain';
+import { known, unknown, type CarId, type CarKey, type ForecastSample, type FrameNumber, type GameSettings, type Known, type MachineId, type OpenSpan, type SessionTime, type Span } from '@pitwall/domain';
 import type { DeepReadonly } from '../util/deep-readonly.ts';
 import type { LiveState } from '../state/live-state.ts';
 import type { Projection } from '../log/types.ts';
@@ -153,16 +153,25 @@ export const situationAtEnd = (projection: Projection): Situation['byMachine'] =
   return byMachine;
 };
 
+/** The race a planning round assumes (C62d): its laps and, where the round gives them, its forecast samples. */
+export type AsOfRace = { laps: number; nextForecast?: readonly ForecastSample[] };
+
 /**
- * The ended run's view as of its end (SP4.3d2 plan call 1, C62d): `asOfNow(view)` with the situation at the session's
- * end (`situationAtEnd`: `finish` closed every span, C18), the ended run's live values, and `fixed.totalLaps` the race
- * laps the engineer entered in place of the session's. The fields stay getters, as `asOfNow`'s (C41).
+ * The ended run's view as of its end (SP4.3d2 plan call 1, SP4.3f spec §4.1, C62d): `asOfNow(view)` with the situation at
+ * the session's end (`situationAtEnd`: `finish` closed every span, C18), the ended run's live values, `fixed.totalLaps`
+ * the race laps the engineer entered in place of the session's, and, with `race.nextForecast` given (an empty list
+ * included), `fixed.weatherNow.nextForecast` those samples in place of the session's; the rest of `weatherNow` is the
+ * view's. The fields stay getters, as `asOfNow`'s (C41).
  */
-export function asOfEnded(view: EngineView, laps: number): AsOfView {
+export function asOfEnded(view: EngineView, race: AsOfRace): AsOfView {
   const now = asOfNow(view);
+  const { laps, nextForecast } = race;
   const fixed = Object.defineProperties({} as AsOfFixed, {
     ...Object.getOwnPropertyDescriptors(now.fixed),
     totalLaps: { get: () => known(laps, view.live.sessionTime), enumerable: true },
+    ...(nextForecast === undefined
+      ? {}
+      : { weatherNow: { get: (): LiveWeather | null => { const w = now.fixed.weatherNow; return w === null ? null : { ...w, nextForecast }; }, enumerable: true } }),
   });
   return Object.defineProperties({} as AsOfView, {
     ...Object.getOwnPropertyDescriptors(now),
