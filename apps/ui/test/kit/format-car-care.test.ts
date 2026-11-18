@@ -9,6 +9,7 @@ import {
   formatLapNumber,
   formatLaps,
   formatMinutesAhead,
+  formatOffsetMinutes,
   formatPercent,
   formatPercentTenths,
   formatPsi,
@@ -111,4 +112,12 @@ describe('formatMinutesAhead', () => {
     [30, '+30'],
     [Number.NaN, ''],
   ])('%f -> %s', (n, text) => expect(formatMinutesAhead(n)).toBe(text));
+});
+
+describe('formatOffsetMinutes', () => {
+  it.each([
+    [300_000, '+5'],
+    [1_800_000, '+30'],
+    [Number.NaN, ''],
+  ])('%f ms -> %s', (ms, text) => expect(formatOffsetMinutes(ms)).toBe(text));
 });

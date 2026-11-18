@@ -145,9 +145,9 @@ function ourLaps(c: Required<Pick<Case, 'lap' | 'fromLap' | 'fitted' | 'previous
   });
 }
 
-/** One forecast sample `offsetMin` minutes ahead with `rainPct` % rain chance; the other fields as a dry sample has them. */
-const forecastSample = (offsetMin: number, rainPct: number): ForecastSample => ({
-  offsetMin,
+/** One forecast sample `minutes` ahead with `rainPct` % rain chance; the other fields as a dry sample has them. */
+const forecastSample = (minutes: number, rainPct: number): ForecastSample => ({
+  offsetMs: minutes * 60_000,
   weather: 'overcast',
   trackTempC: 30,
   trackTempTrend: 'flat',
@@ -162,7 +162,7 @@ function rainOutlookOf(forecast: ForecastSample[]): RainOutlook {
   const index = forecast.findIndex((s) => s.rainPct >= rainPct);
   const first = forecast[index];
   if (first === undefined) return { firstRain: unknown('notApplicable'), withinHorizon: false, samplesAhead: forecast };
-  return { firstRain: known({ index, offsetMin: first.offsetMin, rainPct: first.rainPct }, 0), withinHorizon: first.offsetMin <= horizonMin, samplesAhead: forecast };
+  return { firstRain: known({ index, offsetMs: first.offsetMs, rainPct: first.rainPct }, 0), withinHorizon: first.offsetMs <= horizonMin * 60_000, samplesAhead: forecast };
 }
 
 /** `track-wetness`'s output: a dry track, or a wet one (600 ms slower than dry, sd 0). */

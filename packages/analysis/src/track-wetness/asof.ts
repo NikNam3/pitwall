@@ -263,13 +263,13 @@ function fieldReference(view: AsOfView, own: readonly number[], ownAt: Ms, scale
 
 /**
  * The forecast's rain chance now (ruling R19): the `rainPct` of the forecast sample nearest the present (smallest
- * `|offsetMin|`); `undefined` without `weatherNow` (a cut or stored view) or without a sample.
+ * `|offsetMs|`); `undefined` without `weatherNow` (a cut or stored view) or without a sample.
  */
 function rainNowPct(view: AsOfView): number | undefined {
   const weather = view.fixed.weatherNow;
   if (weather === null) return undefined;
   let nearest: (typeof weather.forecast)[number] | undefined;
-  for (const s of weather.forecast) if (nearest === undefined || Math.abs(s.offsetMin) < Math.abs(nearest.offsetMin)) nearest = s;
+  for (const s of weather.forecast) if (nearest === undefined || Math.abs(s.offsetMs) < Math.abs(nearest.offsetMs)) nearest = s;
   return nearest?.rainPct;
 }
 
@@ -313,7 +313,7 @@ function startState(view: AsOfView, config: Config): TrackWetness['state'] {
   const weather = view.fixed.weatherNow;
   if (weather === null) return unknown('notReceived');
   let first: (typeof weather.nextForecast)[number] | undefined;
-  for (const s of weather.nextForecast) if (first === undefined || s.offsetMin < first.offsetMin) first = s;
+  for (const s of weather.nextForecast) if (first === undefined || s.offsetMs < first.offsetMs) first = s;
   if (first === undefined) return unknown('insufficientData');
   return known({ wetnessMs: RAIN.has(first.weather) ? config.startRainWetnessMs : 0, sdMs: config.initialSdMs }, view.at);
 }

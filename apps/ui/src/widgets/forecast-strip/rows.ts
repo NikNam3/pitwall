@@ -1,8 +1,8 @@
 // The forecast strip's rows (spec 4; C65): the topic's samples formatted, nothing computed. Which sample is the first
 // rain is the topic's `firstRainIndex` (C43); the widget holds no threshold.
-import type { ForecastSample, WeatherForecast } from '@pitwall/domain';
+import type { ForecastSample, Ms, WeatherForecast } from '@pitwall/domain';
 import { unknownPart, type CellPart } from '../../kit/grid/grid.ts';
-import { formatMinutesAhead, formatPct, formatTemp, formatWhole } from '../../kit/values/format.ts';
+import { formatOffsetMinutes, formatPct, formatTemp, formatWhole } from '../../kit/values/format.ts';
 import * as text from './text.ts';
 
 /** One sample's column of the full strip. */
@@ -18,14 +18,14 @@ export type SampleColumn = {
 };
 
 /** The minutes from now: `now` for the present sample, else `+5`. */
-const offset = (min: number): string => (min === 0 ? text.now : formatMinutesAhead(min));
+const offset = (ms: Ms): string => (ms === 0 ? text.now : formatOffsetMinutes(ms));
 
 /** One column per sample in the topic's order; with `maxColumns`, the earliest that fit. */
 export function fullColumns(forecast: WeatherForecast, maxColumns?: number): SampleColumn[] {
   const first = forecast.firstRainIndex;
   const samples = maxColumns === undefined ? forecast.samples : forecast.samples.slice(0, Math.max(0, maxColumns));
   return samples.map((s, i) => ({
-    offset: offset(s.offsetMin),
+    offset: offset(s.offsetMs),
     sky: text.weather[s.weather],
     rain: formatWhole(s.rainPct),
     track: formatTemp(s.trackTempC),
@@ -47,7 +47,7 @@ const nowLine = (s: ForecastSample): NowLine => ({
 });
 
 const firstRainPart = (s: ForecastSample): CellPart => ({
-  text: s.offsetMin === 0 ? text.rainNow(formatPct(s.rainPct)) : text.rainAtOffset(formatPct(s.rainPct), formatMinutesAhead(s.offsetMin)),
+  text: s.offsetMs === 0 ? text.rainNow(formatPct(s.rainPct)) : text.rainAtOffset(formatPct(s.rainPct), formatOffsetMinutes(s.offsetMs)),
 });
 
 /** Compact keeps now (the first sample) and the first rain; without a first rain, its part is empty with the reason. */

@@ -75,10 +75,10 @@ const LAP_OF_LEADER = /\b\w*[Ll]aps?\s*\[\s*(?:leader|order\s*\[\s*0\s*\])\s*\]/
 const DRY_PACE_FROM_MEDIANS = /\bmedianMs\.slick\b|\bdryRefOf\b/;
 
 /**
- * Reading "rain coming" from the forecast samples: the samples ahead filtered by their offset (`offsetMin >= 0`) or a
+ * Reading "rain coming" from the forecast samples: the samples ahead filtered by their offset (`offsetMs >= 0`) or a
  * rain chance held against a threshold (`rainPct >= …`) (SP4.3c Task 14, O3a).
  */
-const RAIN_FROM_SAMPLES = /\boffsetMin\s*>=?\s*0(?![\d.])|\brainPct\s*>=/;
+const RAIN_FROM_SAMPLES = /\boffsetMs\s*>=?\s*0(?![\d.])|\brainPct\s*>=/;
 
 /** The weather path's dynamics: the wetness a rain lap adds, a dry lap takes and the ceiling (SP4.3c Task 14, O3b). */
 const WETNESS_DYNAMICS = ['WETNESS_RISE_MS_PER_LAP', 'WETNESS_FALL_MS_PER_LAP', 'WETNESS_MAX_MS'];
@@ -456,11 +456,11 @@ describe('owners guard (spec §5.8)', () => {
       expect(DRY_PACE_FROM_MEDIANS.test(codeOf('const m = row.medianMs.slick;'))).toBe(true);
       expect(DRY_PACE_FROM_MEDIANS.test(codeOf('const dryRefMs = dryRefOf(byLap);'))).toBe(true);
       expect(DRY_PACE_FROM_MEDIANS.test(codeOf('// row.medianMs.slick\nconst m = row.medianMs[type];'))).toBe(false);
-      expect(RAIN_FROM_SAMPLES.test(codeOf('const ahead = forecast.filter((s) => s.offsetMin >= 0);'))).toBe(true);
+      expect(RAIN_FROM_SAMPLES.test(codeOf('const ahead = forecast.filter((s) => s.offsetMs >= 0);'))).toBe(true);
       expect(RAIN_FROM_SAMPLES.test(codeOf('return byLap.some((l) => l.rainPct >= config.rainCandidatePct);'))).toBe(true);
       expect(RAIN_FROM_SAMPLES.test(codeOf('const rain = u < rainPctAt(byLap, lap + shift);'))).toBe(false);
-      expect(RAIN_FROM_SAMPLES.test(codeOf('// s.offsetMin >= 0\nconst d = Math.abs(s.offsetMin);'))).toBe(false);
-      expect(RAIN_FROM_SAMPLES.test(codeOf('const later = s.offsetMin >= 0.5;'))).toBe(false);
+      expect(RAIN_FROM_SAMPLES.test(codeOf('// s.offsetMs >= 0\nconst d = Math.abs(s.offsetMs);'))).toBe(false);
+      expect(RAIN_FROM_SAMPLES.test(codeOf('const later = s.offsetMs >= 0.5;'))).toBe(false);
       const mc = unit('race-monte-carlo');
       const wp = unit('weather-paths');
       expect(wp?.folder).toBe('packages/analysis/src/weather-paths');

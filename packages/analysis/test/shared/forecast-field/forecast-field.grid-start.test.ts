@@ -115,8 +115,8 @@ function qualifyingLaps(k: number): LapRecord[] {
 }
 
 /** The next session's (the race's) forecast: dry for 15 minutes, 80 % rain from 30 minutes on. */
-const sample = (offsetMin: number, rainPct: number): ForecastSample => ({
-  offsetMin,
+const sample = (minutes: number, rainPct: number): ForecastSample => ({
+  offsetMs: minutes * 60_000,
   weather: rainPct > 50 ? 'lightRain' : 'overcast',
   trackTempC: 30,
   trackTempTrend: 'flat',

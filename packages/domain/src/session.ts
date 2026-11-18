@@ -7,7 +7,8 @@ export type ZoneFlag = 'unknown' | 'none' | 'green' | 'blue' | 'yellow';
 
 /** One forecast sample of this session (step 1 keeps only these). */
 export type ForecastSample = {
-  offsetMin: number;
+  /** The time after the session start the sample describes, integer ms (C4). */
+  offsetMs: Ms;
   weather: Weather;
   trackTempC: Celsius;
   trackTempTrend: Trend;

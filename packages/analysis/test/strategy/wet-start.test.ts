@@ -100,8 +100,8 @@ const PLANNING_LAPS = 44;
 const SEED = 1_521_242_744;
 
 /** The race's forecast: dry, every sample below `rain-outlook`'s `rainPct` (40 %), no rain weather type. */
-const DRY_FORECAST: readonly ForecastSample[] = [0, 15, 30, 45, 60].map((offsetMin) => ({
-  offsetMin,
+const DRY_FORECAST: readonly ForecastSample[] = [0, 15, 30, 45, 60].map((minutes) => ({
+  offsetMs: minutes * 60_000,
   weather: 'overcast',
   trackTempC: 30,
   trackTempTrend: 'flat',

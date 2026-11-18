@@ -169,6 +169,9 @@ export const formatCelsius = (c: Celsius): string => (Number.isFinite(c) ? `${wh
 /** Minutes ahead as a signed whole number, no unit, `5` -> `+5`. */
 export const formatMinutesAhead = (min: number): string => (Number.isFinite(min) ? `+${whole(min)}` : '');
 
+/** A forecast offset in ms as signed whole minutes, no unit, `300_000` -> `+5`. */
+export const formatOffsetMinutes = (ms: Ms): string => formatMinutesAhead(ms / 60_000);
+
 /** Percentage to whole numbers, `17.6` -> `18%`. */
 export const formatPercent = (p: Percent): string => (Number.isFinite(p) ? formatPct(p) : '');
 

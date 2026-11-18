@@ -608,16 +608,16 @@ function stopInto(sp: StartingPoint, k: number, stop: DeepReadonly<RivalStop> | 
   sp.typeSwitch[k] = stop?.switchLap.known === true && stop.switchTo.known ? { lap: stop.switchLap.value, to: stop.switchTo.value } : null;
 }
 
-/** The rain chance `min` minutes ahead, linearly between the samples around it (`samples` by offset, not empty). */
-function rainPctAt(samples: readonly { offsetMin: number; rainPct: number }[], min: number): number {
+/** The rain chance `ms` after now, linearly between the samples around it (`samples` by offset, not empty). */
+function rainPctAt(samples: readonly { offsetMs: number; rainPct: number }[], ms: number): number {
   const first = samples[0] as (typeof samples)[number];
-  if (min <= first.offsetMin) return first.rainPct;
+  if (ms <= first.offsetMs) return first.rainPct;
   for (let i = 1; i < samples.length; i++) {
     const s1 = samples[i] as (typeof samples)[number];
-    if (min > s1.offsetMin) continue;
+    if (ms > s1.offsetMs) continue;
     const s0 = samples[i - 1] as (typeof samples)[number];
-    const span = s1.offsetMin - s0.offsetMin;
-    return span > 0 ? s0.rainPct + ((min - s0.offsetMin) / span) * (s1.rainPct - s0.rainPct) : s1.rainPct;
+    const span = s1.offsetMs - s0.offsetMs;
+    return span > 0 ? s0.rainPct + ((ms - s0.offsetMs) / span) * (s1.rainPct - s0.rainPct) : s1.rainPct;
   }
   return (samples[samples.length - 1] as (typeof samples)[number]).rainPct;
 }
@@ -640,11 +640,11 @@ function weatherOf(
 ): StartingPoint['weather'] {
   if (forecast === undefined || accuracy === undefined || forecast.length === 0) return unknown('notReceived');
   if (!(leaderLapMs > 0)) return unknown('insufficientData');
-  const samples = [...forecast].sort((a, b) => a.offsetMin - b.offsetMin);
+  const samples = [...forecast].sort((a, b) => a.offsetMs - b.offsetMs);
   const byLap: { lap: number; rainPct: number }[] = [];
   for (let l = lap; l <= lapsTotal; l++) {
-    const inMin = ((l - lap + 0.5 - leaderFraction) * leaderLapMs) / 60_000;
-    byLap.push({ lap: l, rainPct: rainPctAt(samples, inMin) });
+    const inMs = (l - lap + 0.5 - leaderFraction) * leaderLapMs;
+    byLap.push({ lap: l, rainPct: rainPctAt(samples, inMs) });
   }
   return known({ byLap, accuracy }, at);
 }

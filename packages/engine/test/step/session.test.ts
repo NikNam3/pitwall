@@ -24,8 +24,8 @@ describe('session state', () => {
     expect(initialState({ feedId, sessionUid: 9n, session: packet }).signals.session.marshalZones).toEqual([
       { startFraction: 0.125, flag: 'yellow' }, { startFraction: 0.5, flag: 'unknown' },
     ]);
-    expect(s.forecast).toEqual([{ offsetMin: 5, weather: 'heavyRain', trackTempC: 30, trackTempTrend: 'down', airTempC: 23,
-      airTempTrend: 'flat', rainPct: 60 }, expect.objectContaining({ offsetMin: 10, weather: 'storm' })]);
+    expect(s.forecast).toEqual([{ offsetMs: 300_000, weather: 'heavyRain', trackTempC: 30, trackTempTrend: 'down', airTempC: 23,
+      airTempTrend: 'flat', rainPct: 60 }, expect.objectContaining({ offsetMs: 600_000, weather: 'storm' })]);
     expect(s.settings).toMatchObject({ tyreTemperature: 'surfaceOnly', safetyCar: 'increased', redFlags: 'reduced', carDamage: 'standard',
       carDamageRate: 'simulation', lowFuelMode: 'hard', recoveryMode: 'flashbacks', flashbackLimit: 'unlimited', surfaceType: 'realistic',
       collisions: 'playerToPlayerOff', pitLaneTyreSim: true, parcFerme: true });
@@ -53,7 +53,7 @@ describe('session state', () => {
       0: { sessionType: 13, timeOffset: 0, weather: 1 }, 1: { sessionType: 15, timeOffset: 0, weather: 2 },
       2: { sessionType: 13, timeOffset: 5, weather: 3 }, 3: { sessionType: 15, timeOffset: 5, weather: 4 } } });
     const forecast = initialState({ feedId, sessionUid: 9n, session: mixed }).session.forecast;
-    expect(forecast.map((f) => [f.offsetMin, f.weather])).toEqual([[0, 'overcast'], [5, 'heavyRain']]);
+    expect(forecast.map((f) => [f.offsetMs, f.weather])).toEqual([[0, 'overcast'], [300_000, 'heavyRain']]);
     expect(forecast.every((f) => !('sessionType' in f))).toBe(true);
   });
 });
@@ -87,9 +87,9 @@ describe("the next session's forecast (SP4.3d2 Task 4)", () => {
     const expected = forecastOfType(GP, 15, [5, 15]);
     expect(expected).toHaveLength(2);
     expect(s.nextForecast).toEqual(expected);
-    expect(s.nextForecast.map((f) => [f.offsetMin, f.weather, f.trackTempC, f.airTempC, f.rainPct])).toEqual([[0, 'overcast', 21, 16, 10], [5, 'lightRain', 22, 17, 15]]);
+    expect(s.nextForecast.map((f) => [f.offsetMs, f.weather, f.trackTempC, f.airTempC, f.rainPct])).toEqual([[0, 'overcast', 21, 16, 10], [300_000, 'lightRain', 22, 17, 15]]);
     // the forecast stays this session's
-    expect(s.forecast.map((f) => [f.offsetMin, f.weather])).toEqual([[0, 'clear'], [5, 'lightCloud']]);
+    expect(s.forecast.map((f) => [f.offsetMs, f.weather])).toEqual([[0, 'clear'], [300_000, 'lightCloud']]);
   });
 
   it('structure [1, 5, 15] at type 15: nextForecast is []', () => {

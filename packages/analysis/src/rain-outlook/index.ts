@@ -1,7 +1,7 @@
 // `rain-outlook` (spec 3.3; SP4.3c O3a): the one reading of the forecast (C43): "rain is coming" (one threshold,
 // `rainPct`), the samples ahead and the highest chance per remaining lap. Read by `weather`, `race-moment` and
 // `strategy`'s candidate rule. A calculator: no topic.
-import type { ForecastSample, Known, Percent } from '@pitwall/domain';
+import type { ForecastSample, Known, Ms, Percent } from '@pitwall/domain';
 
 export * from './config.ts';
 
@@ -10,15 +10,15 @@ export const RAIN_OUTLOOK = 'rain-outlook';
 
 /**
  * The first forecast sample at or above `rainPct` (index into `samplesAhead`), whether it is within `horizonMin`, and
- * the samples ahead: those with `offsetMin ≥ 0` in time order.
+ * the samples ahead: those with `offsetMs ≥ 0` in time order.
  */
-export type RainOutlook = { firstRain: Known<{ index: number; offsetMin: number; rainPct: Percent }>; withinHorizon: boolean; samplesAhead: ForecastSample[] };
+export type RainOutlook = { firstRain: Known<{ index: number; offsetMs: Ms; rainPct: Percent }>; withinHorizon: boolean; samplesAhead: ForecastSample[] };
 
 /** A forecast read per race lap: per lap its rain chance (0–100). */
 export type ChanceByLap = readonly { lap: number; rainPct: number }[];
 
-/** The forecast's samples ahead (`offsetMin ≥ 0`), in time order. */
-export const samplesAheadOf = (forecast: readonly ForecastSample[]): ForecastSample[] => forecast.filter((s) => s.offsetMin >= 0).sort((a, b) => a.offsetMin - b.offsetMin);
+/** The forecast's samples ahead (`offsetMs ≥ 0`), in time order. */
+export const samplesAheadOf = (forecast: readonly ForecastSample[]): ForecastSample[] => forecast.filter((s) => s.offsetMs >= 0).sort((a, b) => a.offsetMs - b.offsetMs);
 
 /**
  * The highest chance per remaining lap: per lap from `fromLap` on (in lap order), the highest rain chance of the

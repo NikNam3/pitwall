@@ -14,9 +14,9 @@ import { NONE, openSpan, PRACTICE, QUALIFYING } from '../situated.ts';
 /** The race's laps as the user entered them in the planning round. */
 const RACE_LAPS = 44;
 
-/** A forecast sample `offsetMin` minutes ahead. */
-const sample = (offsetMin: number, weather: Weather, rainPct: number): ForecastSample => ({
-  offsetMin,
+/** A forecast sample `minutes` ahead. */
+const sample = (minutes: number, weather: Weather, rainPct: number): ForecastSample => ({
+  offsetMs: minutes * 60_000,
   weather,
   trackTempC: 30,
   trackTempTrend: 'flat',

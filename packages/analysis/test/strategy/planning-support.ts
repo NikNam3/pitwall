@@ -23,8 +23,8 @@ import { viewAtFrame, type ViewSpec } from './support.ts';
 const RACE_ONLY = new Set(['session-phase-race', 'race-control-race', 'car-activity-race', 'compound-rule', 'penalties']);
 
 /** The race's forecast as qualifying's last Session packet lists it: dry, then up to 60 % rain. */
-export const RACE_FORECAST: readonly ForecastSample[] = [0, 15, 30, 45, 60].map((offsetMin, i) => ({
-  offsetMin,
+export const RACE_FORECAST: readonly ForecastSample[] = [0, 15, 30, 45, 60].map((minutes, i) => ({
+  offsetMs: minutes * 60_000,
   weather: i < 2 ? 'overcast' : 'lightRain',
   trackTempC: 30,
   trackTempTrend: 'flat',

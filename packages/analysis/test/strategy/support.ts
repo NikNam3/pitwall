@@ -220,9 +220,9 @@ export const stopIn = (view: EngineView, car: CarId, inLaps: number, compound: P
 
 export const json = (x: unknown): string => JSON.stringify(x);
 
-/** One forecast sample `offsetMin` minutes ahead with `rainPct` % rain chance; the other fields as a dry sample has them. */
-export const forecastSample = (offsetMin: number, rainPct: number): ForecastSample => ({
-  offsetMin,
+/** One forecast sample `minutes` ahead with `rainPct` % rain chance; the other fields as a dry sample has them. */
+export const forecastSample = (minutes: number, rainPct: number): ForecastSample => ({
+  offsetMs: minutes * 60_000,
   weather: 'overcast',
   trackTempC: 30,
   trackTempTrend: 'flat',
