@@ -143,7 +143,7 @@ describe('plan board: the race conditions per the mockup', () => {
     expect(mocks.invoke).not.toHaveBeenCalled();
     await fireEvent.change(rain);
     expect(mocks.invoke.mock.calls).toEqual([
-      ['plans.race.set', { feedId: LINK.feedId, race: { laps: LAPS, sets: 'carried', conditions: { kind: 'entered', samples: SAMPLES_EDITED } } }],
+      ['plans.race.set', { feedId: LINK.feedId, race: { laps: LAPS, sets: 'carried', conditions: { kind: 'entered', samples: SAMPLES_EDITED.map(({ offsetMs, weather, rainPct }) => ({ offsetMs, weather, rainPct })) } } }],
     ]);
     expect(sent).toEqual([]);
   });
