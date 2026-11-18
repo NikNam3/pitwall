@@ -10,7 +10,16 @@ import { createInterface } from 'node:readline';
 import { _electron as electron } from '@playwright/test';
 import type { ElectronApplication, Page } from '@playwright/test';
 import { preview } from 'vite';
-import type { BridgeHandle, GalleryHandle, GalleryOptions, ImportRecordingOptions, LaunchPitwallOptions, PitwallApp, StartBridgeOptions } from './harness-contract.ts';
+import type {
+  BridgeHandle,
+  GalleryHandle,
+  GalleryOptions,
+  ImportRecordingOptions,
+  LaunchPitwallOptions,
+  NoSessionBridgeOptions,
+  PitwallApp,
+  StartBridgeOptions,
+} from './harness-contract.ts';
 
 const REPO_ROOT = path.resolve(import.meta.dirname, '../../..');
 const UI_DIR = path.join(REPO_ROOT, 'apps/ui');
@@ -34,7 +43,7 @@ const POLL_MS = 100;
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
 /** A TCP port nothing listens on right now. */
-async function freePort(): Promise<number> {
+export async function freePort(): Promise<number> {
   const server = createServer();
   await new Promise<void>((resolve) => server.listen(0, HOST, resolve));
   const address = server.address();
@@ -102,8 +111,15 @@ export async function openGallery(options: GalleryOptions = {}): Promise<Gallery
   }
 }
 
-/** A recording by fixture name: a committed segment (`fixtures/segments/<name>.pwrec.gz`) or a full recording's id in `PITWALL_FIXTURES_DIR`. */
+/**
+ * A recording by fixture name: a committed segment (`fixtures/segments/<name>.pwrec.gz`) or a full recording's id in
+ * `PITWALL_FIXTURES_DIR`; an absolute path (a synthetic recording a spec wrote) is taken as it is.
+ */
 function recordingPath(name: string): string {
+  if (path.isAbsolute(name)) {
+    if (!existsSync(name)) throw new Error(`no recording ${name}`);
+    return name;
+  }
   const index = JSON.parse(readFileSync(path.join(REPO_ROOT, 'fixtures/index.json'), 'utf8')) as {
     fixtures: Array<{ id: string; file: string }>;
     segments: Array<{ file: string }>;
@@ -128,7 +144,12 @@ process.once('exit', () => {
  * `params` only there); resolves once it prints `listening`. Its stdout and stderr lines go to `lines`.
  */
 function spawnBridge(file: string, env: Record<string, string>, lines: string[]): Promise<ChildProcess> {
-  const child = spawn(process.execPath, [BRIDGE_CLI, 'replay', file, '--paused'], {
+  return spawnCli(['replay', file, '--paused'], env, lines);
+}
+
+/** `pitwall <args>` as a bridge: resolves once it prints `listening`; its stdout and stderr lines go to `lines`. */
+function spawnCli(args: string[], env: Record<string, string>, lines: string[]): Promise<ChildProcess> {
+  const child = spawn(process.execPath, [BRIDGE_CLI, ...args], {
     cwd: REPO_ROOT,
     env: childEnv({ PITWALL_WS_LOG_LEVEL: 'debug', ...env }),
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -189,6 +210,32 @@ export async function startBridge(options: StartBridgeOptions): Promise<BridgeHa
       await stopChild(child);
       lines = [];
       child = await spawnBridge(file, env, lines);
+    },
+    log: () => [...lines],
+  };
+}
+
+/**
+ * A bridge with no session (SP4.3f Task 8): `pitwall live` on `options.udpPort` (bound to 127.0.0.1) and
+ * `options.wsPort`, on `options.dataDir`, the WebSocket log at debug as `startBridge`'s. Nothing is sent to its UDP
+ * port until the spec sends it; `restart()` starts `pitwall live` again on the same ports and data dir.
+ */
+export async function startBridgeNoSession(options: NoSessionBridgeOptions): Promise<BridgeHandle> {
+  const env: Record<string, string> = {
+    PITWALL_WS_PORT: String(options.wsPort),
+    PITWALL_UDP_PORT: String(options.udpPort),
+    PITWALL_UDP_HOST: HOST,
+    PITWALL_DATA_DIR: options.dataDir,
+  };
+  let lines: string[] = [];
+  let child = await spawnCli(['live'], env, lines);
+  return {
+    wsPort: options.wsPort,
+    stop: () => stopChild(child),
+    restart: async () => {
+      await stopChild(child);
+      lines = [];
+      child = await spawnCli(['live'], env, lines);
     },
     log: () => [...lines],
   };

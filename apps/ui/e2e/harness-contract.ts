@@ -23,7 +23,7 @@ export type StartBridgeOptions = {
 };
 
 export type ImportRecordingOptions = {
-  /** A fixture name from `fixtures/index.json`, imported with `pitwall import <fixture>`. */
+  /** A fixture name from `fixtures/index.json`, or an absolute path to a `.pwrec.gz` (a synthetic recording), imported with `pitwall import`. */
   recording: string;
   /** `PITWALL_DATA_DIR`: the recording is copied to `<dir>/recordings` and stored in its database. */
   dataDir: string;
@@ -39,6 +39,13 @@ export type BridgeHandle = {
   /** The bridge's stdout and stderr lines since the last (re)start, one pino JSON object per line, unparsed. */
   log(): string[];
 };
+
+/**
+ * A bridge with no session (SP4.3f Task 8): `pitwall live` on its own UDP port (bound to 127.0.0.1, never 20777 or
+ * 20778) and WebSocket port, on `dataDir`, and no traffic until the spec sends some. `restart()` runs `pitwall live`
+ * again on the same ports and data dir.
+ */
+export type NoSessionBridgeOptions = { dataDir: string; wsPort: number; udpPort: number };
 
 export type LaunchPitwallOptions = {
   wsPort: number;
