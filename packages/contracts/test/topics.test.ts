@@ -124,7 +124,8 @@ describe('TOPICS', () => {
     expect(TOPICS[name]).toMatchObject({ name, owner: 'core', scope: 'global', mode: 'state' });
   });
   // M7-R: cars.overview lost `stops`, pitStopCount.byCar is new
-  it('exports the contract version', () => { expect(CONTRACT_VERSION).toBe(14); });
+  // SP4.3e Task 7b: plans.prepared publishes PlanningRoundState, plans.prepare.laps gives way to plans.race.set
+  it('exports the contract version', () => { expect(CONTRACT_VERSION).toBe(15); });
 });
 
 describe('defineTopic', () => {

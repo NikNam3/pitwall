@@ -14,12 +14,8 @@ import type { StrategyInput } from './input.ts';
 /** What the planning round hands the job beyond the view: the race's laps as entered, per our car its prepared plans. */
 export type PlanningRound = {
   laps: number;
-  /**
-   * The round's race assumptions (C62d, spec §4.3), forwarded to the one builder (`buildGridStart`, C50); absent:
-   * `{ laps, sets: 'carried' }`.
-   */
-  // SP4.3e: required in Task 7b
-  race?: RaceAssumptions;
+  /** The round's race assumptions (C62d, spec §4.3), forwarded to the one builder (`buildGridStart`, C50). */
+  race: RaceAssumptions;
   prepared: Record<CarId, { saved: Partial<Record<Slot, Policy>>; active: Slot | null }>;
 };
 
@@ -40,7 +36,7 @@ export function planningInputFrom(asOf: AsOfView, round: PlanningRound): Strateg
   const outputs = runAsOf(FORECAST_UNITS, view);
   const grid = gridOf(view);
   const start = grid.known
-    ? buildGridStart(view, outputs, { laps: round.laps, grid: grid.value, fittedCompound: (car) => (ours.has(car) ? 'free' : unknown('notReceived')), race: round.race ?? { laps: round.laps, sets: 'carried' } })
+    ? buildGridStart(view, outputs, { laps: round.laps, grid: grid.value, fittedCompound: (car) => (ours.has(car) ? 'free' : unknown('notReceived')), race: round.race })
     : unknown(grid.reason);
 
   const committed: Record<CarId, Policy | null> = {};

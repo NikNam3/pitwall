@@ -4,7 +4,7 @@ import type { ActionOutcome, UiAction } from '@pitwall/contracts';
 
 /** The ids of the shell commands that take arguments from a widget: the planning round's controls (SP4.3d2 call 10). */
 export const WIDGET_COMMAND_IDS = [
-  'plans.prepare.laps',
+  'plans.race.set',
   'plans.prepare.save',
   'plans.prepare.accept',
   'plans.prepare.remove',

@@ -4,9 +4,9 @@
 // DP's best per stop count (no stop, 1, 2, 3). Each row's place distribution is gen.mjs' `placeDist`, its E[pos] computed
 // from it as gen.mjs does; ΔPOS (`diffPlan`, positive = good for us, R31), ΔTIME (`deltaPlanMs`), the ranks and
 // `bestPerStops` are written as `strategy` fills them (Task 5). The display computes none of it (C65).
-import type { Computed, MachineSpans, PlanningRound } from '@pitwall/contracts';
+import type { Computed, MachineSpans, PlanningRoundState } from '@pitwall/contracts';
 import { carId, known, toSessionTime, unknown } from '@pitwall/domain';
-import type { McRow, McSource, NoiseCompound, Policy, Slot, StrategyCar } from '@pitwall/domain';
+import type { McRow, McSource, NoiseCompound, Policy, SessionRef, Slot, StrategyCar } from '@pitwall/domain';
 import type { GalleryEntry } from '../../kit/gallery-types.ts';
 import type { widget } from './widget.ts';
 
@@ -158,7 +158,7 @@ export const COLD = board({ slots: SLOTS.slice(0, 2), dp: DP_PICKS.slice(1, 3), 
 // B = its 2-stop L12 H · L30 M on S), not yet saved: no slot is active (activate needs a saved slot). Every plan carries
 // its start compound (the DP's free start compound, SP4.3d spec §7.2). G2 is empty: its entry is a window-local draft.
 
-/** The race laps the engineer entered, and the bridge's suggestion (the track's last stored race). */
+/** The round's race laps (the bridge's suggestion, the track's last stored race, or entered by the engineer). */
 export const LAPS = 44;
 /** The rain chance of the race's forecast from qualifying, %. */
 export const RAIN_PCT = 10;
@@ -201,21 +201,25 @@ export type RoundSpec = {
   active?: Slot | null;
 };
 
-/** `plans.prepared` while the round is open: KUH's prepared plans, the laps entered and suggested. */
-export function round(spec: RoundSpec = {}): PlanningRound {
+/** The qualifying the round replays (SP4.3e spec §4.3). */
+export const QUALIFYING: SessionRef = { sessionUid: '7001', weekendId: WEEKEND };
+
+/** `plans.prepared` while the round is open (`PlanningRoundState`): KUH's prepared plans, the race laps (entered or suggested). */
+export function round(spec: RoundSpec = {}): PlanningRoundState {
   const { entered = LAPS, running = false, slots = { G1: policyOf(PLAN_G1.stops, PLAN_G1.start) }, active = null } = spec;
   return {
     open: true,
-    weekendId: WEEKEND,
-    format: 'grandPrix',
+    qualifying: QUALIFYING,
+    practice: [],
+    race: { laps: entered, sets: 'carried' },
     team: TEAM,
-    laps: { entered, suggested: known(LAPS, at) },
     cars: { [KUH]: { raceNumber: KUH_NUMBER, slots, active } },
     running,
+    saved: [],
   };
 }
-/** `plans.prepared` outside the planning round. */
-export const CLOSED: PlanningRound = { open: false };
+/** `plans.prepared` outside the planning round: no saved plans of the team on the track (ruling R15). */
+export const CLOSED: PlanningRoundState = { open: false, saved: [] };
 
 // ---- The race's grid prefill (SP4.3d spec §7.1 step 7, Task 9: the race's strategy job prefills A and B on the grid
 // while no plan is prepared): the race's board on the grid, no slot saved, A and B prefilled, `accept` commits them.
@@ -242,7 +246,7 @@ export const cases = {
   planningRound: { plan: plan(), preview: preview(), prepared: round() },
   // The planning job running, no result yet: the inputs line and the computing mark.
   planningComputing: { prepared: round({ running: true }) },
-  // No race laps entered yet: no job runs; the laps field empty with the suggestion.
+  // No race laps known yet (no suggestion, none entered; ruling R16): no job runs; the laps field empty.
   planningNoLaps: { prepared: round({ entered: null }) },
   // `source: planning` outside the planning round: the kit's notApplicable mark.
   planningNotApplicable: { plan: plan(), prepared: CLOSED },

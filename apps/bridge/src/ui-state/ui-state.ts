@@ -154,7 +154,6 @@ export class UiState {
       case 'plan.accept':
         // The team's feed pipelines' decisions, routed by `PlanRouting` (C76, SP4.3b Task 17, SP4.3d1 Task 10), not UI state.
         return INVALID;
-      case 'plans.prepare.laps':
       case 'plans.prepare.save':
       case 'plans.prepare.accept':
       case 'plans.prepare.remove':

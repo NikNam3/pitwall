@@ -20,7 +20,7 @@ const sessionWith = (settings: TrackSession['settings']): TrackSession => {
   };
   return {
     sessionUid: '7' as SessionUid, weekendId: 'W1', seasonId: 'S1', playerCar: car(0), teammateCar: car(1), trackId: 10,
-    startedAt: '2026-10-01T20:00:00.000Z', pwrecPath: null, settings, cars: [], rulesVersion: 'current', complete: true,
+    startedAt: '2026-10-01T20:00:00.000Z', pwrecPath: null, settings, kind: 'practice', cars: [], rulesVersion: 'current', complete: true,
     phase: { kind: 'race', format: 'grandPrix' }, stale: false, projection, track: unknown('notApplicable'),
   };
 };

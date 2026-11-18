@@ -3,7 +3,7 @@ import { known, unknown, type CarId, type CarKey, type Known, type SessionBasis,
 import { projectionOfLog } from '@pitwall/engine/log';
 import type { DeepReadonly, Projection, ProjectionState, BasisContext, StoredSession } from '@pitwall/engine/readers';
 import { createLogger, type Logger } from '../log.ts';
-import type { Db, SessionKey, SessionRow, StoredSessionRow } from './db.ts';
+import type { Db, SessionKey, StoredSessionKind, SessionRow, StoredSessionRow } from './db.ts';
 import { logOfRows, type StoredFact } from './log-rows.ts';
 
 type SessionDbRow = {
@@ -18,6 +18,7 @@ type SessionDbRow = {
   settings: string;
   rules_version: string;
   complete: number;
+  kind: string;
 };
 
 /** The basis that names `sessions` (C62): per session its weekend-phase span's kind; the practice ones and the newest qualifying. */
@@ -102,7 +103,7 @@ export class WeekendRepository {
     this.#rebuild = opts.rebuild;
     this.#rulesVersion = opts.rulesVersion;
     this.#track = opts.track ?? (() => unknown('notApplicable'));
-    const sessionColumns = `s.session_uid, s.weekend_id, w.season_id, s.player_car, s.teammate_car, s.track_id, s.started_at, s.pwrec_path, s.settings, s.rules_version, s.complete`;
+    const sessionColumns = `s.session_uid, s.weekend_id, w.season_id, s.player_car, s.teammate_car, s.track_id, s.started_at, s.pwrec_path, s.settings, s.rules_version, s.complete, s.kind`;
     const sessionsFrom = `FROM sessions s JOIN weekends w ON w.weekend_id = s.weekend_id`;
     this.#statements = {
       weekendSessions: db.prepare(`SELECT ${sessionColumns} ${sessionsFrom} WHERE s.weekend_id = ? ORDER BY s.started_at, s.session_uid, s.player_car`),
@@ -295,6 +296,7 @@ export class WeekendRepository {
       cars: this.#carsOf(keyOf(row)),
       rulesVersion: row.rules_version,
       complete: row.complete === 1,
+      kind: row.kind as StoredSessionKind,
     };
   }
 }

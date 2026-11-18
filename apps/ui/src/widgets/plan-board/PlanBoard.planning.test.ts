@@ -7,11 +7,11 @@
 //    presentation table's (`presentation.ts` `variantOf`): planning while `prepared.open`, live otherwise;
 //  - planning variant, full: the race inputs line `[data-testid="inputs"]` (mockup `planInputs`): `GRID` and the grid
 //    place (`P8`, the preview's `planning.gridPlace`), `LAPS` and the laps field `<input data-testid="laps">` (its value
-//    the entered laps, `''` until entered; its `placeholder` the bridge's suggestion, `prepared.laps.suggested`),
+//    the round's race laps `prepared.race.laps`, the bridge's suggestion or entered; `''` while `null`, SP4.3e R16),
 //    `RAIN` and the rain chance (`10%`), `N` and the scenarios (`1200`); then the header with `START` and the slot and
 //    DP lines as in the race; each slot line's start compound letter in `[data-testid="start-<slot>"]`;
-//  - LAPS (C73): typing is window-local; committing the field (its `change`) invokes the command `plans.prepare.laps`
-//    once with `{ feedId: link.feedId, laps: <the number> }`; a rejected value (`{ ok: false, message }`) marks the
+//  - LAPS (C73): typing is window-local; committing the field (its `change`) invokes the command `plans.race.set`
+//    once with `{ feedId: link.feedId, race: { laps: <the number>, sets: <the round's sets> } }` (SP4.3e Task 7b); a rejected value (`{ ok: false, message }`) marks the
 //    field with the warning role (`data-role="warning"`) and the bridge's message as its hover;
 //  - a prefilled slot (`preview.prefill`, A and B, not yet saved): its line `row-<slot>` (the slot without `●`), its
 //    plan's STOPS and the E[POS] of the preview's row with that plan, dim, a hover naming the prefill, and
@@ -23,8 +23,8 @@
 //    data-testid="entry-G2-compound-<i>">`, `<button data-testid="entry-G2-save">` (`save to G2`); nothing is invoked
 //    until save, which invokes `plans.prepare.save` with `{ feedId, carId, slot: 'G2', policy: { startCompound, stops } }`;
 //  - computing: while `prepared.running`, `[data-testid="computing"]`; none otherwise;
-//  - no laps entered (`prepared.laps.entered` null, no preview): the inputs line with the empty laps field and its
-//    suggestion; no slot or DP line;
+//  - no laps known (`prepared.race.laps` null, no preview): the inputs line with the empty laps field, no placeholder;
+//    no slot or DP line;
 //  - the live variant on the grid with a prefill (`plan.prefill`, the race's strategy job, Task 9): the prefilled lines
 //    with `accept-<slot>`, which invokes `plan.accept` with `{ feedId, carId, slot, policy }`.
 // Every control invokes a command by id through the panel (`kit/commands.ts` `getWidgetCommands().invoke`, C72), only
@@ -112,8 +112,9 @@ describe('plan board: the planning round per the mockup', () => {
     const inputs = get(c, 'inputs');
     for (const part of ['GRID', 'P8', 'LAPS', 'RAIN', '10%', 'N', '1200']) expect(textOf(inputs), part).toContain(part);
     const laps = get(inputs, 'laps') as HTMLInputElement;
+    // the round's race laps (`race.laps`); no placeholder (SP4.3e R16: no suggestion field of its own)
     expect(laps.value).toBe(String(LAPS));
-    expect(laps.placeholder).toBe(String(LAPS));
+    expect(laps.placeholder).toBe('');
     expect(textOf(c)).toContain('START');
     // the slot lines in slot order: the prefilled A and B, the entered G1; G2 is its entry
     expect(ids(c, 'row-')).toEqual(['row-A', 'row-B', 'row-G1']);
@@ -148,11 +149,11 @@ describe('plan board: the planning round per the mockup', () => {
     expect(ids(c2, 'row-')).toEqual(['row-A', 'row-B', 'row-G1']);
   });
 
-  it('no laps entered: the empty laps field with the suggestion, no lines', () => {
+  it('no laps known: the empty laps field, no lines', () => {
     const { container: c } = mount(cases.planningNoLaps);
     const laps = get(get(c, 'inputs'), 'laps') as HTMLInputElement;
     expect(laps.value).toBe('');
-    expect(laps.placeholder).toBe(String(LAPS));
+    expect(laps.placeholder).toBe('');
     expect(all(c, 'row-')).toHaveLength(0);
     expect(all(c, 'dp-')).toHaveLength(0);
     expect(find(c, 'computing')).toBeNull();
@@ -215,7 +216,7 @@ describe('plan board: the planning controls invoke commands (C72–C74)', () => 
     expect(sent).toEqual([]);
   });
 
-  it('LAPS invokes plans.prepare.laps once with the number', async () => {
+  it('LAPS invokes plans.race.set once with the number and the round\'s sets', async () => {
     const { container: c, sent } = mount(cases.planningNoLaps);
     const laps = get(c, 'laps') as HTMLInputElement;
     laps.value = '5';
@@ -224,7 +225,7 @@ describe('plan board: the planning controls invoke commands (C72–C74)', () => 
     await fireEvent.input(laps);
     expect(mocks.invoke).not.toHaveBeenCalled();
     await fireEvent.change(laps);
-    expect(mocks.invoke.mock.calls).toEqual([['plans.prepare.laps', { feedId: LINK.feedId, laps: 52 }]]);
+    expect(mocks.invoke.mock.calls).toEqual([['plans.race.set', { feedId: LINK.feedId, race: { laps: 52, sets: 'carried' } }]]);
     expect(sent).toEqual([]);
   });
 

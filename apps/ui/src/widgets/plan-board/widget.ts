@@ -19,7 +19,7 @@ export const widget = declareWidget({
     plan: optional(topic('strategy.car', ({ link }) => ({ carId: link.primary }))),
     // The planning job's result for the same car (SP4.3d spec §7.4): the board's rows in the planning round.
     preview: optional(topic('plans.preview', ({ link }) => ({ carId: link.primary }))),
-    // The planning round: open or not, the race laps entered and suggested, the prepared plans, the job running.
+    // The planning round: open or not, its race laps, the prepared plans, the job running.
     prepared: optional(topic('plans.prepared')),
     // The race's session phase: its presentation table decides whether the board offers its actions (C66).
     phase: optional(topic('situation.sessionPhaseRace')),
@@ -30,5 +30,5 @@ export const widget = declareWidget({
   sizes: { compact: { minCols: 37, minRows: 7 }, full: { minCols: 82, minRows: 13 } },
   actions: ['plan.save', 'plan.activate', 'plan.remove'],
   // The planning round's controls and the race's prefill accept (SP4.3d2 call 10, C72, C74).
-  commands: ['plans.prepare.laps', 'plans.prepare.save', 'plans.prepare.accept', 'plans.prepare.remove', 'plans.prepare.activate', 'plan.accept'],
+  commands: ['plans.race.set', 'plans.prepare.save', 'plans.prepare.accept', 'plans.prepare.remove', 'plans.prepare.activate', 'plan.accept'],
 });

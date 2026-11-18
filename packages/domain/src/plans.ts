@@ -1,6 +1,5 @@
 // The plan decisions (C76, SP4.3b spec §8.2): the car's newest `planCommitted` or `planCleared` in the projection's
 // decisions decides its plan; readers get it here, never by their own matching (C25).
-import type { PreparedCar } from './basis.ts';
 import type { Policy } from './forecast.ts';
 import type { CarId } from './ids.ts';
 import { PLAN_SLOTS, type Slot } from './plan-slots.ts';
@@ -31,10 +30,6 @@ export function activeSlot(history: { readonly decisions: readonly DecisionRecor
   const newest = history.decisions.findLast((d) => (d.kind === 'planCommitted' || d.kind === 'planCleared') && d.carId === carId);
   return newest?.kind === 'planCommitted' ? (newest.slot ?? null) : null;
 }
-
-/** A team's prepared plans for one race: the entered race laps (`null` until entered) and per car its prepared plans. */
-// SP4.3e: deleted in Task 7b
-export type PreparedPlans = { laps: number | null; cars: PreparedCar[] };
 
 const same = (a: Policy, b: Policy): boolean => JSON.stringify(a) === JSON.stringify(b);
 

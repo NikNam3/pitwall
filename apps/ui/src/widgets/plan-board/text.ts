@@ -40,7 +40,7 @@ export const computing = '…';
 export const computingHover = 'planning job running';
 /** Hovers of the planning round's controls: the command they invoke (C72). */
 export const commandHover = {
-  laps: 'plans.prepare.laps',
+  laps: 'plans.race.set',
   save: 'plans.prepare.save',
   accept: 'plans.prepare.accept',
   activate: 'plans.prepare.activate',
