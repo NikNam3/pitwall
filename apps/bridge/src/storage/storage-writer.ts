@@ -1,7 +1,8 @@
 import type { Log } from '@pitwall/engine/log';
 import type { DeepReadonly } from '@pitwall/engine/readers';
+import type { Statement } from 'better-sqlite3';
 import type { Db, SessionKey, SessionRow } from './db.ts';
-import { logRows } from './log-rows.ts';
+import { logRows, type FactRow } from './log-rows.ts';
 
 export interface StorageWriterOptions {
   /** Called with every failed write; the writer itself never throws, so storage cannot stop the live feed. */
@@ -37,10 +38,10 @@ export class StorageWriter {
     this.#statements = {
       insertWeekend: db.prepare('INSERT OR IGNORE INTO weekends (weekend_id, season_id, track_id) VALUES (?, ?, ?)'),
       upsertSession: db.prepare(
-        `INSERT INTO sessions (session_uid, weekend_id, player_car, teammate_car, track_id, started_at, pwrec_path, settings, rules_version, complete)
-         VALUES (@sessionUid, @weekendId, @playerCar, @teammateCar, @trackId, @startedAt, @pwrecPath, @settings, @rulesVersion, @complete)
+        `INSERT INTO sessions (session_uid, weekend_id, player_car, teammate_car, track_id, started_at, pwrec_path, settings, rules_version, complete, kind)
+         VALUES (@sessionUid, @weekendId, @playerCar, @teammateCar, @trackId, @startedAt, @pwrecPath, @settings, @rulesVersion, @complete, @kind)
          ON CONFLICT (session_uid, weekend_id, player_car) DO UPDATE SET teammate_car = excluded.teammate_car, track_id = excluded.track_id, started_at = excluded.started_at,
-           pwrec_path = excluded.pwrec_path, settings = excluded.settings, rules_version = excluded.rules_version, complete = excluded.complete`,
+           pwrec_path = excluded.pwrec_path, settings = excluded.settings, rules_version = excluded.rules_version, complete = excluded.complete, kind = excluded.kind`,
       ),
       deleteCars: db.prepare(`DELETE FROM cars WHERE ${OF_SESSION}`),
       insertCar: db.prepare(
@@ -128,6 +129,64 @@ export class StorageWriter {
     });
   }
 
+  /**
+   * A rebuild in parts (C24, C61; the rebuild service): one part of the session's rebuilt log is written into its
+   * staging rows, in one transaction. Staging rows live in this connection's temporary schema, so no reader of `facts`
+   * ever sees them; the session's stored log stays as it is until `swapStaged`. Throws on a failed write.
+   */
+  stagePart(key: SessionKey, rows: readonly FactRow[]): void {
+    const staging = this.#staging();
+    const params = keyParams(key);
+    this.#db.transaction(() => {
+      for (const row of rows) staging.insert.run({ ...params, ...row });
+    })();
+  }
+
+  /**
+   * The rebuild's swap (C24, C61): in one transaction, the session's fact and car rows are deleted and its staged log,
+   * its row (with `rulesVersion`, complete unless `complete` is false, and its kind) and cars written in their place;
+   * the staging rows are dropped. Throws on a failed write, which leaves the old log and row as they were.
+   */
+  swapStaged(row: SessionRow, rulesVersion: string, opts: { complete: boolean }): void {
+    const staging = this.#staging();
+    const key = keyParams(row);
+    this.#db.transaction(() => {
+      this.#statements.deleteFacts.run(key);
+      this.#writeRow(row, rulesVersion, opts.complete);
+      staging.swap.run(key);
+      staging.drop.run(key);
+    })();
+    this.#written.delete(keyString(row));
+  }
+
+  /** Drops the session's staging rows (a rebuild that does not swap). Throws on a failed write. */
+  dropStaged(key: SessionKey): void {
+    this.#staging().drop.run(keyParams(key));
+  }
+
+  #stagingStatements: { insert: Statement; swap: Statement; drop: Statement } | undefined;
+
+  #staging(): { insert: Statement; swap: Statement; drop: Statement } {
+    if (this.#stagingStatements !== undefined) return this.#stagingStatements;
+    this.#db.exec(
+      `CREATE TEMP TABLE IF NOT EXISTS staged_facts (
+         session_uid TEXT NOT NULL, weekend_id TEXT NOT NULL, player_car INTEGER NOT NULL, list TEXT NOT NULL, seq INTEGER NOT NULL,
+         car_id INTEGER, record TEXT NOT NULL, PRIMARY KEY (session_uid, weekend_id, player_car, list, seq)) STRICT`,
+    );
+    this.#stagingStatements = {
+      insert: this.#db.prepare(
+        `INSERT OR REPLACE INTO temp.staged_facts (session_uid, weekend_id, player_car, list, seq, car_id, record)
+         VALUES (@sessionUid, @weekendId, @playerCar, @list, @seq, @carId, @record)`,
+      ),
+      swap: this.#db.prepare(
+        `INSERT INTO facts (session_uid, weekend_id, player_car, list, seq, car_id, record)
+         SELECT session_uid, weekend_id, player_car, list, seq, car_id, record FROM temp.staged_facts WHERE ${OF_SESSION} ORDER BY list, seq`,
+      ),
+      drop: this.#db.prepare(`DELETE FROM temp.staged_facts WHERE ${OF_SESSION}`),
+    };
+    return this.#stagingStatements;
+  }
+
   #writeRow(row: SessionRow, rulesVersion: string, complete: boolean): void {
     const s = this.#statements;
     const key = keyParams(row);
@@ -141,6 +200,7 @@ export class StorageWriter {
       settings: JSON.stringify(row.settings),
       rulesVersion,
       complete: complete ? 1 : 0,
+      kind: row.kind,
     });
     s.deleteCars.run(key);
     for (const { carId, carKey, driver } of row.cars) {

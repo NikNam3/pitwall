@@ -15,6 +15,7 @@ import type { Feature } from '../features/feature.ts';
 import type { ValueFor } from '../hub/topic-hub.ts';
 import type { Logger } from '../log.ts';
 import type { SessionKey } from '../storage/db.ts';
+import type { RebuildPriority } from '../storage/rebuild-service-types.ts';
 import type { SessionsOnTrack, TrackSession } from '../storage/weekend-repository.ts';
 import { PriorsCache, snapshotFingerprint, PriorsRunner, resolveSource } from './compute.ts';
 import { loadSets, removeSet, stintKey, writeSet } from './sets.ts';
@@ -34,10 +35,11 @@ export type CalibrationStoreDeps = {
   hub: { publishGlobal(topic: TopicName, valueFor: ValueFor): void };
   log: Logger;
   /**
-   * Rebuilds stored sessions from their recordings (C61). The store asks once per session it read stale and recomputes
-   * once the rebuild settles; a rejection is logged and the sources stay `stale`.
+   * Rebuilds stored sessions from their recordings (C61). The store asks once per session it read stale, at its first
+   * real read (never while it opens: nothing at bridge start), with priority `firstRead`, and recomputes once the
+   * rebuild settles; a rejection is logged and the sources stay `stale`.
    */
-  rebuild: (keys: readonly SessionKey[]) => Promise<void>;
+  rebuild: (keys: readonly SessionKey[], opts?: { priority?: RebuildPriority }) => Promise<void>;
   /** Now as an ISO date, for a new set's `createdAt`. Default: the wall clock. */
   now?: () => string;
 };
@@ -63,6 +65,10 @@ export class CalibrationStore {
   readonly #tracks = new Map<number, TrackOf>();
   /** The stale sessions whose rebuild was requested (`keyText`): never requested again in this run. */
   readonly #rebuildRequested = new Set<string>();
+  /** Per track, the stale sessions its last recompute read: asked for at the next first read (`preselect`). */
+  readonly #stale = new Map<number, TrackSession[]>();
+  /** While the store opens it reads what is current and asks for nothing (C61: nothing at bridge start). */
+  #opening = true;
   #closed = false;
 
   private constructor(root: string, deps: CalibrationStoreDeps) {
@@ -78,6 +84,7 @@ export class CalibrationStore {
     for (const set of loadSets(dataDir, deps.log)) store.#sets.set(set.id, set);
     store.#recomputeAll();
     store.#publishAll();
+    store.#opening = false;
     return store;
   }
 
@@ -118,6 +125,9 @@ export class CalibrationStore {
    * else the newest source session, else none.
    */
   preselect(trackId: number): PriorsSnapshot | null {
+    // The first real read (C61): a stale session the track's sets read is asked for now; the snapshot goes on without
+    // it (a running session never waits), and the store recomputes once it settles.
+    this.#requestRebuild(this.#stale.get(trackId) ?? []);
     const sets = this.#setsOf(trackId);
     const used = sets.filter((s) => s.lastUsedAt !== undefined).toSorted((a, b) => ((a.lastUsedAt ?? '') < (b.lastUsedAt ?? '') ? 1 : -1));
     const chosen = sets.find((s) => s.preferred) ?? used[0] ?? this.#newestBySources(trackId, sets);
@@ -208,11 +218,14 @@ export class CalibrationStore {
       const missing = resolved.filter((r) => 'skipped' in r && r.skipped === 'missing').length;
       this.#values.set(set.id, { entries, fits, defaults, samples, missing });
     }
-    if (sets.length === 0) this.#candidates.delete(trackId);
-    else {
+    if (sets.length === 0) {
+      this.#candidates.delete(trackId);
+      this.#stale.delete(trackId);
+    } else {
       this.#candidates.set(trackId, suggestions(trackId, sessions, sets, this.#runner));
       // The sets' sources and the suggestions read every stored session on the track: a stale one awaits its rebuild.
-      this.#requestRebuild(sessions.filter((s) => s.stale));
+      this.#stale.set(trackId, sessions.filter((s) => s.stale));
+      if (!this.#opening) this.#requestRebuild(this.#stale.get(trackId) ?? []);
     }
   }
 
@@ -235,7 +248,7 @@ export class CalibrationStore {
     if (keys.length === 0) return;
     for (const key of keys) this.#rebuildRequested.add(keyText(key));
     const { log } = this.#deps;
-    (async () => this.#deps.rebuild(keys))()
+    (async () => this.#deps.rebuild(keys, { priority: 'firstRead' }))()
       .then(
         () => {
           if (!this.#closed) this.recompute('rebuild');

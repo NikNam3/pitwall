@@ -33,7 +33,6 @@ import { recordingProfiles } from '../pipeline/profile-sidecar.ts';
 import { ProfileStore } from '../drivers/store.ts';
 import { cliLogger, whenAborted, type CliIo } from './io.ts';
 import type { RebuildProgress } from './rebuild-database.ts';
-import { endedQualifyingsOf, restoreEndedSessions } from './startup-restore.ts';
 
 /** A recording served through a `ReplayController`; `controls` are applied (and any jump finished) before `listening` is printed. */
 export type ReplayInput = { feedId: FeedId; path: string; controls: readonly ReplayControl[]; unpaced: boolean };
@@ -64,16 +63,18 @@ type ServeBase = {
   uiDir?: string;
   /**
    * Opened by the caller, closed by `serve` (also when it fails). `rulesVersion`: the logs are stored with it (C61);
-   * `rebuild`: rebuilds a stored session found incomplete, in the background. `restore`: live, each feed's session to
-   * restore at startup as the caller picked it before its startup rebuild (`pitwall live`); unset, `serve` picks them
-   * (`endedQualifyingsOf`).
+   * `rebuild`: rebuilds a stored session found incomplete, in the background; nothing is rebuilt at start (C61).
    */
   storage?: {
     db: Db;
     recordingsDir: string;
     rulesVersion: string;
     rebuild?: (row: StoredSessionRow) => Promise<void>;
-    restore?: ReadonlyMap<FeedId, StoredSessionRow>;
+    /**
+     * Handed, once the pipelines' map exists, the sessions the feeds run now (read at every call): the rebuild service
+     * behind `rebuild` checks them when a rebuild is asked for, when it starts and at its swap (C24, C59).
+     */
+    onRunning?: (running: () => ReadonlyArray<SessionKey | undefined>) => void;
   };
   staleCheck?: FeedPipelineOptions['staleCheck'];
   /** For a source that binds a socket: resolves once it is bound, rejects with a `StartupError` if it cannot be. */
@@ -171,16 +172,10 @@ export async function serve(opts: ServeOptions): Promise<number> {
       rulesVersion: storage.rulesVersion,
       track: (row) => (row.pwrecPath === null ? loadTrackFile(row.trackId, TRACKS_DIR) : recordingTrack(row.pwrecPath, row.trackId, TRACKS_DIR)),
     });
-    // Live, each feed's session to restore at startup (C59, C61): picked before the stores open, so none of their reads
-    // rebuilds it; the restore replays it once.
-    const restoreRows: ReadonlyMap<FeedId, StoredSessionRow> = isLive && storage
-      ? storage.restore ?? await endedQualifyingsOf(storage.db, live.map(({ source, port }) => ({ feedId: source.feedId, port })), cliLogger(io, 'warn'))
-      : new Map();
-    let restoring: readonly SessionKey[] = [...restoreRows.values()];
-    // A session a feed is running (or restoring) right now is no stale session: it is never rebuilt under it (C59). The
-    // bridge's rebuilds run one at a time, each checked when it starts: a restore may begin while it waits, and a session
-    // stored fresh meanwhile (a restore replaced it) is not rebuilt again.
-    const running = (): Array<SessionKey | undefined> => [...restoring, ...[...pipelines.values()].map((pipeline) => pipeline.runningSession())];
+    // A session a feed is running right now is no stale session: it is never rebuilt under it (C59). The bridge's
+    // rebuilds run one at a time, each checked when it starts: a session stored fresh meanwhile is not rebuilt again.
+    const running = (): Array<SessionKey | undefined> => [...pipelines.values()].map((pipeline) => pipeline.runningSession());
+    storage?.onRunning?.(running);
     const isRunning = (row: SessionKey): boolean => running().some((key) => key !== undefined && sameSession(row, key));
     const isFresh = (row: SessionKey): boolean => {
       const stored = calibrationRepo?.sessionOf(row);
@@ -194,6 +189,8 @@ export async function serve(opts: ServeOptions): Promise<number> {
     });
     // The stale sessions a set, a person's links or the suggestions read (C61), rebuilt from their recordings as a session
     // start's weekend context rebuilds its stale ones; a failed rebuild is logged and its session stays stale (C3).
+    // Nothing is rebuilt at bridge start (C61): the stores ask for nothing while they open, only at their first real read
+    // (a session start's snapshot, a calibration edit), always as a first read (the service's default priority).
     const rebuildStored = async (keys: readonly SessionKey[]): Promise<void> => {
       if (checkedRebuild === undefined || calibrationRepo === undefined) return;
       const rows = keys.flatMap((key) => calibrationRepo.sessionsOf(key.weekendId).filter((row) => sameSession(row, key)));
@@ -404,27 +401,6 @@ export async function serve(opts: ServeOptions): Promise<number> {
         undo.push(() => pipeline.stop());
         return { source, pipeline };
       });
-      // Before input opens: each feed's ended qualifying is restored from its recording (C59, C61; spec §7.0 rule 4).
-      if (storage) {
-        const restoreLog = cliLogger(io, 'warn');
-        try {
-          await restoreEndedSessions(
-            made.flatMap(({ source, pipeline }) => {
-              const row = restoreRows.get(source.feedId);
-              return row === undefined ? [] : [{
-                row,
-                restore: (r: StoredSessionRow) => pipeline.restoreEnded(r).catch((error: unknown) => {
-                  restoreLog.error({ feedId: source.feedId, sessionUid: r.sessionUid, pwrecPath: r.pwrecPath, err: error }, 'ended session not restored');
-                }),
-              }];
-            }),
-            { line: (text) => io.err(text), ...(opts.startup && { progress: opts.startup.progress }) },
-          );
-        } finally {
-          // Restored (stored fresh) or not: from now on a stale one is rebuilt as any other.
-          restoring = [];
-        }
-      }
       const running = made.map(({ source, pipeline }) => {
         pipeline.start();
         return pipeline.done.catch(failedFeed(source.feedId));

@@ -1,23 +1,23 @@
 // The rules version rebuilds stale sessions (Task 28; C24, C38, C61). `pitwall live`, `import` and `reprocess` compute
 // the rules version once, when they open the database. A session is stale when its rules version differs or its log is
-// not complete. At bridge start, before input opens, every stale session of the newest stored session's weekend is
-// rebuilt from its recording, one progress line each; any other stale session is rebuilt when first read; the sessions
-// a session start's weekend context skips are rebuilt in the background. A session whose recording is missing, or whose
-// recording no longer yields it, is kept, never served, and warned about once. `pitwall replay` and `pitwall dev` open
-// no database. Every data dir and database here is a temp one (C84).
-import { copyFileSync, existsSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
+// not complete. Nothing is rebuilt at bridge start (SP4.3e Task 7d: `no-startup-rebuild.test.ts`; the rebuild service,
+// `test/storage/rebuild-*.test.ts`, holds the startup rebuild's ported tests); a stale session is rebuilt when first
+// read; the sessions a session start's weekend context skips are rebuilt in the background. A session whose recording
+// no longer yields it is kept, never served, and warned about once. `pitwall replay` and `pitwall dev` open no
+// database. Every data dir and database here is a temp one (C84).
+import { copyFileSync, existsSync, mkdtempSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { beforeAll, describe, expect, it, vi } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import type { FeedId, SessionUid } from '@pitwall/domain';
 import type { QuickCalculator } from '@pitwall/engine';
 import { ScenarioBuilder, packetBytes } from '../../../../packages/engine/test/builders/index.ts';
 import type { CliIo } from '../../src/cli/io.ts';
 import { cliLogger } from '../../src/cli/io.ts';
 import { main } from '../../src/cli/pitwall.ts';
-import { rebuildDatabase, sessionRebuilder, StaleSessions } from '../../src/cli/rebuild-database.ts';
-import { loadFeatureConfig, sessionConfigPath } from '../../src/feature-config.ts';
+import { rebuildDatabase, sessionRebuilder } from '../../src/cli/rebuild-database.ts';
+import { loadFeatureConfig } from '../../src/feature-config.ts';
 import { defineFeature } from '../../src/features/feature.ts';
 import { FEATURES } from '../../src/features/index.generated.ts';
 import { TopicHub } from '../../src/hub/topic-hub.ts';
@@ -146,141 +146,12 @@ async function startLive(dir: string): Promise<Line[]> {
   return lines;
 }
 
-const PROGRESS = /rebuilding (\d+)\/(\d+): (.+)$/;
-const progressOf = (lines: readonly Line[]) => lines.filter((l) => l.stream === 'err' && PROGRESS.test(l.line));
-const listeningAt = (lines: readonly Line[]) => lines.findIndex((l) => l.stream === 'out' && l.line.startsWith('listening'));
-
-/** The lines other than progress lines that name the session: its recording's file or its session uid. */
-const linesAbout = (lines: readonly Line[], session: { key: SessionKey; file: string }) =>
-  lines.filter((l) => l.stream === 'err' && !PROGRESS.test(l.line)
-    && (l.line.includes(basename(session.file)) || l.line.includes(`"sessionUid":"${session.key.sessionUid}"`)));
-
 const repoOf = (db: Db, opts: ConstructorParameters<typeof WeekendRepository>[1] = {}) => new WeekendRepository(db, { rulesVersion: current, ...opts });
 
-describe('pitwall live: the stale sessions of the newest weekend are rebuilt at start (C61)', { timeout: 60_000 }, () => {
-  it('a changed rules version rebuilds the current weekend at start and logs progress, before input opens', async () => {
-    const dir = tmp();
-    const earlier = await storeSession(dir, { uid: 11, weekend: 1, at: T0, version: OLD });
-    const practice = await storeSession(dir, { uid: 21, weekend: 2, at: T0 + 24 * HOUR, version: OLD });
-    const qualifying = await storeSession(dir, { uid: 22, weekend: 2, at: T0 + 25 * HOUR, version: OLD });
-    const logs = { practice: await logOf(dir, practice.key), qualifying: await logOf(dir, qualifying.key) };
-    const lines = await startLive(dir);
-    const progress = progressOf(lines);
-    expect(progress.map((l) => l.line.match(PROGRESS)!.slice(1, 3).join('/'))).toEqual(['1/2', '2/2']);
-    expect(progress.map((l) => [basename(practice.file), basename(qualifying.file)].filter((name) => l.line.includes(name)))).toEqual(
-      expect.arrayContaining([[basename(practice.file)], [basename(qualifying.file)]]),
-    );
-    for (const line of progress) expect(lines.indexOf(line)).toBeLessThan(listeningAt(lines));
-    expect(await rowOf(dir, practice.key)).toMatchObject({ rules_version: current, complete: 1 });
-    expect(await rowOf(dir, qualifying.key)).toMatchObject({ rules_version: current, complete: 1 });
-    expect(await logOf(dir, practice.key)).toEqual(logs.practice);
-    expect(await logOf(dir, qualifying.key)).toEqual(logs.qualifying);
-    // another weekend's stale session waits for its first read
-    expect(await rowOf(dir, earlier.key)).toMatchObject({ rules_version: OLD });
-  });
-
-  // Ported (SP4.3d2 Task 5 fixes, P1; C59, ruling R21): a recording without its session end is a session the bridge was
-  // stopped in; its rebuild replaces the log and leaves the row incomplete, so the feed's resume path continues it.
-  it('an incomplete session of the newest weekend whose recording holds no session end is rebuilt at start and stays incomplete', async () => {
-    const dir = tmp();
-    const session = await storeSession(dir, { uid: 21, weekend: 2, at: T0, version: current, ended: false });
-    // as if the bridge was killed mid-session: part of the log written, never marked complete
-    await withDb(dir, (db) => {
-      db.prepare('UPDATE sessions SET complete = 0').run();
-      db.prepare("DELETE FROM facts WHERE list = 'events' OR list LIKE 'spans:%'").run();
-    });
-    const lines = await startLive(dir);
-    expect(progressOf(lines).map((l) => l.line.includes(basename(session.file)))).toEqual([true]);
-    expect(await rowOf(dir, session.key)).toMatchObject({ rules_version: current, complete: 0, pwrec_path: session.file });
-    // the log is replaced from the recording: its events are there again
-    const lists = (await logOf(dir, session.key)).map((row) => (row as { list: string }).list);
-    expect(lists).toContain('events');
-  });
-
-  it('an incomplete session of the newest weekend whose recording holds its session end is rebuilt complete at start', async () => {
-    const dir = tmp();
-    const session = await storeSession(dir, { uid: 21, weekend: 2, at: T0, version: current });
-    const complete = await withDb(dir, (db) => repoOf(db).projectionOf(session.key));
-    expect(complete?.events.length).toBeGreaterThan(0);
-    // as if the bridge was killed mid-session: part of the log written, never marked complete
-    await withDb(dir, (db) => {
-      db.prepare('UPDATE sessions SET complete = 0').run();
-      db.prepare("DELETE FROM facts WHERE list = 'events' OR list LIKE 'spans:%'").run();
-    });
-    const lines = await startLive(dir);
-    expect(progressOf(lines).map((l) => l.line.includes(basename(session.file)))).toEqual([true]);
-    expect(await rowOf(dir, session.key)).toMatchObject({ rules_version: current, complete: 1 });
-    expect(await withDb(dir, (db) => repoOf(db).projectionOf(session.key))).toEqual(complete);
-  });
-
-  it('an unchanged rules version rebuilds nothing', async () => {
-    const dir = tmp();
-    await storeSession(dir, { uid: 11, weekend: 1, at: T0, version: current });
-    await storeSession(dir, { uid: 21, weekend: 2, at: T0 + 24 * HOUR, version: current });
-    const before = await dump(dir);
-    const lines = await startLive(dir);
-    expect(progressOf(lines)).toEqual([]);
-    expect(await dump(dir)).toEqual(before);
-  });
-
-  it('a session whose recording is missing is kept and not served, and warned about once', async () => {
-    const dir = tmp();
-    const gone = await storeSession(dir, { uid: 21, weekend: 2, at: T0, version: OLD });
-    await storeSession(dir, { uid: 22, weekend: 2, at: T0 + HOUR, version: current });
-    rmSync(gone.file);
-    rmSync(sessionConfigPath(gone.file), { force: true });
-    const facts = await factsOf(dir, gone.key);
-    const lines = await startLive(dir);
-    expect(linesAbout(lines, gone)).toHaveLength(1);
-    expect(await rowOf(dir, gone.key)).toMatchObject({ rules_version: OLD, complete: 1, pwrec_path: gone.file });
-    expect(await factsOf(dir, gone.key)).toEqual(facts);
-    const rebuild = vi.fn(async () => {});
-    expect(await withDb(dir, (db) => repoOf(db, { rebuild }).projectionOf(gone.key))).toBeUndefined();
-    expect(rebuild).not.toHaveBeenCalled();
-  });
-});
-
-// C61 "with progress shown": the rebuilds report `onProgress(done, total)` (done = recordings finished) for the startup
-// server to send; they know nothing of the server.
-describe('the start-up rebuilds report their progress (C61)', { timeout: 60_000 }, () => {
-  const config = () => loadFeatureConfig(tmp(), FEATURES);
-
-  it('rebuildNewestWeekend reports 0 of n before the first recording, then each recording finished', async () => {
-    const dir = tmp();
-    await storeSession(dir, { uid: 11, weekend: 1, at: T0, version: OLD });
-    await storeSession(dir, { uid: 21, weekend: 2, at: T0 + 24 * HOUR, version: OLD });
-    await storeSession(dir, { uid: 22, weekend: 2, at: T0 + 25 * HOUR, version: OLD });
-    const { io } = memoryIo();
-    const calls: Array<[number, number]> = [];
-    await withDb(dir, async (db) => {
-      const stale = new StaleSessions(db, config(), io, current);
-      expect(await stale.rebuildNewestWeekend((done: number, total: number) => calls.push([done, total]))).toBe(true);
-    });
-    // the other weekend's stale session is not counted: it waits for its first read
-    expect(calls).toEqual([[0, 2], [1, 2], [2, 2]]);
-  });
-
-  it('rebuildNewestWeekend with nothing stale reports no recording to rebuild', async () => {
-    const dir = tmp();
-    await storeSession(dir, { uid: 21, weekend: 2, at: T0, version: current });
-    const { io } = memoryIo();
-    const calls: Array<[number, number]> = [];
-    await withDb(dir, async (db) => {
-      expect(await new StaleSessions(db, config(), io, current).rebuildNewestWeekend((done: number, total: number) => calls.push([done, total]))).toBe(true);
-    });
-    expect(calls.every(([done, total]) => done === 0 && total === 0)).toBe(true);
-  });
-
-  it('rebuildNewestWeekend without a callback rebuilds as before', async () => {
-    const dir = tmp();
-    const session = await storeSession(dir, { uid: 21, weekend: 2, at: T0, version: OLD });
-    const { io } = memoryIo();
-    await withDb(dir, async (db) => {
-      expect(await new StaleSessions(db, config(), io, current).rebuildNewestWeekend()).toBe(true);
-    });
-    expect(await rowOf(dir, session.key)).toMatchObject({ rules_version: current, complete: 1 });
-  });
-
+// C61 "with progress shown": a schema change's rebuild reports `onProgress(done, total)` (done = recordings finished)
+// for the startup server to send; it knows nothing of the server. (The rebuild service's progress:
+// `test/storage/rebuild-service.test.ts`.)
+describe('the schema rebuild reports its progress (C61)', { timeout: 60_000 }, () => {
   it('rebuildDatabase (a schema change) reports 0 of n before the first recording, then each recording finished', async () => {
     const dir = tmp();
     const dirs = dataDir({ PITWALL_DATA_DIR: dir });
@@ -294,7 +165,7 @@ describe('the start-up rebuilds report their progress (C61)', { timeout: 60_000 
   });
 });
 
-describe('stale sessions outside the start-up rebuild (C61)', { timeout: 60_000 }, () => {
+describe('stale sessions are rebuilt when first read (C61)',{ timeout: 60_000 }, () => {
   const config = () => loadFeatureConfig(tmp(), FEATURES);
 
   it('a stale session of another weekend is rebuilt when first read', async () => {
