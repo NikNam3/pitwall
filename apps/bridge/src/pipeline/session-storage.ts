@@ -157,6 +157,11 @@ export class SessionStorage {
     return this.#read((repo) => repo.seatRowsOf(refs, player));
   }
 
+  /** The rows of every stored session of the seat on `trackId`, stale ones included (the picker's candidates, C54, C62). */
+  seatSessionsOnTrack(trackId: number, player: CarKey): StoredSessionRow[] | undefined {
+    return this.#read((repo) => repo.seatSessionsOnTrack(trackId, player));
+  }
+
   /** The context of `basis` for the seat (C62): the named sessions the seat stored and that are current. */
   basisContext(basis: SessionBasis, player: CarKey): BasisContext | undefined {
     return this.#read((repo) => repo.contextOf(basis, player));

@@ -12,6 +12,7 @@ import { effectiveConfig, recordingConfig } from '../feature-config.ts';
 import { recordingTrack, TRACKS_DIR } from '../track-files/load.ts';
 import { recordingDecisions } from './decision-sidecars.ts';
 import { FeedPipeline } from './feed-pipeline.ts';
+import { recordingBasis } from './basis-sidecar.ts';
 import { recordingProfiles } from './profile-sidecar.ts';
 
 /** Hands every packet on, then calls `after` with it: the hook that runs the hub's clock and ticks per packet. */
@@ -134,6 +135,7 @@ export async function topicStreamHash(recordingPath: string, { features = FEATUR
     tracks: (trackId) => recordingTrack(recordingPath, trackId, TRACKS_DIR, log),
     recorded: recordingDecisions(recordingPath, log),
     recordedProfiles: recordingProfiles(recordingPath, log),
+    recordedBasis: recordingBasis(recordingPath, log),
     log,
   });
   pipeline.start();

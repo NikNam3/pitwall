@@ -76,6 +76,12 @@ type ServeBase = {
     rulesVersion: string;
     rebuild?: (row: StoredSessionRow) => Promise<void>;
     /**
+     * The one rebuild service behind `rebuild` (`StaleSessions.rebuildService`): the basis's `ensureCurrent` reaches it
+     * with its priority (`runningBasis` before `planning` before `firstRead`, C61). Without it the basis goes through
+     * `rebuild`'s queue, one row at a time.
+     */
+    rebuildService?: Pick<RebuildService, 'ensureCurrent'>;
+    /**
      * Handed, once the pipelines' map exists, the sessions the feeds run now (read at every call): the rebuild service
      * behind `rebuild` checks them when a rebuild is asked for, when it starts and at its swap (C24, C59).
      */
@@ -235,8 +241,14 @@ export async function serve(opts: ServeOptions): Promise<number> {
       profiles?.recompute('rebuild');
     });
     // The basis's sessions made current before they enter a running session (C61, C62), through the bridge's one rebuild
-    // queue (`checkedRebuild`): a session not stored, or current, waits for nothing; one that fails stays stale (C3).
-    const ensureCurrent: RebuildService['ensureCurrent'] = async (keys, o) => {
+    // service with the basis's priority, then the stores see the rebuilt projections; without the service through the
+    // one rebuild queue (`checkedRebuild`): a session not stored, or current, waits for nothing; one that fails stays stale (C3).
+    const service = storage?.rebuildService;
+    const ensureCurrent: RebuildService['ensureCurrent'] = service ? async (keys, o) => {
+      await service.ensureCurrent(keys, o);
+      calibration?.recompute('rebuild');
+      profiles?.recompute('rebuild');
+    } : async (keys, o) => {
       const stale = keys.flatMap((key) => {
         const row = calibrationRepo?.sessionOf(key);
         return row !== undefined && storage !== undefined && isStale(row, storage.rulesVersion) ? [row] : [];
@@ -391,8 +403,9 @@ export async function serve(opts: ServeOptions): Promise<number> {
       // Live: each session starts on the profile store's snapshot of its slots; a replay on its profiles sidecar (C38, C62c).
       ...(profiles && isLive && { profiles }),
       ...(opts.replay && { recordedProfiles: recordingProfiles(opts.replay.path, pipelineLog) }),
-      // Live: each session preselects its basis (C62); a replay starts on its basis sidecar (C38).
-      ...(isLive && opts.storage && { basis: { rebuild: { ensureCurrent }, lastChoice } }),
+      // Live: each session preselects its basis (C62); a replay starts on its basis sidecar (C38), whose sessions are
+      // made current before its first frame (C61).
+      ...(opts.storage && { basis: { rebuild: { ensureCurrent }, lastChoice } }),
       ...(opts.replay && { recordedBasis: recordingBasis(opts.replay.path, pipelineLog) }),
       ...(opts.staleCheck && { staleCheck: opts.staleCheck }),
       ...(staleSweep && { staleSweep }),

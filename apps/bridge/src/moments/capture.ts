@@ -9,6 +9,7 @@ import { PwrecSource } from '../input/pwrec-source.ts';
 import { createLogger } from '../log.ts';
 import { recordingDecisions } from '../pipeline/decision-sidecars.ts';
 import { FeedPipeline } from '../pipeline/feed-pipeline.ts';
+import { recordingBasis } from '../pipeline/basis-sidecar.ts';
 import { recordingProfiles } from '../pipeline/profile-sidecar.ts';
 import { recordingTrack, TRACKS_DIR } from '../track-files/load.ts';
 
@@ -118,9 +119,10 @@ export async function captureMoment(segmentPath: string, atMs: number): Promise<
     features: FEATURES,
     config: recordingConfig(segmentPath, FEATURES, effectiveConfig(FEATURES)),
     tracks: (trackId) => recordingTrack(segmentPath, trackId, TRACKS_DIR, log),
-    // The recording's priors, decisions and profiles sidecars, as a replay reads them (C38, C62c, C76).
+    // The recording's priors, decisions, profiles and basis sidecars, as a replay reads them (C38, C62, C62c, C76).
     recorded: recordingDecisions(segmentPath, log),
     recordedProfiles: recordingProfiles(segmentPath, log),
+    recordedBasis: recordingBasis(segmentPath, log),
     log,
   });
   pipeline.start();

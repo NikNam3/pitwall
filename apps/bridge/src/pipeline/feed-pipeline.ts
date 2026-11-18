@@ -116,7 +116,9 @@ export type FeedPipelineOptions = {
    * `rebuild.ensureCurrent` (priority `runningBasis`; no frame waits) and enter by a `basisChosen` naming the whole
    * preselection, unless a basis was chosen since. A feed joining its team is handed the team's newest choice once its
    * sessions are current. Without it (and without `recordedBasis`) a session's basis is the seat's earlier sessions of
-   * the weekend, stale ones left out.
+   * the weekend, stale ones left out. With `recordedBasis` (a replay or reprocess) only its `rebuild` is used: the
+   * sessions the sidecar's `start` and the recorded `basisChosen` decisions name are made current before the first frame
+   * (priority `firstRead`), and the run waits for them (C61).
    */
   basis?: BasisInputs;
   /**
@@ -580,7 +582,10 @@ export class FeedPipeline {
     this.#started = true;
     const { source, staleCheck, testInsight } = this.#o;
     if (testInsight !== undefined) this.#publishInsights(this.#alerts.raiseTestInsight(testInsight, this.#sessionTime()));
-    source.start((packet) => this.#onPacket(packet));
+    const ready = this.#recordedBasisCurrent();
+    const begin = (): void => source.start((packet) => this.#onPacket(packet));
+    if (ready === undefined) begin();
+    else void ready.then(() => this.#guarded('replay start', () => !this.#stopped && begin()));
     if (staleCheck !== undefined) {
       // While a restart's restore replays a recording, the packets wait in its buffer: the feed is not silent.
       this.#staleTimer = setInterval(() => this.#guarded('stale check', () => {
@@ -588,6 +593,39 @@ export class FeedPipeline {
       }), staleCheck.everyMs);
     }
     this.#finish().then(this.#done.resolve, this.#done.reject);
+  }
+
+  /**
+   * A replay or reprocess with the bridge's rebuild service (`recordedBasis` with `basis`; C38, C61, C62): the stored
+   * sessions its basis sidecar's `start` names, and those of every recorded `basisChosen`, are made current before its
+   * first frame (`ensureCurrent`, priority `firstRead`), so it runs on the sessions the live run had. Its seat is not known
+   * before its first frame: every stored seat of a named session is made current. `undefined`: nothing to wait for (a live
+   * run, none stale, no rebuild service); a failed rebuild is logged and the replay runs without the stale sessions.
+   */
+  #recordedBasisCurrent(): Promise<void> | undefined {
+    const { recordedBasis, recorded, basis, storage } = this.#o;
+    if (basis === undefined || storage === undefined || (recordedBasis === undefined && recorded === undefined)) return undefined;
+    const bases: SessionBasis[] = [
+      ...(recordedBasis ? [recordedBasis.start] : []),
+      ...(recorded?.decisions ?? []).flatMap(({ decision }) => (decision.kind === 'basisChosen' ? [decision.basis] : [])),
+    ];
+    const refs = bases.flatMap((b) => [...b.practice, ...(b.qualifying === null ? [] : [b.qualifying])]);
+    if (refs.length === 0) return undefined;
+    let keys: SessionKey[];
+    try {
+      const stale = new Map<string, SessionKey>();
+      for (const row of new WeekendRepository(storage.db, { log: this.#log, rulesVersion: storage.rulesVersion }).rowsOf(refs)) {
+        if (isStale(row, storage.rulesVersion)) stale.set(`${row.sessionUid}@${row.weekendId}/${row.playerCar}`, { sessionUid: row.sessionUid, weekendId: row.weekendId, playerCar: row.playerCar });
+      }
+      keys = [...stale.values()];
+    } catch (error) {
+      this.#log.error({ feedId: this.#feedId, err: error }, "the recorded basis's sessions not read: the replay runs without the stale ones");
+      return undefined;
+    }
+    if (keys.length === 0) return undefined;
+    return basis.rebuild.ensureCurrent(keys, { priority: 'firstRead' }).catch((error: unknown) => {
+      this.#log.error({ feedId: this.#feedId, err: error }, "the recorded basis not made current: the replay runs without the stale sessions");
+    });
   }
 
   /**
@@ -1144,6 +1182,7 @@ export class FeedPipeline {
         if (!result.ok) this.#log.warn({ feedId: this.#feedId, reason: result.reason, message: result.message }, 'a basis was not committed');
       },
       chosen: () => this.#basisRun === run && this.#session?.hasBasisChoice === true,
+      ...(continued !== undefined && { recordedChoice: continued.decisions.some(({ decision }) => decision.kind === 'basisChosen') }),
     });
     return run;
   }

@@ -7,6 +7,7 @@ import { TopicHub } from '../hub/topic-hub.ts';
 import type { PacketSource } from '../input/packet-source.ts';
 import { PwrecSource } from '../input/pwrec-source.ts';
 import type { Logger } from '../log.ts';
+import { recordingBasis } from '../pipeline/basis-sidecar.ts';
 import { recordingDecisions } from '../pipeline/decision-sidecars.ts';
 import { FeedPipeline, type FeedPipelineOptions } from '../pipeline/feed-pipeline.ts';
 import { recordingProfiles } from '../pipeline/profile-sidecar.ts';
@@ -48,9 +49,10 @@ export function recordingPipeline(run: RecordingRun): FeedPipeline {
     config: run.config,
     log,
     tracks: (trackId) => recordingTrack(path, trackId, TRACKS_DIR, log),
-    // Reprocessing equals the live run (C38): the recording's priors, decisions and profiles sidecars (C62c, C76).
+    // Reprocessing equals the live run (C38): the recording's priors, decisions, profiles and basis sidecars (C62, C62c, C76).
     recorded: recordingDecisions(path, log),
     recordedProfiles: recordingProfiles(path, log),
+    recordedBasis: recordingBasis(path, log),
     ...(run.storage && { storage: run.storage }),
   });
 }

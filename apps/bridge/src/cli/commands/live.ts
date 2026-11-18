@@ -77,7 +77,7 @@ export async function run(_positionals: string[], values: { dev?: boolean | unde
       dumpsDir: dirs.dumps,
       uiDir: dirs.ui,
       config,
-      storage: { db, recordingsDir: dirs.recordings, rulesVersion: version, rebuild: stale.rebuild, onRunning: (running) => { holder.running = running; } },
+      storage: { db, recordingsDir: dirs.recordings, rulesVersion: version, rebuild: stale.rebuild, rebuildService: stale.rebuildService, onRunning: (running) => { holder.running = running; } },
       staleCheck: { clock: () => performance.now(), everyMs: 500 },
       // Each port was free a moment ago; this catches the race and any other bind failure.
       bound: async () => {

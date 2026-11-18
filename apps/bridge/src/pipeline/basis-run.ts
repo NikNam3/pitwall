@@ -6,11 +6,14 @@
 //   sessions, the sidecar `{ start, preselected }` is written, and the rest are made current (`ensureCurrent`, priority
 //   `runningBasis`; no frame waits) and enter by a `basisChosen` naming the whole preselection, unless a basis was chosen
 //   since (`commit`).
-// - A replay or reprocess with the recording's sidecar (`recorded`), or a continued recording (C59): the session starts on
-//   its `start`; its decisions come back from the decisions sidecar (C76).
+// - A replay or reprocess with the recording's sidecar (`recorded`): the session starts on its `start`, made current
+//   before the run's first frame by the feed's pipeline (C61); its decisions come back from the decisions sidecar (C76).
+// - A continued recording (C59, a running session, `recorded` and `live`): it starts on its `start`'s current sessions
+//   without waiting; the stale ones and the preselection's others are queued (`runningBasis`) and the preselection enters
+//   by a `basisChosen` once current, unless its decisions hold a choice.
 // - A recording without a sidecar, or a run without the preselection's inputs: the seat's earlier sessions of the weekend.
 import type { BasisActive } from '@pitwall/contracts';
-import { basisKey, NO_BASIS, type BasisSidecar, type CarKey, type FeedId, type SessionBasis, type SessionRef, type TeamId, type TrackId, type WeekendPhase } from '@pitwall/domain';
+import { NO_BASIS, type BasisSidecar, type CarKey, type FeedId, type SessionBasis, type SessionRef, type TeamId, type TrackId, type WeekendPhase } from '@pitwall/domain';
 import type { BasisContext, DeepReadonly } from '@pitwall/engine/readers';
 import type { TopicHub } from '../hub/topic-hub.ts';
 import type { Logger } from '../log.ts';
@@ -44,6 +47,8 @@ export type BasisRunOptions = {
   commit: (basis: SessionBasis) => void;
   /** Whether the running session holds a `basisChosen` decision, committed or pending. */
   chosen: () => boolean;
+  /** A continued recording (C59) whose decisions sidecar holds a `basisChosen`: they come back as its replay runs. */
+  recordedChoice?: boolean;
 };
 
 /**
@@ -79,6 +84,10 @@ export class BasisRun {
   #rebuilding: BasisProgress = null;
   /** The named sessions' rows by `refText`, read once each. */
   readonly #rows = new Map<string, StoredSessionRow | null>();
+  /** The session's own row: its ref and track (the picker's candidates are the seat's other sessions on it). */
+  #own: Pick<SessionRow, 'sessionUid' | 'weekendId' | 'trackId'> | undefined;
+  /** The picker's candidates, read once (`#candidatesOf`); dropped when a rebuild ends, so their staleness is read again. */
+  #candidates: StoredSessionRow[] | undefined;
   /** The last `basis.active` published, as JSON: published again only when it changes. */
   #published: string | undefined;
   #closed = false;
@@ -98,9 +107,11 @@ export class BasisRun {
    */
   start(player: CarKey, row: SessionRow, phase: WeekendPhase): BasisContext | undefined {
     this.#player = player;
+    this.#own = { sessionUid: row.sessionUid, weekendId: row.weekendId, trackId: row.trackId };
     const { recorded, live } = this.#o;
     if (recorded !== undefined && recorded !== null) {
       this.#start = recorded.start;
+      // A continued recording (C59): a running session never waits; what of its basis is stale enters by decision (C61).
       if (live !== undefined) this.#queue(recorded.preselected, recorded.start, live);
     } else if (live !== undefined && recorded === undefined) {
       this.#startLive(player, row, phase, live);
@@ -169,6 +180,10 @@ export class BasisRun {
   /** A rebuild of the sessions a basis names: its progress, or `null` once it is done. */
   rebuilding(progress: BasisProgress): void {
     if (this.#closed) return;
+    if (progress === null) {
+      this.#rows.clear();
+      this.#candidates = undefined;
+    }
     this.#rebuilding = progress;
     this.#publish();
   }
@@ -198,14 +213,17 @@ export class BasisRun {
   }
 
   /**
-   * The preselection's sessions the session did not start on: those the seat stored are made current, and then the whole
-   * preselection enters by decision, unless a basis was chosen since (C62). No frame waits for it.
+   * The preselection's sessions the session does not run on: those the seat stored that the start does not name, and
+   * those of the start that are stale (a continued recording after a rules-version change, C59, C61), are made current,
+   * and then the whole preselection enters by decision, unless a basis was chosen since (C62). No frame waits for it. A
+   * continued recording whose decisions already hold a choice queues nothing: its start is no longer its basis.
    */
   #queue(preselected: SessionBasis, start: SessionBasis, live: BasisInputs): void {
     const player = this.#player;
-    if (player === undefined || basisKey(preselected) === basisKey(start)) return;
+    const storage = this.#o.storage;
+    if (player === undefined || this.#o.recordedChoice === true) return;
     const startRefs = new Set(refsOf(start).map(refText));
-    const missing = (this.#o.storage?.seatRowsOf(refsOf(preselected), player) ?? []).filter((row) => !startRefs.has(refText(row)));
+    const missing = (storage?.seatRowsOf(refsOf(preselected), player) ?? []).filter((row) => !startRefs.has(refText(row)) || storage?.isStale(row));
     if (missing.length === 0) return;
     const { log, feedId } = this.#o;
     const keys = missing.map(keyOfRow);
@@ -241,9 +259,23 @@ export class BasisRun {
     this.#o.hub.publishState(this.#o.feedId, 'basis.active', () => value);
   }
 
-  /** Per session the bases name and the seat stored, its date, kind (its place in the basis) and track. */
+  /**
+   * The picker's candidates (R18): every stored practice and qualifying of the seat on the session's track, the session
+   * itself aside, then per session the bases name and the seat stored (kind: its place in the basis); each with its date,
+   * kind, track and whether it is stale (C61).
+   */
   #sessionsOf(bases: readonly SessionBasis[]): BasisActive['sessions'] {
+    const storage = this.#o.storage;
+    const entry = (row: StoredSessionRow, kind: 'practice' | 'qualifying'): BasisActive['sessions'][string] => ({
+      date: row.startedAt,
+      kind,
+      trackId: row.trackId as TrackId,
+      stale: storage?.isStale(row) ?? false,
+    });
     const sessions: BasisActive['sessions'] = {};
+    for (const row of this.#candidatesOf()) {
+      if (row.kind === 'practice' || row.kind === 'qualifying') sessions[refText(row)] ??= entry(row, row.kind);
+    }
     for (const basis of bases) {
       const roles: Array<[SessionRef, 'practice' | 'qualifying']> = [
         ...basis.practice.map((ref): [SessionRef, 'practice'] => [ref, 'practice']),
@@ -251,10 +283,20 @@ export class BasisRun {
       ];
       for (const [ref, kind] of roles) {
         const row = this.#rowOf(ref);
-        if (row !== null && sessions[refText(ref)] === undefined) sessions[refText(ref)] = { date: row.startedAt, kind, trackId: row.trackId as TrackId };
+        if (row !== null) sessions[refText(ref)] ??= entry(row, kind);
       }
     }
     return sessions;
+  }
+
+  /** The seat's stored sessions on the session's track but the session's own, read once (again after a rebuild). */
+  #candidatesOf(): readonly StoredSessionRow[] {
+    if (this.#candidates !== undefined) return this.#candidates;
+    const player = this.#player;
+    const own = this.#own;
+    const rows = player === undefined || own === undefined ? [] : (this.#o.storage?.seatSessionsOnTrack(own.trackId, player) ?? []);
+    this.#candidates = own === undefined ? rows : rows.filter((row) => !(row.sessionUid === own.sessionUid && row.weekendId === own.weekendId));
+    return this.#candidates;
   }
 
   #rowOf(ref: SessionRef): StoredSessionRow | null {

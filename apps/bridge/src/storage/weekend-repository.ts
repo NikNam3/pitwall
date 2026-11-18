@@ -137,6 +137,18 @@ export class WeekendRepository {
                AND c.car_id = s.player_car AND c.team_id = @teamId AND c.race_number = @raceNumber)
          ORDER BY s.started_at, s.player_car`,
       ),
+      // The stored sessions on a track whose own player car had the seat's team and race number (C62), oldest first.
+      seatSessionsOnTrack: db.prepare(
+        `SELECT ${sessionColumns} ${sessionsFrom}
+         WHERE s.track_id = @trackId
+           AND EXISTS (
+             SELECT 1 FROM cars c
+             WHERE c.session_uid = s.session_uid AND c.weekend_id = s.weekend_id AND c.player_car = s.player_car
+               AND c.car_id = s.player_car AND c.team_id = @teamId AND c.race_number = @raceNumber)
+         ORDER BY s.started_at, s.session_uid, s.player_car`,
+      ),
+      // Every stored session of one session ref, of any player car.
+      refSessions: db.prepare(`SELECT ${sessionColumns} ${sessionsFrom} WHERE s.session_uid = @sessionUid AND s.weekend_id = @weekendId ORDER BY s.player_car`),
       newestTrack: db.prepare(`SELECT track_id FROM sessions ORDER BY started_at DESC, session_uid DESC, player_car DESC LIMIT 1`).pluck(),
       cars: db.prepare(`SELECT car_id, team_id, race_number, name FROM cars WHERE ${OF_SESSION} ORDER BY car_id`),
       facts: db.prepare(`SELECT list, record FROM facts WHERE ${OF_SESSION} ORDER BY list, seq`),
@@ -246,6 +258,25 @@ export class WeekendRepository {
       const rows = this.#statements.seatSessions.all({ sessionUid: ref.sessionUid, weekendId: ref.weekendId, teamId: player.teamId, raceNumber: player.raceNumber }) as SessionDbRow[];
       return rows.slice(0, 1).map((row) => this.#toSession(row));
     });
+  }
+
+  /**
+   * The rows of every stored session on `trackId` whose own player car had `player`'s team and race number (the seat's,
+   * C62), oldest first, stale ones included: the basis picker's candidates (`basis.active`, C54).
+   */
+  seatSessionsOnTrack(trackId: number, player: CarKey): StoredSessionRow[] {
+    const rows = this.#statements.seatSessionsOnTrack.all({ trackId, teamId: player.teamId, raceNumber: player.raceNumber }) as SessionDbRow[];
+    return rows.map((row) => this.#toSession(row));
+  }
+
+  /**
+   * The rows of `refs` of every player car, stale ones included, in the order of `refs`: what a replay makes current
+   * before its first frame, its seat not yet known (C61).
+   */
+  rowsOf(refs: readonly SessionRef[]): StoredSessionRow[] {
+    return refs.flatMap((ref) =>
+      (this.#statements.refSessions.all({ sessionUid: ref.sessionUid, weekendId: ref.weekendId }) as SessionDbRow[]).map((row) => this.#toSession(row)),
+    );
   }
 
   /**
