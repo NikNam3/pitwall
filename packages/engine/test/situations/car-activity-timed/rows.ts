@@ -22,7 +22,10 @@
 //   A line in the pit lane (garage boxes before the line, §2.3) is no line.
 // - `inLap` once the car heads for the pit lane (the in-lap driver status on a push lap, which AI cars show from the line
 //   after their push lap, SgQ; the pit entry, car-location `track -> pitLane`) or the session's end ends its push (the
-//   result status turning finished mid-lap, the session phase turning finished or post-session, §2.10).
+//   result status turning finished mid-lap, the session phase turning finished or post-session, §2.10). The in-lap
+//   driver status on a push frame without a line is a pending confirmation (C18): the push holds; the next frame at the
+//   line opens `inLap` on that frame (the game sets the status at the line, on the tick before or after it by feed,
+//   planner report 2026-11-17 §2); the status held without a line opens `inLap` a frame later; the status gone clears it.
 // - `finished` at the line once the session has ended for the car (its result status finished, or the session phase
 //   finished or post-session): the chequered flag's last lap. A car set to finished mid-lap (the last frame of SgQ and
 //   MiP) is not finished by that alone (Review Focus 3): its push ends, `inLap`.
@@ -89,7 +92,18 @@ export const timedActivityRows = (t: Timed, push: 'pushLap' | 'flyingLap'): Tran
     // the in lap
     { name: 'into the pit lane on the out lap (seen once in practice, not yet seen in qualifying): outLap -> inLap', from: 'outLap', to: 'inLap', input: onOut().frame(f(car0({ ds: 'outLap', ps: 'pitting', d: 2_700 }))) },
     { name: 'the session’s end on the out lap: the result status finished mid-lap (not yet seen): outLap -> inLap', from: 'outLap', to: 'inLap', input: onOut().frame(f(car0({ ds: 'outLap', ps: 'none', d: 2_600, rs: 'finished' }))) },
-    { name: `the in-lap driver status on track, a frame after the line (SgQ car 8 at 221.986): ${push} -> inLap`, from: push, to: 'inLap', input: inputs().frames(2, f(pushing(4_920, 1))).frame(f(pushing(1, 2, 0))).frame(f(inLapOnTrack(2, 2, 33))) },
+    {
+      name: `in-lap status mid-lap, then held: ${push} -> inLap a frame later (SgQ car 8: the status a frame after the line, 221.986)`,
+      from: push,
+      to: 'inLap',
+      input: inputs().frames(2, f(pushing(4_920, 1))).frame(f(pushing(1, 2, 0))).frame(f(inLapOnTrack(2, 2, 33))).frame(f(inLapOnTrack(40, 2, 700))),
+    },
+    {
+      name: `in-lap status on the tick before the line: ${push} stays ${push}, inLap on the crossing frame (Texas 2026-11-17 DR car 18 at 216.830 / 216.847): ${push} -> inLap`,
+      from: push,
+      to: 'inLap',
+      input: inputs().frames(2, f(pushing(4_920, 1))).frame(f(inLapOnTrack(4_990, 1))).frame(f(inLapOnTrack(2, 2, 33))),
+    },
     { name: `the pit entry with the driver status still flying (ps 0 -> 1): ${push} -> inLap`, from: push, to: 'inLap', input: onPush().frame(f(car0({ ds: 'flyingLap', ps: 'pitting', d: 4_960, lap: 2 }))) },
     {
       name: `the session’s end: the result status finished mid-lap, the lap number up, the lap distance not at the line (SgQ 900.594 car 0): ${push} -> inLap`,

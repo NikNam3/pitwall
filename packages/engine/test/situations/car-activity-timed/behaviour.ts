@@ -46,9 +46,12 @@ export const GARAGE_VISIT: readonly GarageRow[] = [
   [4, 5, 100, 'none', 'flyingLap'], //           14 line: lap 3 done
   [4, 2_500, 45_000, 'none', 'flyingLap'], //    15
 ];
-/** The kind of each `GARAGE_VISIT` frame, the push kind `push`. */
+/**
+ * The kind of each `GARAGE_VISIT` frame, the push kind `push`: the in-lap status mid-lap (frame 2) is pending (C18), the
+ * pit entry (frame 3) opens the in lap.
+ */
 export const garageVisitKinds = (push: string): string[] => [
-  push, push, 'inLap', 'inLap', 'inLap', 'garage', 'garage', 'outLap', 'outLap', 'outLap', 'outLap', push, push, push, push, push,
+  push, push, push, 'inLap', 'inLap', 'garage', 'garage', 'outLap', 'outLap', 'outLap', 'outLap', push, push, push, push, push,
 ];
 
 /** Registers the shared tests for one timed car-activity machine. */
@@ -162,6 +165,38 @@ export const describeTimedActivity = ({ machine, spans, phase, sessionPhaseId, p
     it('the lap number going up without the lap distance at the line is no line', () => {
       const r = run(inputs().frames(2, f(onOutLap(2_000, 1))).frame(f(onOutLap(2_010, 2))));
       expect(kinds(r)).toEqual(['outLap', 'outLap', 'outLap']);
+    });
+  });
+
+  describe(`${machine.id}: the in-lap driver status on a ${push} is a pending confirmation (C18; planner report 2026-11-17 §2)`, () => {
+    /** Car 0 pushes: three frames of its lap 2. */
+    const onPushFrames = () => inputs().frames(3, f(pushing(2_000, 2)));
+    it(`in-lap status mid-lap, then held: ${push} until the frame after the status, inLap from there`, () => {
+      const r = run(onPushFrames().frame(f(inLapOnTrack(2_100, 2))).frames(2, f(inLapOnTrack(2_150, 2))));
+      expect(kinds(r)).toEqual([push, push, push, push, 'inLap', 'inLap']);
+      expect(r.open[4]).toMatchObject({ kind: 'inLap', id: 1, startFrame: 5 });
+      expect(r.closed[4]).toMatchObject([{ kind: push, id: 0, startFrame: 1 }]);
+    });
+    it(`in-lap status on the tick before the line: ${push} stays ${push} on that tick, inLap opens on the crossing frame`, () => {
+      const r = run(inputs().frames(2, f(pushing(4_920, 1))).frame(f(inLapOnTrack(4_990, 1))).frame(f(inLapOnTrack(2, 2, 33))).frame(f(inLapOnTrack(40, 2, 700))));
+      expect(kinds(r)).toEqual([push, push, push, 'inLap', 'inLap']);
+      expect(r.open[3]).toMatchObject({ kind: 'inLap', id: 1, startFrame: 4 });
+      expect(r.closed[3]).toMatchObject([{ kind: push, id: 0, startFrame: 1 }]);
+    });
+    it(`in-lap status for one frame mid-lap, then gone: the pending is cleared, one ${push} span throughout`, () => {
+      const r = run(onPushFrames().frame(f(inLapOnTrack(2_100, 2))).frames(3, f(pushing(2_150, 2))));
+      expect(kinds(r)).toEqual(Array(7).fill(push));
+      expect(closedCount(r)).toBe(0);
+    });
+    it(`a cleared pending does not carry to the line: in-lap status once mid-lap, gone, then the line flying: one ${push} span`, () => {
+      const r = run(onPushFrames().frame(f(inLapOnTrack(2_100, 2))).frame(f(pushing(4_990, 2))).frame(f(pushing(3, 3, 50))).frame(f(pushing(40, 3, 700))));
+      expect(kinds(r)).toEqual(Array(7).fill(push));
+      expect(closedCount(r)).toBe(0);
+    });
+    it(`the pit entry with the in-lap status pending opens inLap on the pit-entry frame (the pit-entry rule unchanged)`, () => {
+      const r = run(onPushFrames().frame(f(inLapOnTrack(4_950, 2))).frame(f(inPitLane(4_960, 2))));
+      expect(kinds(r)).toEqual([push, push, push, push, 'inLap']);
+      expect(r.open[4]).toMatchObject({ kind: 'inLap', startFrame: 5 });
     });
   });
 

@@ -29,5 +29,12 @@ export const firstFrame = (seg: Seen, index: number, test: (c: CarSeen) => boole
   return found.frameNumber;
 };
 
+/** The frame number of the segment's frame after frame `frameNumber`. */
+export const frameAfter = (seg: Seen, frameNumber: number): number => {
+  const found = seg.frames.find((f) => f.frameNumber > frameNumber);
+  if (found === undefined) throw new Error(`no frame after frame ${frameNumber}`);
+  return found.frameNumber;
+};
+
 /** The frame number after the segment's last frame: where the session's end closes the open spans. */
 export const afterLast = (seg: Seen): number => seg.frames.at(-1)!.frameNumber + 1;
