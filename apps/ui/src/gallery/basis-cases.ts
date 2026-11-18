@@ -18,11 +18,11 @@ const key = (ref: SessionRef): string => `${ref.sessionUid}@${ref.weekendId}`;
 
 /** Every stored session of the seat on the track: this weekend's and the 3–4 Nov weekend's. */
 const SESSIONS: BasisActive['sessions'] = {
-  [key(P17)]: { date: '2026-11-17', kind: 'practice', trackId: TEXAS },
-  [key(P16)]: { date: '2026-11-16', kind: 'practice', trackId: TEXAS },
-  [key(P03)]: { date: '2026-11-03', kind: 'practice', trackId: TEXAS },
-  [key(Q17)]: { date: '2026-11-17', kind: 'qualifying', trackId: TEXAS },
-  [key(Q04)]: { date: '2026-11-04', kind: 'qualifying', trackId: TEXAS },
+  [key(P17)]: { date: '2026-11-17', kind: 'practice', trackId: TEXAS, stale: false },
+  [key(P16)]: { date: '2026-11-16', kind: 'practice', trackId: TEXAS, stale: false },
+  [key(P03)]: { date: '2026-11-03', kind: 'practice', trackId: TEXAS, stale: false },
+  [key(Q17)]: { date: '2026-11-17', kind: 'qualifying', trackId: TEXAS, stale: false },
+  [key(Q04)]: { date: '2026-11-04', kind: 'qualifying', trackId: TEXAS, stale: false },
 };
 
 const MORNING = { id: 'plan-texas-1809', name: 'Texas 18 Nov 09:40', laps: 56 };

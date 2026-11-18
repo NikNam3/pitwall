@@ -18,10 +18,10 @@ export const Q04: SessionRef = { sessionUid: '9988776655443322110', weekendId: O
 export const keyOf = (ref: SessionRef): string => `${ref.sessionUid}@${ref.weekendId}`;
 
 export const SESSIONS: BasisActive['sessions'] = {
-  [keyOf(P16)]: { date: '2026-11-16', kind: 'practice', trackId: TRACK },
-  [keyOf(Q04)]: { date: '2026-11-04', kind: 'qualifying', trackId: TRACK },
-  [keyOf(P17)]: { date: '2026-11-17', kind: 'practice', trackId: TRACK },
-  [keyOf(Q17)]: { date: '2026-11-17', kind: 'qualifying', trackId: TRACK },
+  [keyOf(P16)]: { date: '2026-11-16', kind: 'practice', trackId: TRACK, stale: false },
+  [keyOf(Q04)]: { date: '2026-11-04', kind: 'qualifying', trackId: TRACK, stale: false },
+  [keyOf(P17)]: { date: '2026-11-17', kind: 'practice', trackId: TRACK, stale: false },
+  [keyOf(Q17)]: { date: '2026-11-17', kind: 'qualifying', trackId: TRACK, stale: false },
 };
 
 export const PLAN_NAME = 'Texas 18 Nov 09:40';

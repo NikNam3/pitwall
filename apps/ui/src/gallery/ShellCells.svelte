@@ -5,8 +5,10 @@
   import type { SessionInfo } from '@pitwall/contracts';
   import { carId, feedId } from '@pitwall/domain';
   import { TopicStore } from '../connection/topic-store.svelte.ts';
+  import { BASIS_CASES, type BasisCaseName } from './basis-cases.ts';
   import * as text from '../kit/text.ts';
   import type { ResolvedLink } from '../kit/types.ts';
+  import BasisPicker from '../shell/basis/BasisPicker.svelte';
   import Inspector from '../shell/inspector/Inspector.svelte';
   import { Inspection } from '../shell/inspector/inspection.svelte.ts';
   import { DEFAULT_KEYS, defaultCommands } from '../shell/commands/default-commands.ts';
@@ -53,6 +55,9 @@
     { topic: 'ui.settings', value: { realismNextSession: true, keys: {} } },
     { topic: 'ui.alerts', value: { acknowledged: [], muted: [] } },
   ];
+
+  const basisStore = (name: BasisCaseName): TopicStore =>
+    new TopicStore(new GalleryConnection(base ?? [], BASIS_CASES[name], [{ feedId: FEED, kind: 'udp', label: 'gallery', team: null }]));
 
   const topBarStore = (name: keyof typeof TOP_BAR_CASES): TopicStore =>
     new TopicStore(
@@ -137,6 +142,10 @@
     {:else if cell.kind === 'inspector'}
       <ShellCell id={cell.id} {theme} baseline={cell.hasBaseline} cols={stageCols(cell.kind)} prepare={settleClock}>
         <Inspector store={inspectorStore} catalogue={INSPECTOR_CATALOGUE} widget={cell.detail ?? INSPECTOR_WIDGET} link={inspectorLink} host={{ openPath: noop }} />
+      </ShellCell>
+    {:else if cell.kind === 'basis-picker'}
+      <ShellCell id={cell.id} {theme} baseline={cell.hasBaseline} cols={stageCols(cell.kind)} rows={OVERLAY_ROWS} overlay>
+        <BasisPicker store={basisStore(cell.detail as BasisCaseName)} feedId={FEED} send={() => Promise.resolve({ ok: true })} onClose={noop} />
       </ShellCell>
     {/if}
   {/each}
