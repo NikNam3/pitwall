@@ -48,7 +48,7 @@ export function hasBaseline(cell: WidgetCell, entry: CellSource, defaultTheme: s
 }
 
 /** What a shell cell shows (Task 4, spec 10): the top bar under one of its cases, or a shell overlay. */
-export type ShellCellKind = 'topbar' | 'palette' | 'key-overview' | 'settings-popover' | 'inspector' | 'basis-picker';
+export type ShellCellKind = 'topbar' | 'palette' | 'key-overview' | 'settings-popover' | 'inspector' | 'basis-picker' | 'plan-save';
 
 /** One cell of the shell: the top bar, a shell overlay, or the panel overlays of `feed-status`. */
 export type ShellCell = {
@@ -87,6 +87,8 @@ export const SHELL_CELLS: readonly ShellCell[] = [
   { id: 'shell/basis-picker/planning-two-teams', kind: 'basis-picker', detail: 'planning-two-teams', hasBaseline: false },
   { id: 'shell/basis-picker/planning-stale', kind: 'basis-picker', detail: 'planning-stale', hasBaseline: false },
   { id: 'shell/basis-picker/planning-none-stored', kind: 'basis-picker', detail: 'planning-none-stored', hasBaseline: false },
+  // SP4.3f Task 10: the name prompt "Save plan" (`plan-save-cases.ts`), no baseline (budget).
+  { id: 'shell/plan-save/one-saved', kind: 'plan-save', detail: 'one-saved', hasBaseline: false },
   { id: 'shell/palette', kind: 'palette', detail: 'font', hasBaseline: false },
   { id: 'shell/key-overview', kind: 'key-overview', hasBaseline: false },
   { id: 'shell/settings-popover/feed-status', kind: 'settings-popover', detail: 'feed-status', hasBaseline: false },
