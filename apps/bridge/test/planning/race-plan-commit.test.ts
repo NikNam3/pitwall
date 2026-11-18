@@ -817,6 +817,9 @@ describe('choosing a saved plan in a race (Task 7b row e, ported from SP4.3d2 Ta
     await b.ended(1);
     await vi.waitFor(() => expect(b.prepared().at(-1)).toMatchObject({ open: true, running: false }), { timeout: 60_000 });
     const [ours, prepared] = Object.entries(b.round().cars)[0]!;
+    // no stored race suggests the laps: the engineer enters them before the round plans (ruling R16)
+    expect(await b.send({ kind: 'plans.race.set', feedId: A, race: { laps: 56, sets: 'carried' } })).toEqual({ ok: true });
+    await vi.waitFor(() => expect(b.round().race).toEqual({ laps: 56, sets: 'carried' }));
     expect(await b.send({ kind: 'plans.prepare.accept', feedId: A, carId: Number(ours), slot: 'A', policy: POLICY_A })).toEqual({ ok: true });
     expect(await b.send({ kind: 'plans.save', feedId: A, name: 'Texas' })).toEqual({ ok: true });
     await vi.waitFor(() => expect(b.round().saved).toHaveLength(1));

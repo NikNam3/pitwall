@@ -147,7 +147,13 @@ function spiedRebuild(place: { dirs: DataDir; db: Db }): { rebuild: RebuildServi
 /** A runner over the place with a hub client subscribed to `plans.prepared` and our cars' `plans.preview`. */
 function runnerOf(place: { dirs: DataDir; db: Db }, o: { planningJob?: Job<StrategyInput, StrategyOutput> } = {}) {
   const { rebuild, calls } = spiedRebuild(place);
-  const hub = new TopicHub({ now: () => 0 });
+  // the hub's clock: `plans.preview` has `maxHz: 1`, so a test that waits for a later preview moves it on and flushes
+  let clock = 0;
+  const hub = new TopicHub({ now: () => clock });
+  const advance = (ms: number): void => {
+    clock += ms;
+    hub.tick();
+  };
   const got: ServerMessage[] = [];
   hub.addClient('c', { send: (m) => got.push(structuredClone(m)), bufferedAmount: () => 0 });
   const subscribe = (id: string, topic: TopicName, params: object) => hub.subscribe({ clientId: 'c', id, topic, params, feedId: F });
@@ -169,7 +175,7 @@ function runnerOf(place: { dirs: DataDir; db: Db }, o: { planningJob?: Job<Strat
   const prepared = (): PlanningRoundState[] => values<PlanningRoundState>('prepared');
   const preview = (car: number): Array<Computed<StrategyCar>> => values<Computed<StrategyCar>>(`preview:${car}`);
   const replays = (): Array<Extract<Call, { kind: 'replayToEnd' }>> => calls.filter((c): c is Extract<Call, { kind: 'replayToEnd' }> => c.kind === 'replayToEnd');
-  return { runner, calls, replays, prepared, preview };
+  return { runner, calls, replays, prepared, preview, advance };
 }
 
 const FRESH_56: RaceAssumptions = { laps: 56, sets: 'fresh' };
@@ -242,7 +248,14 @@ describe('the planning runner (Task 7b rows a, b; C51, C54, C62d)', { timeout: 1
     await vi.waitFor(() => expect(r.prepared().at(-1)).toMatchObject({ open: true, race: FRESH_56 }));
     await vi.waitFor(() => expect(r.replays().at(-1)?.job).toEqual({ pwrecPath: qualifying.file, basisOverride: [], laps: 56, sets: 'fresh' }), { timeout: 60_000 });
     expect(r.replays().at(-1)?.priority).toBe('planning');
-    await vi.waitFor(() => expect(r.preview(1).length).toBeGreaterThan(before), { timeout: 60_000 });
+    // past the preview's throttle interval (maxHz 1): the newest preview goes out on the hub's tick
+    await vi.waitFor(
+      () => {
+        r.advance(1000);
+        expect(r.preview(1).length).toBeGreaterThan(before);
+      },
+      { timeout: 60_000 },
+    );
   });
 
   it('close closes the round: plans.prepared open false, a running job\'s result never published', async () => {
@@ -253,11 +266,12 @@ describe('the planning runner (Task 7b rows a, b; C51, C54, C62d)', { timeout: 1
     await vi.waitFor(() => expect(r.prepared().at(-1)).toMatchObject({ open: true, running: true }), { timeout: 60_000 });
 
     r.runner.close(F);
-    await vi.waitFor(() => expect(r.prepared().at(-1)).toEqual({ open: false }));
+    // closed: the team's saved plans on the track still listed, none in this data dir (ruling R15)
+    await vi.waitFor(() => expect(r.prepared().at(-1)).toEqual({ open: false, saved: [] }));
     // past the time the job would have taken: its result is never published
     await new Promise((resolve) => setTimeout(resolve, SLOW_MS + 2000));
     for (const car of OUR_CARS) expect(r.preview(car), `car ${car}`).toEqual([]);
-    expect(r.prepared().at(-1)).toEqual({ open: false });
+    expect(r.prepared().at(-1)).toEqual({ open: false, saved: [] });
   });
 
   it('a qualifying the seat has not stored opens no round (C3: no throw)', async () => {

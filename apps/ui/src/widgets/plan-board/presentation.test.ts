@@ -26,7 +26,7 @@ describe('the plan-board presentation table: session-phase-race', () => {
 });
 
 // SP4.3d2 Task 12 (C66): the table also maps the planning round's state (`plans.prepared.open`) to the board's variant;
-// `variantOf(source, prepared: PlanningRound | undefined): 'live' | 'planning'`: `live` and `planning` as chosen; `auto`
+// `variantOf(source, prepared: PlanningRoundState | undefined): 'live' | 'planning'`: `live` and `planning` as chosen; `auto`
 // the round state's row: planning while the round is open, live when it is closed or the topic has no value.
 describe('the plan-board presentation table: the planning round', () => {
   it('has a row for each round state, and no other: open → planning, closed → live', () => {

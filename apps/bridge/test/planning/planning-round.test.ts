@@ -228,7 +228,7 @@ describe('the planning round (Task 7b, ported from SP4.3d2 Task 10; C62d, C54, C
     const b = await bridge();
     // before the qualifying ends: no round
     b.play(sessionPackets({ uid: 70n, type: 7 }));
-    await vi.waitFor(() => expect(b.prepared().at(-1)).toEqual({ open: false }));
+    await vi.waitFor(() => expect(b.prepared().at(-1)).toEqual({ open: false, saved: [] }));
     await b.ended(1);
     const round = await roundSettles(b);
     // the round of that qualifying, no practice stored, the sets carried over (its live end, spec §4.3)
@@ -246,6 +246,9 @@ describe('the planning round (Task 7b, ported from SP4.3d2 Task 10; C62d, C54, C
       running: false,
       saved: [],
     });
+    // no stored race suggests the laps: the round plans once they are entered (ruling R16)
+    expect(round.race.laps).toBeNull();
+    expect(await b.send(raceSet(A, 44))).toEqual({ ok: true });
     // the planning job ran on it: a preview per our car
     await vi.waitFor(() => expect(b.preview(0).length).toBeGreaterThan(0), { timeout: 60_000 });
     await vi.waitFor(() => expect(b.preview(1).length).toBeGreaterThan(0), { timeout: 60_000 });
@@ -293,7 +296,7 @@ describe('the planning round (Task 7b, ported from SP4.3d2 Task 10; C62d, C54, C
       await b.ended(++count);
       // the timer ran past the end; the round would have opened by now
       await new Promise((r) => setTimeout(r, 200));
-      expect(b.prepared().at(-1), `session type ${s.type}`).toEqual({ open: false });
+      expect(b.prepared().at(-1), `session type ${s.type}`).toEqual({ open: false, saved: [] });
       expect(b.prepared().some((v) => v.open), `session type ${s.type}`).toBe(false);
     }
     // without an open round every round action is not supported (no round to plan in)
@@ -307,8 +310,11 @@ describe('the planning round (Task 7b, ported from SP4.3d2 Task 10; C62d, C54, C
     const b = await bridge();
     await q3(b);
     await roundSettles(b);
+    // no stored race suggests the laps: the round plans once they are entered (ruling R16)
+    expect(await b.send(raceSet(A, 50))).toEqual({ ok: true });
     await vi.waitFor(() => expect(b.preview(0).length).toBeGreaterThan(0), { timeout: 60_000 });
     expect(rowsOf(b, 0).map((r) => r.slot)).toEqual([null]);
+    await vi.waitFor(() => expect(b.round().running).toBe(false), { timeout: 60_000 });
 
     // the race assumptions re-run the job (C73: one uiAction, validated)
     const before = b.preview(0).length;
@@ -443,6 +449,9 @@ describe('the planning round (Task 7b, ported from SP4.3d2 Task 10; C62d, C54, C
     await b.ended(2);
     await roundSettles(b, A);
     expect(await roundSettles(b, B)).toMatchObject({ qualifying: ref(75n), team: TEAM });
+    // no stored race suggests the laps: each feed's round plans once they are entered (ruling R16)
+    expect(await b.send(raceSet(A, 44))).toEqual({ ok: true });
+    expect(await b.send(raceSet(B, 44))).toEqual({ ok: true });
     await vi.waitFor(() => expect(b.preview(1, B).length).toBeGreaterThan(0), { timeout: 60_000 });
 
     // a plan saved on one feed is the team's: the teammate's round lists it (C1a)
@@ -455,16 +464,19 @@ describe('the planning round (Task 7b, ported from SP4.3d2 Task 10; C62d, C54, C
   it('race loads', async () => {
     const b = await bridge({ planningJob: SLOW_JOB });
     await q3(b);
+    // no stored race suggests the laps: the round plans once they are entered (ruling R16)
+    await vi.waitFor(() => expect(b.prepared().at(-1)).toMatchObject({ open: true }), { timeout: 60_000 });
+    expect(await b.send(raceSet(A, 44))).toEqual({ ok: true });
     await vi.waitFor(() => expect(b.prepared().at(-1)).toMatchObject({ open: true, running: true }), { timeout: 60_000 });
 
     // the race's first packet while the job runs: the round closes, the job is cancelled
     b.play(firstPackets({ uid: 76n, type: 15 }));
-    await vi.waitFor(() => expect(b.prepared().at(-1)).toEqual({ open: false }));
+    await vi.waitFor(() => expect(b.prepared().at(-1)).toEqual({ open: false, saved: [] }));
     // past the time the job would have taken: its result is never published
     await new Promise((r) => setTimeout(r, SLOW_MS + 2000));
     expect(b.preview(0)).toEqual([]);
     expect(b.preview(1)).toEqual([]);
-    expect(b.prepared().at(-1)).toEqual({ open: false });
+    expect(b.prepared().at(-1)).toEqual({ open: false, saved: [] });
     // and nothing plans any more
     expect(await b.send(raceSet(A, 45))).toEqual({ ok: false, reason: 'notSupported' });
   });
