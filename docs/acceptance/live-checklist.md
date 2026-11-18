@@ -95,7 +95,7 @@ Follow-ups noted by the SP4.3e run (not built):
 - [ ] **A new lobby:** if the race runs in a new lobby whose weather was not set to match the practice and qualifying, the imported forecast is wrong: override it on the plan board (`RAIN ▸`) with the lobby's weather before saving the plan. The race's own forecast reaches the in-race strategy at the race's first packets anyway; only the plan made beforehand rests on the override.
 - [ ] Case A: at a live qualifying's end the round opens with every pick preselected (that qualifying, its basis's practice, the team's cars, laps suggested, `carried`, the qualifying's race forecast).
 
-Left for later (spec §7): the long qualifying format (Q1/Q2/Q3 as separate sessions: P11–P20 in slot order); a one-shot car with an invalid lap placed in slot order; planning without a qualifying; the picker's `last choice` mark; storing only the slots a session uses (storage keeps the game's 22).
+Left for later: the compact plan board has no planning line (a window under about 1440×900 renders the `plan` workbook's boards compact: no LAPS/SETS/RAIN, so a case B round without suggested laps cannot start from the panel; user, 2026-11-18). Spec §7: the long qualifying format (Q1/Q2/Q3 as separate sessions: P11–P20 in slot order); a one-shot car with an invalid lap placed in slot order; planning without a qualifying; the picker's `last choice` mark; storing only the slots a session uses (storage keeps the game's 22).
 
 ## Results
 
