@@ -65,6 +65,8 @@
   const variant = $derived(variantOf(options.source, prepared));
   const planning = $derived(variant === 'planning');
   const round = $derived(planning && prepared?.open === true ? prepared : undefined);
+  /** The saved plan the round was last saved as: the inputs line shows `saved · <name>` in place of `save`. */
+  const lastSaved = $derived(round?.lastSaved ?? undefined);
   // The variant's job topic; before its first result it has no value: the panel frame shows its computing state.
   const job = $derived(planning ? (data.preview as typeof data.preview | undefined) : (data.plan as typeof data.plan | undefined));
   const reason = $derived(planning && round === undefined ? 'notApplicable' : job !== undefined && !job.value.known ? job.value.reason : undefined);
@@ -118,6 +120,10 @@
     actionRejected = null;
     const outcome = await pending;
     actionRejected = outcome.ok ? null : (outcome.message ?? text.rejectedNoReason);
+  }
+  /** The inputs line's `save` (and `saved · <name>`): opens the shell's name prompt (C72, C74). */
+  function saveRound(): void {
+    void outcomeOf(commands.invoke('plans.save.pick', {}));
   }
   function pick(slot: Slot): void {
     const line = view?.dp.find((l) => l.stopCount === pickFor);
@@ -470,6 +476,13 @@
         value.scenarios,
       )}{/if}{#if round?.running === true}{GAP}{GAP}{GAP}<span data-testid="computing" style:color={role(dimRole)} title={text.computingHover}
         >{text.computing}</span
+      >{/if}{GAP}{GAP}{#if lastSaved !== undefined}<button
+        type="button"
+        class="pw-button"
+        data-testid="saved"
+        title={text.commandHover.saveRound}
+        onclick={saveRound}>{text.saved(lastSaved.name)}</button
+      >{:else}<button type="button" class="pw-button" data-testid="save" title={text.commandHover.saveRound} onclick={saveRound}>{text.save}</button
       >{/if}</div>
 {/snippet}
 

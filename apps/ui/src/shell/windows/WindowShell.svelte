@@ -24,6 +24,7 @@
     planCommands,
     planningCommands,
     planningSlotCommands,
+    planSavePickCommand,
     planSlotCommands,
     sessionEndCommand,
     windowCommands,
@@ -36,6 +37,7 @@
   import Palette from '../commands/Palette.svelte';
   import { CommandRegistry } from '../commands/registry.ts';
   import BasisPicker from '../basis/BasisPicker.svelte';
+  import PlanSavePicker from '../plans/PlanSavePicker.svelte';
   import { mountDock, type DockHandle, type PanelView } from '../docking/index.ts';
   import { INITIAL_WINDOW, type Host } from '../host/host.ts';
   import { Inspection } from '../inspector/inspection.svelte.ts';
@@ -323,6 +325,8 @@
       ? []
       : calibrationCommands(trackSets, { send, feedId: defaultFeed, pick: () => openGarage('calibration-panel') })),
     ...(defaultFeed === undefined ? [] : [sessionEndCommand({ send, feedId: defaultFeed }), basisPickCommand(commandContext)]),
+    // "Save plan…" while the feed's planning round is open (SP4.3f spec §4.4); the plan board's `save` invokes it.
+    ...(defaultFeed === undefined || openRound === undefined ? [] : [planSavePickCommand(commandContext)]),
     ...planRegistry,
     ...(editing
       ? [
@@ -587,6 +591,8 @@
     {/if}
   {:else if overlay?.kind === 'basis' && defaultFeed !== undefined}
     <BasisPicker {store} feedId={defaultFeed} {send} onClose={closeOverlay} />
+  {:else if overlay?.kind === 'planSave' && defaultFeed !== undefined}
+    <PlanSavePicker {store} feedId={defaultFeed} {send} onClose={closeOverlay} />
   {/if}
 </div>
 
