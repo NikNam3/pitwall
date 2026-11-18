@@ -4,7 +4,7 @@
 //  - the panel hands its `invoke` prop (the registry's `invoke`) to the widget through `kit/commands.ts`
 //    (`getWidgetCommands().invoke(id, args)`), for the declared ids only; the outcome resolves back to the widget (C73);
 //  - an undeclared id never reaches `invoke`: in dev it throws, in production it resolves `notSupported`;
-//  - outside a panel `invoke` runs nothing and resolves `ok`.
+//  - outside a panel `invoke` runs nothing and resolves `notSupported` (SP4.3e Task 8).
 import type { ActionOutcome, PanelSpec } from '@pitwall/contracts';
 import { carId, feedId } from '@pitwall/domain';
 import { cleanup, fireEvent, render, screen } from '@testing-library/svelte';
