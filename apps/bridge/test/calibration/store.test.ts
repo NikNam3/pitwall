@@ -63,7 +63,7 @@ function trackSession(uid: string, o: {
   const session: TrackSession = {
     sessionUid: uid as SessionUid, weekendId: o.weekendId ?? 'W1', seasonId: 'S1', playerCar: car(0),
     teammateCar: o.teammateCar === undefined ? car(1) : o.teammateCar, trackId: o.trackId ?? TRACK,
-    startedAt: o.startedAt, pwrecPath: null, settings: {}, cars: o.cars ?? CARS, rulesVersion: 'current', complete: true,
+    startedAt: o.startedAt, pwrecPath: null, settings: {}, kind: 'practice', cars: o.cars ?? CARS, rulesVersion: 'current', complete: true,
     phase: o.phase ?? { kind: 'race', format: 'grandPrix' }, stale: false, projection, track: unknown('notApplicable'),
   };
   return o.stale === true ? staleOf(session) : session;
@@ -75,7 +75,7 @@ function trackSession(uid: string, o: {
  */
 function staleOf(s: TrackSession): TrackSession {
   return {
-    sessionUid: s.sessionUid, weekendId: s.weekendId, seasonId: s.seasonId, playerCar: s.playerCar, teammateCar: s.teammateCar, trackId: s.trackId, startedAt: s.startedAt,
+    sessionUid: s.sessionUid, weekendId: s.weekendId, seasonId: s.seasonId, playerCar: s.playerCar, teammateCar: s.teammateCar, trackId: s.trackId, startedAt: s.startedAt, kind: s.kind,
     pwrecPath: s.pwrecPath, settings: s.settings, cars: s.cars, rulesVersion: 'old', complete: s.complete, track: s.track,
     stale: true, projection: undefined,
   };
