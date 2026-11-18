@@ -48,7 +48,7 @@ async function runQueue(queued: (q: { service: RebuildService; keys: Record<stri
   return order;
 }
 
-const job = (pwrecPath: string) => ({ pwrecPath, basisOverride: [], laps: 20, sets: 'carried' as const });
+const job = (pwrecPath: string) => ({ pwrecPath, basisOverride: [], laps: 20, sets: 'carried' as const, conditions: { kind: 'imported' as const }, profiles: null });
 /** The jobs in the order they ended. */
 const ends = (order: readonly string[]) => order.filter((e) => e.endsWith(' done')).map((e) => e.slice(0, -' done'.length));
 /** The positions in `order` of `name`'s writes. */

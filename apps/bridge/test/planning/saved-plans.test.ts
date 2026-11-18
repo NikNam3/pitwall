@@ -80,6 +80,37 @@ describe('the saved plans (Task 7b row c; C62d, C70)', () => {
     expect(log.warn).not.toHaveBeenCalled();
   });
 
+  it('(SP4.3f) computedOn.forecast, computedOn.profiles and entered conditions read back as saved', () => {
+    const dir = dataDir();
+    const log = warnLog();
+    const samples: SavedPlan['computedOn']['forecast'] = [
+      { offsetMs: 0, weather: 'lightCloud', trackTempC: 31, trackTempTrend: 'flat', airTempC: 24, airTempTrend: 'up', rainPct: 12 },
+      { offsetMs: 1_800_000, weather: 'lightRain', trackTempC: 28, trackTempTrend: 'down', airTempC: 22, airTempTrend: 'flat', rainPct: 80 },
+    ] as SavedPlan['computedOn']['forecast'];
+    const rainy = plan({
+      id: 'rainy',
+      computedOn: { ...plan({ id: 'x' }).computedOn, race: { laps: 56, sets: 'fresh', conditions: { kind: 'entered', samples } }, forecast: samples, profiles: 'fingerprint-of-the-snapshot' },
+    });
+    new SavedPlanStore(dir, log).save(rainy);
+    const again = new SavedPlanStore(dir, log);
+    expect(again.read('rainy')).toEqual(rainy);
+    expect(again.list(MERCEDES, AUSTIN)).toEqual([rainy]);
+    expect(log.warn).not.toHaveBeenCalled();
+  });
+
+  it('(SP4.3f) an SP4.3e file without forecast and profiles reads as [] and null', () => {
+    const dir = dataDir();
+    const log = warnLog();
+    const old = plan({ id: 'old' });
+    const { forecast: _forecast, profiles: _profiles, ...computedOn } = old.computedOn;
+    // as SP4.3e wrote it: no conditions in the race, no forecast, no profiles
+    const { conditions: _conditions, ...race } = computedOn.race;
+    mkdirSync(join(dir, 'plans', String(MERCEDES)), { recursive: true });
+    writeFileSync(fileOf(dir, MERCEDES, 'old'), JSON.stringify({ ...old, computedOn: { ...computedOn, race } }));
+    expect(new SavedPlanStore(dir, log).read('old')).toEqual(old);
+    expect(log.warn).not.toHaveBeenCalled();
+  });
+
   it('list gives the team\'s plans on the track only', () => {
     const dir = dataDir();
     const store = new SavedPlanStore(dir, warnLog());

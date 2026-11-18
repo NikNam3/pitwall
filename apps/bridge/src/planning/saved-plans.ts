@@ -1,11 +1,12 @@
 // The team's saved plans (C62d, C70, C1a; SP4.3e spec §4.3 "Saved plans"): bridge user state, one file per plan,
 // `PITWALL_DATA_DIR/plans/<team>/<id>.json`, tied to no session; each notes the basis and the race assumptions it was
-// computed on (`computedOn`, for display only). Written atomically (C58); a file that cannot be read or is no saved plan
-// is skipped with a warning (C3).
+// computed on, the forecast samples it planned on and its profile snapshot's fingerprint (`computedOn`, for display
+// only; an SP4.3e file without the last two reads them as `[]` and `null`). Written atomically (C58); a file that cannot
+// be read or is no saved plan is skipped with a warning (C3).
 import { existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { decodeUiAction } from '@pitwall/contracts';
-import { IMPORTED, PLAN_SLOTS, type Policy, type PreparedCar, type RaceAssumptions, type SavedPlan, type SessionBasis, type SessionRef, type Slot, type TeamId, type TrackId } from '@pitwall/domain';
+import { IMPORTED, PLAN_SLOTS, type EnteredSample, type ForecastSample, type Policy, type PreparedCar, type RaceAssumptions, type RaceConditions, type SavedPlan, type SessionBasis, type SessionRef, type Slot, type TeamId, type TrackId } from '@pitwall/domain';
 import type { Logger } from '../log.ts';
 import { parseJson, readText, writeAtomic } from '../ui-state/ui-files.ts';
 
@@ -51,12 +52,44 @@ function basisOf(raw: unknown): SessionBasis | undefined {
   return { practice: practice as SessionRef[], qualifying };
 }
 
+const WEATHERS: readonly string[] = ['clear', 'lightCloud', 'overcast', 'lightRain', 'heavyRain', 'storm'];
+const TRENDS: readonly string[] = ['up', 'down', 'flat'];
+const isFiniteNumber = (raw: unknown): raw is number => typeof raw === 'number' && Number.isFinite(raw);
+
+/** A stored row's offset, weather and rain chance as an entered row holds them (the rest kept as stored). */
+const isEnteredSample = (raw: unknown): raw is EnteredSample =>
+  isObject(raw) && Number.isInteger(raw.offsetMs) && (raw.offsetMs as number) >= 0 && isString(raw.weather) && WEATHERS.includes(raw.weather)
+  && isFiniteNumber(raw.rainPct) && raw.rainPct >= 0 && raw.rainPct <= 100;
+
+const isForecastSample = (raw: unknown): raw is ForecastSample =>
+  isEnteredSample(raw) && isFiniteNumber((raw as Record<string, unknown>).trackTempC) && isFiniteNumber((raw as Record<string, unknown>).airTempC)
+  && TRENDS.includes((raw as Record<string, unknown>).trackTempTrend as string) && TRENDS.includes((raw as Record<string, unknown>).airTempTrend as string);
+
+/** The conditions a plan was computed on; an SP4.3e file without any reads as `IMPORTED`. */
+function conditionsOf(raw: unknown): RaceConditions | undefined {
+  if (raw === undefined) return IMPORTED;
+  if (!isObject(raw)) return undefined;
+  if (raw.kind === 'imported') return IMPORTED;
+  if (raw.kind !== 'entered' || !Array.isArray(raw.samples) || !raw.samples.every(isEnteredSample)) return undefined;
+  return { kind: 'entered', samples: structuredClone(raw.samples as EnteredSample[]) };
+}
+
 function raceOf(raw: unknown): RaceAssumptions | undefined {
   if (!isObject(raw)) return undefined;
   const { laps, sets } = raw;
   if (!Number.isInteger(laps) || (laps as number) < 1 || (laps as number) > MAX_RACE_LAPS) return undefined;
-  return sets === 'carried' || sets === 'fresh' ? { laps: laps as number, sets, conditions: IMPORTED } : undefined;
+  const conditions = conditionsOf(raw.conditions);
+  return (sets === 'carried' || sets === 'fresh') && conditions !== undefined ? { laps: laps as number, sets, conditions } : undefined;
 }
+
+/** The samples a plan was computed with; an SP4.3e file without any reads as `[]`. */
+function forecastOf(raw: unknown): ForecastSample[] | undefined {
+  if (raw === undefined) return [];
+  return Array.isArray(raw) && raw.every(isForecastSample) ? structuredClone(raw as ForecastSample[]) : undefined;
+}
+
+/** The fingerprint of the profile snapshot a plan was computed on; an SP4.3e file without one reads as `null`. */
+const profilesOf = (raw: unknown): string | null | undefined => (raw === undefined || raw === null ? null : isString(raw) ? raw : undefined);
 
 /** The file's `SavedPlan`, `undefined` when it is none (C3). */
 function savedPlanOf(raw: unknown): SavedPlan | undefined {
@@ -64,15 +97,17 @@ function savedPlanOf(raw: unknown): SavedPlan | undefined {
   if (!Number.isInteger(raw.team) || !Number.isInteger(raw.trackId) || !Array.isArray(raw.cars) || !isObject(raw.computedOn)) return undefined;
   const basis = basisOf(raw.computedOn.basis);
   const race = raceOf(raw.computedOn.race);
+  const forecast = forecastOf(raw.computedOn.forecast);
+  const profiles = profilesOf(raw.computedOn.profiles);
   const cars = raw.cars.map(preparedCarOf);
-  if (basis === undefined || race === undefined || cars.some((car) => car === undefined)) return undefined;
+  if (basis === undefined || race === undefined || forecast === undefined || profiles === undefined || cars.some((car) => car === undefined)) return undefined;
   return {
     id: raw.id,
     name: raw.name,
     team: raw.team as TeamId,
     trackId: raw.trackId as TrackId,
     savedAt: raw.savedAt,
-    computedOn: { basis, race, forecast: [], profiles: null },
+    computedOn: { basis, race, forecast, profiles },
     cars: cars as PreparedCar[],
   };
 }
