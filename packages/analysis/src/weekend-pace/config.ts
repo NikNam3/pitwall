@@ -23,4 +23,10 @@ export const WEEKEND_PACE_CONFIG = defineConfig('weekend-pace', {
    * 2026-11-05, 20 cars, sd 876 (MAD-σ 996).
    */
   qualifyingPaceSdMs: 900,
+  /**
+   * A car with no long run and no valid qualifying lap (ms; SP4.3e Task 6): its stand-in pace is the median of the
+   * field's qualifying-derived paces (best + `raceTrimOffsetMs`) plus this, with `qualifyingPaceSdMs`, marked
+   * `standIn`. Source: an estimate, not measured: such a car is assumed one second slower than the field's middle.
+   */
+  noPaceStandInOffsetMs: 1000,
 });
