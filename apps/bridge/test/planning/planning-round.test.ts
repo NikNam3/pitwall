@@ -19,7 +19,7 @@
 //
 // Every run is a live `serve` on manual sources (live-like) fed builder sessions, in a temporary data dir (C84); sessions
 // end by the timer on the test's receive clock.
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -481,6 +481,30 @@ describe('the planning round (Task 7b, ported from SP4.3d2 Task 10; C62d, C54, C
     expect(await b.send(raceSet(A, 45))).toEqual({ ok: false, reason: 'notSupported' });
   });
 
+  it('(F2) a save on feed A reaches feed B of the team without a round: its closed state lists the plan (C1a, C54)', async () => {
+    const b = await bridge({ feeds: [A, B] });
+    // feed B: a practice of the teammate's seat (car 1, team 3) on the track: no round, its closed state lists none yet
+    b.play(sessionPackets({ uid: 68n, type: 1, player: 1 }), B);
+    await b.ended(1);
+    await vi.waitFor(() => expect(b.prepared(B).at(-1)).toEqual({ open: false, saved: [] }));
+    // feed A: a Q3 of the player's seat (car 0, team 3) opens A's round
+    b.play(sessionPackets({ uid: 70n, type: 7, player: 0 }), A);
+    await b.ended(2);
+    await roundSettles(b, A);
+    expect(await b.send(raceSet(A, 44))).toEqual({ ok: true });
+    expect(await b.send({ kind: 'plans.save', feedId: A, name: 'team plan' })).toEqual({ ok: true });
+    await vi.waitFor(() => expect(savedFiles(b.dataDir)).toHaveLength(1));
+    const [saved] = savedFiles(b.dataDir);
+    // B has no round: its closed state is published again with the team's new saved list
+    await vi.waitFor(() => expect(b.prepared(B).at(-1)).toEqual({ open: false, saved: [{ id: saved!.id, name: 'team plan', savedAt: saved!.savedAt }] }));
+
+    // a rename and a delete on A reach B's closed state too
+    expect(await b.send({ kind: 'plans.rename', feedId: A, id: saved!.id, name: 'renamed' })).toEqual({ ok: true });
+    await vi.waitFor(() => expect(b.prepared(B).at(-1)).toEqual({ open: false, saved: [expect.objectContaining({ id: saved!.id, name: 'renamed' })] }));
+    expect(await b.send({ kind: 'plans.delete', feedId: A, id: saved!.id })).toEqual({ ok: true });
+    await vi.waitFor(() => expect(b.prepared(B).at(-1)).toEqual({ open: false, saved: [] }));
+  });
+
   it('suggestion', async () => {
     const b = await bridge();
     // a stored grand prix on the track, of 44 laps; then a newer race on another track, of 50
@@ -491,5 +515,143 @@ describe('the planning round (Task 7b, ported from SP4.3d2 Task 10; C62d, C54, C
     await q3(b, 3);
     // the round's laps default to the suggestion, its sets carried (its live end)
     expect((await roundSettles(b)).race).toEqual({ laps: 44, sets: 'carried' });
+  });
+});
+
+// Task 7bfix F1 + R19 (C62d, C54, C70, C3): the bridge remembers each feed's last seat (team, race number) as bridge
+// state, `PITWALL_DATA_DIR/feeds/<feedId>.json`, written when the feed's team becomes known (atomic; a missing or corrupt
+// file reads `undefined`, the latter with a warning). A feed's seat is its running session's seat, else the remembered
+// one; the closed `plans.prepared` is published again when it changes. The morning workflow of spec §1: pitwall opened
+// with no session running lists the team's saved plans, opens a round on `plans.round.open`, renames and deletes.
+// Assumed (open question in the test report): the closed state's track between sessions is the feed's last session's
+// track, remembered with the seat (the topic lists the saved plans "on the feed's track").
+const feedFile = (dataDir: string, feed: FeedId = A): string => join(dataDir, 'feeds', `${feed}.json`);
+
+describe('the feed\'s remembered seat (Task 7bfix F1, R19; C62d, C54, C70)', { timeout: 180_000 }, () => {
+  it('(F1) a bridge started with a remembered seat and no session lists the team\'s saved plans closed and opens a round on plans.round.open', async () => {
+    const dataDir = tmp('data');
+    const first = await bridge({ dataDir });
+    // the weekend's practice and Q3 of the seat (car 0: team 3, race number 1); the feed's seat is remembered once known
+    first.play(sessionPackets({ uid: 69n, type: 1 }));
+    await vi.waitFor(() => expect(existsSync(feedFile(dataDir))).toBe(true));
+    await first.ended(1);
+    await q3(first, 2);
+    await roundSettles(first);
+    expect(await first.send(raceSet(A, 44))).toEqual({ ok: true });
+    expect(await first.send({ kind: 'plans.prepare.accept', feedId: A, carId: 0, slot: 'A', policy: POLICY_A })).toEqual({ ok: true });
+    expect(await first.send({ kind: 'plans.save', feedId: A, name: 'morning' })).toEqual({ ok: true });
+    await vi.waitFor(() => expect(savedFiles(dataDir)).toHaveLength(1));
+    const [saved] = savedFiles(dataDir);
+    await first.stop();
+
+    // the next morning: pitwall opened, no session running
+    const b = await bridge({ dataDir });
+    await vi.waitFor(() => expect(b.prepared().at(-1)).toEqual({ open: false, saved: [{ id: saved!.id, name: 'morning', savedAt: saved!.savedAt }] }));
+
+    // rename while no round is open: the remembered seat's team owns the plan (C73)
+    expect(await b.send({ kind: 'plans.rename', feedId: A, id: saved!.id, name: 'Texas final' })).toEqual({ ok: true });
+    await vi.waitFor(() => expect(savedFiles(dataDir)).toEqual([expect.objectContaining({ id: saved!.id, name: 'Texas final' })]));
+    await vi.waitFor(() => expect(b.prepared().at(-1)).toEqual({ open: false, saved: [expect.objectContaining({ id: saved!.id, name: 'Texas final' })] }));
+
+    // the engineer picks the qualifying and practice to plan on: the round opens for the remembered seat
+    expect(await b.send({ kind: 'plans.round.open', feedId: A, qualifying: ref(70n), practice: [ref(69n)] })).toEqual({ ok: true });
+    const round = await roundSettles(b);
+    expect(round).toMatchObject({
+      qualifying: ref(70n),
+      practice: [ref(69n)],
+      team: TEAM,
+      cars: { 0: { raceNumber: RACE_NUMBER(0) }, 1: { raceNumber: RACE_NUMBER(1) } },
+      saved: [expect.objectContaining({ id: saved!.id, name: 'Texas final' })],
+    });
+    expect(await b.send(raceSet(A, 44))).toEqual({ ok: true });
+    await vi.waitFor(() => expect(b.preview(0).length).toBeGreaterThan(0), { timeout: 60_000 });
+
+    // delete: the plan is gone from the round's list and from disk
+    expect(await b.send({ kind: 'plans.delete', feedId: A, id: saved!.id })).toEqual({ ok: true });
+    await vi.waitFor(() => expect(savedFiles(dataDir)).toEqual([]));
+    await vi.waitFor(() => expect(b.round().saved).toEqual([]));
+  });
+
+  it('(F1) rename and delete with no round open and no session: accepted for the remembered seat\'s team, rejected for another team\'s plan', async () => {
+    const dataDir = tmp('data');
+    const first = await bridge({ dataDir });
+    // a Q3 of team 4's seat (car 2), its plan saved; then a Q3 of team 3's seat (car 0), its plan saved: team 3 is remembered
+    first.play(sessionPackets({ uid: 74n, type: 7, player: 2 }));
+    await first.ended(1);
+    await roundSettles(first);
+    expect(await first.send(raceSet(A, 44))).toEqual({ ok: true });
+    expect(await first.send({ kind: 'plans.save', feedId: A, name: 'team 4' })).toEqual({ ok: true });
+    await vi.waitFor(() => expect(savedFiles(dataDir, 4)).toHaveLength(1));
+    first.play(sessionPackets({ uid: 70n, type: 7, player: 0 }));
+    await first.ended(2);
+    await vi.waitFor(() => expect(first.round()).toMatchObject({ qualifying: ref(70n), team: TEAM, running: false }), { timeout: 60_000 });
+    expect(await first.send(raceSet(A, 44))).toEqual({ ok: true });
+    expect(await first.send({ kind: 'plans.save', feedId: A, name: 'team 3' })).toEqual({ ok: true });
+    await vi.waitFor(() => expect(savedFiles(dataDir)).toHaveLength(1));
+    const [ours] = savedFiles(dataDir);
+    const [theirs] = savedFiles(dataDir, 4);
+    await first.stop();
+
+    const b = await bridge({ dataDir });
+    await vi.waitFor(() => expect(b.prepared().at(-1)).toEqual({ open: false, saved: [expect.objectContaining({ id: ours!.id, name: 'team 3' })] }));
+    // another team's plan: rejected, nothing changed
+    expect(await b.send({ kind: 'plans.rename', feedId: A, id: theirs!.id, name: 'x' })).toMatchObject({ ok: false, reason: 'invalid' });
+    expect(await b.send({ kind: 'plans.delete', feedId: A, id: theirs!.id })).toMatchObject({ ok: false, reason: 'invalid' });
+    expect(savedFiles(dataDir, 4)).toEqual([expect.objectContaining({ id: theirs!.id, name: 'team 4' })]);
+    // the remembered team's plan: accepted
+    expect(await b.send({ kind: 'plans.rename', feedId: A, id: ours!.id, name: 'renamed' })).toEqual({ ok: true });
+    await vi.waitFor(() => expect(savedFiles(dataDir)).toEqual([expect.objectContaining({ id: ours!.id, name: 'renamed' })]));
+    expect(await b.send({ kind: 'plans.delete', feedId: A, id: ours!.id })).toEqual({ ok: true });
+    await vi.waitFor(() => expect(savedFiles(dataDir)).toEqual([]));
+    await vi.waitFor(() => expect(b.prepared().at(-1)).toEqual({ open: false, saved: [] }));
+  });
+
+  it('(F1) a running session\'s seat wins over the remembered one', async () => {
+    const dataDir = tmp('data');
+    const first = await bridge({ dataDir });
+    // team 4's plan saved first (car 2), then team 3's (car 0): team 3 is the remembered seat
+    first.play(sessionPackets({ uid: 74n, type: 7, player: 2 }));
+    await first.ended(1);
+    await roundSettles(first);
+    expect(await first.send(raceSet(A, 44))).toEqual({ ok: true });
+    expect(await first.send({ kind: 'plans.save', feedId: A, name: 'team 4' })).toEqual({ ok: true });
+    await vi.waitFor(() => expect(savedFiles(dataDir, 4)).toHaveLength(1));
+    first.play(sessionPackets({ uid: 70n, type: 7, player: 0 }));
+    await first.ended(2);
+    await vi.waitFor(() => expect(first.round()).toMatchObject({ qualifying: ref(70n), team: TEAM, running: false }), { timeout: 60_000 });
+    expect(await first.send(raceSet(A, 44))).toEqual({ ok: true });
+    expect(await first.send({ kind: 'plans.save', feedId: A, name: 'team 3' })).toEqual({ ok: true });
+    await vi.waitFor(() => expect(savedFiles(dataDir)).toHaveLength(1));
+    const [ours] = savedFiles(dataDir);
+    const [theirs] = savedFiles(dataDir, 4);
+    await first.stop();
+
+    const b = await bridge({ dataDir });
+    await vi.waitFor(() => expect(b.prepared().at(-1)).toEqual({ open: false, saved: [expect.objectContaining({ id: ours!.id })] }));
+    // a race of team 4's seat (car 2) on the track starts and runs (not ended): its seat is the feed's seat now
+    b.play(firstPackets({ uid: 76n, type: 15, player: 2 }));
+    await vi.waitFor(() => expect(b.prepared().at(-1)).toEqual({ open: false, saved: [expect.objectContaining({ id: theirs!.id, name: 'team 4' })] }));
+    // the running seat's team owns the plans now: team 3's plan is no longer the feed's, team 4's is
+    expect(await b.send({ kind: 'plans.rename', feedId: A, id: ours!.id, name: 'x' })).toMatchObject({ ok: false, reason: 'invalid' });
+    expect(await b.send({ kind: 'plans.rename', feedId: A, id: theirs!.id, name: 'team 4 final' })).toEqual({ ok: true });
+    await vi.waitFor(() => expect(savedFiles(dataDir, 4)).toEqual([expect.objectContaining({ id: theirs!.id, name: 'team 4 final' })]));
+    // and the running seat is remembered for the next start
+    await b.stop();
+    const again = await bridge({ dataDir });
+    await vi.waitFor(() => expect(again.prepared().at(-1)).toEqual({ open: false, saved: [expect.objectContaining({ id: theirs!.id, name: 'team 4 final' })] }));
+  });
+
+  it('(F1, C3) a corrupt remembered-seat file reads as none: the bridge starts, lists no plans, opens no round', async () => {
+    const dataDir = tmp('data');
+    mkdirSync(join(dataDir, 'feeds'), { recursive: true });
+    writeFileSync(feedFile(dataDir), '{ not json');
+    const b = await bridge({ dataDir });
+    await vi.waitFor(() => expect(b.prepared().at(-1)).toEqual({ open: false, saved: [] }));
+    expect(await b.send({ kind: 'plans.round.open', feedId: A, qualifying: ref(70n), practice: [] })).toEqual({ ok: true });
+    await new Promise((r) => setTimeout(r, 500));
+    expect(b.prepared().some((v) => v.open)).toBe(false);
+    // a session's team writes the file anew
+    b.play(firstPackets({ uid: 76n, type: 15 }));
+    await vi.waitFor(() => expect(() => JSON.parse(readFileSync(feedFile(dataDir), 'utf8')) as unknown).not.toThrow());
   });
 });

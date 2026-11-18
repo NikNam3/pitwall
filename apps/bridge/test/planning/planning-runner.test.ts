@@ -274,6 +274,37 @@ describe('the planning runner (Task 7b rows a, b; C51, C54, C62d)', { timeout: 1
     expect(r.prepared().at(-1)).toEqual({ open: false, saved: [] });
   });
 
+  it('(F3) save without a team last choice writes only the plan: no basis kind is confirmed by a save (C62)', async () => {
+    const place = newPlace();
+    await storeQualifying(place);
+    const practice = await storePractice(place, 501n, 9001);
+    const r = runnerOf(place);
+    await r.runner.open({ feedId: F, qualifying: QUALIFYING, practice: [practice.ref], race: FRESH_56 });
+    await vi.waitFor(() => expect(r.prepared().at(-1)).toMatchObject({ open: true }), { timeout: 60_000 });
+    expect(r.runner.save(F, { name: 'morning' })).toEqual({ ok: true });
+    const [plan] = new SavedPlanStore(place.dirs.root, silent).list(TEAM, TRACK);
+    const choice = createLastChoiceStore(place.dirs.root, silent).read(TEAM, TRACK);
+    // the team's last saved plan on the track (C62d), and no basis the user never confirmed: neither kind is written
+    expect(choice?.plan).toEqual({ id: plan!.id, at: plan!.savedAt });
+    expect(choice?.basis.practice).toBeUndefined();
+    expect(choice?.basis.qualifying).toBeUndefined();
+  });
+
+  it('(F3) save with a team last choice keeps its basis kinds as they were', async () => {
+    const place = newPlace();
+    await storeQualifying(place);
+    const confirmedAt = '2026-11-18T09:40:00.000Z';
+    const last = createLastChoiceStore(place.dirs.root, silent);
+    last.write(TEAM, { trackId: TRACK, basis: { qualifying: { ref: QUALIFYING, at: confirmedAt } }, plan: { id: null, at: confirmedAt } });
+    const r = runnerOf(place);
+    await r.runner.open({ feedId: F, qualifying: QUALIFYING, practice: [], race: FRESH_56 });
+    await vi.waitFor(() => expect(r.prepared().at(-1)).toMatchObject({ open: true }), { timeout: 60_000 });
+    expect(r.runner.save(F, { name: 'morning' })).toEqual({ ok: true });
+    const choice = last.read(TEAM, TRACK);
+    expect(choice?.basis).toEqual({ qualifying: { ref: QUALIFYING, at: confirmedAt } });
+    expect(choice?.plan.id).toEqual(expect.any(String));
+  });
+
   it('a qualifying the seat has not stored opens no round (C3: no throw)', async () => {
     const place = newPlace();
     const r = runnerOf(place);

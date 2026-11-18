@@ -58,6 +58,20 @@ describe('the last choice store (C62, C70)', () => {
     expect(log.warn).not.toHaveBeenCalled();
   });
 
+  it('(F3) a choice with a plan and no basis kind, or one kind only, round-trips (Task 7bfix)', () => {
+    const dir = dataDir();
+    const log = warnLog();
+    const store = createLastChoiceStore(dir, log);
+    const at = '2026-11-18T09:40:00.000Z';
+    const planOnly: LastChoice = { trackId: AUSTIN, basis: {}, plan: { id: 'texas-morning', at } };
+    const practiceOnly: LastChoice = { trackId: MONZA, basis: { practice: { refs: [{ sessionUid: '100', weekendId: '7' }], at } }, plan: { id: null, at } };
+    store.write(TEAM, planOnly);
+    store.write(TEAM, practiceOnly);
+    expect(createLastChoiceStore(dir, log).read(TEAM, AUSTIN)).toEqual(planOnly);
+    expect(createLastChoiceStore(dir, log).read(TEAM, MONZA)).toEqual(practiceOnly);
+    expect(log.warn).not.toHaveBeenCalled();
+  });
+
   it('a missing file reads undefined', () => {
     const log = warnLog();
     const store = createLastChoiceStore(dataDir(), log);
