@@ -24,7 +24,15 @@ export const basisKey = (basis: SessionBasis): string => {
 };
 
 /** The basis sidecar next to a recording (C62): the sessions the session started with and, for display only, the preselection. */
-export type BasisSidecar = { start: SessionBasis; preselected: SessionBasis };
+/**
+ * The basis sidecar (C59, C62): `start`, `preselected` (display only), and `plans`, each plan choice that reached the
+ * feed by record index (SP4.3e R20; a replay shows the same plan at the same record, C38).
+ */
+export type BasisSidecar = {
+  start: SessionBasis;
+  preselected: SessionBasis;
+  plans?: { at: number; plan: { id: string; name: string; laps: number } | null }[];
+};
 
 /** A planning round's race assumptions (C62d): the race laps and whether its tyre sets carry over from the qualifying. */
 export type RaceAssumptions = { laps: number; sets: 'carried' | 'fresh' };

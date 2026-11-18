@@ -3,7 +3,8 @@ export const USAGE = `usage: pitwall <live|replay|tap|reprocess|import> …
 
   live [--dev]              listen for the game's UDP telemetry, record it and serve the topics
   replay <file> [--realtime] [--paused] [--speed n] [--at-lap n | --at-time ms] [--dev]
-                            serve a .pwrec.gz recording; --realtime keeps the recorded pace
+                            serve a .pwrec.gz recording; its basis is read from the data dir's database,
+                            the replayed session is not stored; --realtime keeps the recorded pace
                             --paused starts paused, --speed sets the playback factor (1 = recorded pace),
                             --at-lap / --at-time jump there before the server reports it is listening
                             --dev publishes per-calculator compute times (dev.calcStats) and the catalogue (dev.catalogue)

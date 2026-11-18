@@ -37,8 +37,11 @@
   /** The race the top bar cases are drawn on, and the feed it is on. */
   const BASE_MOMENT = 'raceSingaporeStart.grid';
   const FEED = feedId('gallery');
-  /** The top bar is one line wide; the overlays are as wide as they are plus a margin. */
-  const TOP_BAR_COLS = 140;
+  /**
+   * The top bar is one line, as wide as its longest case (`basis-laps-differ`: the race, the basis segment with two
+   * practice days, a plan and its laps, the feed and realism); the overlays are as wide as they are plus a margin.
+   */
+  const TOP_BAR_COLS = 160;
   const OVERLAY_MARGIN_COLS = 4;
   const OVERLAY_ROWS = 40;
   /** Wide enough for the longest value the inspector prints. */
