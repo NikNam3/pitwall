@@ -45,6 +45,7 @@
   const prepared = $derived<PlanningRoundState | undefined>(preparedEntry.state.status === 'ok' ? preparedEntry.state.value : undefined);
   const status = $derived<FeedStatus | undefined>(statusEntry.state.status === 'ok' ? statusEntry.state.value : undefined);
   const between = $derived(status?.betweenSessions === true);
+  const team = $derived(store.feeds.find((f) => f.feedId === feedId)?.team ?? null);
 
   const practice = $derived(active === undefined ? [] : sessionOptions(active, 'practice'));
   const qualifying = $derived(active === undefined ? [] : sessionOptions(active, 'qualifying'));
@@ -69,7 +70,7 @@
     if (choice === undefined) return undefined;
     const refs = choice.practice.map(refOf);
     const q = choice.qualifying === null ? null : refOf(choice.qualifying);
-    if (between) return q === null ? undefined : { kind: 'plans.round.open', feedId, qualifying: q, practice: refs };
+    if (between) return q === null || team === null ? undefined : { kind: 'plans.round.open', feedId, qualifying: q, team, practice: refs };
     return { kind: 'basis.choose', feedId, basis: { practice: refs, qualifying: q }, plan: choice.plan };
   });
 

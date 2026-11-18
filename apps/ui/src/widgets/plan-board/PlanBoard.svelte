@@ -199,7 +199,7 @@
       lapsDraft = null;
       return;
     }
-    const outcome = await commands.invoke('plans.race.set', { feedId: link.feedId, race: { laps: Number(typed.trim()), sets: round.race.sets } });
+    const outcome = await commands.invoke('plans.race.set', { feedId: link.feedId, race: { laps: Number(typed.trim()), sets: round.race.sets, conditions: round.race.conditions } });
     if (lapsDraft !== typed) return;
     if (outcome.ok) {
       lapsDraft = null;
@@ -211,7 +211,7 @@
     const laps = round?.race.laps ?? null;
     if (round === undefined || laps === null) return;
     setsRejected = null;
-    const outcome = await commands.invoke('plans.race.set', { feedId: link.feedId, race: { laps, sets } });
+    const outcome = await commands.invoke('plans.race.set', { feedId: link.feedId, race: { laps, sets, conditions: round.race.conditions } });
     setsRejected = outcome.ok ? null : (outcome.message ?? text.rejectedNoReason);
   }
   /** The round's race laps: the bridge's suggestion until entered; `null` while neither is known. */

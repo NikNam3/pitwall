@@ -9,7 +9,7 @@
   const commands = getWidgetCommands();
   let outcome = $state('');
   const laps = async (): Promise<void> => {
-    const result = await commands.invoke('plans.race.set', { feedId: link.feedId, race: { laps: 52, sets: 'carried' } });
+    const result = await commands.invoke('plans.race.set', { feedId: link.feedId, race: { laps: 52, sets: 'carried', conditions: { kind: 'imported' } } });
     outcome = result.ok ? 'ok' : result.reason;
   };
   const undeclared = async (): Promise<void> => {

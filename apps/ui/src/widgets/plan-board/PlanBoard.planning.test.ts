@@ -225,7 +225,7 @@ describe('plan board: the planning controls invoke commands (C72–C74)', () => 
     await fireEvent.input(laps);
     expect(mocks.invoke).not.toHaveBeenCalled();
     await fireEvent.change(laps);
-    expect(mocks.invoke.mock.calls).toEqual([['plans.race.set', { feedId: LINK.feedId, race: { laps: 52, sets: 'carried' } }]]);
+    expect(mocks.invoke.mock.calls).toEqual([['plans.race.set', { feedId: LINK.feedId, race: { laps: 52, sets: 'carried', conditions: { kind: 'imported' } } }]]);
     expect(sent).toEqual([]);
   });
 

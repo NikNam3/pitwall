@@ -5,7 +5,7 @@
 // from it as gen.mjs does; ΔPOS (`diffPlan`, positive = good for us, R31), ΔTIME (`deltaPlanMs`), the ranks and
 // `bestPerStops` are written as `strategy` fills them (Task 5). The display computes none of it (C65).
 import type { Computed, MachineSpans, PlanningRoundState } from '@pitwall/contracts';
-import { carId, known, toSessionTime, unknown } from '@pitwall/domain';
+import { carId, IMPORTED, known, toSessionTime, unknown } from '@pitwall/domain';
 import type { McRow, McSource, NoiseCompound, Policy, SessionRef, Slot, StrategyCar } from '@pitwall/domain';
 import type { GalleryEntry } from '../../kit/gallery-types.ts';
 import type { widget } from './widget.ts';
@@ -211,8 +211,13 @@ export function round(spec: RoundSpec = {}): PlanningRoundState {
     open: true,
     qualifying: QUALIFYING,
     practice: [],
-    race: { laps: entered, sets: 'carried' },
+    race: { laps: entered, sets: 'carried', conditions: IMPORTED },
     team: TEAM,
+    trackId: 0,
+    playerCar: KUH,
+    teammateCar: null,
+    forecast: { source: { ref: QUALIFYING, startedAt: '2026-01-01T00:00:00Z' }, rows: unknown('notReceived') },
+    rebuilding: false,
     cars: { [KUH]: { raceNumber: KUH_NUMBER, slots, active } },
     running,
     saved: [],

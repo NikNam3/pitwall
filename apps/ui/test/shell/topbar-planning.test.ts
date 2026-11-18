@@ -5,7 +5,7 @@
 //  - while `feed.status.betweenSessions` the feed segment reads `text.topBar.feedBetweenSessions` in `textFaint`
 //    (not stale, not amber), unless the feed is down.
 import type { FeedStatus, MachineSpans, PlanningRoundState } from '@pitwall/contracts';
-import { feedId, type OpenSpan } from '@pitwall/domain';
+import { carId, feedId, unknown, type OpenSpan } from '@pitwall/domain';
 import { cleanup, render, screen } from '@testing-library/svelte';
 import { tick } from 'svelte';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -24,8 +24,13 @@ const OPEN: PlanningRoundState = {
   open: true,
   qualifying: { sessionUid: '1', weekendId: 'w1' },
   practice: [],
-  race: { laps: null, sets: 'carried' },
+  race: { laps: null, sets: 'carried', conditions: { kind: 'imported' } },
   team: 0,
+  trackId: 0,
+  playerCar: carId(0),
+  teammateCar: null,
+  forecast: { source: { ref: { sessionUid: '1', weekendId: 'w1' }, startedAt: '2026-01-01T00:00:00Z' }, rows: unknown('notReceived') },
+  rebuilding: false,
   cars: {},
   running: false,
   saved: [],

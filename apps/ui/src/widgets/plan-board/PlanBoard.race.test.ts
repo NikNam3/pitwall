@@ -11,7 +11,7 @@
 // `plans.race.set` must be a widget command (`kit/command-types.ts`, requested of the supervisor) the declaration lists
 // (`widget.ts` `commands`, C74); the stubbed panel throws on an undeclared id. Fails until then.
 import type { ActionOutcome, PlanningRoundState, UiAction } from '@pitwall/contracts';
-import { feedId } from '@pitwall/domain';
+import { carId, feedId, IMPORTED, unknown } from '@pitwall/domain';
 import { cleanup, fireEvent, render } from '@testing-library/svelte';
 import type { Component } from 'svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -49,8 +49,13 @@ const ROUND: PlanningRoundState = {
   open: true,
   qualifying: { sessionUid: '12101553556244014932', weekendId: '548397152' },
   practice: [],
-  race: { laps: 56, sets: 'fresh' },
+  race: { laps: 56, sets: 'fresh', conditions: IMPORTED },
   team: TEAM,
+  trackId: 0,
+  playerCar: carId(0),
+  teammateCar: null,
+  forecast: { source: { ref: { sessionUid: '12101553556244014932', weekendId: '548397152' }, startedAt: '2026-01-01T00:00:00Z' }, rows: unknown('notReceived') },
+  rebuilding: false,
   cars: { [KUH]: { raceNumber: KUH_NUMBER, slots: {}, active: null } },
   running: false,
   saved: [],
@@ -98,7 +103,7 @@ describe('plan board: the race assumptions (plans.race.set)', () => {
     await fireEvent.input(laps);
     expect(mocks.invoke).not.toHaveBeenCalled();
     await fireEvent.change(laps);
-    expect(mocks.invoke.mock.calls).toEqual([['plans.race.set', { feedId: LINK.feedId, race: { laps: 20, sets: 'fresh' } }]]);
+    expect(mocks.invoke.mock.calls).toEqual([['plans.race.set', { feedId: LINK.feedId, race: { laps: 20, sets: 'fresh', conditions: IMPORTED } }]]);
     expect(sent).toEqual([]);
   });
 
@@ -107,7 +112,7 @@ describe('plan board: the race assumptions (plans.race.set)', () => {
     const sets = get(c, 'sets') as HTMLSelectElement;
     sets.value = 'carried';
     await fireEvent.change(sets);
-    expect(mocks.invoke.mock.calls).toEqual([['plans.race.set', { feedId: LINK.feedId, race: { laps: 56, sets: 'carried' } }]]);
+    expect(mocks.invoke.mock.calls).toEqual([['plans.race.set', { feedId: LINK.feedId, race: { laps: 56, sets: 'carried', conditions: IMPORTED } }]]);
   });
 
   it('a rejected laps value: the field amber with the bridge\'s message on hover', async () => {

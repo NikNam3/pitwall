@@ -7,7 +7,7 @@
 // list (SP4.3d spec §5.1): the TRG column, its trigger lines and the rival's race number (`cars.overview`) are deleted
 // with the triggers (SP4.3d1 Task 3).
 import type { Computed, PlanningRoundState } from '@pitwall/contracts';
-import { carId, known, toSessionTime, unknown } from '@pitwall/domain';
+import { carId, IMPORTED, known, toSessionTime, unknown } from '@pitwall/domain';
 import type { McRow, McSource, NoiseCompound, Policy, Slot, StrategyCar } from '@pitwall/domain';
 import type { GalleryEntry } from '../../kit/gallery-types.ts';
 import type { widget } from './widget.ts';
@@ -194,8 +194,13 @@ export const ROUND: PlanningRoundState = {
   open: true,
   qualifying: { sessionUid: '7001', weekendId: 'spa-2026' },
   practice: [],
-  race: { laps: 44, sets: 'carried' },
+  race: { laps: 44, sets: 'carried', conditions: IMPORTED },
   team: 0,
+  trackId: 0,
+  playerCar: KUH,
+  teammateCar: null,
+  forecast: { source: { ref: { sessionUid: '7001', weekendId: 'spa-2026' }, startedAt: '2026-01-01T00:00:00Z' }, rows: unknown('notReceived') },
+  rebuilding: false,
   cars: { [KUH]: { raceNumber: 12, slots: {}, active: null } },
   running: false,
   saved: [],

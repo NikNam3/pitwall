@@ -14,7 +14,7 @@
 //  - the draft starts at the basis in use (`basis.active.basis`) and its plan, is window-local (C73) and sends nothing
 //    until `<button data-testid="basis-confirm">`; Confirm sends exactly one uiAction: in a session `basis.choose
 //    { feedId, basis, plan }` (plan an id or `null` for none), between sessions (`feed.status.betweenSessions`)
-//    `plans.round.open { feedId, qualifying, practice }`, disabled while the qualifying is none;
+//    `plans.round.open { feedId, qualifying, team, practice }`, disabled while the qualifying is none;
 //  - an ok outcome closes the picker; a rejection keeps it open with the bridge's message in `[data-testid="basis-error"]`;
 //  - while `basis.active.rebuilding` is set, `[data-testid="basis-progress"]` reads `rebuilding 1 / 3`;
 //  - an option the team's last confirmed choice names (`basis.active.lastChoice`) carries the mark `last choice`;
@@ -72,7 +72,7 @@ const status = (betweenSessions: boolean): FeedStatus => ({
 
 const mount = async (feed = true) => {
   const ctx = makeStore();
-  ctx.connection.push({ type: 'hello', contractVersion: 0, feeds: [{ feedId: FEED, kind: 'udp', label: 'x', team: null }] });
+  ctx.connection.push({ type: 'hello', contractVersion: 0, feeds: [{ feedId: FEED, kind: 'udp', label: 'x', team: 5 }] });
   render(WindowShell, { store: ctx.store, host: ctx.host, widgets: TEST_WIDGETS, ...(feed && { defaultFeed: FEED }) });
   await ctx.push('ui.workbooks', { names: ['race'], active: workbook(16) });
   await ctx.push('ui.linkGroups', [group1()]);
@@ -249,7 +249,7 @@ describe('Confirm', () => {
     await fireEvent.click(input(root, `practice-${keyOf(P17)}`));
     await fireEvent.click(confirm(root));
     await tick();
-    expect(t.sent().map((s) => s.action)).toEqual([{ kind: 'plans.round.open', feedId: FEED, qualifying: Q17, practice: [P16] }]);
+    expect(t.sent().map((s) => s.action)).toEqual([{ kind: 'plans.round.open', feedId: FEED, qualifying: Q17, team: 5, practice: [P16] }]);
   });
 
   it('between sessions without a qualifying: Confirm is disabled and sends nothing', async () => {
