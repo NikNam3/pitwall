@@ -17,7 +17,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import WebSocket from 'ws';
 import type { BasisActive, PlanningRoundState, ServerMessage } from '@pitwall/contracts';
-import { feedId, type SavedPlan, type SessionBasis, type StrategyOutput } from '@pitwall/domain';
+import { feedId, IMPORTED, type SavedPlan, type SessionBasis, type StrategyOutput } from '@pitwall/domain';
 import type { StrategyInput } from '@pitwall/analysis';
 import type { Job } from '@pitwall/engine/readers';
 import { ScenarioBuilder, packetBytes } from '../../../../packages/engine/test/builders/index.ts';
@@ -178,8 +178,8 @@ async function bridge(dataDir: string) {
 
 type Bridge = Awaited<ReturnType<typeof bridge>>;
 
-const raceSet = (laps: number) => ({ kind: 'plans.race.set', feedId: A, race: { laps, sets: 'carried' } });
-const roundOpen = { kind: 'plans.round.open', feedId: A, qualifying: ref(QUALIFYING), practice: [ref(PRACTICE)] };
+const raceSet = (laps: number) => ({ kind: 'plans.race.set', feedId: A, race: { laps, sets: 'carried', conditions: IMPORTED } });
+const roundOpen = { kind: 'plans.round.open', feedId: A, team: TEAM, qualifying: ref(QUALIFYING), practice: [ref(PRACTICE)] };
 
 /** Waits until feed A's round is open with its job done. */
 const roundSettles = (b: Bridge): Promise<void> =>

@@ -10,7 +10,7 @@
 // Without known race laps no replay and no job runs (C3). The newest run wins; a closed round's result is never published.
 import { randomUUID } from 'node:crypto';
 import type { ActionOutcome, Computed, PlanningRoundState, RoundRace, SavedPlanEntry, UiAction } from '@pitwall/contracts';
-import { type CarId, type CarKey, type FeedId, type Policy, type PreparedCar, type SavedPlan, type SessionRef, type Slot, type StrategyCar, type StrategyOutput, type TeamId, type TrackId } from '@pitwall/domain';
+import { type CarId, type CarKey, type FeedId, type Policy, type PreparedCar, type SavedPlan, type SessionRef, type Slot, type StrategyCar, type StrategyOutput, type TeamId, type TrackId, unknown } from '@pitwall/domain';
 import type { StrategyInput } from '@pitwall/analysis';
 import type { Job } from '@pitwall/engine/readers';
 import { selectCar } from '../features/feature.ts';
@@ -58,6 +58,10 @@ type Round = {
   race: RoundRace;
   team: TeamId;
   trackId: TrackId;
+  playerCar: CarId;
+  teammateCar: CarId | null;
+  /** The stored qualifying's start (ISO). */
+  startedAt: string;
   /** Our cars by slot of the qualifying, each with its prepared plans (by race number, C62). */
   cars: Map<CarId, PreparedCar>;
   input: StrategyInput | undefined;
@@ -123,6 +127,11 @@ export function createPlanningRunner(o: PlanningRunnerOptions): PlanningRunner {
     practice: round.practice,
     race: round.race,
     team: round.team,
+    trackId: round.trackId,
+    playerCar: round.playerCar,
+    teammateCar: round.teammateCar,
+    forecast: { source: { ref: round.qualifying, startedAt: round.startedAt }, rows: unknown('notReceived') },
+    rebuilding: false,
     cars: Object.fromEntries(round.cars),
     running: round.replaying || round.running,
     saved: savedOf(round.team, round.trackId),
@@ -287,6 +296,9 @@ export function createPlanningRunner(o: PlanningRunnerOptions): PlanningRunner {
         race: { ...spec.race },
         team: seat.teamId,
         trackId: row.trackId,
+        playerCar: row.playerCar,
+        teammateCar: row.teammateCar,
+        startedAt: row.startedAt,
         cars,
         input: undefined,
         generation: 0,
@@ -353,7 +365,7 @@ export function createPlanningRunner(o: PlanningRunnerOptions): PlanningRunner {
         team: round.team,
         trackId: round.trackId,
         savedAt,
-        computedOn: { basis: { practice: round.practice, qualifying: round.qualifying }, race: { laps, sets } },
+        computedOn: { basis: { practice: round.practice, qualifying: round.qualifying }, race: { laps, sets, conditions: round.race.conditions }, forecast: [], profiles: null },
         cars: [...round.cars.values()].map((car) => structuredClone(car)),
       };
       o.store.save(plan);

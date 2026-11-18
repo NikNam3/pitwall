@@ -4,7 +4,7 @@
 // stays `unknown('insufficientData')`; the grid start built on it is `unknown('insufficientData')`, no throw.
 //
 // Rows (plan Task 6 Step 1): 1 no basis, 2 grid start, 3 no qualifying evidence.
-import { carId, unknown, type CarId, type WeekendPace } from '@pitwall/domain';
+import { carId, IMPORTED, unknown, type CarId, type WeekendPace } from '@pitwall/domain';
 import { asOfNow, type CalculatorId } from '@pitwall/engine/readers';
 import { describe, expect, it } from 'vitest';
 import { DEGRADATION, WEEKEND_PACE, WEEKEND_PACE_CONFIG } from '../../src/index.ts';
@@ -40,7 +40,7 @@ describe('weekend-pace without a basis (SP4.3e Task 6)', () => {
       [WEEKEND_PACE, pace],
     ]);
     const grid = Array.from({ length: CARS }, (_, k) => carId(k));
-    const build = () => buildGridStart(asOfNow(view), outputs, { laps: 30, grid, fittedCompound: (_: CarId) => unknown('notApplicable'), race: { laps: 30, sets: 'carried' } });
+    const build = () => buildGridStart(asOfNow(view), outputs, { laps: 30, grid, fittedCompound: (_: CarId) => unknown('notApplicable'), race: { laps: 30, sets: 'carried', conditions: IMPORTED } });
     expect(build).not.toThrow();
     expect(build()).toEqual(INSUFFICIENT);
   });

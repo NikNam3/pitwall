@@ -12,7 +12,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { Policy, SavedPlan } from '@pitwall/domain';
+import { IMPORTED, type Policy, type SavedPlan } from '@pitwall/domain';
 import { SavedPlanStore } from '../../src/planning/saved-plans.ts';
 
 const MERCEDES = 0;
@@ -42,7 +42,9 @@ const plan = (o: Partial<SavedPlan> & Pick<SavedPlan, 'id'>): SavedPlan => ({
   savedAt: '2026-11-18T09:40:00.000Z',
   computedOn: {
     basis: { practice: [{ sessionUid: '100', weekendId: '7' }], qualifying: { sessionUid: '102', weekendId: '7' } },
-    race: { laps: 56, sets: 'fresh' },
+    race: { laps: 56, sets: 'fresh', conditions: IMPORTED },
+    forecast: [],
+    profiles: null,
   },
   cars: [
     { raceNumber: 64, slots: { A: POLICY_A, B: POLICY_B }, active: 'B' },
@@ -65,7 +67,9 @@ describe('the saved plans (Task 7b row c; C62d, C70)', () => {
     expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual(morning);
     expect((JSON.parse(readFileSync(file, 'utf8')) as SavedPlan).computedOn).toEqual({
       basis: { practice: [{ sessionUid: '100', weekendId: '7' }], qualifying: { sessionUid: '102', weekendId: '7' } },
-      race: { laps: 56, sets: 'fresh' },
+      race: { laps: 56, sets: 'fresh', conditions: IMPORTED },
+    forecast: [],
+    profiles: null,
     });
     // atomic: no temp file left behind
     expect(readdirSync(join(dir, 'plans', String(MERCEDES)))).toEqual(['texas-morning.json']);

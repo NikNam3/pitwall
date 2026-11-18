@@ -26,7 +26,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import WebSocket from 'ws';
 import type { BasisActive, PlanningRoundState, ServerMessage } from '@pitwall/contracts';
 import {
-  activeSlot, carId, feedId, latestPlan, NO_BASIS, PLAN_SLOTS, planSlots,
+  activeSlot, carId, feedId, IMPORTED, latestPlan, NO_BASIS, PLAN_SLOTS, planSlots,
   type DecisionRecord, type FeedId, type GivenDecision, type Policy, type PreparedCar, type SavedPlan, type Slot, type StrategyOutput, type VoidFact,
 } from '@pitwall/domain';
 import type { QuickCalculator } from '@pitwall/engine';
@@ -155,7 +155,7 @@ const savedPlan = (id: string, cars: PreparedCar[]): SavedPlan => ({
   team: TEAM,
   trackId: TRACK,
   savedAt: AT,
-  computedOn: { basis: NO_BASIS, race: { laps: RACE_LAPS, sets: 'carried' } },
+  computedOn: { basis: NO_BASIS, race: { laps: RACE_LAPS, sets: 'carried', conditions: IMPORTED }, forecast: [], profiles: null },
   cars,
 });
 
@@ -825,8 +825,8 @@ describe('choosing a saved plan in a race (Task 7b row e, ported from SP4.3d2 Ta
     await vi.waitFor(() => expect(b.prepared().at(-1)).toMatchObject({ open: true, running: false }), { timeout: 60_000 });
     const [ours, prepared] = Object.entries(b.round().cars)[0]!;
     // no stored race suggests the laps: the engineer enters them before the round plans (ruling R16)
-    expect(await b.send({ kind: 'plans.race.set', feedId: A, race: { laps: 56, sets: 'carried' } })).toEqual({ ok: true });
-    await vi.waitFor(() => expect(b.round().race).toEqual({ laps: 56, sets: 'carried' }));
+    expect(await b.send({ kind: 'plans.race.set', feedId: A, race: { laps: 56, sets: 'carried', conditions: IMPORTED } })).toEqual({ ok: true });
+    await vi.waitFor(() => expect(b.round().race).toEqual({ laps: 56, sets: 'carried', conditions: IMPORTED }));
     expect(await b.send({ kind: 'plans.prepare.accept', feedId: A, carId: Number(ours), slot: 'A', policy: POLICY_A })).toEqual({ ok: true });
     expect(await b.send({ kind: 'plans.save', feedId: A, name: 'Texas' })).toEqual({ ok: true });
     await vi.waitFor(() => expect(b.round().saved).toHaveLength(1));
@@ -905,7 +905,7 @@ describe('basis.active shows the chosen plan (Task 7e; C1a, C54, C55, C62d)', { 
   const planOf = (id: string, name: string): SavedPlan => ({
     ...savedPlan(id, PREPARED.cars),
     name,
-    computedOn: { basis: NO_BASIS, race: { laps: PLAN_LAPS, sets: 'carried' } },
+    computedOn: { basis: NO_BASIS, race: { laps: PLAN_LAPS, sets: 'carried', conditions: IMPORTED }, forecast: [], profiles: null },
   });
   const P = planOf('p', 'Texas morning');
   const Q = planOf('q', 'Texas evening');
@@ -1067,8 +1067,8 @@ describe('basis.active shows the chosen plan (Task 7e; C1a, C54, C55, C62d)', { 
     await b.ended(1);
     await vi.waitFor(() => expect(b.prepared(B).at(-1)).toMatchObject({ open: true }), { timeout: 60_000 });
     const OVERWRITE_LAPS = 44;
-    expect(await b.send({ kind: 'plans.race.set', feedId: B, race: { laps: OVERWRITE_LAPS, sets: 'carried' } })).toEqual({ ok: true });
-    await vi.waitFor(() => expect(b.round(B)).toMatchObject({ race: { laps: OVERWRITE_LAPS, sets: 'carried' }, running: false }), { timeout: 60_000 });
+    expect(await b.send({ kind: 'plans.race.set', feedId: B, race: { laps: OVERWRITE_LAPS, sets: 'carried', conditions: IMPORTED } })).toEqual({ ok: true });
+    await vi.waitFor(() => expect(b.round(B)).toMatchObject({ race: { laps: OVERWRITE_LAPS, sets: 'carried', conditions: IMPORTED }, running: false }), { timeout: 60_000 });
 
     // the race on feed A commits Q, the team's last choice
     choosePlan(b.dataDir, Q);

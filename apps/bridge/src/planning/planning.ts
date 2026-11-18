@@ -4,7 +4,7 @@
 // 'carried' }` (laps unknown without a suggestion, C3); the feed's next session start closes it. At a live race's start
 // it hands the pipeline the team's last chosen or saved plan on the track as plan decisions (`planDecisionsOf`).
 import type { ActionOutcome, UiAction } from '@pitwall/contracts';
-import { endsQualifying, raceFormatOf, type CarKey, type FeedId, type Known, type RaceFormat, type SessionRef, type TrackId } from '@pitwall/domain';
+import { endsQualifying, IMPORTED, raceFormatOf, type CarKey, type FeedId, type Known, type RaceFormat, type SessionRef, type TrackId } from '@pitwall/domain';
 import type { Logger } from '../log.ts';
 import type { EndedSession, PlanningHooks, PlanTarget, RaceStartPlan } from '../pipeline/feed-pipeline.ts';
 import type { LastChoiceStore } from '../pipeline/last-choice-types.ts';
@@ -99,7 +99,7 @@ export class Planning implements PlanningHooks {
       feedId,
       qualifying: { sessionUid: ended.key.sessionUid, weekendId: ended.key.weekendId },
       practice: ended.basis?.practice ?? [],
-      race: { laps: suggested.known ? suggested.value : null, sets: 'carried' as const },
+      race: { laps: suggested.known ? suggested.value : null, sets: 'carried' as const, conditions: IMPORTED },
     };
     const starts = this.#starts.get(feedId) ?? 0;
     void ended.closed
@@ -148,7 +148,7 @@ export class Planning implements PlanningHooks {
     switch (action.kind) {
       case 'plans.round.open':
         this.#confirmBasis(action.feedId, action.qualifying, action.practice);
-        void runner.open({ feedId: action.feedId, qualifying: action.qualifying, practice: action.practice, race: { laps: runner.laps(action.feedId) ?? null, sets: 'fresh' } })
+        void runner.open({ feedId: action.feedId, qualifying: action.qualifying, practice: action.practice, race: action.race ?? { laps: runner.laps(action.feedId) ?? null, sets: 'fresh', conditions: IMPORTED } })
           .catch((error: unknown) => this.#o.log.error({ feedId: action.feedId, err: error }, 'planning round not opened'));
         return { ok: true };
       case 'plans.race.set':

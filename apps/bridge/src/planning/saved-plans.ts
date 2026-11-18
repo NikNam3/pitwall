@@ -5,7 +5,7 @@
 import { existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { decodeUiAction } from '@pitwall/contracts';
-import { PLAN_SLOTS, type Policy, type PreparedCar, type RaceAssumptions, type SavedPlan, type SessionBasis, type SessionRef, type Slot, type TeamId, type TrackId } from '@pitwall/domain';
+import { IMPORTED, PLAN_SLOTS, type Policy, type PreparedCar, type RaceAssumptions, type SavedPlan, type SessionBasis, type SessionRef, type Slot, type TeamId, type TrackId } from '@pitwall/domain';
 import type { Logger } from '../log.ts';
 import { parseJson, readText, writeAtomic } from '../ui-state/ui-files.ts';
 
@@ -55,7 +55,7 @@ function raceOf(raw: unknown): RaceAssumptions | undefined {
   if (!isObject(raw)) return undefined;
   const { laps, sets } = raw;
   if (!Number.isInteger(laps) || (laps as number) < 1 || (laps as number) > MAX_RACE_LAPS) return undefined;
-  return sets === 'carried' || sets === 'fresh' ? { laps: laps as number, sets } : undefined;
+  return sets === 'carried' || sets === 'fresh' ? { laps: laps as number, sets, conditions: IMPORTED } : undefined;
 }
 
 /** The file's `SavedPlan`, `undefined` when it is none (C3). */
@@ -72,7 +72,7 @@ function savedPlanOf(raw: unknown): SavedPlan | undefined {
     team: raw.team as TeamId,
     trackId: raw.trackId as TrackId,
     savedAt: raw.savedAt,
-    computedOn: { basis, race },
+    computedOn: { basis, race, forecast: [], profiles: null },
     cars: cars as PreparedCar[],
   };
 }

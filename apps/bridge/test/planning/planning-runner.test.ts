@@ -28,7 +28,7 @@ import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Computed, PlanningRoundState, ServerMessage, TopicName } from '@pitwall/contracts';
-import { feedId, type BasisSidecar, type CarKey, type FeedId, type RaceAssumptions, type SessionRef, type StrategyCar, type StrategyOutput } from '@pitwall/domain';
+import { carId, feedId, IMPORTED, unknown, type BasisSidecar, type CarKey, type FeedId, type RaceAssumptions, type SessionRef, type StrategyCar, type StrategyOutput } from '@pitwall/domain';
 import type { StrategyInput } from '@pitwall/analysis';
 import type { Job } from '@pitwall/engine/readers';
 import { processRecording } from '../../src/cli/process-recording.ts';
@@ -175,7 +175,7 @@ function runnerOf(place: { dirs: DataDir; db: Db }, o: { planningJob?: Job<Strat
   return { runner, calls, replays, prepared, preview, advance };
 }
 
-const FRESH_56: RaceAssumptions = { laps: 56, sets: 'fresh' };
+const FRESH_56: RaceAssumptions = { laps: 56, sets: 'fresh', conditions: IMPORTED };
 
 describe('the planning runner (Task 7b rows a, b; C51, C54, C62d)', { timeout: 180_000 }, () => {
   it('(a) open on a qualifying segment with race { laps: 56, sets: fresh } publishes plans.preview for both our cars; the replay ran through replayToEnd with priority planning', async () => {
@@ -193,12 +193,18 @@ describe('the planning runner (Task 7b rows a, b; C51, C54, C62d)', { timeout: 1
     }
     // the round's state (C54): the qualifying, its practice basis, the race assumptions, our cars by slot with their race numbers
     await vi.waitFor(() => expect(r.prepared().at(-1)).toMatchObject({ open: true, running: false }));
+    const stored = place.db.prepare('SELECT player_car, teammate_car, started_at FROM sessions WHERE session_uid = ?').get(QUALIFYING.sessionUid) as { player_car: number; teammate_car: number | null; started_at: string };
     expect(r.prepared().at(-1)).toEqual<PlanningRoundState>({
       open: true,
       qualifying: QUALIFYING,
       practice: [],
       race: FRESH_56,
       team: TEAM,
+      trackId: TRACK,
+      playerCar: carId(stored.player_car),
+      teammateCar: stored.teammate_car === null ? null : carId(stored.teammate_car),
+      forecast: { source: { ref: QUALIFYING, startedAt: stored.started_at }, rows: unknown('notReceived') },
+      rebuilding: false,
       cars: {
         1: { raceNumber: 2, slots: {}, active: null },
         0: { raceNumber: 64, slots: {}, active: null },
@@ -237,7 +243,7 @@ describe('the planning runner (Task 7b rows a, b; C51, C54, C62d)', { timeout: 1
     const place = newPlace();
     const qualifying = await storeQualifying(place);
     const r = runnerOf(place);
-    await r.runner.open({ feedId: F, qualifying: QUALIFYING, practice: [], race: { laps: 56, sets: 'carried' } });
+    await r.runner.open({ feedId: F, qualifying: QUALIFYING, practice: [], race: { laps: 56, sets: 'carried', conditions: IMPORTED } });
     await vi.waitFor(() => expect(r.preview(1).length).toBeGreaterThan(0), { timeout: 60_000 });
     const before = r.preview(1).length;
 

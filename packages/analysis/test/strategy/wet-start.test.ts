@@ -13,7 +13,7 @@
 //   dry case that differs from the unfiltered least-time plan's start compound, so the two tables differ.
 // - The planning-run rows use `./planning-support.ts`' qualifying view with a dry race forecast, inter and wet sets in
 //   hand, and `forecast-field`'s inter and wet dry offsets overridden (C47) to make them the cheapest.
-import { known, NOISE_COMPOUNDS, type CarId, type ForecastSample, type NoiseCompound, type Policy, type StartingPoint, type StrategyOutput, type TyreSet } from '@pitwall/domain';
+import { IMPORTED, known, NOISE_COMPOUNDS, type CarId, type ForecastSample, type NoiseCompound, type Policy, type StartingPoint, type StrategyOutput, type TyreSet } from '@pitwall/domain';
 import { createRng, type AsOfView } from '@pitwall/engine/readers';
 import { describe, expect, it } from 'vitest';
 import { planningInputFrom, reactionOf, toDpInput } from '../../src/shared/strategy-input/index.ts';
@@ -130,7 +130,7 @@ const DRY_QUALIFYING = once((): AsOfView => {
   const config = { ...asOf.config, 'forecast-field': { ...asOf.config['forecast-field'], interOffsetMs: -1_500, wetOffsetMs: -1_200 } } as AsOfView['config'];
   return { ...asOf, config };
 });
-const DRY_INPUT = once((): StrategyInput => planningInputFrom(DRY_QUALIFYING(), { laps: PLANNING_LAPS, race: { laps: PLANNING_LAPS, sets: 'carried' }, prepared: NO_PLANS(OURS) }));
+const DRY_INPUT = once((): StrategyInput => planningInputFrom(DRY_QUALIFYING(), { laps: PLANNING_LAPS, race: { laps: PLANNING_LAPS, sets: 'carried', conditions: IMPORTED }, prepared: NO_PLANS(OURS) }));
 
 type CarRows = Extract<StrategyOutput[CarId], { known: true }>['value'];
 function entryOf(out: StrategyOutput, car: CarId): CarRows {

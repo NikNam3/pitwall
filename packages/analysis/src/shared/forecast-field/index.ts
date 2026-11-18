@@ -57,7 +57,7 @@ import { tyreModelAsOf, tyreModelCalculator } from '../../tyre-model/calculator.
 import { TYRE_MODEL } from '../../tyre-model/id.ts';
 import { worstWearRate } from '../../tyre-model/index.ts';
 import { WEEKEND_PACE, weekendPaceAsOf, weekendPaceCalculator } from '../../weekend-pace/index.ts';
-import { ourCars } from '@pitwall/domain';
+import { IMPORTED, ourCars } from '@pitwall/domain';
 import { startLapOf } from '../../race-forecast/index.ts';
 import { configOf } from '../config-of.ts';
 import { burnPerLapKg, planBurnKgPerLap } from '../fuel-burn.ts';
@@ -157,7 +157,7 @@ export function buildStartingPoint(view: AsOfView, outputs: ReadonlyMap<Calculat
     const grid = Array.from(order).filter((k) => retired[k] === 0) as CarId[];
     const fittedCompound = (car: CarId): Known<NoiseCompound> => (tyreModel[car]?.fittedCompound as Known<NoiseCompound> | undefined) ?? unknown('notReceived');
     const laps = fixed.totalLaps.value;
-    return buildGridStart(view, outputs, { laps, grid, fittedCompound, race: { laps, sets: 'carried' } });
+    return buildGridStart(view, outputs, { laps, grid, fittedCompound, race: { laps, sets: 'carried', conditions: IMPORTED } });
   }
 
   const laps = view.history.laps as readonly LapRecord[];

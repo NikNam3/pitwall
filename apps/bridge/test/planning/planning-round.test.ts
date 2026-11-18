@@ -25,7 +25,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import WebSocket from 'ws';
 import type { Computed, PlanningRoundState, ServerMessage } from '@pitwall/contracts';
-import { feedId, type CarId, type FeedId, type Policy, type SavedPlan, type StrategyCar, type StrategyOutput } from '@pitwall/domain';
+import { feedId, IMPORTED, type CarId, type FeedId, type Policy, type SavedPlan, type StrategyCar, type StrategyOutput } from '@pitwall/domain';
 import type { StrategyInput } from '@pitwall/analysis';
 import type { Job } from '@pitwall/engine/readers';
 import { ScenarioBuilder, packetBytes } from '../../../../packages/engine/test/builders/index.ts';
@@ -214,7 +214,7 @@ const roundSettles = async (b: Bridge, feed: FeedId = A): Promise<Open> => {
 const POLICY_A: Policy = { startCompound: 'medium', stops: [{ lap: 20, compound: 'hard' }] };
 const POLICY_B: Policy = { startCompound: 'soft', stops: [{ lap: 12, compound: 'medium' }, { lap: 30, compound: 'hard' }] };
 const save = (feed: FeedId, c: number, slot: string, policy: Policy) => ({ kind: 'plans.prepare.save', feedId: feed, carId: c, slot, policy });
-const raceSet = (feed: FeedId, laps: number, sets: 'carried' | 'fresh' = 'carried') => ({ kind: 'plans.race.set', feedId: feed, race: { laps, sets } });
+const raceSet = (feed: FeedId, laps: number, sets: 'carried' | 'fresh' = 'carried') => ({ kind: 'plans.race.set', feedId: feed, race: { laps, sets, conditions: IMPORTED } });
 
 /** The rows of the newest preview of `feed`'s car `c` (known). */
 const rowsOf = (b: Bridge, c: number, feed: FeedId = A) => {
@@ -319,7 +319,7 @@ describe('the planning round (Task 7b, ported from SP4.3d2 Task 10; C62d, C54, C
     // the race assumptions re-run the job (C73: one uiAction, validated)
     const before = b.preview(0).length;
     expect(await b.send(raceSet(A, 44, 'fresh'))).toEqual({ ok: true });
-    await vi.waitFor(() => expect(b.round().race).toEqual({ laps: 44, sets: 'fresh' }));
+    await vi.waitFor(() => expect(b.round().race).toEqual({ laps: 44, sets: 'fresh', conditions: IMPORTED }));
     await vi.waitFor(() => expect(b.preview(0).length).toBeGreaterThan(before), { timeout: 60_000 });
 
     // a slot save re-runs it: the preview's rows carry the saved slot
@@ -336,7 +336,7 @@ describe('the planning round (Task 7b, ported from SP4.3d2 Task 10; C62d, C54, C
     await q3(b);
     await roundSettles(b);
     expect(await b.send(raceSet(A, 44))).toEqual({ ok: true });
-    await vi.waitFor(() => expect(b.round().race).toEqual({ laps: 44, sets: 'carried' }));
+    await vi.waitFor(() => expect(b.round().race).toEqual({ laps: 44, sets: 'carried', conditions: IMPORTED }));
     await vi.waitFor(() => expect(b.round().running).toBe(false), { timeout: 60_000 });
     const rejected = async (action: Record<string, unknown>): Promise<void> => {
       const round = b.round();
@@ -352,7 +352,7 @@ describe('the planning round (Task 7b, ported from SP4.3d2 Task 10; C62d, C54, C
     await rejected(raceSet(A, 0));
     await rejected(raceSet(A, 101));
     await rejected(raceSet(A, 44.5));
-    await rejected({ kind: 'plans.race.set', feedId: A, race: { laps: 44, sets: 'used' } });
+    await rejected({ kind: 'plans.race.set', feedId: A, race: { laps: 44, sets: 'used', conditions: IMPORTED } });
     // stop laps from 1 to laps − 1
     await rejected(save(A, 0, 'A', { startCompound: 'medium', stops: [{ lap: 44, compound: 'hard' }] }));
     await rejected(save(A, 0, 'A', { startCompound: 'medium', stops: [{ lap: 0, compound: 'hard' }] }));
@@ -405,7 +405,7 @@ describe('the planning round (Task 7b, ported from SP4.3d2 Task 10; C62d, C54, C
       team: TEAM,
       trackId: TRACK,
       // the basis and race assumptions it was computed on, for display only
-      computedOn: { basis: { practice: [ref(69n)], qualifying: ref(70n) }, race: { laps: 44, sets: 'fresh' } },
+      computedOn: { basis: { practice: [ref(69n)], qualifying: ref(70n) }, race: { laps: 44, sets: 'fresh', conditions: IMPORTED }, forecast: [], profiles: null },
     });
     expect(typeof saved!.savedAt).toBe('string');
     // the round's slot choices per car, by race number (C62)
@@ -515,7 +515,7 @@ describe('the planning round (Task 7b, ported from SP4.3d2 Task 10; C62d, C54, C
     await b.ended(2);
     await q3(b, 3);
     // the round's laps default to the suggestion, its sets carried (its live end)
-    expect((await roundSettles(b)).race).toEqual({ laps: 44, sets: 'carried' });
+    expect((await roundSettles(b)).race).toEqual({ laps: 44, sets: 'carried', conditions: IMPORTED });
   });
 });
 
@@ -555,7 +555,7 @@ describe('the feed\'s remembered seat (Task 7bfix F1, R19; C62d, C54, C70)', { t
     await vi.waitFor(() => expect(b.prepared().at(-1)).toEqual({ open: false, saved: [expect.objectContaining({ id: saved!.id, name: 'Texas final' })] }));
 
     // the engineer picks the qualifying and practice to plan on: the round opens for the remembered seat
-    expect(await b.send({ kind: 'plans.round.open', feedId: A, qualifying: ref(70n), practice: [ref(69n)] })).toEqual({ ok: true });
+    expect(await b.send({ kind: 'plans.round.open', feedId: A, team: TEAM, qualifying: ref(70n), practice: [ref(69n)] })).toEqual({ ok: true });
     const round = await roundSettles(b);
     expect(round).toMatchObject({
       qualifying: ref(70n),
@@ -648,7 +648,7 @@ describe('the feed\'s remembered seat (Task 7bfix F1, R19; C62d, C54, C70)', { t
     writeFileSync(feedFile(dataDir), '{ not json');
     const b = await bridge({ dataDir });
     await vi.waitFor(() => expect(b.prepared().at(-1)).toEqual({ open: false, saved: [] }));
-    expect(await b.send({ kind: 'plans.round.open', feedId: A, qualifying: ref(70n), practice: [] })).toEqual({ ok: true });
+    expect(await b.send({ kind: 'plans.round.open', feedId: A, team: TEAM, qualifying: ref(70n), practice: [] })).toEqual({ ok: true });
     await new Promise((r) => setTimeout(r, 500));
     expect(b.prepared().some((v) => v.open)).toBe(false);
     // a session's team writes the file anew

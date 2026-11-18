@@ -5,7 +5,7 @@
 // the run as of its end (`asOfEnded`, `planningInputFrom`) for the race assumptions; the round's slots are the main
 // thread's (`runner.ts`), so the input carries none. The basis's sessions are read from the bridge's database, read only.
 import { planningInputFrom, type StrategyInput } from '@pitwall/analysis';
-import type { CarKey, RaceAssumptions } from '@pitwall/domain';
+import { IMPORTED, type CarKey, type RaceAssumptions } from '@pitwall/domain';
 import { asOfEnded, type BasisContext } from '@pitwall/engine/readers';
 import type { FeatureConfig } from '../feature-config.ts';
 import { FEATURES } from '../features/index.generated.ts';
@@ -50,7 +50,7 @@ function basisOf(repo: WeekendRepository, keys: readonly SessionKey[], player: C
  */
 export async function replayForPlanning(job: ReplayJob, o: { dbPath: string | undefined; config: FeatureConfig; rulesVersion: string; log: Logger }): Promise<PlanningReplay | null> {
   const path = job.pwrecPath;
-  const race: RaceAssumptions = { laps: job.laps, sets: job.sets };
+  const race: RaceAssumptions = { laps: job.laps, sets: job.sets, conditions: IMPORTED };
   const stored: Db | undefined = o.dbPath === undefined || job.basisOverride.length === 0 ? undefined : openDatabase(o.dbPath);
   // The run's own storage, in memory: the engine stores nothing of a planning replay.
   const scratch = openDatabase(':memory:');

@@ -14,7 +14,7 @@
 // - a rival's tyre sets are visible where `tyre-model`'s `freshSets` are known (C43: availability is tyre-model's); a
 //   compound with 0 fresh sets has no set; `rivalStartOdds` is read only through its effect (options summing to 1);
 // - `weekend-pace`'s output is given as a plain `WeekendPace` (Task 6b's unit is written apart), under `WEEKEND_PACE`.
-import { carId, known, NOISE_COMPOUNDS, unknown, type CarId, type ForecastSample, type Known, type LapRecord, type NoiseCompound, type RaceAssumptions, type RivalStop, type RivalStops, type StartingPoint, type TyreSet, type WeekendPace } from '@pitwall/domain';
+import { carId, IMPORTED, known, NOISE_COMPOUNDS, unknown, type CarId, type ForecastSample, type Known, type LapRecord, type NoiseCompound, type RaceAssumptions, type RivalStop, type RivalStops, type StartingPoint, type TyreSet, type WeekendPace } from '@pitwall/domain';
 import { asOfNow, createRng, type AsOfView, type CalculatorId, type Projection } from '@pitwall/engine/readers';
 import { describe, expect, it } from 'vitest';
 import { history, lap } from '../../../../../test-support/builders/index.ts';
@@ -180,7 +180,7 @@ const planningCompound = (car: CarId): Known<NoiseCompound> | 'free' =>
   car === PLAYER || car === TEAMMATE ? 'free' : car === 5 ? known<NoiseCompound>('medium', 0) : unknown('notApplicable');
 
 /** The race assumptions of these tests (C62d): the entered laps, the qualifying's sets carried over (SP4.3e Task 3). */
-const CARRIED: RaceAssumptions = { laps: LAPS, sets: 'carried' };
+const CARRIED: RaceAssumptions = { laps: LAPS, sets: 'carried', conditions: IMPORTED };
 
 /** The grid start of the qualifying view (`view`, `outputs`, `race` as given); throws when unknown. */
 function gridStart(view: AsOfView = qualifyingView(), outputs: Map<CalculatorId, unknown> = qualifyingOutputs(), race: RaceAssumptions = CARRIED): StartingPoint {
@@ -458,7 +458,7 @@ describe('the race sets on the grid start (SP4.3e Task 3)', () => {
   };
 
   it("carried: the qualifying's used M and S and the race's H and M2 (recommendedSession 15, available 0) → start.sets holds H and M2 new", () => {
-    const sp = gridStart(withSets(), withRaceSets(), { laps: LAPS, sets: 'carried' });
+    const sp = gridStart(withSets(), withRaceSets(), { laps: LAPS, sets: 'carried', conditions: IMPORTED });
     for (const car of [PLAYER, TEAMMATE].map(carId)) {
       const sets = sp.sets[car];
       expect(sets, `car ${car}: its race sets`).toBeDefined();
@@ -476,7 +476,7 @@ describe('the race sets on the grid start (SP4.3e Task 3)', () => {
     const view = withSets();
     const extra = [...QUALIFYING_SETS, tyreSet('soft', { available: false, recommendedSession: 6 })];
     const setsNow = view.fixed.setsNow!.map((s, k) => (k === PLAYER ? known({ sets: extra, fittedIdx: 1 }, view.at) : s));
-    const sp = gridStart({ ...view, fixed: { ...view.fixed, setsNow } }, withRaceSets(), { laps: LAPS, sets: 'carried' });
+    const sp = gridStart({ ...view, fixed: { ...view.fixed, setsNow } }, withRaceSets(), { laps: LAPS, sets: 'carried', conditions: IMPORTED });
     expect(newOf(sp.sets[carId(PLAYER)]!), 'no new soft: the Q3 set is not the race\'s').toEqual(['hard', 'medium']);
   });
 
@@ -485,7 +485,7 @@ describe('the race sets on the grid start (SP4.3e Task 3)', () => {
     const defaults = FORECAST_FIELD_CONFIG.defaults as Record<string, unknown>;
     const fresh = Object.fromEntries(FRESH_KEYS.map(([c, key]) => [c, defaults[key]]));
     expect(fresh, 'the config declares freshRaceSets* (C47)').toEqual({ soft: 3, medium: 2, hard: 1, inter: 4, wet: 3 });
-    const sp = gridStart(withSets(), qualifyingOutputs(), { laps: LAPS, sets: 'fresh' });
+    const sp = gridStart(withSets(), qualifyingOutputs(), { laps: LAPS, sets: 'fresh', conditions: IMPORTED });
     for (const car of [PLAYER, TEAMMATE].map(carId)) {
       const sets = sp.sets[car];
       expect(sets, `car ${car}: its race sets`).toBeDefined();
@@ -498,7 +498,7 @@ describe('the race sets on the grid start (SP4.3e Task 3)', () => {
   it('fresh: the counts come from the config (an override of freshRaceSets* is read through view.config)', () => {
     const view = withSets();
     const config: AsOfView['config'] = { ...view.config, 'forecast-field': { freshRaceSetsSoft: 2, freshRaceSetsMedium: 2, freshRaceSetsHard: 2, freshRaceSetsInter: 1, freshRaceSetsWet: 1 } };
-    const sp = gridStart({ ...view, config }, qualifyingOutputs(), { laps: LAPS, sets: 'fresh' });
+    const sp = gridStart({ ...view, config }, qualifyingOutputs(), { laps: LAPS, sets: 'fresh', conditions: IMPORTED });
     expect(countsOf(sp.sets[carId(PLAYER)]!)).toEqual({ soft: 2, medium: 2, hard: 2, inter: 1, wet: 1 });
   });
 });

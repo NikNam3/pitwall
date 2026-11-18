@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { WebSocketServer } from 'ws';
 import { CONTRACT_VERSION, encodeMessage, type ClientMessage, type ServerMessage, type UiAction } from '@pitwall/contracts';
-import { feedId, type PreparedCar, type RaceAssumptions, type SessionBasis, type SessionRef, type TeamId, type TrackId } from '@pitwall/domain';
+import { feedId, IMPORTED, type PreparedCar, type RaceAssumptions, type SessionBasis, type SessionRef, type TeamId, type TrackId } from '@pitwall/domain';
 import type { CliIo } from '../../src/cli/io.ts';
 import { main } from '../../src/cli/pitwall.ts';
 
@@ -62,7 +62,7 @@ const ROUND: PlanningRoundState = {
   open: true,
   qualifying: QUALIFYING,
   practice: [PRACTICE],
-  race: { laps: 56, sets: 'carried' },
+  race: { laps: 56, sets: 'carried', conditions: IMPORTED },
   team: 0,
   cars: {},
   running: false,
@@ -187,8 +187,8 @@ describe('pitwall basis and pitwall plans', { timeout: 30_000 }, () => {
     expect(r.err).toBe('');
     expect(r.code).toBe(0);
     expect(bridge.actions()).toEqual<UiAction[]>([
-      { kind: 'plans.round.open', feedId: FEED, qualifying: QUALIFYING, practice: [PRACTICE] },
-      { kind: 'plans.race.set', feedId: FEED, race: { laps: 56, sets: 'fresh' } },
+      { kind: 'plans.round.open', feedId: FEED, team: 0, qualifying: QUALIFYING, practice: [PRACTICE] },
+      { kind: 'plans.race.set', feedId: FEED, race: { laps: 56, sets: 'fresh', conditions: IMPORTED } },
     ]);
   });
 

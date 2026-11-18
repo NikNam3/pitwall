@@ -7,7 +7,7 @@
 // drawn. Invariants only, no fact of the recording.
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { feedId, known, trackDataOf, unknown, validateTrackFile, type CarId, type Known, type NoiseCompound, type PriorsSnapshot, type StartOption } from '@pitwall/domain';
+import { feedId, IMPORTED, known, trackDataOf, unknown, validateTrackFile, type CarId, type Known, type NoiseCompound, type PriorsSnapshot, type StartOption } from '@pitwall/domain';
 import { SessionRunner, SessionTracker, situationOf, type StepResult } from '@pitwall/engine';
 import { asOfNow, runAsOf, type AsOfView, type EngineView } from '@pitwall/engine/readers';
 import { beforeAll, describe, expect, it } from 'vitest';
@@ -78,7 +78,7 @@ describe('the grid start on the qualifying-texas-send segment (SP4.3d2 Task 7)',
     const fixed = view.fixed;
     const ours = new Set<number>([fixed.playerCar.known ? fixed.playerCar.value : -1, fixed.teammateCar.known ? fixed.teammateCar.value : -1]);
     const outputs = runAsOf(FORECAST_UNITS, view);
-    const sp = buildGridStart(view, outputs, { laps: RACE_LAPS, grid: [...grid.value], fittedCompound: (car: CarId): Known<NoiseCompound> | 'free' => (ours.has(car) ? 'free' : unknown('notApplicable')), race: { laps: RACE_LAPS, sets: 'carried' } });
+    const sp = buildGridStart(view, outputs, { laps: RACE_LAPS, grid: [...grid.value], fittedCompound: (car: CarId): Known<NoiseCompound> | 'free' => (ours.has(car) ? 'free' : unknown('notApplicable')), race: { laps: RACE_LAPS, sets: 'carried', conditions: IMPORTED } });
     expect(sp.known, sp.known ? '' : sp.reason).toBe(true);
     if (!sp.known) return;
     const s = sp.value;

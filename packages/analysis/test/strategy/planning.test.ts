@@ -15,7 +15,7 @@
 // - The grid place of a car is its index in `gridOf(asOf)` plus 1.
 // - "Car 2's run has car 1's active prepared policy as committed" is read on our cars 2 (player) and 5 (teammate): the
 //   final `race-monte-carlo` call that plans the player follows the teammate's active prepared policy as certain input.
-import { NOISE_COMPOUNDS, type CarId, type Policy, type StrategyOutput } from '@pitwall/domain';
+import { IMPORTED, NOISE_COMPOUNDS, type CarId, type Policy, type StrategyOutput } from '@pitwall/domain';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as mc from '../../src/race-monte-carlo/index.ts';
 import type { McInput, McResult } from '../../src/race-monte-carlo/index.ts';
@@ -60,7 +60,7 @@ function entryOf(out: StrategyOutput, car: CarId): CarRows {
 
 /** The planning input on the qualifying view with `prepared` (default: none). */
 const inputOf = (prepared: PreparedRound = NO_PLANS(OURS), asOf = QUALIFYING(), sets: 'carried' | 'fresh' = 'carried'): StrategyInput =>
-  planningInputFrom(asOf, { laps: LAPS, race: { laps: LAPS, sets }, prepared });
+  planningInputFrom(asOf, { laps: LAPS, race: { laps: LAPS, sets, conditions: IMPORTED }, prepared });
 
 /** The grid place of car `car` on the qualifying view: its index in `gridOf` plus 1. */
 function gridPlaceOf(car: CarId): number {
