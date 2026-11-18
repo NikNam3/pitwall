@@ -146,6 +146,13 @@ export class SessionStorage {
     try {
       const { context, incomplete } = repo.weekendContext(row.weekendId, player, keyOf(row), { startedAt: row.startedAt });
       if (incomplete.length > 0) this.#rebuildInBackground(repo.sessionsOf(row.weekendId).filter((s) => incomplete.some((k) => sameKey(k, s))));
+      // TEMP HACK 2026-11-17 (Texas, new lobby after an EA server crash): remove after the race
+      const alias = process.env['PITWALL_WEEKEND_ALIAS'];
+      if (context.sessions.length === 0 && alias !== undefined && alias !== row.weekendId) {
+        const aliased = repo.weekendContext(alias, player, keyOf(row), { startedAt: row.startedAt }).context;
+        this.#o.log?.warn({ weekendId: row.weekendId, alias, sessions: aliased.sessions.length }, 'TEMP: weekend context taken from the alias weekend');
+        return { ...aliased, weekendId: row.weekendId };
+      }
       return context;
     } catch (error) {
       this.#fail(error);

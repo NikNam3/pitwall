@@ -114,6 +114,8 @@ class Needs {
   of(k: DeepReadonly<Known<number>> | undefined, fallback?: number): number {
     if (k?.known === true) return k.value;
     if (fallback !== undefined) return fallback;
+    // TEMP DEBUG 2026-11-17 (Texas planning round): remove after the race
+    if (this.reason === undefined) console.error('[grid-debug] first missing value', JSON.stringify(k), new Error().stack?.split('\n').slice(2, 6).join(' | '));
     this.reason ??= k?.known === false ? k.reason : 'insufficientData';
     return 0;
   }
@@ -327,10 +329,12 @@ const START_COMPOUNDS = ['soft', 'medium', 'hard'] as const satisfies readonly N
  */
 export function buildGridStart(view: AsOfView, outputs: ReadonlyMap<CalculatorId, unknown>, opts: GridStartOptions): Known<StartingPoint> {
   const lapsTotal = opts.laps;
+  console.error('[grid-debug] laps', lapsTotal, 'grid', JSON.stringify(opts.grid)); // TEMP DEBUG 2026-11-17
   if (!(lapsTotal > 0) || opts.grid.length === 0) return unknown('insufficientData');
   const config = configOf(FORECAST_FIELD_CONFIG, view);
   const noise = outputs.get(DRIVER_NOISE) as DeepReadonly<DriverNoise> | undefined;
   const interaction = outputs.get(RACE_INTERACTION) as RaceInteraction | undefined;
+  console.error('[grid-debug] noise', noise !== undefined, 'interaction', interaction !== undefined, 'outputs', [...outputs.keys()].join(',')); // TEMP DEBUG 2026-11-17
   if (noise === undefined || interaction === undefined) return unknown('insufficientData');
   const degradation = outputs.get(DEGRADATION) as DeepReadonly<DegradationOutput> | undefined;
   const stops = (outputs.get(RIVAL_STOPS) as DeepReadonly<RivalStops> | undefined) ?? {};
@@ -374,6 +378,7 @@ export function buildGridStart(view: AsOfView, outputs: ReadonlyMap<CalculatorId
   const ourBurn = player.known && player.value < cars ? burnPerLapKg(lapsByCar[player.value] ?? [], burnOptions) : unknown('notApplicable');
   const oddsConfig: Record<(typeof START_COMPOUNDS)[number], number> = { soft: config.rivalStartOddsSoft, medium: config.rivalStartOddsMedium, hard: config.rivalStartOddsHard };
 
+  const missingPace: number[] = []; // TEMP HACK 2026-11-17
   opts.grid.forEach((id, place) => {
     const k = id as number;
     sp.gapMs[k] = place * config.gridGapMsPerPlace;
@@ -405,7 +410,7 @@ export function buildGridStart(view: AsOfView, outputs: ReadonlyMap<CalculatorId
       sp.paceMs[k] = standIn.basePaceMs - offsetOf(lapModel.compoundOffsetMs, standIn.compound);
       sp.paceSdMs[k] = config.fallbackPaceSdMs;
       fuelIncluded = standIn.fuelIncluded;
-    } else need.of(unknown('insufficientData'));
+    } else { console.error('[grid-debug] no pace for car', id, '- field median used'); missingPace.push(k); } // TEMP HACK 2026-11-17: remove after the race
 
     const measured = burnPerLapKg(lapsByCar[k] ?? [], burnOptions);
     const burn = planBurnKgPerLap(measured.known ? measured : ourBurn, lapsTotal * degConfig.fallbackBurnKgPerLap, lapsTotal);
@@ -420,6 +425,12 @@ export function buildGridStart(view: AsOfView, outputs: ReadonlyMap<CalculatorId
     stopInto(sp, k, stop, windowOn(stop, fitted !== 'free' && fitted.known ? compound : undefined), config.assumeOwesStop);
   });
   for (let k = 0; k < cars; k++) if (retired[k] === 1) sp.compound[k] = NOISE_COMPOUNDS.indexOf(unknownCompound);
+  if (missingPace.length > 0) { // TEMP HACK 2026-11-17: a car without a pace gets the field's median pace
+    const known = opts.grid.map((id) => id as number).filter((k) => !missingPace.includes(k)).map((k) => sp.paceMs[k] as number).sort((a, b) => a - b);
+    const med = known[Math.floor(known.length / 2)] ?? 0;
+    for (const k of missingPace) { sp.paceMs[k] = med; sp.paceSdMs[k] = config.fallbackPaceSdMs; }
+    console.error('[grid-debug] field median pace', med, 'for', JSON.stringify(missingPace));
+  }
   if (need.reason !== undefined) return unknown(need.reason);
   // where the cars are: the leader at the line, each car behind it its gap at its pace short of the line (the lap
   // before, as `startLapOf` reads a lap fraction past the leader's), so the forecast plays each car's laps 1 … laps
