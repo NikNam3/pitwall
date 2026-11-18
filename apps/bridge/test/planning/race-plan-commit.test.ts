@@ -19,7 +19,7 @@
 // stored facts, the void facts applied as the projection applies them, C28) and from the recordings' decisions sidecars,
 // their plan decisions only (a `basisChosen` is Task 7a-2's); sessions end by the timer on the test's receive clock. The
 // segment pair is `qualifying-texas-send` then `race-texas-grid` (C84).
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -43,6 +43,7 @@ import { FeedPipeline } from '../../src/pipeline/feed-pipeline.ts';
 import { createLastChoiceStore } from '../../src/pipeline/last-choice.ts';
 import { SavedPlanStore } from '../../src/planning/saved-plans.ts';
 import { TeamFeeds } from '../../src/pipeline/team-feeds.ts';
+import { recordingBasis } from '../../src/pipeline/basis-sidecar.ts';
 import { readPwrec } from '../../src/pwrec/reader.ts';
 import { openDatabase, type Db } from '../../src/storage/db.ts';
 import { segmentPath } from '../fixtures/replay.ts';
@@ -994,4 +995,118 @@ describe('basis.active shows the chosen plan (Task 7e; C1a, C54, C55, C62d)', { 
       expect(value.raceLaps, 'a qualifying has no race laps').toBeNull();
     }
   });
+
+  // Ruling R20 (C38, C59, C76): the bridge records each plan choice that reaches a feed in the feed's basis sidecar,
+  // `<recording>.basis.json` `plans: { at: <record index>, plan: { id, name, laps } | null }[]`, positional like the
+  // decisions sidecar's record index; a replay and a reprocess republish `basis.active.plan` from it at the same record.
+  // A rename after the race is not replayed: the recorded name stands. A recording without `plans` replays `plan: null`.
+  it('(e) a live race with plan choices, then its replay: basis.active.plan equal at every frame; a recording without plans in its sidecar replays plan null', async () => {
+    const b = await bridge();
+    choosePlan(b.dataDir, P);
+    writePlan(b.dataDir, Q);
+    const race = await raceOnBoth(b);
+    await bothShow(b, shown(P), 'the race-start commit');
+    // what each live feed showed after frame 39, 79 and 159 (the checkpoints the replay is read at)
+    const live: Record<string, BasisActive['plan'][]> = {};
+    const checkpoint = (): void => {
+      for (const feed of [A, B]) (live[feed] ??= []).push(b.active(feed)!.plan);
+    };
+    checkpoint();
+    expect(await b.send({ kind: 'basis.choose', feedId: A, basis: NO_BASIS, plan: Q.id })).toEqual({ ok: true });
+    race.to(80);
+    await bothShow(b, shown(Q), 'Q chosen on feed A');
+    checkpoint();
+    expect(await b.send({ kind: 'basis.choose', feedId: B, basis: NO_BASIS, plan: null })).toEqual({ ok: true });
+    race.to(160);
+    await bothShow(b, null, 'none chosen on feed B');
+    checkpoint();
+    race.to(Infinity);
+    await b.ended(2);
+    // renamed after the race: the replay keeps the name the race recorded
+    expect(await b.send({ kind: 'plans.rename', feedId: A, id: Q.id, name: 'Texas renamed later' })).toEqual({ ok: true });
+    await b.stop();
+    expect(live[A]).toEqual([shown(P), shown(Q), null]);
+    expect(live[B]).toEqual([shown(P), shown(Q), null]);
+
+    for (const [feed, player] of [[A, 0], [B, 1]] as const) {
+      const file = b.recording(RACE, player);
+      // the basis sidecar records each choice that reached the feed, at its record index, in order
+      const plans = (JSON.parse(readFileSync(`${file}.basis.json`, 'utf8')) as { plans?: Array<{ at: number; plan: BasisActive['plan'] }> }).plans;
+      expect(plans?.map((p) => p.plan), `feed ${feed}: the sidecar's plans`).toEqual([shown(P), shown(Q), null]);
+      const at = plans!.map((p) => p.at);
+      for (const index of at) expect(Number.isInteger(index) && index >= 0, `feed ${feed}: a record index`).toBe(true);
+      expect([...at].sort((x, y) => x - y), `feed ${feed}: in record order`).toEqual(at);
+
+      // the replay: the same plan at every frame as the live run showed it (C38)
+      const replayed = await replayPlans(file, feed);
+      expect(replayed.length, `feed ${feed}: the replay ran`).toBeGreaterThan(160);
+      expect([replayed[30], replayed[75], replayed[150]], `feed ${feed}: the checkpoints`).toEqual(live[feed]);
+      expect(replayed.at(-1), `feed ${feed}: the last frame`).toBeNull();
+      expect(changes(replayed), `feed ${feed}: the plans shown, in order`).toEqual(changes(b.actives(feed).map((v) => v.plan)));
+      expect(changes(replayed)).toEqual([shown(P), shown(Q), null]);
+    }
+
+    // a recording whose basis sidecar has no `plans`: plan null at every frame
+    const file = b.recording(RACE, 0);
+    const { plans: _plans, ...without } = JSON.parse(readFileSync(`${file}.basis.json`, 'utf8')) as Record<string, unknown>;
+    writeFileSync(`${file}.basis.json`, JSON.stringify(without));
+    const bare = await replayPlans(file, A);
+    expect(bare.length, 'the replay ran').toBeGreaterThan(160);
+    expect(bare.some((plan) => plan === null), 'basis.active published').toBe(true);
+    expect(bare.every((plan) => plan === null || plan === undefined), 'no plans recorded: none shown').toBe(true);
+  });
 });
+
+/** The values of `plans`, each change once, the leading `null`s (and `undefined`s: nothing published yet) left out. */
+const changes = (plans: ReadonlyArray<BasisActive['plan'] | undefined>): Array<BasisActive['plan']> => {
+  const out: Array<BasisActive['plan']> = [];
+  for (const plan of plans) {
+    if (plan === undefined || (plan === null && out.length === 0)) continue;
+    if (out.length > 0 && JSON.stringify(out.at(-1)) === JSON.stringify(plan)) continue;
+    out.push(plan);
+  }
+  return out;
+};
+
+/**
+ * Replays (reprocesses) a recording alone with its sidecars (C38, C76), as `serve`'s replay hands them to the pipeline
+ * (no saved plans: what it shows comes from the recording): the `basis.active` plan published as of each frame (the
+ * newest one when the frame's calculators run; `undefined` before any), one entry per frame.
+ */
+async function replayPlans(file: string, id: FeedId): Promise<Array<BasisActive['plan'] | undefined>> {
+  const hub = new TopicHub({ now: () => 0 });
+  const published = vi.spyOn(hub, 'publishState');
+  const newest = (): BasisActive['plan'] | undefined => {
+    const call = published.mock.calls.filter(([feed, topic]) => feed === id && topic === 'basis.active').at(-1);
+    return call === undefined ? undefined : (call[2]({}) as BasisActive).plan;
+  };
+  const perFrame: Array<BasisActive['plan'] | undefined> = [];
+  const probe: QuickCalculator<number> = {
+    kind: 'quick',
+    id: 'test.plan-probe',
+    reads: ['feed'],
+    cadence: 'frame',
+    compute: () => {
+      perFrame.push(structuredClone(newest()));
+      return perFrame.length;
+    },
+  };
+  const db = openDatabase(join(tmp('replay'), 'replay.db'));
+  cleanup.push(() => db.close());
+  const pipeline = new FeedPipeline({
+    feedId: id,
+    source: new PwrecSource({ feedId: id, path: file, mode: 'asFastAsPossible' }),
+    hub,
+    features: [defineFeature({ name: 'plan-probe', calculators: [probe], topics: [] })],
+    log,
+    teams: new TeamFeeds(),
+    recorded: recordingDecisions(file),
+    recordedBasis: recordingBasis(file, log),
+    storage: { db, rulesVersion: RULES, mode: 'replace', sourcePath: file },
+  });
+  pipeline.start();
+  await pipeline.done;
+  // the value after the last frame counts too
+  if (perFrame.length > 0) perFrame[perFrame.length - 1] = structuredClone(newest());
+  return perFrame;
+}
