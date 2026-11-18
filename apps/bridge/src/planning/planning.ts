@@ -4,7 +4,7 @@
 // 'carried' }` (laps unknown without a suggestion, C3); the feed's next session start closes it. At a live race's start
 // it hands the pipeline the team's last chosen or saved plan on the track as plan decisions (`planDecisionsOf`).
 import type { ActionOutcome, UiAction } from '@pitwall/contracts';
-import { endsQualifying, raceFormatOf, type CarKey, type FeedId, type Known, type RaceFormat, type TrackId } from '@pitwall/domain';
+import { endsQualifying, raceFormatOf, type CarKey, type FeedId, type Known, type RaceFormat, type SessionRef, type TrackId } from '@pitwall/domain';
 import type { Logger } from '../log.ts';
 import type { EndedSession, PlanningHooks, PlanTarget, RaceStartPlan } from '../pipeline/feed-pipeline.ts';
 import type { LastChoiceStore } from '../pipeline/last-choice-types.ts';
@@ -24,12 +24,14 @@ export type PlanningOptions = {
   /** The runner; built with `seatOf` = this module's `seatOf`. */
   runner: PlanningRunner;
   store: Pick<SavedPlanStore, 'read'>;
-  lastChoice: Pick<LastChoiceStore, 'read'>;
+  lastChoice: Pick<LastChoiceStore, 'read' | 'write'>;
   /** The race laps to suggest for a race of `format` on `trackId` (`suggestedLapsOf` over the stored sessions). */
   suggestedLaps: (trackId: TrackId, format: RaceFormat) => Known<number>;
   /** The feeds' remembered seats (R19); unset: none is remembered. */
   seats?: FeedSeatStore;
   log: Pick<Logger, 'warn' | 'error'>;
+  /** The time a basis is confirmed at (ISO). Default: now. */
+  now?: () => string;
 };
 
 const invalid = (message: string): ActionOutcome => ({ ok: false, reason: 'invalid', message });
@@ -114,11 +116,38 @@ export class Planning implements PlanningHooks {
     return { plan, decisions: plan === undefined ? [] : planDecisionsOf(plan, race.cars, race.decisions) };
   }
 
+  /**
+   * The user confirmed a round's basis (R23; C62, C62d, C70): the team's last choice on the track takes its practice
+   * and qualifying, confirmed now, the plan part unchanged (`{ id: null }` without one). The track is the qualifying's
+   * stored row's, else the remembered seat's; without a team or a track nothing is written. Written whether or not the
+   * round's replay runs or succeeds.
+   */
+  #confirmBasis(feedId: FeedId, qualifying: SessionRef, practice: readonly SessionRef[]): void {
+    const team = this.seatOf(feedId)?.teamId;
+    const trackId = this.#o.runner.trackOf(feedId, qualifying) ?? this.#rememberedOf(feedId)?.trackId;
+    if (team === undefined || trackId === undefined) return;
+    const at = (this.#o.now ?? (() => new Date().toISOString()))();
+    try {
+      const last = this.#o.lastChoice.read(team, trackId);
+      this.#o.lastChoice.write(team, {
+        trackId,
+        basis: {
+          practice: { refs: practice.map(({ sessionUid, weekendId }) => ({ sessionUid, weekendId })), at },
+          qualifying: { ref: { sessionUid: qualifying.sessionUid, weekendId: qualifying.weekendId }, at },
+        },
+        plan: last?.plan ?? { id: null, at },
+      });
+    } catch (error) {
+      this.#o.log.error({ feedId, err: error }, 'last choice not written');
+    }
+  }
+
   /** A planning uiAction (C73): checked against the feed's round (without one `notSupported`); a rejection changes nothing. */
   apply(action: PlanningAction): ActionOutcome {
     const { runner } = this.#o;
     switch (action.kind) {
       case 'plans.round.open':
+        this.#confirmBasis(action.feedId, action.qualifying, action.practice);
         void runner.open({ feedId: action.feedId, qualifying: action.qualifying, practice: action.practice, race: { laps: runner.laps(action.feedId) ?? null, sets: 'fresh' } })
           .catch((error: unknown) => this.#o.log.error({ feedId: action.feedId, err: error }, 'planning round not opened'));
         return { ok: true };
