@@ -1,14 +1,14 @@
 // End to end (SP4.3e Task 7c-2, spec §4.2): confirm a basis and a plan in the shell's picker, the top bar follows.
-// One data dir, two bridges in turn: the first replays the committed segment `qualifying-texas-send` (the end of the
-// Texas one-shot qualifying of 2026-11-17, through SEND) to its end, so the qualifying is stored; the second replays
-// `race-texas-grid` (the race of that weekend: the weekend phase and the team are known from 1.526 s) to its end, so
-// the race's basis is preselected: its own weekend's qualifying. In the app the command "Basis and plan…" (palette,
+// One data dir: `pitwall import` stores the committed segment `qualifying-texas-send` (the end of the Texas one-shot
+// qualifying of 2026-11-17, through SEND); then a bridge replays `race-texas-grid` (the race of that weekend: the
+// weekend phase and the team are known from 1.526 s) to its end, reading its basis from the data dir's database (R21):
+// its own weekend's qualifying. In the app the command "Basis and plan…" (palette,
 // C72) opens the picker; confirming qualifying none and plan none sends `basis.choose`, and the top bar's basis
 // segment reads none; confirming the qualifying again brings its day back. Saved plans need a planning round, which
 // this spec does not open: the plan chosen is none both times.
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
-import { launchPitwall, startBridge } from './harness.ts';
+import { importRecording, launchPitwall, startBridge } from './harness.ts';
 import { makeDataDir, removeDataDir } from './support.ts';
 
 const QUALIFYING = 'qualifying-texas-send';
@@ -25,8 +25,13 @@ test.afterEach(async () => {
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
-/** Plays the bridge's replay feed and resolves once it is at its end. */
-async function playToEnd(port: number): Promise<void> {
+/**
+ * Plays the bridge's replay feed slowly (0.02x: the 1.6 s segment lasts about 80 s) and resolves once its `basis.active`
+ * names a qualifying (the race's preselection, at the first frame with the team known). The session keeps running with
+ * frames arriving, so a basis choice is a decision of it and enters at the next frame (C62, C76; a replay at its end
+ * has ended its session, a paused one applies no decision).
+ */
+async function playSlowlyUntilBasis(port: number): Promise<void> {
   const socket = new WebSocket(`ws://127.0.0.1:${port}`);
   const messages: Array<{ type: string; id?: string; value?: unknown; feeds?: Array<{ feedId: string; kind: string }> }> = [];
   socket.addEventListener('message', (event) => messages.push(JSON.parse(String(event.data)) as (typeof messages)[number]));
@@ -42,14 +47,16 @@ async function playToEnd(port: number): Promise<void> {
       if (feedId === undefined) await sleep(POLL_MS);
     }
     if (feedId === undefined) throw new Error('the bridge offers no replay feed');
+    socket.send(JSON.stringify({ type: 'subscribe', id: 'basis', topic: 'basis.active', params: {}, feedId }));
+    socket.send(JSON.stringify({ type: 'replayControl', id: 'speed', control: { kind: 'speed', factor: 0.02 } }));
     socket.send(JSON.stringify({ type: 'replayControl', id: 'play', control: { kind: 'play' } }));
-    socket.send(JSON.stringify({ type: 'subscribe', id: 'status', topic: 'replay.status', params: {}, feedId }));
     while (Date.now() < deadline) {
-      const last = messages.filter((m) => m.id === 'status' && (m.type === 'snapshot' || m.type === 'update')).at(-1);
-      if ((last?.value as { atEnd?: boolean } | undefined)?.atEnd === true) return;
+      const last = messages.filter((m) => m.id === 'basis' && (m.type === 'snapshot' || m.type === 'update')).at(-1);
+      const qualifying = (last?.value as { basis?: { qualifying?: unknown } } | undefined)?.basis?.qualifying;
+      if (qualifying !== undefined && qualifying !== null) return;
       await sleep(POLL_MS);
     }
-    throw new Error('the replay did not reach its end');
+    throw new Error('the replay published no basis with a qualifying');
   } finally {
     socket.close();
   }
@@ -72,15 +79,14 @@ test('confirming a basis and a plan in the picker updates the top bar', async ()
   const dataDir = await makeDataDir();
   cleanups.push(() => removeDataDir(dataDir));
 
-  // The qualifying, replayed to its end: stored in the data dir.
-  const first = await startBridge({ recording: QUALIFYING, dataDir });
-  await playToEnd(first.wsPort);
-  await first.stop();
+  // The qualifying, imported: stored in the data dir (a replay stores nothing of its own session, R21).
+  await importRecording({ recording: QUALIFYING, dataDir });
 
-  // The race of that weekend: its basis is preselected from the stored qualifying.
+  // The race of that weekend, replayed: its basis is its own weekend's stored qualifying, read from the data dir's
+  // database (a recording without a basis sidecar, C62; R21).
   const bridge = await startBridge({ recording: RACE, dataDir });
   cleanups.push(() => bridge.stop());
-  await playToEnd(bridge.wsPort);
+  await playSlowlyUntilBasis(bridge.wsPort);
   const app = await launchPitwall({ wsPort: bridge.wsPort, dataDir });
   cleanups.push(() => app.close());
   const page = await app.window('main');

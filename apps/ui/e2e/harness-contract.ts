@@ -22,6 +22,13 @@ export type StartBridgeOptions = {
   insight?: string | undefined;
 };
 
+export type ImportRecordingOptions = {
+  /** A fixture name from `fixtures/index.json`, imported with `pitwall import <fixture>`. */
+  recording: string;
+  /** `PITWALL_DATA_DIR`: the recording is copied to `<dir>/recordings` and stored in its database. */
+  dataDir: string;
+};
+
 export type BridgeHandle = {
   /** The free `PITWALL_WS_PORT` chosen at the first start; a restart uses the same one. */
   wsPort: number;

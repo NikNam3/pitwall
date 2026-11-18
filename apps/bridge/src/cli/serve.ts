@@ -28,6 +28,7 @@ import type { LastChoiceStore, PlanChoice } from '../pipeline/last-choice-types.
 import type { RebuildService } from '../storage/rebuild-service-types.ts';
 import { StaleSweep } from '../pipeline/stale-sweep.ts';
 import { TeamFeeds } from '../pipeline/team-feeds.ts';
+import type { StorageMode } from '../pipeline/session-storage.ts';
 import { ReplayController } from '../replay/replay-controller.ts';
 import { loadTrackFile, recordingTrack, TRACKS_DIR } from '../track-files/load.ts';
 import { pruneEndedAcknowledgements } from '../ui-state/ack-pruning.ts';
@@ -73,11 +74,15 @@ type ServeBase = {
   /**
    * Opened by the caller, closed by `serve` (also when it fails). `rulesVersion`: the logs are stored with it (C61);
    * `rebuild`: rebuilds a stored session found incomplete, in the background; nothing is rebuilt at start (C61).
+   * `mode`: `append` (default) stores the run's own sessions; `read` (a replay, R21) stores nothing of them and only
+   * reads the stored sessions their basis names (C38, C62), rebuilding a stale one first (C61); such a run opens no
+   * calibration or profile store and no planning round.
    */
   storage?: {
     db: Db;
     recordingsDir: string;
     rulesVersion: string;
+    mode?: Extract<StorageMode, 'append' | 'read'>;
     rebuild?: (row: StoredSessionRow) => Promise<void>;
     /**
      * The one rebuild service behind `rebuild` (`StaleSessions.rebuildService`): the basis's `ensureCurrent` and the
@@ -184,6 +189,8 @@ export async function serve(opts: ServeOptions): Promise<number> {
       undo.push(pruneEndedAcknowledgements(hub, feedIds, uiState));
     }
     const { rebuild } = storage ?? {};
+    // A run that stores its own sessions (not a replay's `read`, R21) has the stores and the planning round that rest on them.
+    const stores = storage !== undefined && (storage.mode ?? 'append') === 'append';
     // The calibration store (C62a) reads the stored sessions, so only a run that stores has one; `uiDir` is `<data dir>/ui`.
     const calibrationLog = cliLogger(io, 'warn');
     const calibrationRepo = storage && new WeekendRepository(storage.db, {
@@ -216,7 +223,7 @@ export async function serve(opts: ServeOptions): Promise<number> {
         calibrationLog.error({ sessionUid: row.sessionUid, weekendId: row.weekendId, playerCar: row.playerCar, err: error }, 'stored session not rebuilt');
       })));
     };
-    const calibration = calibrationRepo && opts.uiDir !== undefined
+    const calibration = stores && calibrationRepo && opts.uiDir !== undefined
       ? CalibrationStore.open(dirname(opts.uiDir), {
         features: FEATURES,
         repo: calibrationRepo,
@@ -228,7 +235,7 @@ export async function serve(opts: ServeOptions): Promise<number> {
       : undefined;
     if (calibration) undo.push(() => calibration.close());
     // The profile store (C62c) reads the stored sessions too; the running bridge is its only writer (P3, `drivers/.lock`).
-    const profiles = calibrationRepo && opts.uiDir !== undefined
+    const profiles = stores && calibrationRepo && opts.uiDir !== undefined
       ? ProfileStore.open(dirname(opts.uiDir), {
         features: FEATURES,
         repo: calibrationRepo,
@@ -379,7 +386,7 @@ export async function serve(opts: ServeOptions): Promise<number> {
     // plans in `<data dir>/plans/`; its replay runs in the rebuild service's worker, off the thread that applies frames
     // (C61), its jobs on the feeds' worker limit (C51). The suggestion reads the stored sessions on the track (§7.1 step 3).
     let planning: Planning | undefined;
-    if (storage && calibrationRepo && opts.uiDir !== undefined && savedPlans && lastChoiceStore) {
+    if (stores && storage && calibrationRepo && opts.uiDir !== undefined && savedPlans && lastChoiceStore) {
       const dataDirRoot = dirname(opts.uiDir);
       const warnLog = cliLogger(io, 'warn');
       // The bridge's one rebuild service (C61): the round's practice is made current through the basis's `ensureCurrent`
@@ -443,6 +450,7 @@ export async function serve(opts: ServeOptions): Promise<number> {
           db: opts.storage.db,
           recordingsDir: opts.storage.recordingsDir,
           rulesVersion: opts.storage.rulesVersion,
+          ...(opts.storage.mode && { mode: opts.storage.mode }),
           ...(rebuildThenRecompute && { rebuild: rebuildThenRecompute }),
           // A stored session gives new candidates (ruling R14).
           onStored: () => {
