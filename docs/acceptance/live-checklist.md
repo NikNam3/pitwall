@@ -64,6 +64,27 @@ Keep `pnpm -s pitwall tap insights` and `pnpm -s pitwall tap laps` running in tw
 - [ ] Race start: at the race's first frames both drivers' boards show the prepared slots and A active (the decisions sidecar holds `planSaved`, `planCommitted`); a later edit of the prepared plans changes nothing in the race; a restart mid-race continues the race's recording and a teammate joining later gets the plans.
 - [ ] Sprint weekend: the shootout's round prepares the sprint, qualifying's the grand prix; each race commits only its own file (`PITWALL_DATA_DIR/plans/<weekendId>/<format>/<team>.json`).
 
+## 7. SP4.3e: session basis, saved plans, planner fixes (2026-11-18)
+
+Readiness before a race: `node ~/dev/personal/pitwall-research/live-test-2026-11-17/readiness.mjs` (spec §6; read-only).
+
+- [ ] Between sessions (no game running): "Basis and plan…" (palette) lists the stored practice and qualifying sessions on the track, newest first, dated, stale ones marked; Confirm opens the planning round; enter laps and sets (carried / fresh) on the board; save the plan; it survives a bridge restart and is listed in the picker.
+- [ ] Race load: the top bar shows "Practice … · Qualifying … · Plan: <name>" from the team's last choice; the boards hold the plan's slots (A active); "56 / 20 laps" shows when the plan was computed for other laps.
+- [ ] Choose another basis or plan in the race: both feeds follow within a frame; a flashback before the choice shows the earlier basis and plan again.
+- [ ] Basis "none": weekend-pace shows no pace, the live strategy builds up from the race's laps, nothing breaks.
+- [ ] Bridge start rebuilds nothing (no `rebuilding` lines); a confirmed stale basis shows "rebuilding n / m" and enters once current; a running race never stalls.
+- [ ] Grid of a short qualifying is the same on both feeds; no AI flying lap is an in-lap (Tasks 1, 2).
+
+Follow-ups noted by the SP4.3e run (not built):
+- The preselection runs at the first Participants, before the weekend phase is known: every session uses the race rule (a practice or qualifying may preselect a qualifying).
+- A reprocess or `score` with a stale basis session runs without it (the rebuild service rebuilds through the same replay; no rebuild in a reprocess).
+- A continued recording whose recorded `basisChosen` names stale sessions does not re-commit it once they are current.
+- A plan choice in the same tick as a flashback: its shown-plan entry is dropped (its decisions stay).
+- A calibration source or profile session rebuilt during a session reaches it only at the next session start (run log Q1).
+- The top bar with the basis segment needs about 155 columns; a narrower window overflows.
+- `kit/actions.ts` and the Panel's default `send` still answer ok outside a panel (Task 8 left them).
+- From the 2026-11-17 test (handoff §5): a hand-pinned link group stays pinned across sessions; activating a slot right after saving fails ("slot is empty"); each calibration edit blocks 12–14 s; SPI/PLA instead of person names; ERS/DRS in practice long runs; garage panel without a session; calibration SC pit loss 40.3 s.
+
 ## Results
 
 Record the date, the counts per topic and the flashback outcome here after the run.
