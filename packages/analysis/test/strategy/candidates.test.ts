@@ -10,13 +10,16 @@
 // rain filter, its best-plan trigger variants, the one close gap and the count bound stay, on the new field and
 // signature. SP4.3d1 Task 3 deletes the rows of the trigger mechanism (the zero-stop's box trigger, cover and extend,
 // the best plan's trigger variants, the cover and extend rules' gap) and ports the rest to stop lists.
-import { known, type McSource, type Policy, type StartingPoint, type TyreSet } from '@pitwall/domain';
+import { known, unknown, type McSource, type NoiseCompound, type Policy, type StartingPoint, type TyreSet } from '@pitwall/domain';
 import { createRng } from '@pitwall/engine/readers';
-import { describe, expect, it } from 'vitest';
+import fc from 'fast-check';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { rivalPlainPolicy } from '../../src/race-monte-carlo/index.ts';
+import { RAIN_OUTLOOK_CONFIG } from '../../src/rain-outlook/index.ts';
 import { STRATEGY_DP_CONFIG } from '../../src/strategy-dp/config.ts';
-import { bestWith, type DpPlan, type DpResult, type DpSolution } from '../../src/strategy-dp/index.ts';
-import { policyOf } from '../../src/strategy/candidates.ts';
+import type * as dpModule from '../../src/strategy-dp/index.ts';
+import { bestWith, type DpInput, type DpPlan, type DpResult, type DpSolution } from '../../src/strategy-dp/index.ts';
+import { bestPlanOf, policyOf } from '../../src/strategy/candidates.ts';
 import { STRATEGY_CONFIG } from '../../src/strategy/config.ts';
 import { prepareStrategy } from '../../src/strategy/index.ts';
 import { candidatesForRun } from '../../src/strategy/job.ts';
@@ -37,7 +40,36 @@ import {
   LAPS,
   solved,
 } from './candidates-support.ts';
-import { json, once, PLAYER, RACE, SETS, stopIn, TEAMMATE, TEST_CAP, viewAt } from './support.ts';
+import { json, once, PLAYER, RACE, SETS, stopIn, TEAMMATE, TEST_CAP, viewAt, withForecast } from './support.ts';
+
+/**
+ * SP4.3e Task 4: a switch on `strategy-dp`'s `solveDp` (off by default: the real one). On, every plan of the result,
+ * box this lap and continue stop for inters (a plan without a stop gets one onto inters on its start lap), so no plan
+ * of the DP's result is one the rain filter allows in the dry.
+ */
+const dpSwitch = vi.hoisted(() => ({ allInter: false }));
+vi.mock('../../src/strategy-dp/index.ts', async (importOriginal) => {
+  const real = await importOriginal<typeof dpModule>();
+  return {
+    ...real,
+    solveDp: (...args: Parameters<typeof real.solveDp>) => {
+      const result = real.solveDp(...args);
+      return dpSwitch.allInter ? allInterOf(result, args[0]) : result;
+    },
+  };
+});
+afterEach(() => {
+  dpSwitch.allInter = false;
+});
+
+/** `dp` with every plan's stops onto inters, a plan without a stop given one on the input's start lap. */
+function allInterOf(dp: DpResult, input: DpInput): DpResult {
+  const inter = ({ startCompound: _, ...p }: DpPlan): DpPlan => ({
+    ...p,
+    stops: p.stops.length === 0 ? [{ lap: input.fromLap, compound: 'inter' }] : p.stops.map((s) => ({ ...s, compound: 'inter' as const })),
+  });
+  return { ...dp, plans: dp.plans.map(inter), boxThisLap: dp.boxThisLap === null ? null : inter(dp.boxThisLap), continue: inter(dp.continue) };
+}
 
 type Cand = { policy: Policy; source: McSource; rule: string | null };
 
@@ -308,5 +340,84 @@ describe('strategy: candidates (Task 23a, ported)', () => {
       expect(perCar.length, `lap ${lap}: cars planned`).toBeGreaterThan(0);
       for (const [car, list] of perCar) expect(list.length, `lap ${lap}, car ${car}`).toBeLessThanOrEqual(bound);
     }
+  });
+});
+
+// SP4.3e Task 4 (spec §4.4 item 4; planner report F3b, F3c; C3, C43): the rain filter is never bypassed and has one
+// owner, `shared/wet-allowed.ts` (`wetAllowed`, `allowedPolicy`).
+//
+// How these rows read the plan text (the test agent's decisions, Task 4 test phase):
+// - "rain 1 %": every forecast sample (or every lap of the starting point's forecast) at 1 %, below `rain-outlook`'s
+//   threshold, and a dry track: rain cannot come.
+// - `bestPlanOf` gives `undefined` when no plan of the DP result (its plans, box this lap, continue) is allowed; the
+//   job then marks the car `unknown('insufficientData')` and plans it not (no `perCar` entry, no candidates).
+// - `allowedPolicy(start, car, rainPct)` is the filter `candidatesOf` applies (moved from `allowedOf`): a predicate over
+//   a policy (`stops`, a free start's `startCompound`). It is imported dynamically, so only the property row fails until
+//   the module exists (a typecheck error until then: TS2307 on `../../src/shared/wet-allowed.ts`).
+describe('strategy: the rain filter, never bypassed (SP4.3e Task 4)', () => {
+  const WET_COMPOUNDS: readonly string[] = ['inter', 'wet'];
+  const usesWet = (p: Pick<Policy, 'stops' | 'startCompound'>): boolean =>
+    (p.startCompound !== undefined && WET_COMPOUNDS.includes(p.startCompound)) || p.stops.some((s) => WET_COMPOUNDS.includes(s.compound));
+
+  /** A DP result whose every plan, box this lap and continue stop for inters. */
+  const allInter = (): DpResult => ({
+    plans: [plan([{ lap: 28, compound: 'inter' }], 1_000), plan([{ lap: 26, compound: 'inter' }, { lap: 38, compound: 'inter' }], 2_000), plan([{ lap: 30, compound: 'inter' }], 2_500, 1)],
+    boxThisLap: plan([{ lap: 19, compound: 'inter' }], 3_000),
+    continue: plan([{ lap: 44, compound: 'inter' }], 4_000),
+    table: S().dp.table,
+  });
+
+  it("a DP result whose every plan uses inters, rain 1 %: no candidate with inters, the car's entry unknown", () => {
+    // the unit: no candidate with inters, no best plan
+    const start = weatherField(() => 1, 0);
+    const cands = candidatesOf(start, CAR, allInter(), S().solutions, CONFIG) as Cand[];
+    for (const c of cands) expect(usesWet(c.policy), `${c.source} ${c.rule ?? ''}: ${json(c.policy)}`).toBe(false);
+    expect(bestPlanOf(start, CAR, allInter(), CONFIG), 'no best plan: nothing is allowed').toBeUndefined();
+
+    // the job: the car's entry unknown('insufficientData'), the car not planned
+    const view = withForecast(viewAt(RACE(), 3, { config: { maxScenarioPolicies: TEST_CAP } }), 1);
+    const input = prepareStrategy(view);
+    expect(input.start.known, 'the precondition: a starting point').toBe(true);
+    const sp = (input.start as Extract<typeof input.start, { known: true }>).value;
+    expect(sp.wetness.wet, 'the precondition: a dry track').toBe(false);
+    expect(sp.weather.known, 'the precondition: a forecast').toBe(true);
+    if (sp.weather.known) expect(Math.max(...sp.weather.value.byLap.map((l) => l.rainPct)), 'the precondition: rain 1 %').toBe(1);
+    dpSwitch.allInter = true;
+    const { mc, perCar, out } = candidatesForRun(structuredClone(input), createRng(2_025));
+    for (const car of [PLAYER, TEAMMATE]) {
+      expect(out[car], `car ${car}: its entry`).toEqual(unknown('insufficientData'));
+      expect(perCar.has(car), `car ${car}: not planned`).toBe(false);
+      for (const c of mc?.candidates[car] ?? []) expect(usesWet(c.policy), `car ${car}: ${json(c.policy)}`).toBe(false);
+    }
+  });
+
+  it('property: over random DP results no candidate violates allowedPolicy', async () => {
+    const { allowedPolicy } = await import('../../src/shared/wet-allowed.ts');
+    const rainPct = RAIN_OUTLOOK_CONFIG.defaults.rainPct;
+    const compound = fc.constantFrom<NoiseCompound>('soft', 'medium', 'hard', 'inter', 'wet');
+    const stops = fc.array(fc.record({ lap: fc.integer({ min: LAP + 1, max: LAPS - 1 }), compound }), { maxLength: 3 }).map((s) => [...s].sort((a, b) => a.lap - b.lap));
+    const dpPlan = fc.record({ stops, expectedMs: fc.integer({ min: 0, max: 100_000 }), world: fc.constantFrom(0, 1), start: fc.option(compound, { nil: undefined }) }).map(
+      ({ start, ...p }): DpPlan => (start === undefined ? p : { ...p, startCompound: start }),
+    );
+    const weather = fc.oneof(
+      fc.constant({ rain: (): number => 1, wetnessMs: 0 }),
+      fc.constant({ rain: (): number => 0, wetnessMs: 0 }),
+      fc.constant({ rain: (lap: number): number => (lap >= 30 ? 100 : 0), wetnessMs: 0 }),
+      fc.constant({ rain: (): number => 0, wetnessMs: 600 }),
+      fc.integer({ min: 0, max: 100 }).map((pct) => ({ rain: (): number => pct, wetnessMs: 0 })),
+    );
+    fc.assert(
+      fc.property(fc.array(dpPlan, { minLength: 1, maxLength: 12 }), fc.option(dpPlan, { nil: null }), dpPlan, weather, (plans, boxThisLap, cont, w) => {
+        const start = weatherField(w.rain, w.wetnessMs);
+        const dp: DpResult = { plans, boxThisLap, continue: cont, table: S().dp.table };
+        const allowed = allowedPolicy(start, CAR, rainPct);
+        for (const c of candidatesOf(start, CAR, dp, S().solutions, CONFIG) as Cand[]) {
+          expect(allowed(c.policy), `${c.source} ${c.rule ?? ''}: ${json(c.policy)}`).toBe(true);
+        }
+        const best = bestPlanOf(start, CAR, dp, CONFIG);
+        if (best !== undefined) expect(allowed(best), `the best plan ${json(best)}`).toBe(true);
+      }),
+      { numRuns: 200, seed: 4_304 },
+    );
   });
 });

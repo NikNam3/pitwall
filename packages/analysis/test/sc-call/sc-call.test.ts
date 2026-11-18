@@ -37,7 +37,7 @@ import type * as dpModule from '../../src/strategy-dp/index.ts';
 import type { DpFirst, DpInput, DpPlan, DpSolution, DpUnder } from '../../src/strategy-dp/index.ts';
 import { mean, seOf, sweepViewAt } from '../pit-sweep/support.ts';
 import { guardedQuick } from '../situated.ts';
-import { stopIn } from '../strategy/support.ts';
+import { stopIn, withForecast } from '../strategy/support.ts';
 import { JOB_UNITS } from '../units.ts';
 import {
   activityOf,
@@ -196,8 +196,8 @@ const valueOf = <T>(k: { known: boolean; value?: T }, what: string): T => {
 const green = (lap = LAP, spec: ScViewSpec = {}) => scViewAt(GREEN(), lap, spec);
 
 /** A tyre set as `strategy`'s support builds them (`../strategy/support.ts`), any compound. */
-const tyreSet = (visualCompound: 'soft' | 'medium' | 'hard' | 'inter', wearPct: number, fitted: boolean): TyreSet => ({
-  actualCompound: visualCompound === 'soft' ? 'C3' : visualCompound === 'medium' ? 'C2' : visualCompound === 'hard' ? 'C1' : 'inter',
+const tyreSet = (visualCompound: 'soft' | 'medium' | 'hard' | 'inter' | 'wet', wearPct: number, fitted: boolean): TyreSet => ({
+  actualCompound: visualCompound === 'soft' ? 'C3' : visualCompound === 'medium' ? 'C2' : visualCompound === 'hard' ? 'C1' : visualCompound,
   visualCompound,
   wearPct,
   available: true,
@@ -364,6 +364,42 @@ describe('sc-call: the job', () => {
       }
       for (const s of scoresOf(car)) {
         for (const c of s.input.candidates) for (const stop of c.policy.stops) expect(['medium', 'wet'], json(c.policy)).not.toContain(stop.compound);
+      }
+    }
+  });
+
+  // SP4.3e Task 4 (spec §4.4 item 4; planner report F3c; C43): the Box call reads the one wet rule (`shared/wet-allowed.ts`).
+  // The test agent's reading: "no I/W block" = in every block the I and W options are unknown (no answer offered), never
+  // `noSet` (the car has fresh inter and wet sets), and nothing is queried or scored onto inters or wets.
+  it('dry, rain 1 %: the Box call offers no I/W block', () => {
+    const sets = [tyreSet('medium', 10, true), tyreSet('soft', 0, false), tyreSet('medium', 0, false), tyreSet('hard', 0, false), tyreSet('inter', 0, false), tyreSet('inter', 0, false), tyreSet('wet', 0, false)];
+    const view = withForecast(green(LAP, { sets: { [PLAYER]: sets, [TEAMMATE]: sets } }), 1);
+    // the precondition: a dry track and a forecast of 1 % on every lap
+    const input = prepare(view);
+    expect(input.strategy.start.known, 'the precondition: a starting point').toBe(true);
+    const sp = (input.strategy.start as Extract<typeof input.strategy.start, { known: true }>).value;
+    expect(sp.wetness.wet, 'the precondition: a dry track').toBe(false);
+    expect(sp.weather.known, 'the precondition: a forecast').toBe(true);
+    if (sp.weather.known) expect(Math.max(...sp.weather.value.byLap.map((l) => l.rainPct)), 'the precondition: rain 1 %').toBe(1);
+    const out = run(structuredClone(input), createRng(SEED));
+    for (const car of OURS) {
+      const call = callOf(out, car);
+      expect(call.blocks.map((b) => b.condition)).toEqual(['sc', 'vsc', 'green']);
+      for (const block of call.blocks) {
+        for (const answer of ['I', 'W'] as const) {
+          const option = optionOf(block, answer);
+          expect(option.ePos.known, `car ${car} ${block.condition} ${answer}: not offered`).toBe(false);
+          expect(option.ePos, `car ${car} ${block.condition} ${answer}: the sets are there`).not.toEqual(NO_SET);
+        }
+        for (const answer of ['stay', 'H'] as const) expect(optionOf(block, answer).ePos.known, `car ${car} ${block.condition} ${answer}`).toBe(true);
+      }
+      // nothing boxes onto inters or wets: no query, no scored candidate's stop
+      const { solution } = solveOf(car);
+      for (const b of calls.bests.filter((x) => x.solution === solution)) {
+        if ('stopLap' in b.first) expect(['inter', 'wet'], json(b.first)).not.toContain(b.first.compound);
+      }
+      for (const s of scoresOf(car)) {
+        for (const c of s.input.candidates) for (const stop of c.policy.stops) expect(['inter', 'wet'], json(c.policy)).not.toContain(stop.compound);
       }
     }
   });
