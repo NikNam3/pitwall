@@ -75,9 +75,22 @@ export const RACE_UID = 7n;
 export const AT = { practice: 1_763_400_000_000, qualifying: 1_763_403_600_000, race: 1_763_407_200_000 } as const;
 
 /** A builder session of `uid` and `type` in weekend `weekend`, player car `player`; Participants name every slot's team. */
-export const builder = (o: { uid: bigint; weekend: number; type: number; player: number }): ScenarioBuilder =>
-  new ScenarioBuilder({ sessionUid: o.uid, cars: TEAMS.length, player: o.player })
-    .session({ sessionType: o.type, weekendStructure: STRUCTURE, numSessionsInWeekend: STRUCTURE.length, weekendLinkIdentifier: o.weekend })
+export const builder = (o: { uid: bigint; weekend: number; type: number; player: number; track?: number }): ScenarioBuilder =>
+  sessionAgain(new ScenarioBuilder({ sessionUid: o.uid, cars: TEAMS.length, player: o.player }), o);
+
+/**
+ * Queues the session's Session and Participants packets again, sent with the next frame, as the game repeats them: a
+ * restarted bridge's first Session packet is one of these (C59). `track`: default the builder's (`TRACK`).
+ */
+export const sessionAgain = (b: ScenarioBuilder, o: { weekend: number; type: number; track?: number }): ScenarioBuilder =>
+  b
+    .session({
+      sessionType: o.type,
+      weekendStructure: STRUCTURE,
+      numSessionsInWeekend: STRUCTURE.length,
+      weekendLinkIdentifier: o.weekend,
+      ...(o.track !== undefined && { trackId: o.track }),
+    })
     .participants({ participants: TEAMS.map((teamId) => ({ teamId })) });
 
 /** A stored session's key: the session ref and the seat's player car. */
@@ -86,7 +99,7 @@ export const refOf = (uid: bigint, weekend: number): SessionRef => ({ sessionUid
 const keyText = (k: SessionKey): string => `${k.sessionUid}@${k.weekendId}/${k.playerCar}`;
 
 /** Stores one builder session of the seat `player` complete under `RULES`, as a live run of the bridge does. */
-export async function storeSession(db: Db, o: { uid: bigint; weekend: number; type: number; player: number; at: number }): Promise<SessionRef> {
+export async function storeSession(db: Db, o: { uid: bigint; weekend: number; type: number; player: number; at: number; track?: number }): Promise<SessionRef> {
   const packets = builder(o).frames(30, () => {}).packets().map(({ packet, receivedAtMs }) => ({ bytes: packetBytes(packet), receivedAtMs }));
   const id = feedId(`store-${o.uid}-${o.player}`);
   const pipeline = new FeedPipeline({
@@ -235,7 +248,16 @@ afterEach(async () => {
   for (const stop of stops.splice(0)) await stop();
 });
 
-export type Feed = { push: (packets: Timed) => void; seen: Seen[]; pipeline: FeedPipeline; dir: string; file: () => string; end: () => Promise<string> };
+export type Feed = {
+  push: (packets: Timed) => void;
+  seen: Seen[];
+  pipeline: FeedPipeline;
+  dir: string;
+  file: () => string;
+  end: () => Promise<string>;
+  /** Stops the bridge, not the session (`pipeline.stop()`): its row stays incomplete, for a restart to continue (C59). */
+  halt: () => Promise<void>;
+};
 
 /**
  * One database, one hub, one `TeamFeeds`, the fake rebuild service and last choice, as `serve` holds them; `routing()`
@@ -250,11 +272,14 @@ export function bridge(o: { lastChoice?: LastChoice } = {}) {
   const rebuild = fakeRebuild(db);
   const lastChoice = fakeLastChoice(o.lastChoice);
   const plans = fakePlans();
-  /** A live pipeline of feed `id` on a manual source, its session file and sidecars in a temp dir. */
-  const feed = (id: FeedId, wallClock: number = AT.race): Feed => {
+  /**
+   * A live pipeline of feed `id` on a manual source, its session file and sidecars in `recordingsDir` (default a new temp
+   * dir; a restart passes its first run's).
+   */
+  const feed = (id: FeedId, wallClock: number = AT.race, recordingsDir?: string): Feed => {
     const probe = basisProbe();
     const source = new ManualSource(id);
-    const dir = tmp();
+    const dir = recordingsDir ?? tmp();
     const options: FeedPipelineOptions & BasisOptions = {
       feedId: id,
       source,
@@ -292,6 +317,7 @@ export function bridge(o: { lastChoice?: LastChoice } = {}) {
         await stop();
         return file();
       },
+      halt: () => pipeline.stop(),
     };
   };
   const routing = async (): Promise<BasisRouting> => {
@@ -326,6 +352,37 @@ export async function replay(db: Db, file: string, id: FeedId): Promise<Seen[]> 
   pipeline.start();
   await pipeline.done;
   return probe.seen;
+}
+
+/**
+ * A replay (reprocess) of a session file with its sidecars and the bridge's rebuild service (SP4.3e Task 7a-2 fix round,
+ * F2; C38, C61): `FeedPipelineOptions.basis` beside `recordedBasis`. With `recordedBasis`, `basis.rebuild` makes the
+ * sessions the sidecar's `start` names and those of every recorded `basisChosen` current before the run's first frame
+ * (`ensureCurrent`, priority `firstRead`), and the run waits for it (C61: every reader but a running session waits at its
+ * first read); it never preselects and never commits. Started, not awaited: `done` resolves at the replay's end.
+ */
+export async function replayWithRebuild(
+  db: Db,
+  file: string,
+  id: FeedId,
+  rebuild: Pick<RebuildService, 'ensureCurrent'>,
+): Promise<{ seen: Seen[]; done: Promise<void> }> {
+  const probe = basisProbe();
+  const options: FeedPipelineOptions & ReplayOptions & BasisOptions = {
+    feedId: id,
+    source: new PwrecSource({ feedId: id, path: file, mode: 'asFastAsPossible' }),
+    hub: new TopicHub({ now: () => 0 }),
+    features: [probe.feature],
+    log,
+    teams: new TeamFeeds(),
+    recorded: recordingDecisions(file),
+    recordedBasis: await recordingBasisOf(file),
+    basis: { rebuild, lastChoice: fakeLastChoice() },
+    storage: { db, rulesVersion: RULES, mode: 'replace', sourcePath: file },
+  };
+  const pipeline = new FeedPipeline(options as FeedPipelineOptions);
+  pipeline.start();
+  return { seen: probe.seen, done: pipeline.done };
 }
 
 /** Lets the fake rebuild's promises and what waits on them settle. */

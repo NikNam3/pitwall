@@ -106,4 +106,42 @@ describe('basis.active (C54, C62)', () => {
     expect(value(b0.active(A))).toMatchObject({ basis: NO_BASIS, start });
     await a.end();
   });
+
+  // Fix round R18 (the topic file as committed on integ): `sessions` is the picker's candidates.
+  it('sessions lists every stored session of the seat on the track, the named ones included, each with stale: a current practice and a stale qualifying, the basis naming only the practice', async () => {
+    const EARLIER = 55;
+    const LOBBY = 56;
+    const ELSEWHERE = 57;
+    const OTHER_TRACK = 3;
+    const b = bridge();
+    const practice = await storeSession(b.db, { uid: 40n, weekend: EARLIER, type: SESSION_TYPE.practice, player: 0, at: AT.practice });
+    const qualifying = await storeSession(b.db, { uid: 41n, weekend: EARLIER, type: SESSION_TYPE.qualifying, player: 0, at: AT.qualifying });
+    markStale(b.db, keyOf(qualifying, 0));
+    // not candidates: another seat's session (team 4) and the seat's session on another track
+    await storeSession(b.db, { uid: 42n, weekend: EARLIER, type: SESSION_TYPE.practice, player: 2, at: AT.practice });
+    await storeSession(b.db, { uid: 43n, weekend: ELSEWHERE, type: SESSION_TYPE.practice, player: 0, at: AT.practice, track: OTHER_TRACK });
+    expect(b.db.prepare('SELECT track_id FROM sessions WHERE session_uid = ?').get('43')).toEqual({ track_id: OTHER_TRACK });
+    const basis = { practice: [practice], qualifying: null };
+
+    const a = b.feed(A);
+    const packets = builder({ uid: RACE_UID, weekend: LOBBY, type: SESSION_TYPE.race, player: 0 }).frames(16, () => {}).packets();
+    a.push(slice(packets, 0, 6));
+    const routing = await b.routing();
+    expect(await routing.choose({ kind: 'basis.choose', feedId: A, basis, plan: undefined })).toEqual({ ok: true });
+    await settle();
+    a.push(slice(packets, 6, 16));
+    await settle();
+    expect(last(a.seen).basis).toEqual(basis);
+
+    const published = value(b.active(A));
+    expect(published.basis).toEqual(basis);
+    const practiceKey = `${practice.sessionUid}@${practice.weekendId}`;
+    const qualifyingKey = `${qualifying.sessionUid}@${qualifying.weekendId}`;
+    expect(Object.keys(published.sessions).sort()).toEqual([practiceKey, qualifyingKey].sort());
+    expect(published.sessions[practiceKey]).toMatchObject({ kind: 'practice', trackId: TRACK, stale: false });
+    expect(published.sessions[practiceKey]!.date.slice(0, 10)).toBe(dayOf(AT.practice));
+    expect(published.sessions[qualifyingKey]).toMatchObject({ kind: 'qualifying', trackId: TRACK, stale: true });
+    expect(published.sessions[qualifyingKey]!.date.slice(0, 10)).toBe(dayOf(AT.qualifying));
+    await a.end();
+  });
 });
