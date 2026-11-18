@@ -10,8 +10,7 @@ export type { InvokeCommand, WidgetCommandArgs, WidgetCommandId } from './comman
 const KEY = Symbol('widget-commands');
 type Commands = { invoke: InvokeCommand };
 
-const OK: ActionOutcome = { ok: true };
-const NOT_DECLARED: ActionOutcome = { ok: false, reason: 'notSupported' };
+const NOT_SUPPORTED: ActionOutcome = { ok: false, reason: 'notSupported' };
 
 /**
  * Called by the panel: makes `invoke` (the registry's) available to the widget below it, for the ids in `commands`
@@ -24,12 +23,15 @@ export function setWidgetCommands(invoke: InvokeCommand, commands: readonly Widg
     invoke: (id, args) => {
       if (declared.has(id)) return invoke(id, args);
       if (import.meta.env.DEV) throw new Error(`command "${id}" is not declared by the widget (C74)`);
-      return Promise.resolve(NOT_DECLARED);
+      return Promise.resolve(NOT_SUPPORTED);
     },
   });
 }
 
-/** The commands of the panel above; outside a panel (gallery, tests) `invoke` runs nothing and resolves `ok`. */
+/**
+ * The commands of the panel above; outside a panel (gallery, a widget rendered alone) `invoke` runs nothing and
+ * resolves `notSupported`: a control wired to nothing answers with a rejection, never a silent `ok` (C73).
+ */
 export function getWidgetCommands(): Commands {
-  return getContext<Commands | undefined>(KEY) ?? { invoke: () => Promise.resolve(OK) };
+  return getContext<Commands | undefined>(KEY) ?? { invoke: () => Promise.resolve(NOT_SUPPORTED) };
 }
