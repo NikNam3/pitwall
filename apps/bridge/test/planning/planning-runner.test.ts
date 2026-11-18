@@ -31,7 +31,6 @@ import type { Computed, PlanningRoundState, ServerMessage, TopicName } from '@pi
 import { feedId, type BasisSidecar, type CarKey, type FeedId, type RaceAssumptions, type SessionRef, type StrategyCar, type StrategyOutput } from '@pitwall/domain';
 import type { StrategyInput } from '@pitwall/analysis';
 import type { Job } from '@pitwall/engine/readers';
-import { ScenarioBuilder, packetBytes } from '../../../../packages/engine/test/builders/index.ts';
 import { processRecording } from '../../src/cli/process-recording.ts';
 import { loadFeatureConfig } from '../../src/feature-config.ts';
 import { FEATURES } from '../../src/features/index.generated.ts';
@@ -41,14 +40,13 @@ import { createLogger } from '../../src/log.ts';
 import { createLastChoiceStore } from '../../src/pipeline/last-choice.ts';
 import { createPlanningRunner } from '../../src/planning/runner.ts';
 import { SavedPlanStore } from '../../src/planning/saved-plans.ts';
-import { PwrecWriter } from '../../src/pwrec/writer.ts';
 import { dataDir, type DataDir } from '../../src/storage/data-dir.ts';
 import { openDatabase, type Db, type SessionKey } from '../../src/storage/db.ts';
 import { createRebuildService } from '../../src/storage/rebuild-service.ts';
 import type { RebuildPriority, RebuildService, ReplayJob } from '../../src/storage/rebuild-service-types.ts';
 import { WeekendRepository } from '../../src/storage/weekend-repository.ts';
 import { segmentPath } from '../fixtures/replay.ts';
-import { META } from '../pwrec/helpers.ts';
+import { writeSynthetic } from '../../../../test-support/recordings/index.ts';
 import { SLOW_MS } from './planning-slow-stub-job.ts';
 
 const RULES = 'rules-of-this-bridge';
@@ -109,16 +107,15 @@ async function storeQualifying(place: { dirs: DataDir; db: Db }): Promise<{ key:
  * written as a recording into the place's recordings and stored; its ref and key.
  */
 async function storePractice(place: { dirs: DataDir; db: Db }, uid: bigint, weekend: number): Promise<{ ref: SessionRef; key: SessionKey }> {
-  const packets = new ScenarioBuilder({ sessionUid: uid, cars: 4, player: 3 })
-    .session({ sessionType: 1, weekendStructure: [1, 8, 15], numSessionsInWeekend: 3, weekendLinkIdentifier: weekend, trackId: TRACK, totalLaps: 56 })
-    .participants({ participants: [{ teamId: 5, raceNumber: 10 }, { teamId: 5, raceNumber: 11 }, { teamId: TEAM, raceNumber: 64 }, { teamId: TEAM, raceNumber: 2 }] })
-    .frames(30, () => {})
-    .event({ code: 'SEND' })
-    .packets();
   const file = join(place.dirs.recordings, `practice-${uid}.pwrec.gz`);
-  const writer = PwrecWriter.create(file, META);
-  for (const { packet, receivedAtMs } of packets) writer.write(receivedAtMs, packetBytes(packet));
-  await writer.close(packets.at(-1)!.receivedAtMs);
+  await writeSynthetic(file, {
+    sessionUid: uid,
+    weekendId: weekend,
+    trackId: TRACK,
+    kind: 'practice',
+    player: 3,
+    cars: [{ teamId: 5, raceNumber: 10 }, { teamId: 5, raceNumber: 11 }, { teamId: TEAM, raceNumber: 64 }, { teamId: TEAM, raceNumber: 2 }],
+  });
   const key = await store(place, file);
   return { ref: { sessionUid: key.sessionUid, weekendId: key.weekendId }, key };
 }
