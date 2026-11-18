@@ -24,6 +24,7 @@ import type { CarSignals } from '../../signals/types.ts';
 import type { DeepReadonly } from '../../util/deep-readonly.ts';
 import { CAR_STATUS } from '../car-status/in-session.ts';
 import type { MachineInput, MachineStep, SubMachine } from '../machine.ts';
+import { crossesLine as crossesLineAt } from '../../recorders/line-crossing.ts';
 
 /** The sub-machine of where a car physically is. */
 const CAR_LOCATION = 'car-location';
@@ -57,11 +58,8 @@ type CarNow = {
 const isSessionEnd = (kind: string | undefined): boolean => kind === 'finished' || kind === 'postSession';
 
 /** The line on track: the lap distance from below 0 to 0 or more, or a wrap of more than half the track's length. */
-const crossesLine = (before: CarOpen, now: CarNow, trackLengthM: Metres): boolean => {
-  if (now.location !== 'track') return false;
-  if (before.lapDistanceM < 0 && now.lapDistanceM >= 0) return true;
-  return trackLengthM > 0 && before.lapDistanceM - now.lapDistanceM > trackLengthM / 2;
-};
+const crossesLine = (before: CarOpen, now: CarNow, trackLengthM: Metres): boolean =>
+  now.location === 'track' && crossesLineAt(before.lapDistanceM, now.lapDistanceM, trackLengthM);
 
 /** The kind of a car's activity: a timed sub-machine's push kind and the rules above. */
 const rulesOf = <P extends Push>(push: P) => {
