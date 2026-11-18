@@ -726,8 +726,23 @@ function oursIn(view: AsOfView, cars: number): CarId[] {
  */
 // SP4.3e Task 3: the carried race's reserved sets (`recommendedSession` the race's session type, R8d) wait on a
 // requested `tyre-model` output and step-1 value (the weekend structure is a signal, C12, C13); see the task's report.
+/**
+ * Our cars' sets carried into the race from the qualifying: `tyre-model`'s `raceSets` (the sets available now and those
+ * the game reserves for the next race, Task 3b; availability is tyre-model's, C43); a car without them gets none.
+ */
+function carriedSetsOf(view: AsOfView, tyreModel: DeepReadonly<TyreModelOutput>, cars: number): StartingPoint['sets'] {
+  const out: StartingPoint['sets'] = {};
+  for (const car of oursIn(view, cars)) {
+    const sets = tyreModel[car]?.raceSets;
+    if (sets === undefined || !sets.known) continue;
+    out[car] = sets.value.map((s) => ({ compound: s.compound, wearPct: s.wearPct }));
+  }
+  return out;
+}
+
 function raceSetsOf(view: AsOfView, tyreModel: DeepReadonly<TyreModelOutput>, cars: number, race: RaceAssumptions): StartingPoint['sets'] {
-  if (view.situation.weekendPhase.kind === 'race' || race.sets === 'carried') return setsOf(view, tyreModel, cars);
+  if (view.situation.weekendPhase.kind === 'race') return setsOf(view, tyreModel, cars);
+  if (race.sets === 'carried') return carriedSetsOf(view, tyreModel, cars);
   const c = configOf(FORECAST_FIELD_CONFIG, view);
   const counts: Record<NoiseCompound, number> = { soft: c.freshRaceSetsSoft, medium: c.freshRaceSetsMedium, hard: c.freshRaceSetsHard, inter: c.freshRaceSetsInter, wet: c.freshRaceSetsWet };
   const fresh = NOISE_COMPOUNDS.flatMap((compound) => Array.from({ length: Math.max(0, Math.floor(counts[compound])) }, () => ({ compound, wearPct: 0 })));

@@ -312,7 +312,13 @@ describe('the grid start (SP4.3d2 Task 7)', () => {
     }
   });
 
-  it("6b: pace: a car without weekend-pace's pace and without degradation's stand-in makes the grid start unknown('insufficientData'), never 0 (C3)", () => {
+  it("6b: pace: weekend-pace's declared stand-in is read like any pace (SP4.3e Task 6); a car without weekend-pace's pace and without degradation's stand-in makes the grid start unknown('insufficientData'), never 0 (C3)", () => {
+    const pace = weekendPace();
+    pace[carId(3)] = known({ paceMs: 91_234, sdMs: 900, source: 'standIn', laps: 0 }, 0);
+    const standIn = gridStart(qualifyingView(), qualifyingOutputs(pace));
+    expect(standIn.paceMs[3], 'car 3: the stand-in pace').toBeCloseTo(91_234, 6);
+    expect(standIn.paceSdMs[3], 'car 3: the stand-in sd').toBeCloseTo(900, 6);
+    // without qualifying evidence in the field weekend-pace has no stand-in (G5): still insufficientData
     const missing = buildGridStart(qualifyingView(), qualifyingOutputs(weekendPace([3])), { laps: LAPS, grid: GRID, fittedCompound: planningCompound, race: CARRIED });
     expect(missing).toEqual(unknown('insufficientData'));
     const none = buildGridStart(qualifyingView(), qualifyingOutputs(null), { laps: LAPS, grid: GRID, fittedCompound: planningCompound, race: CARRIED });
@@ -437,6 +443,13 @@ describe('the race sets on the grid start (SP4.3e Task 3)', () => {
     const setsNow = Array.from({ length: CARS }, (_, k) => (k === PLAYER || k === TEAMMATE ? known({ sets: QUALIFYING_SETS, fittedIdx: 1 }, view.at) : unknown('realism')));
     return { ...view, fixed: { ...view.fixed, setsNow } };
   };
+  /** `tyre-model`'s output with our cars' `raceSets` as Task 3b builds them from `QUALIFYING_SETS`: the available sets and the race-reserved ones (C43: availability is tyre-model's). */
+  const withRaceSets = (outputs: Map<CalculatorId, unknown> = qualifyingOutputs()): Map<CalculatorId, unknown> => {
+    const model = { ...(outputs.get(TYRE_MODEL) as Record<number, object>) };
+    const raceSets = known(QUALIFYING_SETS.map((x) => ({ compound: x.visualCompound as NoiseCompound, wearPct: x.wearPct })), 0);
+    for (const k of [PLAYER, TEAMMATE]) model[k] = { ...model[k], raceSets };
+    return new Map([...outputs, [TYRE_MODEL, model]]);
+  };
   const newOf = (sets: readonly { compound: NoiseCompound; wearPct: number }[]): NoiseCompound[] => sets.filter((s) => s.wearPct <= 0).map((s) => s.compound).sort();
   const countsOf = (sets: readonly { compound: NoiseCompound; wearPct: number }[]): Partial<Record<NoiseCompound, number>> => {
     const out: Partial<Record<NoiseCompound, number>> = {};
@@ -445,7 +458,7 @@ describe('the race sets on the grid start (SP4.3e Task 3)', () => {
   };
 
   it("carried: the qualifying's used M and S and the race's H and M2 (recommendedSession 15, available 0) → start.sets holds H and M2 new", () => {
-    const sp = gridStart(withSets(), qualifyingOutputs(), { laps: LAPS, sets: 'carried' });
+    const sp = gridStart(withSets(), withRaceSets(), { laps: LAPS, sets: 'carried' });
     for (const car of [PLAYER, TEAMMATE].map(carId)) {
       const sets = sp.sets[car];
       expect(sets, `car ${car}: its race sets`).toBeDefined();
@@ -457,11 +470,13 @@ describe('the race sets on the grid start (SP4.3e Task 3)', () => {
     expect(Object.keys(sp.sets).map(Number).sort()).toEqual([PLAYER, TEAMMATE]);
   });
 
+  // which sets are the race's is tyre-model's judgement (`raceSets`, Task 3b; its rows in test/tyre-model/race-sets.test.ts):
+  // the builder reads it, never the sets themselves (C43)
   it('carried: a set neither available now nor reserved for the race is not a race set', () => {
     const view = withSets();
     const extra = [...QUALIFYING_SETS, tyreSet('soft', { available: false, recommendedSession: 6 })];
     const setsNow = view.fixed.setsNow!.map((s, k) => (k === PLAYER ? known({ sets: extra, fittedIdx: 1 }, view.at) : s));
-    const sp = gridStart({ ...view, fixed: { ...view.fixed, setsNow } }, qualifyingOutputs(), { laps: LAPS, sets: 'carried' });
+    const sp = gridStart({ ...view, fixed: { ...view.fixed, setsNow } }, withRaceSets(), { laps: LAPS, sets: 'carried' });
     expect(newOf(sp.sets[carId(PLAYER)]!), 'no new soft: the Q3 set is not the race\'s').toEqual(['hard', 'medium']);
   });
 

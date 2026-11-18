@@ -5,7 +5,9 @@
 // degradation's alone, C43), taken to tyre age 0 by the priors' slope of the compound (`view.priors`, C62a), else by
 // the stint's own `ν` as degradation fits it; a soft or hard run is moved to medium by `lapModelParams`'
 // `compoundOffsetMs` (ruling R6). Else its best valid qualifying lap (lap-classes' `forPace` rule) plus
-// `raceTrimOffsetMs` (ruling R5); else `unknown('insufficientData')` (C3). Quick: from scratch on each run; it runs on
+// `raceTrimOffsetMs` (ruling R5); else the declared stand-in (SP4.3e Task 6): the median of the qualifying-sourced
+// cars' paces plus `noPaceStandInOffsetMs`, `source: 'standIn'`; without qualifying evidence in the field
+// `unknown('insufficientData')` (C3). Quick: from scratch on each run; it runs on
 // a lap record and at the session's start.
 import { currentLaps, known, scopeOf, unknown, type CarId, type CarKey, type LapRecord, type VisualCompound, type WeekendPace, type WeekendPhase } from '@pitwall/domain';
 import {
@@ -212,6 +214,8 @@ export function weekendPaceAsOf(view: AsOfView): WeekendPace {
       if (seat !== undefined) addBest(evidence.qualifying, seat, ms);
     }
   }
+  const without: CarId[] = [];
+  const qualifyingPaces: number[] = [];
   for (const car of rows.cars) {
     const seat = seatNow(car);
     if (seat === undefined) {
@@ -225,10 +229,22 @@ export function weekendPaceAsOf(view: AsOfView): WeekendPace {
       continue;
     }
     const best = evidence.qualifying.get(seat);
+    if (best === undefined) {
+      without.push(car);
+      continue;
+    }
+    const paceMs = best + config.raceTrimOffsetMs;
+    qualifyingPaces.push(paceMs);
+    out[car] = known({ paceMs, sdMs: config.qualifyingPaceSdMs, source: 'qualifying', laps: 1 }, view.at);
+  }
+  // the declared stand-in (C3): the median of the qualifying-sourced cars' paces (one kind of evidence, long runs
+  // excluded) plus `noPaceStandInOffsetMs`; without qualifying evidence in the field, insufficientData
+  const fieldMedian = median(qualifyingPaces);
+  for (const car of without) {
     out[car] =
-      best === undefined
+      fieldMedian === undefined
         ? unknown('insufficientData')
-        : known({ paceMs: best + config.raceTrimOffsetMs, sdMs: config.qualifyingPaceSdMs, source: 'qualifying', laps: 1 }, view.at);
+        : known({ paceMs: Math.round(fieldMedian) + config.noPaceStandInOffsetMs, sdMs: config.qualifyingPaceSdMs, source: 'standIn', laps: 0 }, view.at);
   }
   return out;
 }
