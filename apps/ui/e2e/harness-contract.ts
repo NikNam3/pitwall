@@ -13,8 +13,10 @@ export type GalleryOptions = {
 };
 
 export type StartBridgeOptions = {
-  /** A fixture name from `fixtures/index.json`, replayed with `pitwall replay <fixture> --paused`. */
+  /** A fixture name from `fixtures/index.json` (or an absolute path to a `.pwrec.gz`), replayed with `pitwall replay <fixture> --paused`. */
   recording: string;
+  /** The `PITWALL_WS_PORT` to serve on (a panel already open on it reconnects); a free one by default. */
+  wsPort?: number | undefined;
   /** `PITWALL_DATA_DIR` of the bridge; it keeps the workbooks under `<dir>/ui/workbooks`. */
   dataDir: string;
   /** Test-only hook (inert unless set): with `PITWALL_E2E_INSIGHT=<key>` the bridge raises one critical insight
@@ -23,7 +25,7 @@ export type StartBridgeOptions = {
 };
 
 export type ImportRecordingOptions = {
-  /** A fixture name from `fixtures/index.json`, imported with `pitwall import <fixture>`. */
+  /** A fixture name from `fixtures/index.json`, or an absolute path to a `.pwrec.gz` (a synthetic recording), imported with `pitwall import`. */
   recording: string;
   /** `PITWALL_DATA_DIR`: the recording is copied to `<dir>/recordings` and stored in its database. */
   dataDir: string;
@@ -40,6 +42,13 @@ export type BridgeHandle = {
   log(): string[];
 };
 
+/**
+ * A bridge with no session (SP4.3f Task 8): `pitwall live` on its own UDP port (bound to 127.0.0.1, never 20777 or
+ * 20778) and WebSocket port, on `dataDir`, and no traffic until the spec sends some. `restart()` runs `pitwall live`
+ * again on the same ports and data dir.
+ */
+export type NoSessionBridgeOptions = { dataDir: string; wsPort: number; udpPort: number };
+
 export type LaunchPitwallOptions = {
   wsPort: number;
   /** The same `PITWALL_DATA_DIR`; the harness passes it on so the app and bridge agree. */
@@ -49,5 +58,11 @@ export type LaunchPitwallOptions = {
 export type PitwallApp = {
   /** Resolves once the window with this workbook window id (`?window=<id>` in its URL) has loaded; waits for it to open. */
   window(id: string): Promise<Page>;
+  /**
+   * Gives the page of the window with this id (open, as `window(id)` resolved it) a viewport of `size` CSS px, as a
+   * window of that content size would; resolves once the page has that size. The desktop app's own default stays as
+   * it is.
+   */
+  resize(id: string, size: { width: number; height: number }): Promise<void>;
   close(): Promise<void>;
 };

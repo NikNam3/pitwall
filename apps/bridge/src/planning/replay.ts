@@ -25,9 +25,10 @@ import { effectiveForecast, type TempsAtEnd } from './round.ts';
 
 /**
  * What the planning replay hands back: the planning job's input for the race assumptions, without the round's slots;
- * the qualifying's race samples at its end (`[]` without any) and its own temperatures then.
+ * the qualifying's race samples at its end (`[]` without any) and its own temperatures then. `input` is `undefined`
+ * while the race laps are not known (C3): such a replay reads the forecast only.
  */
-export type PlanningReplay = { input: StrategyInput; imported: ForecastSample[]; atEnd: TempsAtEnd };
+export type PlanningReplay = { input: StrategyInput | undefined; imported: ForecastSample[]; atEnd: TempsAtEnd };
 
 /** An ISO time past every stored session's start: `weekendContext` then gives every session of a weekend. */
 const AFTER_ALL = '￿';
@@ -59,7 +60,8 @@ function basisOf(repo: WeekendRepository, keys: readonly SessionKey[], player: C
  */
 export async function replayForPlanning(job: ReplayJob, o: { dbPath: string | undefined; config: FeatureConfig; rulesVersion: string; log: Logger }): Promise<PlanningReplay | null> {
   const path = job.pwrecPath;
-  const race: RaceAssumptions = { laps: job.laps, sets: job.sets, conditions: job.conditions };
+  const { laps } = job;
+  const race: RaceAssumptions | undefined = laps === null ? undefined : { laps, sets: job.sets, conditions: job.conditions };
   const stored: Db | undefined = o.dbPath === undefined || job.basisOverride.length === 0 ? undefined : openDatabase(o.dbPath);
   // The run's own storage, in memory: the engine stores nothing of a planning replay.
   const scratch = openDatabase(':memory:');
@@ -89,8 +91,12 @@ export async function replayForPlanning(job: ReplayJob, o: { dbPath: string | un
         const { session } = view.live;
         const imported = session.nextForecast.map((s) => ({ ...s }));
         const atEnd: TempsAtEnd = { at: view.live.sessionTime, trackTempC: session.trackTempC, airTempC: session.airTempC };
+        if (race === undefined) {
+          result = { input: undefined, imported, atEnd };
+          return;
+        }
         const nextForecast = effectiveForecast(job.conditions, imported, atEnd);
-        const input = planningInputFrom(asOfEnded(view, { laps: job.laps, nextForecast }), { laps: job.laps, race, prepared: {} });
+        const input = planningInputFrom(asOfEnded(view, { laps: race.laps, nextForecast }), { laps: race.laps, race, prepared: {} });
         result = { input, imported, atEnd };
       },
     });

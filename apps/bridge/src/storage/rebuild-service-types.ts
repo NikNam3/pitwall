@@ -11,9 +11,10 @@ export type RebuildPriority = 'runningBasis' | 'planning' | 'firstRead';
  * A planning round's replay (C62d): the qualifying's recording replayed to its end with `basisOverride` as its basis in
  * place of the recording's basis sidecar and its `basisChosen` decisions, the race assumptions (`laps`, `sets`,
  * `conditions`: the race's forecast in place of the qualifying's) and `profiles`, the round's profile snapshot (the
- * current one of the qualifying's linked drivers, C62c) in place of the recording's profiles sidecar.
+ * current one of the qualifying's linked drivers, C62c) in place of the recording's profiles sidecar. `laps` `null`
+ * (not known yet, C3): the replay reads the qualifying's race samples only and builds no job input.
  */
-export type ReplayJob = { pwrecPath: string; basisOverride: SessionKey[]; laps: number; sets: 'carried' | 'fresh'; conditions: RaceConditions; profiles: ProfileSnapshot | null };
+export type ReplayJob = { pwrecPath: string; basisOverride: SessionKey[]; laps: number | null; sets: 'carried' | 'fresh'; conditions: RaceConditions; profiles: ProfileSnapshot | null };
 
 export type RebuildService = {
   /**
