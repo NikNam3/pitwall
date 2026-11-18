@@ -37,7 +37,13 @@ export type BasisSidecar = {
 };
 
 /** The race's forecast a round computes with (C62d): the qualifying's race samples as imported, or the user's rows. */
-export type RaceConditions = { kind: 'imported' } | { kind: 'entered'; samples: ForecastSample[] };
+/**
+ * One forecast row the user entered: the time after the race start, the weather and the rain chance. The temperatures
+ * are no planning input and not entered: the bridge takes them from the nearest imported row, else the qualifying's own
+ * at its end (never a made-up value, C3).
+ */
+export type EnteredSample = Pick<ForecastSample, 'offsetMs' | 'weather' | 'rainPct'>;
+export type RaceConditions = { kind: 'imported' } | { kind: 'entered'; samples: EnteredSample[] };
 
 /** The imported race conditions. */
 export const IMPORTED: RaceConditions = { kind: 'imported' };

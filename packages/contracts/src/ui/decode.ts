@@ -1,6 +1,6 @@
 // Structural validation of UI state (spec 7.2). Input is untrusted: decoders return `undefined`, never throw,
 // and rebuild values from the known fields only. Widget names and option values are the UI's business.
-import { NOISE_COMPOUNDS, PLAN_SLOTS, type Slot, type CalibrationSource, type CarId, type FeedId, type ForecastSample, type InsightCategory, type NoiseCompound, type Policy, type RaceAssumptions, type RaceConditions, type RoundRace, type SessionBasis, type SessionRef, type StoredSessionRef, type SessionUid } from '@pitwall/domain';
+import { NOISE_COMPOUNDS, PLAN_SLOTS, type Slot, type CalibrationSource, type CarId, type FeedId, type EnteredSample, type InsightCategory, type NoiseCompound, type Policy, type RaceAssumptions, type RaceConditions, type RoundRace, type SessionBasis, type SessionRef, type StoredSessionRef, type SessionUid } from '@pitwall/domain';
 import type { CarRef, Geometry, LinkGroup, PanelSpec, TimeWindow, UiAction, Workbook, WorkbookWindow } from './types.ts';
 
 type Json = Record<string, unknown>;
@@ -268,24 +268,13 @@ const decodeSessionBasis = (raw: unknown): SessionBasis | undefined => {
 /** The game's forecast array holds at most 64 samples. */
 const MAX_FORECAST_SAMPLES = 64;
 const WEATHERS: readonly string[] = ['clear', 'lightCloud', 'overcast', 'lightRain', 'heavyRain', 'storm'];
-const TRENDS: readonly string[] = ['up', 'down', 'flat'];
 
-/** One forecast row: offset a whole number of ms from 0, rain 0 to 100, known weather and trends. */
-const decodeForecastSample = (raw: unknown): ForecastSample | undefined => {
+/** One entered forecast row: offset a whole number of ms from 0, a known weather, rain 0 to 100; nothing else is kept. */
+const decodeEnteredSample = (raw: unknown): EnteredSample | undefined => {
   if (!isObject(raw) || !isInteger(raw.offsetMs) || raw.offsetMs < 0) return undefined;
   if (!isString(raw.weather) || !WEATHERS.includes(raw.weather)) return undefined;
-  if (!isString(raw.trackTempTrend) || !TRENDS.includes(raw.trackTempTrend)) return undefined;
-  if (!isString(raw.airTempTrend) || !TRENDS.includes(raw.airTempTrend)) return undefined;
-  if (!isNumber(raw.trackTempC) || !isNumber(raw.airTempC) || !isNumber(raw.rainPct) || raw.rainPct < 0 || raw.rainPct > 100) return undefined;
-  return {
-    offsetMs: raw.offsetMs as ForecastSample['offsetMs'],
-    weather: raw.weather as ForecastSample['weather'],
-    trackTempC: raw.trackTempC as ForecastSample['trackTempC'],
-    trackTempTrend: raw.trackTempTrend as ForecastSample['trackTempTrend'],
-    airTempC: raw.airTempC as ForecastSample['airTempC'],
-    airTempTrend: raw.airTempTrend as ForecastSample['airTempTrend'],
-    rainPct: raw.rainPct as ForecastSample['rainPct'],
-  };
+  if (!isNumber(raw.rainPct) || raw.rainPct < 0 || raw.rainPct > 100) return undefined;
+  return { offsetMs: raw.offsetMs as EnteredSample['offsetMs'], weather: raw.weather as EnteredSample['weather'], rainPct: raw.rainPct as EnteredSample['rainPct'] };
 };
 
 /** The race's conditions: `imported`, or 1 to 64 entered samples with strictly rising offsets. */
@@ -293,7 +282,7 @@ const decodeRaceConditions = (raw: unknown): RaceConditions | undefined => {
   if (!isObject(raw)) return undefined;
   if (raw.kind === 'imported') return { kind: 'imported' };
   if (raw.kind !== 'entered' || !Array.isArray(raw.samples) || raw.samples.length < 1 || raw.samples.length > MAX_FORECAST_SAMPLES) return undefined;
-  const samples = mapAll(raw.samples, decodeForecastSample);
+  const samples = mapAll(raw.samples, decodeEnteredSample);
   if (samples === undefined) return undefined;
   return samples.every((sample, i) => i === 0 || sample.offsetMs > (samples[i - 1]?.offsetMs ?? 0)) ? { kind: 'entered', samples } : undefined;
 };
