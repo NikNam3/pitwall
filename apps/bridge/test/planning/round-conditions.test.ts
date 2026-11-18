@@ -61,6 +61,7 @@ describe('the round\'s conditions (SP4.3f Task 3; C3, C62d, C73)', { timeout: 18
     expect(after.forecast.source.ref).toEqual(qualifying.ref);
     expect(after.forecast.rows).toEqual({
       known: true,
+      at: expect.any(Number),
       value: [
         { sample: imported[0], overridden: false },
         { sample: { ...imported[1]!, rainPct: 80 }, overridden: true },
@@ -82,7 +83,7 @@ describe('the round\'s conditions (SP4.3f Task 3; C3, C62d, C73)', { timeout: 18
 
     expect(p.jobInputs().at(-1)!.planning!.rainPct).toMatchObject({ known: true, value: 45 });
     expect(after.race.conditions).toEqual(IMPORTED);
-    expect(after.forecast.rows).toEqual({ known: true, value: imported.map((sample) => ({ sample, overridden: false })) });
+    expect(after.forecast.rows).toEqual({ known: true, at: expect.any(Number), value: imported.map((sample) => ({ sample, overridden: false })) });
   });
 
   it('a qualifying with no race samples: rows unknown(\'notReceived\'), rainPct unknown (Review focus 3)', async () => {

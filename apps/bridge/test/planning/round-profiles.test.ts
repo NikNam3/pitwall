@@ -48,7 +48,9 @@ describe('the round\'s profiles (SP4.3f Task 3; C62c, C62d)', { timeout: 180_000
     // asked once, for every car slot of the qualifying's row, with the row's ref (as a session start asks, C62c)
     expect(profiles.snapshotFor).toHaveBeenCalledTimes(1);
     const [slots, session] = profiles.snapshotFor.mock.calls[0]! as [SlotIdentity[], unknown];
-    expect(slots.map((s) => s.carId).sort((a, b) => a - b)).toEqual(QUALIFYING_CARS.map((_, i) => i));
+    // every slot the stored row has: the game's 22 (the session's 20, then 2 empty), as a session start asks
+    expect(slots.map((s) => s.carId).sort((a, b) => a - b).slice(0, QUALIFYING_CARS.length)).toEqual(QUALIFYING_CARS.map((_, i) => i));
+    expect(slots).toHaveLength(22);
     expect(slots).toEqual(expect.arrayContaining([
       expect.objectContaining({ carId: 19, teamId: TEAM, raceNumber: 2 }),
       expect.objectContaining({ carId: 18, teamId: TEAM, raceNumber: 64 }),
