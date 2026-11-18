@@ -3,7 +3,7 @@ import { known, unknown, type CarId, type CarKey, type Known, type SessionBasis,
 import { projectionOfLog } from '@pitwall/engine/log';
 import type { DeepReadonly, Projection, ProjectionState, BasisContext, StoredSession } from '@pitwall/engine/readers';
 import { createLogger, type Logger } from '../log.ts';
-import type { Db, SessionKey, SessionKind, SessionRow, StoredSessionRow } from './db.ts';
+import type { Db, SessionKey, StoredSessionKind, SessionRow, StoredSessionRow } from './db.ts';
 import { logOfRows, type StoredFact } from './log-rows.ts';
 
 type SessionDbRow = {
@@ -296,7 +296,7 @@ export class WeekendRepository {
       cars: this.#carsOf(keyOf(row)),
       rulesVersion: row.rules_version,
       complete: row.complete === 1,
-      kind: row.kind as SessionKind,
+      kind: row.kind as StoredSessionKind,
     };
   }
 }

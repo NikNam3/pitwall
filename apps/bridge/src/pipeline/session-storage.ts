@@ -2,7 +2,7 @@
 import { carKeyOf, known, unknown, type CarId, type CarKey, type SessionState, type SessionUid, type WeekendPhase } from '@pitwall/domain';
 import type { DeepReadonly, EngineState, BasisContext } from '@pitwall/engine/readers';
 import type { Logger } from '../log.ts';
-import type { Db, SessionKey, SessionKind, SessionRow, StoredSessionRow } from '../storage/db.ts';
+import type { Db, SessionKey, StoredSessionKind, SessionRow, StoredSessionRow } from '../storage/db.ts';
 import { StorageWriter } from '../storage/storage-writer.ts';
 import { WeekendRepository } from '../storage/weekend-repository.ts';
 
@@ -25,7 +25,7 @@ export type SessionRowInput = {
 };
 
 /** The kind a session's row stores for its weekend phase: `none` while pending or for the `none` phase. */
-export const sessionKindOf = (phase: WeekendPhase): SessionKind => (phase.kind === 'pending' ? 'none' : phase.kind);
+export const sessionKindOf = (phase: WeekendPhase): StoredSessionKind => (phase.kind === 'pending' ? 'none' : phase.kind);
 
 export const sessionRowOf = (s: SessionRowInput): SessionRow => ({
   sessionUid: s.sessionUid,

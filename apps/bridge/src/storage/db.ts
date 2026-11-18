@@ -11,7 +11,7 @@ export type Db = Database.Database;
 export const SCHEMA_VERSION = 7;
 
 /** A session's weekend-phase kind as its row stores it: the weekend-phase span's kind; `none` while pending or without one. */
-export type SessionKind = WeekendPhaseKind | 'none';
+export type StoredSessionKind = WeekendPhaseKind | 'none';
 
 /** Every per-session table refers to its session by the three key columns (C1a, C60). */
 const SESSION_REF = `session_uid TEXT NOT NULL, weekend_id TEXT NOT NULL, player_car INTEGER NOT NULL`;
@@ -77,7 +77,7 @@ export type SessionRow = {
    * The session's weekend-phase kind (C14, C62): its weekend-phase span's kind once the weekend phase is decided, `none`
    * before (pending) or without one. Row metadata, so a stale session's kind is known without reading its log (C61).
    */
-  kind: SessionKind;
+  kind: StoredSessionKind;
 };
 
 /** A row as storage returns it: with the rules version of its log and whether that log is complete (C61). */
@@ -95,7 +95,7 @@ function migrate6To7(db: Db): void {
   const setKind = db.prepare(`UPDATE sessions SET kind = @kind WHERE ${OF_KEY}`);
   for (const key of sessions) {
     const projection = projectionOfLog(logOfRows(facts.all(key) as StoredFact[]));
-    const kind: SessionKind = projection.spans['weekend-phase']?.[0]?.kind as SessionKind | undefined ?? 'none';
+    const kind: StoredSessionKind = projection.spans['weekend-phase']?.[0]?.kind as StoredSessionKind | undefined ?? 'none';
     setKind.run({ ...key, kind });
   }
 }
