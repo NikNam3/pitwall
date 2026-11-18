@@ -16,7 +16,9 @@ import { known, unknown, type CarId, type Known, type NoiseCompound, type PitCon
 import type { Rng } from '@pitwall/engine/readers';
 import { startLapOf } from '../race-forecast/index.ts';
 import { scoreCalls, type CallCandidate, type CallInput, type McInput } from '../race-monte-carlo/index.ts';
+import { RAIN_OUTLOOK_CONFIG } from '../rain-outlook/config.ts';
 import { configOf } from '../shared/config-of.ts';
+import { allowedPolicy, isWetCompound, wetAllowed } from '../shared/wet-allowed.ts';
 import { placePmf } from '../shared/distribution.ts';
 import { committedField, followable, mcSettingsFrom, notPlannedWhy, plannedCars, plannedField, policyOf, reactionsOf, strategyConfigOf, toDpInput, toMcHazard } from '../shared/strategy-input/index.ts';
 import { bestWith, solveWorld, type DpSolution, type DpUnder } from '../strategy-dp/index.ts';
@@ -94,6 +96,10 @@ type CallContext = {
   sets: ReadonlySet<NoiseCompound>;
   /** The committed plan as far as the car can follow it, else `null`. */
   committed: Policy | null;
+  /** Whether the one wet rule allows inters and wets (`shared/wet-allowed.ts`, C43). */
+  wetAllowed: boolean;
+  /** The wet rule's filter of a DP plan (`allowedPolicy`). */
+  allowed: (p: Pick<Policy, 'stops' | 'startCompound'>) => boolean;
   cars: number;
   at: number;
   base: Omit<CallInput, 'candidates' | 'hazard' | 'scenarios'>;
@@ -106,7 +112,7 @@ function blockOn(ctx: CallContext, condition: PitCondition, on: Under, budget: n
   const head = { condition, lossMs: r.lossMs, lossSource: r.lossSource, lapsLeft: on.lapsLeft };
   const stayPlan = ctx.committed ?? (() => {
     const p = bestWith(sol, { noStopThrough: lap }, on.under);
-    return p === null ? null : policyOf(p);
+    return p === null || !ctx.allowed(p) ? null : policyOf(p);
   })();
   const options = new Map<ScCallAnswer, ScCallOption>();
   const played: { answer: ScCallAnswer; policy: Policy }[] = [];
@@ -119,8 +125,13 @@ function blockOn(ctx: CallContext, condition: PitCondition, on: Under, budget: n
       options.set(answer, optionUnknown(answer, 'noSet'));
       continue;
     }
+    // the one wet rule (C43): no inter or wet answer where rain cannot come
+    if (!ctx.wetAllowed && isWetCompound(compound)) {
+      options.set(answer, optionUnknown(answer, 'notApplicable'));
+      continue;
+    }
     const plan = bestWith(sol, { stopLap: lap, compound }, on.under);
-    if (plan === null) options.set(answer, optionUnknown(answer, 'notApplicable'));
+    if (plan === null || !ctx.allowed(plan)) options.set(answer, optionUnknown(answer, 'notApplicable'));
     else played.push({ answer, policy: policyOf(plan) });
   }
   const scenarios = played.length === 0 ? 0 : Math.floor(budget / played.length);
@@ -187,12 +198,15 @@ function callFor(input: ScCallInput, start: StartingPoint, at: number, carId: Ca
   const base = { start: callStart, car: carId, committed, rivalRules, traffic: { gapMs: strategyConfigOf(strategy.config).trafficGapMs, laps: 0 }, reactions };
   const mcHazard = toMcHazard(hazard, callStart);
   const own = strategy.committed[carId] ?? null;
+  const { rainPct } = RAIN_OUTLOOK_CONFIG.read(strategy);
   const ctx: CallContext = {
     sol,
     lap: dp.fromLap,
     car,
     sets: new Set((callStart.sets[carId] ?? []).map((s) => s.compound)),
     committed: own === null ? null : followable(callStart, carId, own).policy,
+    wetAllowed: wetAllowed(callStart, dp.fromLap, rainPct),
+    allowed: allowedPolicy(callStart, carId, rainPct),
     cars: callStart.cars,
     at,
     base,
