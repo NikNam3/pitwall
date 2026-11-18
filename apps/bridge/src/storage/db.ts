@@ -1,5 +1,7 @@
 import Database from 'better-sqlite3';
 import type { CarId, CarKey, Known, SessionUid, WeekendPhaseKind } from '@pitwall/domain';
+import { projectionOfLog } from '@pitwall/engine/log';
+import { logOfRows, type StoredFact } from './log-rows.ts';
 import { SchemaVersionError } from './schema-version-error.ts';
 
 export { SchemaVersionError };
@@ -83,16 +85,22 @@ export type StoredSessionRow = SessionRow & { rulesVersion: string; complete: bo
 
 /**
  * Schema 6 → 7 in place (C24, C60: every stored session kept): the session row gains its kind, backfilled from the
- * session's first stored weekend-phase span (`none` without one).
+ * session's projection (C28, C34: a fact a void covers is never read): its first visible weekend-phase span's kind,
+ * `none` without one. Runs inside the migration's transaction.
  */
-const MIGRATE_6_TO_7 = `
-ALTER TABLE sessions ADD COLUMN kind TEXT NOT NULL DEFAULT 'none';
-UPDATE sessions SET kind = COALESCE((
-  SELECT json_extract(f.record, '$.kind') FROM facts f
-  WHERE f.session_uid = sessions.session_uid AND f.weekend_id = sessions.weekend_id AND f.player_car = sessions.player_car
-    AND f.list = 'spans:weekend-phase'
-  ORDER BY f.seq LIMIT 1), 'none');
-`;
+function migrate6To7(db: Db): void {
+  db.exec(`ALTER TABLE sessions ADD COLUMN kind TEXT NOT NULL DEFAULT 'none'`);
+  const sessions = db.prepare('SELECT session_uid AS sessionUid, weekend_id AS weekendId, player_car AS playerCar FROM sessions').all() as SessionKey[];
+  const facts = db.prepare(`SELECT list, record FROM facts WHERE ${OF_KEY} ORDER BY list, seq`);
+  const setKind = db.prepare(`UPDATE sessions SET kind = @kind WHERE ${OF_KEY}`);
+  for (const key of sessions) {
+    const projection = projectionOfLog(logOfRows(facts.all(key) as StoredFact[]));
+    const kind: SessionKind = projection.spans['weekend-phase']?.[0]?.kind as SessionKind | undefined ?? 'none';
+    setKind.run({ ...key, kind });
+  }
+}
+
+const OF_KEY = 'session_uid = @sessionUid AND weekend_id = @weekendId AND player_car = @playerCar';
 
 /**
  * Opens (creating it if empty) the pitwall database; a schema-6 one is migrated in place to schema 7, a database of any
@@ -111,7 +119,7 @@ export function openDatabase(path: string): Db {
       })();
     } else if (version === 6) {
       db.transaction(() => {
-        db.exec(MIGRATE_6_TO_7);
+        migrate6To7(db);
         db.pragma(`user_version = ${SCHEMA_VERSION}`);
       })();
     } else if (version !== SCHEMA_VERSION) {
