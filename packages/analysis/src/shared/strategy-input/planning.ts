@@ -4,7 +4,7 @@
 // laps with our cars' start compounds free (the DP chooses them) and every rival's drawn; per our car its active
 // prepared policy committed and its prepared slots; positions the grid places; our cars planned. Pure (C2);
 // structured-cloneable (C51).
-import { known, ourCars, unknown, type CarId, type Known, type Policy, type Slot } from '@pitwall/domain';
+import { known, ourCars, unknown, type CarId, type Known, type Policy, type RaceAssumptions, type Slot } from '@pitwall/domain';
 import { runAsOf, type AsOfView } from '@pitwall/engine/readers';
 import { raceHazardAsOf } from '../../race-hazard/asof.ts';
 import { buildGridStart, FORECAST_UNITS } from '../forecast-field/index.ts';
@@ -14,6 +14,12 @@ import type { StrategyInput } from './input.ts';
 /** What the planning round hands the job beyond the view: the race's laps as entered, per our car its prepared plans. */
 export type PlanningRound = {
   laps: number;
+  /**
+   * The round's race assumptions (C62d, spec §4.3), forwarded to the one builder (`buildGridStart`, C50); absent:
+   * `{ laps, sets: 'carried' }`.
+   */
+  // SP4.3e: required in Task 7b
+  race?: RaceAssumptions;
   prepared: Record<CarId, { saved: Partial<Record<Slot, Policy>>; active: Slot | null }>;
 };
 
@@ -34,7 +40,7 @@ export function planningInputFrom(asOf: AsOfView, round: PlanningRound): Strateg
   const outputs = runAsOf(FORECAST_UNITS, view);
   const grid = gridOf(view);
   const start = grid.known
-    ? buildGridStart(view, outputs, { laps: round.laps, grid: grid.value, fittedCompound: (car) => (ours.has(car) ? 'free' : unknown('notReceived')) })
+    ? buildGridStart(view, outputs, { laps: round.laps, grid: grid.value, fittedCompound: (car) => (ours.has(car) ? 'free' : unknown('notReceived')), race: round.race ?? { laps: round.laps, sets: 'carried' } })
     : unknown(grid.reason);
 
   const committed: Record<CarId, Policy | null> = {};
