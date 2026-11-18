@@ -1,33 +1,37 @@
-// SP4.3d2 Task 10, the bridge's planning module (C1a, C47, C51, C54, C55, C58, C62, C62d, C70, C73, C75; SP4.3d spec
-// §7.0 rules 3–6, §7.1, §7.4). Between a weekend's qualifying and its race the bridge holds a planning round per feed:
-// it opens when the feed's session ends with `endsQualifying` (a Q3, a one-shot or short qualifying, a sprint shootout's
-// last segment), for the race `raceFormatOf(format)` plans, the feed's team and weekend, and closes when the feed's next
-// session starts (its job cancelled, its result dropped). `plans.prepare.*` uiActions edit the team's prepared plans
-// (`PITWALL_DATA_DIR/plans/<weekendId>/<format>/<team>.json`); every accepted one writes the file, republishes
-// `plans.prepared` and re-runs the planning job of every open round of the team, once race laps are entered; the job's
-// result per our car is `plans.preview` (`Computed<StrategyCar>`).
+// The bridge's planning round, through `serve` (C1a, C51, C54, C62d, C70, C73, C75; SP4.3e spec §4.3). Ported from the
+// SP4.3d2 Task 10 tests to the planning runner (SP4.3e Task 7b): a round is a function of a qualifying recording, a
+// practice basis and the race assumptions (`createPlanningRunner`, `planning-runner.test.ts`). At a qualifying's live
+// end (`endsQualifying`: a Q3, a one-shot or short qualifying, a sprint shootout's last segment; the timer or
+// `session.end`) the bridge opens the feed's round with that qualifying, its own basis's practice and the race
+// assumptions `{ laps: suggested, sets: 'carried' }`; the feed's next session start closes it (its job cancelled, its
+// result dropped). `plans.prepared` publishes `PlanningRoundState`; `plans.preview` the job's result per our car.
+// `plans.race.set` changes the race assumptions (C73: validated; laps 1 to 100); `plans.prepare.*` the round's slots;
+// `plans.save { name?, replaces? }` saves the round's slot choices as the team's saved plan (`plans/<team>/<id>.json`,
+// with `computedOn`), and it becomes the team's last saved plan on the track (`basis/<team>.json`); `plans.rename` and
+// `plans.delete` change a saved plan. Saved plans belong to the team (C1a). Deleted with the round per pipeline state:
+// the prepared-plans file per race (`RaceKey`), `plans.prepare.laps` and the sprint/grand-prix keying.
 //
 // Seams this file assumes (the implement phase adds them):
-//  - `serve`'s option `planningJob`: the planning job the planning module runs (default `PLANNING_JOB`, Task 9); these
-//    tests pass a stand-in whose worker module echoes its input (`planning-stub-job.ts`: per our car one row per
-//    prepared slot, the slot on the row) or does so after a wait (`planning-slow-stub-job.ts`). No test here needs the
-//    real job: the model's rows are Task 9's tests; these check the trigger path, the topics and the store;
-//  - `plans.prepared` publishes `{ open: false }` for a feed outside the round (from the feed's start on);
-//  - the prepared cars are keyed by the qualifying session's car slot, each with its race number (C62).
+//  - `serve`'s option `planningJob` as before (the echo stand-in `planning-stub-job.ts`, or its slow twin); `serve`
+//    runs the round on its rebuild service (Task 7d) and its runner;
+//  - `PlanningRoundState` exported by `@pitwall/contracts` (the topic's value, ruling R1);
+//  - `createLastChoiceStore(dataDir, log)` (`src/pipeline/last-choice.ts`, Task 7a-1), read here only.
 //
-// Every run is a live `serve` on manual sources (live-like) fed builder sessions, in a temporary data dir (C84: no test
-// reads `PITWALL_DATA_DIR`); sessions end by Task 3's timer on the test's receive clock.
-import { existsSync, mkdirSync, mkdtempSync, readFileSync } from 'node:fs';
+// Every run is a live `serve` on manual sources (live-like) fed builder sessions, in a temporary data dir (C84); sessions
+// end by the timer on the test's receive clock.
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import WebSocket from 'ws';
-import type { Computed, PlanningRound, ServerMessage } from '@pitwall/contracts';
-import { feedId, type CarId, type FeedId, type Policy, type PreparedPlans, type StrategyCar, type StrategyOutput } from '@pitwall/domain';
+import type { Computed, PlanningRoundState, ServerMessage } from '@pitwall/contracts';
+import { feedId, type CarId, type FeedId, type Policy, type SavedPlan, type StrategyCar, type StrategyOutput } from '@pitwall/domain';
 import type { StrategyInput } from '@pitwall/analysis';
 import type { Job } from '@pitwall/engine/readers';
 import { ScenarioBuilder, packetBytes } from '../../../../packages/engine/test/builders/index.ts';
 import { serve } from '../../src/cli/serve.ts';
+import { createLogger } from '../../src/log.ts';
+import { createLastChoiceStore } from '../../src/pipeline/last-choice.ts';
 import { openDatabase, type Db } from '../../src/storage/db.ts';
 import { ManualSource } from '../helpers/manual-source.ts';
 import { SLOW_MS } from './planning-slow-stub-job.ts';
@@ -46,6 +50,7 @@ const TEAM = 3;
 /** The builder's race numbers: slot + 1. */
 const RACE_NUMBER = (car: number): number => car + 1;
 const car = (n: number): CarId => n as CarId;
+const ref = (uid: bigint, weekend = WEEKEND) => ({ sessionUid: uid.toString(), weekendId: String(weekend) });
 
 /** A grand-prix weekend and a sprint weekend (session types: 1 P1, 5–7 Q1–Q3, 10–12 SQ1–SQ3, 15 race, 16 race 2). */
 const GP_WEEKEND = [1, 5, 6, 7, 15];
@@ -69,10 +74,7 @@ const sessionPackets = (s: SessionSpec): Packets => {
 };
 
 /** The first frame's packets of a session (the race loading). */
-const firstPackets = (s: SessionSpec): Packets => {
-  const all = sessionPackets(s);
-  return all.filter((p) => p.packet.header.frameIdentifier === 0);
-};
+const firstPackets = (s: SessionSpec): Packets => sessionPackets(s).filter((p) => p.packet.header.frameIdentifier === 0);
 
 const job = (module: string): Job<StrategyInput, StrategyOutput> => ({
   kind: 'job',
@@ -80,7 +82,7 @@ const job = (module: string): Job<StrategyInput, StrategyOutput> => ({
   reads: [],
   trigger: 'frame',
   prepare: () => {
-    throw new Error('the planning module builds the input itself (planningInputFrom)');
+    throw new Error('the planning runner builds the input itself (planningInputFrom)');
   },
   module: new URL(module, import.meta.url),
 });
@@ -88,10 +90,15 @@ const ECHO_JOB = job('./planning-stub-job.ts');
 const SLOW_JOB = job('./planning-slow-stub-job.ts');
 
 const tmp = (name: string): string => mkdtempSync(join(tmpdir(), `planning-round-${name}-`));
-const preparedFile = (dataDir: string, format: string, team = TEAM): string => join(dataDir, 'plans', String(WEEKEND), format, `${team}.json`);
-const readPrepared = (path: string): PreparedPlans => JSON.parse(readFileSync(path, 'utf8')) as PreparedPlans;
+const plansDir = (dataDir: string, team = TEAM): string => join(dataDir, 'plans', String(team));
+/** Every saved plan file of the team. */
+const savedFiles = (dataDir: string, team = TEAM): SavedPlan[] =>
+  existsSync(plansDir(dataDir, team))
+    ? readdirSync(plansDir(dataDir, team)).filter((f) => f.endsWith('.json')).map((f) => JSON.parse(readFileSync(join(plansDir(dataDir, team), f), 'utf8')) as SavedPlan)
+    : [];
 
 type Answer = { ok: true } | { ok: false; reason: string; message?: string };
+type Open = Extract<PlanningRoundState, { open: true }>;
 
 const cleanup: Array<() => unknown> = [];
 afterEach(async () => {
@@ -146,11 +153,11 @@ async function bridge(o: { dataDir?: string; feeds?: readonly FeedId[]; planning
   const values = <T>(id: string): T[] =>
     got.flatMap((m) => ((m.type === 'snapshot' || m.type === 'update') && m.id === id && 'value' in m ? [m.value as T] : []));
   /** Every `plans.prepared` value of `feed`, in order. */
-  const prepared = (feed: FeedId = A): PlanningRound[] => values<PlanningRound>(`prepared:${feed}`);
+  const prepared = (feed: FeedId = A): PlanningRoundState[] => values<PlanningRoundState>(`prepared:${feed}`);
   /** Every `plans.preview` value of `feed`'s car `c`, in order. */
   const preview = (c: number, feed: FeedId = A): Array<Computed<StrategyCar>> => values<Computed<StrategyCar>>(`preview:${feed}:${c}`);
   /** The newest open round of `feed`. */
-  const round = (feed: FeedId = A): Extract<PlanningRound, { open: true }> => {
+  const round = (feed: FeedId = A): Open => {
     const last = prepared(feed).at(-1);
     if (last?.open !== true) throw new Error(`feed ${feed}: no open round (${JSON.stringify(last)})`);
     return last;
@@ -192,15 +199,22 @@ async function bridge(o: { dataDir?: string; feeds?: readonly FeedId[]; planning
 
 type Bridge = Awaited<ReturnType<typeof bridge>>;
 
-/** A grand prix's Q3 of feed `feed`'s player car `player`, played and ended by the timer; `count` sessions stored complete after it. */
+/** A grand prix's Q3 of feed `feed`, played and ended by the timer; `count` sessions stored complete after it. */
 async function q3(b: Bridge, count = 1, uid = 70n): Promise<void> {
   b.play(sessionPackets({ uid, type: 7 }));
   await b.ended(count);
 }
 
+/** Waits until `feed`'s round is open with its job done. */
+const roundSettles = async (b: Bridge, feed: FeedId = A): Promise<Open> => {
+  await vi.waitFor(() => expect(b.prepared(feed).at(-1)).toMatchObject({ open: true, running: false }), { timeout: 60_000 });
+  return b.round(feed);
+};
+
 const POLICY_A: Policy = { startCompound: 'medium', stops: [{ lap: 20, compound: 'hard' }] };
 const POLICY_B: Policy = { startCompound: 'soft', stops: [{ lap: 12, compound: 'medium' }, { lap: 30, compound: 'hard' }] };
 const save = (feed: FeedId, c: number, slot: string, policy: Policy) => ({ kind: 'plans.prepare.save', feedId: feed, carId: c, slot, policy });
+const raceSet = (feed: FeedId, laps: number, sets: 'carried' | 'fresh' = 'carried') => ({ kind: 'plans.race.set', feedId: feed, race: { laps, sets } });
 
 /** The rows of the newest preview of `feed`'s car `c` (known). */
 const rowsOf = (b: Bridge, c: number, feed: FeedId = A) => {
@@ -209,27 +223,43 @@ const rowsOf = (b: Bridge, c: number, feed: FeedId = A) => {
   return value.value.rows;
 };
 
-describe('the planning round (Task 10; C62d, C54, C55)', { timeout: 120_000 }, () => {
+describe('the planning round (Task 7b, ported from SP4.3d2 Task 10; C62d, C54, C55)', { timeout: 180_000 }, () => {
   it('opens', async () => {
     const b = await bridge();
     // before the qualifying ends: no round
     b.play(sessionPackets({ uid: 70n, type: 7 }));
     await vi.waitFor(() => expect(b.prepared().at(-1)).toEqual({ open: false }));
     await b.ended(1);
-    await vi.waitFor(() => expect(b.prepared().at(-1)?.open).toBe(true));
-    expect(b.round()).toEqual({
+    const round = await roundSettles(b);
+    // the round of that qualifying, no practice stored, the sets carried over (its live end, spec §4.3)
+    expect(round).toMatchObject({
       open: true,
-      weekendId: String(WEEKEND),
-      format: 'grandPrix',
+      qualifying: ref(70n),
+      practice: [],
+      race: { sets: 'carried' },
       team: TEAM,
-      laps: { entered: null, suggested: { known: false, reason: 'notReceived' } },
       // both our cars, by the qualifying session's slot, each with its race number (C62)
       cars: {
         0: { raceNumber: RACE_NUMBER(0), slots: {}, active: null },
         1: { raceNumber: RACE_NUMBER(1), slots: {}, active: null },
       },
       running: false,
+      saved: [],
     });
+    // the planning job ran on it: a preview per our car
+    await vi.waitFor(() => expect(b.preview(0).length).toBeGreaterThan(0), { timeout: 60_000 });
+    await vi.waitFor(() => expect(b.preview(1).length).toBeGreaterThan(0), { timeout: 60_000 });
+  });
+
+  it('opens with its own basis\'s practice', async () => {
+    const b = await bridge();
+    // the weekend's practice of the seat, then its Q3: the round's practice basis is the qualifying's own basis's practice
+    b.play(sessionPackets({ uid: 69n, type: 1 }));
+    await b.ended(1);
+    await q3(b, 2);
+    const round = await roundSettles(b);
+    expect(round.practice).toEqual([ref(69n)]);
+    expect(round.qualifying).toEqual(ref(70n));
   });
 
   it('opens (session.end)', async () => {
@@ -237,31 +267,15 @@ describe('the planning round (Task 10; C62d, C54, C55)', { timeout: 120_000 }, (
     // the engineer ends the recording before the grace window passed (C59): the round opens the same
     b.play(sessionPackets({ uid: 71n, type: 7 }));
     expect(await b.send({ kind: 'session.end', feedId: A })).toEqual({ ok: true });
-    await vi.waitFor(() => expect(b.prepared().at(-1)?.open).toBe(true));
-    expect(b.round()).toMatchObject({ weekendId: String(WEEKEND), format: 'grandPrix', team: TEAM });
+    const round = await roundSettles(b);
+    expect(round).toMatchObject({ qualifying: ref(71n), team: TEAM, race: { sets: 'carried' } });
   });
 
-  it('paths', async () => {
+  it('opens (a sprint shootout\'s last segment)', async () => {
     const b = await bridge();
-    // a sprint weekend: the shootout plans the sprint (spec §7.0 rules 5, 6)
     b.play(sessionPackets({ uid: 80n, type: 12, structure: SPRINT_WEEKEND }));
     await b.ended(1);
-    await vi.waitFor(() => expect(b.round().format).toBe('sprint'));
-    expect(await b.send({ kind: 'plans.prepare.laps', feedId: A, laps: 19 })).toEqual({ ok: true });
-    await vi.waitFor(() => expect(existsSync(preparedFile(b.dataDir, 'sprint'))).toBe(true));
-    expect(readPrepared(preparedFile(b.dataDir, 'sprint')).laps).toBe(19);
-    expect(existsSync(preparedFile(b.dataDir, 'grandPrix'))).toBe(false);
-
-    // the weekend's qualifying plans the grand prix: its own file, the sprint's untouched
-    b.play(sessionPackets({ uid: 81n, type: 7, structure: SPRINT_WEEKEND }));
-    await b.ended(2);
-    await vi.waitFor(() => expect(b.round().format).toBe('grandPrix'));
-    // a round of another race starts with nothing entered
-    expect(b.round().laps.entered).toBeNull();
-    expect(await b.send({ kind: 'plans.prepare.laps', feedId: A, laps: 44 })).toEqual({ ok: true });
-    await vi.waitFor(() => expect(existsSync(preparedFile(b.dataDir, 'grandPrix'))).toBe(true));
-    expect(readPrepared(preparedFile(b.dataDir, 'grandPrix')).laps).toBe(44);
-    expect(readPrepared(preparedFile(b.dataDir, 'sprint')).laps).toBe(19);
+    expect(await roundSettles(b)).toMatchObject({ qualifying: ref(80n), team: TEAM });
   });
 
   it('no round', async () => {
@@ -282,83 +296,57 @@ describe('the planning round (Task 10; C62d, C54, C55)', { timeout: 120_000 }, (
       expect(b.prepared().at(-1), `session type ${s.type}`).toEqual({ open: false });
       expect(b.prepared().some((v) => v.open), `session type ${s.type}`).toBe(false);
     }
-    // without an open round every planning action is not supported (no session to plan from)
-    expect(await b.send({ kind: 'plans.prepare.laps', feedId: A, laps: 44 })).toEqual({ ok: false, reason: 'notSupported' });
+    // without an open round every round action is not supported (no round to plan in)
+    expect(await b.send(raceSet(A, 44))).toEqual({ ok: false, reason: 'notSupported' });
     expect(await b.send(save(A, 0, 'A', POLICY_A))).toEqual({ ok: false, reason: 'notSupported' });
+    expect(await b.send({ kind: 'plans.save', feedId: A, name: 'none' })).toEqual({ ok: false, reason: 'notSupported' });
     expect(existsSync(join(b.dataDir, 'plans'))).toBe(false);
   });
 
   it('edits', async () => {
-    const dataDir = tmp('data');
-    const b = await bridge({ dataDir });
+    const b = await bridge();
     await q3(b);
-    await vi.waitFor(() => expect(b.round().open).toBe(true));
-    // without entered laps no job runs
-    await new Promise((r) => setTimeout(r, 1500));
-    expect(b.preview(0)).toEqual([]);
-
-    // the laps run the job: a preview per our car
-    expect(await b.send({ kind: 'plans.prepare.laps', feedId: A, laps: 44 })).toEqual({ ok: true });
-    await vi.waitFor(() => expect(b.round().laps.entered).toBe(44));
-    await vi.waitFor(() => expect(b.preview(0).length).toBeGreaterThan(0), { timeout: 20_000 });
-    await vi.waitFor(() => expect(b.preview(1).length).toBeGreaterThan(0), { timeout: 20_000 });
+    await roundSettles(b);
+    await vi.waitFor(() => expect(b.preview(0).length).toBeGreaterThan(0), { timeout: 60_000 });
     expect(rowsOf(b, 0).map((r) => r.slot)).toEqual([null]);
 
-    // a save re-runs it: the preview's rows carry the saved slot
+    // the race assumptions re-run the job (C73: one uiAction, validated)
+    const before = b.preview(0).length;
+    expect(await b.send(raceSet(A, 44, 'fresh'))).toEqual({ ok: true });
+    await vi.waitFor(() => expect(b.round().race).toEqual({ laps: 44, sets: 'fresh' }));
+    await vi.waitFor(() => expect(b.preview(0).length).toBeGreaterThan(before), { timeout: 60_000 });
+
+    // a slot save re-runs it: the preview's rows carry the saved slot
     expect(await b.send(save(A, 0, 'A', POLICY_A))).toEqual({ ok: true });
     await vi.waitFor(() => expect(b.round().cars[car(0)]).toEqual({ raceNumber: RACE_NUMBER(0), slots: { A: POLICY_A }, active: null }));
-    await vi.waitFor(() => expect(rowsOf(b, 0)).toEqual([expect.objectContaining({ slot: 'A', policy: POLICY_A })]), { timeout: 20_000 });
-    // the job ran with the entered laps and is done
-    await vi.waitFor(() => expect(b.round().running).toBe(false));
-
-    // the file holds it (bridge user state, C70)
-    const file = preparedFile(dataDir, 'grandPrix');
-    expect(readPrepared(file)).toEqual({
-      laps: 44,
-      cars: expect.arrayContaining([
-        { raceNumber: RACE_NUMBER(0), slots: { A: POLICY_A }, active: null },
-        { raceNumber: RACE_NUMBER(1), slots: {}, active: null },
-      ]),
-    });
-    await b.stop();
-    expect(readPrepared(file)).toMatchObject({ laps: 44, cars: expect.arrayContaining([expect.objectContaining({ raceNumber: RACE_NUMBER(0), slots: { A: POLICY_A } })]) });
-
-    // after a bridge restart, the next attempt at the qualifying opens on what was prepared
-    const again = await bridge({ dataDir });
-    again.play(sessionPackets({ uid: 72n, type: 7 }));
-    await again.ended(2);
-    await vi.waitFor(() => expect(again.prepared().at(-1)?.open).toBe(true));
-    expect(again.round().laps.entered).toBe(44);
-    expect(again.round().cars[car(0)]).toEqual({ raceNumber: RACE_NUMBER(0), slots: { A: POLICY_A }, active: null });
-    await vi.waitFor(() => expect(rowsOf(again, 0)).toEqual([expect.objectContaining({ slot: 'A', policy: POLICY_A })]), { timeout: 20_000 });
+    await vi.waitFor(() => expect(rowsOf(b, 0)).toEqual([expect.objectContaining({ slot: 'A', policy: POLICY_A })]), { timeout: 60_000 });
+    await vi.waitFor(() => expect(b.round().running).toBe(false), { timeout: 60_000 });
+    // the round's slots are no stored file of their own: only a saved plan is (C62d)
+    expect(existsSync(join(b.dataDir, 'plans'))).toBe(false);
   });
 
   it('checks', async () => {
     const b = await bridge();
     await q3(b);
-    await vi.waitFor(() => expect(b.round().open).toBe(true));
-    const file = preparedFile(b.dataDir, 'grandPrix');
+    await roundSettles(b);
+    expect(await b.send(raceSet(A, 44))).toEqual({ ok: true });
+    await vi.waitFor(() => expect(b.round().race).toEqual({ laps: 44, sets: 'carried' }));
+    await vi.waitFor(() => expect(b.round().running).toBe(false), { timeout: 60_000 });
     const rejected = async (action: Record<string, unknown>): Promise<void> => {
-      const before = existsSync(file) ? readFileSync(file, 'utf8') : undefined;
       const round = b.round();
       const answer = await b.send(action);
       expect(answer.ok, JSON.stringify(action)).toBe(false);
       if (!answer.ok) expect(['invalid', 'malformed'], JSON.stringify(action)).toContain(answer.reason);
       // nothing written, nothing changed
-      expect(existsSync(file) ? readFileSync(file, 'utf8') : undefined).toBe(before);
+      expect(existsSync(join(b.dataDir, 'plans')), JSON.stringify(action)).toBe(false);
       expect(b.round()).toEqual(round);
     };
 
-    // laps a whole number from 1 to 100
-    await rejected({ kind: 'plans.prepare.laps', feedId: A, laps: 0 });
-    await rejected({ kind: 'plans.prepare.laps', feedId: A, laps: 101 });
-    await rejected({ kind: 'plans.prepare.laps', feedId: A, laps: 44.5 });
-    expect(existsSync(file)).toBe(false);
-    expect(await b.send({ kind: 'plans.prepare.laps', feedId: A, laps: 44 })).toEqual({ ok: true });
-    await vi.waitFor(() => expect(b.round().laps.entered).toBe(44));
-    // the job the laps started has finished, so `running` stays put through the rejections
-    await vi.waitFor(() => expect(b.round().running).toBe(false));
-
+    // the race's laps a whole number from 1 to 100, its sets carried or fresh
+    await rejected(raceSet(A, 0));
+    await rejected(raceSet(A, 101));
+    await rejected(raceSet(A, 44.5));
+    await rejected({ kind: 'plans.race.set', feedId: A, race: { laps: 44, sets: 'used' } });
     // stop laps from 1 to laps − 1
     await rejected(save(A, 0, 'A', { startCompound: 'medium', stops: [{ lap: 44, compound: 'hard' }] }));
     await rejected(save(A, 0, 'A', { startCompound: 'medium', stops: [{ lap: 0, compound: 'hard' }] }));
@@ -373,22 +361,78 @@ describe('the planning round (Task 10; C62d, C54, C55)', { timeout: 120_000 }, (
     await rejected({ kind: 'plans.prepare.activate', feedId: A, carId: 0, slot: 'B' });
     // a car that is none of ours
     await rejected(save(A, 2, 'A', POLICY_A));
+    // renaming or deleting a plan the team has not saved
+    await rejected({ kind: 'plans.rename', feedId: A, id: 'none', name: 'x' });
+    await rejected({ kind: 'plans.delete', feedId: A, id: 'none' });
 
     // removing the active slot
     expect(await b.send({ kind: 'plans.prepare.accept', feedId: A, carId: 0, slot: 'A', policy: POLICY_A })).toEqual({ ok: true });
     await vi.waitFor(() => expect(b.round().cars[car(0)]).toEqual({ raceNumber: RACE_NUMBER(0), slots: { A: POLICY_A }, active: 'A' }));
     await rejected({ kind: 'plans.prepare.remove', feedId: A, carId: 0, slot: 'A' });
-    // the accepted ones are what the file holds
-    expect(readPrepared(file)).toEqual({
-      laps: 44,
-      cars: expect.arrayContaining([{ raceNumber: RACE_NUMBER(0), slots: { A: POLICY_A }, active: 'A' }]),
-    });
     // an inactive slot can be removed, the active one changed
     expect(await b.send(save(A, 0, 'B', POLICY_B))).toEqual({ ok: true });
     expect(await b.send({ kind: 'plans.prepare.activate', feedId: A, carId: 0, slot: 'B' })).toEqual({ ok: true });
     expect(await b.send({ kind: 'plans.prepare.remove', feedId: A, carId: 0, slot: 'A' })).toEqual({ ok: true });
     await vi.waitFor(() => expect(b.round().cars[car(0)]).toEqual({ raceNumber: RACE_NUMBER(0), slots: { B: POLICY_B }, active: 'B' }));
-    expect(readPrepared(file).cars).toEqual(expect.arrayContaining([{ raceNumber: RACE_NUMBER(0), slots: { B: POLICY_B }, active: 'B' }]));
+  });
+
+  it('(c) plans.save writes plans/<team>/<id>.json with computedOn; survives a restart', async () => {
+    const dataDir = tmp('data');
+    const b = await bridge({ dataDir });
+    b.play(sessionPackets({ uid: 69n, type: 1 }));
+    await b.ended(1);
+    await q3(b, 2);
+    await roundSettles(b);
+    expect(await b.send(raceSet(A, 44, 'fresh'))).toEqual({ ok: true });
+    expect(await b.send({ kind: 'plans.prepare.accept', feedId: A, carId: 0, slot: 'A', policy: POLICY_A })).toEqual({ ok: true });
+    expect(await b.send(save(A, 1, 'B', POLICY_B))).toEqual({ ok: true });
+    await vi.waitFor(() => expect(b.round().cars[car(1)]).toMatchObject({ slots: { B: POLICY_B } }));
+
+    expect(await b.send({ kind: 'plans.save', feedId: A, name: 'Q3 plan' })).toEqual({ ok: true });
+    await vi.waitFor(() => expect(savedFiles(dataDir)).toHaveLength(1));
+    const [saved] = savedFiles(dataDir);
+    // one file per plan, named by its id, of the team
+    expect(existsSync(join(plansDir(dataDir), `${saved!.id}.json`))).toBe(true);
+    expect(saved).toMatchObject({
+      name: 'Q3 plan',
+      team: TEAM,
+      trackId: TRACK,
+      // the basis and race assumptions it was computed on, for display only
+      computedOn: { basis: { practice: [ref(69n)], qualifying: ref(70n) }, race: { laps: 44, sets: 'fresh' } },
+    });
+    expect(typeof saved!.savedAt).toBe('string');
+    // the round's slot choices per car, by race number (C62)
+    expect(saved!.cars).toEqual(expect.arrayContaining([
+      { raceNumber: RACE_NUMBER(0), slots: { A: POLICY_A }, active: 'A' },
+      { raceNumber: RACE_NUMBER(1), slots: { B: POLICY_B }, active: null },
+    ]));
+    // listed in the round's state, and the team's last saved plan on the track (C62d)
+    await vi.waitFor(() => expect(b.round().saved).toEqual([{ id: saved!.id, name: 'Q3 plan', savedAt: saved!.savedAt }]));
+    expect(createLastChoiceStore(dataDir, createLogger({ level: 'silent' })).read(TEAM, TRACK)?.plan.id).toBe(saved!.id);
+
+    // replaces: the same plan, its new choices
+    expect(await b.send({ kind: 'plans.prepare.activate', feedId: A, carId: 1, slot: 'B' })).toEqual({ ok: true });
+    expect(await b.send({ kind: 'plans.save', feedId: A, name: 'Q3 plan', replaces: saved!.id })).toEqual({ ok: true });
+    await vi.waitFor(() => expect(savedFiles(dataDir)).toEqual([expect.objectContaining({
+      id: saved!.id,
+      cars: expect.arrayContaining([{ raceNumber: RACE_NUMBER(1), slots: { B: POLICY_B }, active: 'B' }]),
+    })]));
+    await b.stop();
+
+    // a restart: the next round of the team on the track lists it
+    const again = await bridge({ dataDir });
+    again.play(sessionPackets({ uid: 72n, type: 7 }));
+    await again.ended(3);
+    const round = await roundSettles(again);
+    expect(round.saved).toEqual([expect.objectContaining({ id: saved!.id, name: 'Q3 plan' })]);
+
+    // rename and delete (C73)
+    expect(await again.send({ kind: 'plans.rename', feedId: A, id: saved!.id, name: 'Texas final' })).toEqual({ ok: true });
+    await vi.waitFor(() => expect(savedFiles(dataDir)).toEqual([expect.objectContaining({ id: saved!.id, name: 'Texas final' })]));
+    await vi.waitFor(() => expect(again.round().saved).toEqual([expect.objectContaining({ id: saved!.id, name: 'Texas final' })]));
+    expect(await again.send({ kind: 'plans.delete', feedId: A, id: saved!.id })).toEqual({ ok: true });
+    await vi.waitFor(() => expect(savedFiles(dataDir)).toEqual([]));
+    await vi.waitFor(() => expect(again.round().saved).toEqual([]));
   });
 
   it('team', async () => {
@@ -397,31 +441,21 @@ describe('the planning round (Task 10; C62d, C54, C55)', { timeout: 120_000 }, (
     b.play(sessionPackets({ uid: 75n, type: 7, player: 0 }), A);
     b.play(sessionPackets({ uid: 75n, type: 7, player: 1 }), B);
     await b.ended(2);
-    await vi.waitFor(() => expect(b.prepared(A).at(-1)?.open).toBe(true));
-    await vi.waitFor(() => expect(b.prepared(B).at(-1)?.open).toBe(true));
-    expect(b.round(B)).toMatchObject({ weekendId: String(WEEKEND), format: 'grandPrix', team: TEAM });
+    await roundSettles(b, A);
+    expect(await roundSettles(b, B)).toMatchObject({ qualifying: ref(75n), team: TEAM });
+    await vi.waitFor(() => expect(b.preview(1, B).length).toBeGreaterThan(0), { timeout: 60_000 });
 
-    // the laps entered on one feed are the team's: both feeds' jobs run
-    expect(await b.send({ kind: 'plans.prepare.laps', feedId: A, laps: 44 })).toEqual({ ok: true });
-    await vi.waitFor(() => expect(b.round(B).laps.entered).toBe(44));
-    await vi.waitFor(() => expect(b.preview(1, B).length).toBeGreaterThan(0), { timeout: 20_000 });
-    expect(rowsOf(b, 1, B).map((r) => r.slot)).toEqual([null]);
-
-    // an edit for car 1 on feed A re-runs the job of the teammate's feed too
-    expect(await b.send(save(A, 1, 'A', POLICY_B))).toEqual({ ok: true });
-    await vi.waitFor(() => expect(b.round(B).cars[car(1)]).toEqual({ raceNumber: RACE_NUMBER(1), slots: { A: POLICY_B }, active: null }));
-    await vi.waitFor(() => expect(rowsOf(b, 1, B)).toEqual([expect.objectContaining({ slot: 'A', policy: POLICY_B })]), { timeout: 20_000 });
-    await vi.waitFor(() => expect(rowsOf(b, 1, A)).toEqual([expect.objectContaining({ slot: 'A', policy: POLICY_B })]), { timeout: 20_000 });
-    // one file for the team
-    expect(readPrepared(preparedFile(b.dataDir, 'grandPrix')).cars).toEqual(expect.arrayContaining([{ raceNumber: RACE_NUMBER(1), slots: { A: POLICY_B }, active: null }]));
+    // a plan saved on one feed is the team's: the teammate's round lists it (C1a)
+    expect(await b.send({ kind: 'plans.prepare.accept', feedId: A, carId: 1, slot: 'A', policy: POLICY_B })).toEqual({ ok: true });
+    expect(await b.send({ kind: 'plans.save', feedId: A, name: 'team plan' })).toEqual({ ok: true });
+    await vi.waitFor(() => expect(b.round(B).saved).toEqual([expect.objectContaining({ name: 'team plan' })]));
+    expect(savedFiles(b.dataDir)).toHaveLength(1);
   });
 
   it('race loads', async () => {
     const b = await bridge({ planningJob: SLOW_JOB });
     await q3(b);
-    await vi.waitFor(() => expect(b.round().open).toBe(true));
-    expect(await b.send({ kind: 'plans.prepare.laps', feedId: A, laps: 44 })).toEqual({ ok: true });
-    await vi.waitFor(() => expect(b.round().running).toBe(true));
+    await vi.waitFor(() => expect(b.prepared().at(-1)).toMatchObject({ open: true, running: true }), { timeout: 60_000 });
 
     // the race's first packet while the job runs: the round closes, the job is cancelled
     b.play(firstPackets({ uid: 76n, type: 15 }));
@@ -432,7 +466,7 @@ describe('the planning round (Task 10; C62d, C54, C55)', { timeout: 120_000 }, (
     expect(b.preview(1)).toEqual([]);
     expect(b.prepared().at(-1)).toEqual({ open: false });
     // and nothing plans any more
-    expect(await b.send({ kind: 'plans.prepare.laps', feedId: A, laps: 45 })).toEqual({ ok: false, reason: 'notSupported' });
+    expect(await b.send(raceSet(A, 45))).toEqual({ ok: false, reason: 'notSupported' });
   });
 
   it('suggestion', async () => {
@@ -443,17 +477,7 @@ describe('the planning round (Task 10; C62d, C54, C55)', { timeout: 120_000 }, (
     b.play(sessionPackets({ uid: 61n, type: 15, weekend: 2222, track: TRACK + 1, laps: 50, structure: [15] }));
     await b.ended(2);
     await q3(b, 3);
-    await vi.waitFor(() => expect(b.prepared().at(-1)?.open).toBe(true));
-    expect(b.round().laps).toEqual({ entered: null, suggested: expect.objectContaining({ known: true, value: 44 }) });
-  });
-
-  it('suggestion (none)', async () => {
-    const b = await bridge();
-    // only a race on another track
-    b.play(sessionPackets({ uid: 62n, type: 15, weekend: 2222, track: TRACK + 1, laps: 50, structure: [15] }));
-    await b.ended(1);
-    await q3(b, 2);
-    await vi.waitFor(() => expect(b.prepared().at(-1)?.open).toBe(true));
-    expect(b.round().laps).toEqual({ entered: null, suggested: { known: false, reason: 'notReceived' } });
+    // the round's laps default to the suggestion, its sets carried (its live end)
+    expect((await roundSettles(b)).race).toEqual({ laps: 44, sets: 'carried' });
   });
 });
