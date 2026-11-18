@@ -44,5 +44,17 @@ const PLANNING_FIXED = 1 + 1 + 1 + 4 + 1;
 /** Whether the blank after the inputs line fits in `rows` with `slotLines` slot lines (saved, prefilled, entries). */
 export const blankAfterInputs = (slotLines: number, rows: number): boolean => PLANNING_FIXED + slotLines + 1 <= rows;
 
+/**
+ * SP4.3f Task 7 (plan-board-conditions.html): the conditions editor's full lines besides its rows, in place of the plan
+ * rows: the inputs line, the header (with reset and done) and the `+ row` line.
+ */
+const CONDITIONS_FIXED = 1 + 1 + 1;
+
+/** Whether `+ row` is offered: one more row still fits in `rows` with `rowCount` conditions rows. */
+export const addRowFits = (rowCount: number, rows: number): boolean => CONDITIONS_FIXED + rowCount + 1 <= rows;
+
+/** The conditions editor's cells (gen.mjs `conditionLines`): the offset (right-aligned), the weather and rain columns. */
+export const CONDITIONS_COLS = { at: 4, weather: 14, rain: 16, rainField: 3 } as const;
+
 /** The game slots: an empty one has its entry in the planning round (the game's plan typed in, mockup G2). */
 export const GAME_SLOTS: readonly Slot[] = ['G1', 'G2'];
