@@ -9,7 +9,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import WebSocket from 'ws';
 import type { ServerMessage } from '@pitwall/contracts';
-import { feedId, type DriverPerson, type DriversProfilesValue, type ProfileSnapshot, type SessionRef, type SessionUid } from '@pitwall/domain';
+import { feedId, type DriverPerson, type DriversProfilesValue, type ProfileSnapshot, type StoredSessionRef, type SessionUid } from '@pitwall/domain';
 import { decode, PacketId } from '@pitwall/protocol';
 import { serve } from '../../src/cli/serve.ts';
 import { readPwrec } from '../../src/pwrec/reader.ts';
@@ -112,7 +112,7 @@ async function liveServe() {
   const push = (from: number, to: number): void => {
     for (const record of records.slice(from, to)) source.push(record.bytes, record.receivedAtMs);
   };
-  const seedRef: SessionRef = { sessionUid: 'seed' as SessionUid, weekendId: 'W0', feedCar: car(player.carId) };
+  const seedRef: StoredSessionRef = { sessionUid: 'seed' as SessionUid, weekendId: 'W0', feedCar: car(player.carId) };
   return { dataDir, recordingsDir, player, seedRef, send, profiles, push, stop, total: records.length };
 }
 

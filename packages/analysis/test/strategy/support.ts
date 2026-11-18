@@ -21,6 +21,7 @@ import {
   unknown,
   type CarId,
   type DecisionRecord,
+  type ForecastSample,
   type FrameNumber,
   type GivenDecision,
   type LapRecord,
@@ -218,6 +219,26 @@ export const stopIn = (view: EngineView, car: CarId, inLaps: number, compound: P
 });
 
 export const json = (x: unknown): string => JSON.stringify(x);
+
+/** One forecast sample `offsetMin` minutes ahead with `rainPct` % rain chance; the other fields as a dry sample has them. */
+export const forecastSample = (offsetMin: number, rainPct: number): ForecastSample => ({
+  offsetMin,
+  weather: 'overcast',
+  trackTempC: 30,
+  trackTempTrend: 'flat',
+  airTempC: 22,
+  airTempTrend: 'flat',
+  rainPct,
+});
+
+/**
+ * `view` with the session's forecast at `rainPct` % on every sample, 0 to 120 minutes ahead every 5 (SP4.3e Task 4:
+ * "rain 1 %" is a dry forecast, below `rain-outlook`'s threshold).
+ */
+export function withForecast(view: EngineView, rainPct: number): EngineView {
+  const forecast = Array.from({ length: 25 }, (_, i) => forecastSample(5 * i, rainPct));
+  return { ...view, live: { ...view.live, session: { ...view.live.session, forecast, forecastAccuracy: 'perfect' } } as EngineView['live'] };
+}
 
 /** `STRATEGY_JOB.parts` (Task 25); fails the test that asks when the job declares none. */
 export function jobParts(): NonNullable<typeof STRATEGY_JOB.parts> {

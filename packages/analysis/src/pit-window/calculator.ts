@@ -19,7 +19,10 @@ import {
 import { openSpansOf, type EngineView, type QuickCalculator } from '@pitwall/engine/readers';
 import { behaviourFor, type BehaviourTable } from '../shared/behaviour.ts';
 import { owesSecondDryCompound } from '../shared/compound-rule.ts';
+import { isWetCompound, wetAllowedFrom } from '../shared/wet-allowed.ts';
 import { ourCars } from '@pitwall/domain';
+import { RAIN_OUTLOOK, type RainOutlook } from '../rain-outlook/index.ts';
+import { TRACK_WETNESS, type TrackWetnessOutput } from '../track-wetness/index.ts';
 import { TYRE_LIFE, type TyreLife, type TyreLifeOutput } from '../tyre-life/index.ts';
 import { TYRE_MODEL } from '../tyre-model/id.ts';
 import { PIT_WINDOW_BEHAVIOUR, phaseRow, type PitWindowEffect } from './behaviour.ts';
@@ -118,8 +121,8 @@ const byEarliest = (a: PitWindowSet, b: PitWindowSet): number => {
   return e(a) - e(b) || l(b) - l(a);
 };
 
-/** Our car's `pitWindow.car` value. */
-function pitWindowOf(view: EngineView, car: CarId, life: TyreLife | undefined, model: TyreModelCar | undefined, windowLeadLaps: number): Known<PitWindow> {
+/** Our car's `pitWindow.car` value; inter and wet rows only where the wet rule allows them (`wetAllowed`). */
+function pitWindowOf(view: EngineView, car: CarId, life: TyreLife | undefined, model: TyreModelCar | undefined, windowLeadLaps: number, wetAllowed: boolean): Known<PitWindow> {
   const state = view.live.cars[car];
   if (state === undefined) return unknown('notReceived');
   const { tyres } = state;
@@ -150,6 +153,7 @@ function pitWindowOf(view: EngineView, car: CarId, life: TyreLife | undefined, m
     for (const [c, n] of fresh) {
       if (!n.known || n.value <= 0) continue;
       if (owesRule && c === fitted) continue;
+      if (!wetAllowed && isWetCompound(c)) continue;
       compounds.push(c);
     }
   }
@@ -183,7 +187,7 @@ function pitWindowOf(view: EngineView, car: CarId, life: TyreLife | undefined, m
 export const pitWindowCalculator: QuickCalculator<PitWindowOutput> = {
   id: PIT_WINDOW,
   kind: 'quick',
-  reads: [{ calculator: TYRE_LIFE }, { calculator: TYRE_MODEL }, 'identity', 'tyres', 'session', 'laps', 'pitStops', 'stints', 'decisions', 'timing', 'spans:weekend-phase', 'spans:compound-rule', 'spans:car-activity-race'],
+  reads: [{ calculator: TYRE_LIFE }, { calculator: TYRE_MODEL }, { calculator: RAIN_OUTLOOK }, { calculator: TRACK_WETNESS }, 'identity', 'tyres', 'session', 'laps', 'pitStops', 'stints', 'decisions', 'timing', 'spans:weekend-phase', 'spans:compound-rule', 'spans:car-activity-race'],
   cadence: { hz: 4 },
   compute: (view): PitWindowOutput => {
     // the session's row (the weekend phase), over the race's (C14: a pending phase reads as the race)
@@ -201,7 +205,9 @@ export const pitWindowCalculator: QuickCalculator<PitWindowOutput> = {
     const lives = view.outputs.get(TYRE_LIFE) as TyreLifeOutput | undefined;
     const models = view.outputs.get(TYRE_MODEL) as TyreModelOutput | undefined;
     const { windowLeadLaps } = PIT_WINDOW_CONFIG.read(view);
-    for (const car of cars) out[car] = pitWindowOf(view, car, lives?.[car], models?.[car], windowLeadLaps);
+    // the one wet rule (C43) on `rain-outlook`'s and `track-wetness`'s outputs: inters and wets only where rain can come
+    const wet = wetAllowedFrom(view.outputs.get(RAIN_OUTLOOK) as RainOutlook | undefined, view.outputs.get(TRACK_WETNESS) as TrackWetnessOutput | undefined);
+    for (const car of cars) out[car] = pitWindowOf(view, car, lives?.[car], models?.[car], windowLeadLaps, wet);
     return out;
   },
 };

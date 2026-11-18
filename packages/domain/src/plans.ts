@@ -31,12 +31,6 @@ export function activeSlot(history: { readonly decisions: readonly DecisionRecor
   return newest?.kind === 'planCommitted' ? (newest.slot ?? null) : null;
 }
 
-/** One car's prepared plans of the planning round (SP4.3d spec §7.4): by race number, its slots and its active slot. */
-export type PreparedCar = { raceNumber: number; slots: Partial<Record<Slot, Policy>>; active: Slot | null };
-
-/** A team's prepared plans for one race: the entered race laps (`null` until entered) and per car its prepared plans. */
-export type PreparedPlans = { laps: number | null; cars: PreparedCar[] };
-
 const same = (a: Policy, b: Policy): boolean => JSON.stringify(a) === JSON.stringify(b);
 
 /**

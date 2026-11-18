@@ -7,8 +7,10 @@
   // SP4.3d2 Task 12: the variant (presentation.ts `variantOf`): live draws `strategy.car`, planning the planning job's
   // `plans.preview` with the race inputs line (GRID, LAPS, RAIN, N), the START column, the prefilled slots with
   // `accept` and an empty game slot's entry; every planning control, and the race's prefill accept, invokes a shell
-  // command by id through the panel (C72, C74). The cell budget is layout.ts'.
-  import type { NoiseCompound, Slot } from '@pitwall/domain';
+  // command by id through the panel (C72, C74). The cell budget is layout.ts'. SP4.3e Task 8: a rejected outcome of a
+  // command or action that marks no field shows the bridge's message on the board's last line (C73).
+  import type { ActionOutcome } from '@pitwall/contracts';
+  import type { NoiseCompound, RaceAssumptions, Slot } from '@pitwall/domain';
   import { PLAN_SLOTS } from '@pitwall/domain';
   import { getUiActions } from '../../kit/actions.ts';
   import { getWidgetCommands } from '../../kit/commands.ts';
@@ -35,6 +37,8 @@
   /** The lap field's width in cells; the race laps field's. */
   const LAP = 2;
   const RACE_LAPS = 3;
+  /** The race's tyre sets, in the sets field's order (SP4.3e spec §4.3). */
+  const RACE_SETS = ['carried', 'fresh'] as const satisfies readonly RaceAssumptions['sets'][];
 
   type Rejection = { message: string; changed: Changed };
 
@@ -45,8 +49,11 @@
   /** The planning round's window-local drafts (C73): the race laps as typed, the entries of empty game slots. */
   let lapsDraft = $state<string | null>(null);
   let lapsRejected = $state<string | null>(null);
+  let setsRejected = $state<string | null>(null);
   let entries = $state<Partial<Record<Slot, Draft>>>({});
   let entryRejected = $state<Partial<Record<Slot, Rejection>>>({});
+  /** The bridge's message of the last rejected command or action that marks no field (C73). */
+  let actionRejected = $state<string | null>(null);
 
   const full = $derived(size.mode === 'full');
   const mode = $derived(full ? 'full' : 'compact');
@@ -89,6 +96,7 @@
     if (!acting || line.slot === null || line.prefill) return;
     selected = selected === line.slot ? null : line.slot;
     pickFor = null;
+    actionRejected = null;
   }
   const onKey = (line: SlotLine) => (e: KeyboardEvent): void => {
     if (e.key === 'Enter') select(line);
@@ -96,28 +104,38 @@
   function openPicker(n: StopCount): void {
     pickFor = pickFor === n ? null : n;
     selected = null;
+    actionRejected = null;
+  }
+  /**
+   * Waits for a command's or action's outcome: a rejection shows the bridge's message on the board's last line until
+   * the next control (C73: never a silent nothing).
+   */
+  async function outcomeOf(pending: Promise<ActionOutcome>): Promise<void> {
+    actionRejected = null;
+    const outcome = await pending;
+    actionRejected = outcome.ok ? null : (outcome.message ?? text.rejectedNoReason);
   }
   function pick(slot: Slot): void {
     const line = view?.dp.find((l) => l.stopCount === pickFor);
     pickFor = null;
     if (line === undefined) return;
-    if (planning) void commands.invoke('plans.prepare.save', { feedId: link.feedId, carId: link.primary, slot, policy: line.policy });
-    else void send({ kind: 'plan.save', feedId: link.feedId, carId: link.primary, slot, policy: line.policy });
+    if (planning) void outcomeOf(commands.invoke('plans.prepare.save', { feedId: link.feedId, carId: link.primary, slot, policy: line.policy }));
+    else void outcomeOf(send({ kind: 'plan.save', feedId: link.feedId, carId: link.primary, slot, policy: line.policy }));
   }
   function activate(slot: Slot): void {
-    if (planning) void commands.invoke('plans.prepare.activate', { feedId: link.feedId, carId: link.primary, slot });
-    else void send({ kind: 'plan.activate', feedId: link.feedId, carId: link.primary, slot });
+    if (planning) void outcomeOf(commands.invoke('plans.prepare.activate', { feedId: link.feedId, carId: link.primary, slot }));
+    else void outcomeOf(send({ kind: 'plan.activate', feedId: link.feedId, carId: link.primary, slot }));
   }
   function remove(slot: Slot): void {
-    if (planning) void commands.invoke('plans.prepare.remove', { feedId: link.feedId, carId: link.primary, slot });
-    else void send({ kind: 'plan.remove', feedId: link.feedId, carId: link.primary, slot });
+    if (planning) void outcomeOf(commands.invoke('plans.prepare.remove', { feedId: link.feedId, carId: link.primary, slot }));
+    else void outcomeOf(send({ kind: 'plan.remove', feedId: link.feedId, carId: link.primary, slot }));
   }
   /** `accept` on a prefilled line: the prefill becomes the slot's plan (the round's or the race's command). */
   function accept(line: SlotLine): void {
     if (line.slot === null) return;
     const args = { feedId: link.feedId, carId: link.primary, slot: line.slot, policy: line.policy };
-    if (planning) void commands.invoke('plans.prepare.accept', args);
-    else void commands.invoke('plan.accept', args);
+    if (planning) void outcomeOf(commands.invoke('plans.prepare.accept', args));
+    else void outcomeOf(commands.invoke('plan.accept', args));
   }
   function edit(line: SlotLine): void {
     if (line.slot === null) return;
@@ -153,12 +171,19 @@
   }
   async function saveEntry(slot: Slot): Promise<void> {
     const d = entry(slot);
+    actionRejected = null;
     const outcome = await commands.invoke('plans.prepare.save', { feedId: link.feedId, carId: link.primary, slot, policy: policyOfDraft(d) });
     if (entries[slot] !== undefined && entries[slot] !== d) return;
     if (outcome.ok) {
       entries = { ...entries, [slot]: undefined };
       entryRejected = { ...entryRejected, [slot]: undefined };
-    } else entryRejected = { ...entryRejected, [slot]: { message: outcome.message ?? text.rejectedNoReason, changed: changedFields(d) } };
+      return;
+    }
+    const message = outcome.message ?? text.rejectedNoReason;
+    const changed = changedFields(d);
+    entryRejected = { ...entryRejected, [slot]: { message, changed } };
+    // An unchanged entry has no field to mark: the message goes to the board's last line.
+    if (!changed.some((c) => c.lap || c.compound)) actionRejected = message;
   }
   const badEntry = (slot: Slot, i: number, field: 'lap' | 'compound'): boolean => entryRejected[slot]?.changed[i]?.[field] === true;
 
@@ -166,23 +191,31 @@
     lapsDraft = v;
     lapsRejected = null;
   }
-  /** Commits the race laps field: one command with its number; the bridge validates it (C73). */
+  /** Commits the race laps field: one command with its number and the round's sets; the bridge validates it (C73). */
   async function commitLaps(): Promise<void> {
     const typed = lapsDraft;
     if (typed === null) return;
-    if (typed.trim() === '') {
+    if (typed.trim() === '' || round === undefined) {
       lapsDraft = null;
       return;
     }
-    const outcome = await commands.invoke('plans.prepare.laps', { feedId: link.feedId, laps: Number(typed.trim()) });
+    const outcome = await commands.invoke('plans.race.set', { feedId: link.feedId, race: { laps: Number(typed.trim()), sets: round.race.sets } });
     if (lapsDraft !== typed) return;
     if (outcome.ok) {
       lapsDraft = null;
       lapsRejected = null;
     } else lapsRejected = outcome.message ?? text.rejectedNoReason;
   }
-  const entered = $derived(round?.laps.entered ?? null);
-  const suggested = $derived(round !== undefined && round.laps.suggested.known ? formatWhole(round.laps.suggested.value) : '');
+  /** Commits the race's tyre sets: one command with the round's laps; nothing while the round has no laps yet (C73). */
+  async function commitSets(sets: RaceAssumptions['sets']): Promise<void> {
+    const laps = round?.race.laps ?? null;
+    if (round === undefined || laps === null) return;
+    setsRejected = null;
+    const outcome = await commands.invoke('plans.race.set', { feedId: link.feedId, race: { laps, sets } });
+    setsRejected = outcome.ok ? null : (outcome.message ?? text.rejectedNoReason);
+  }
+  /** The round's race laps: the bridge's suggestion until entered; `null` while neither is known. */
+  const entered = $derived(round?.race.laps ?? null);
 </script>
 
 {#snippet cells(l: SlotLine | DpLine, active: boolean, faint: boolean)}{#if cols.start > 0}<span data-testid={'key' in l ? `start-${l.key}` : undefined}
@@ -303,6 +336,13 @@
     ></div>
 {/snippet}
 
+<!-- The bridge's message of a rejected command or action in the warning role, the whole message on hover; a blank line otherwise. -->
+{#snippet rejectionLine()}
+  <div class="line">{LEAD}{#if actionRejected !== null}<span data-testid="rejection" data-role={rejectedRole} title={actionRejected}
+        ><TextCell text={text.rejected(actionRejected)} width={width - LEAD.length} role={rejectedRole} /></span
+      >{/if}</div>
+{/snippet}
+
 {#snippet inputsLine()}
   <div class="line" data-testid="inputs">{LEAD}<span style:color={role(headerRole)}>{text.inputs.grid}</span> {#if planningInputs !== null}<TextCell
         text={planningInputs.gridPlace.known ? formatPosition(planningInputs.gridPlace.value) : ''}
@@ -313,7 +353,6 @@
       spellcheck="false"
       class="pw-input fld"
       data-testid="laps"
-      placeholder={suggested}
       data-role={lapsRejected !== null ? rejectedRole : undefined}
       title={lapsRejected ?? text.commandHover.laps}
       style:width="{RACE_LAPS}ch"
@@ -321,7 +360,17 @@
       value={lapsDraft ?? (entered === null ? '' : formatWhole(entered))}
       oninput={(e) => typeLaps(e.currentTarget.value)}
       onchange={() => void commitLaps()}
-    />{GAP}{GAP}{GAP}<span style:color={role(headerRole)}>{text.inputs.rain}</span> {#if planningInputs !== null}<TextCell
+    />{GAP}{GAP}{GAP}<span style:color={role(headerRole)}>{text.inputs.sets}</span> <select
+      class="pw-input fld"
+      data-testid="sets"
+      data-role={setsRejected !== null ? rejectedRole : undefined}
+      title={setsRejected ?? text.commandHover.laps}
+      style:color={setsRejected !== null ? role(rejectedRole) : undefined}
+      value={round?.race.sets}
+      onchange={(e) => void commitSets(e.currentTarget.value as RaceAssumptions['sets'])}
+    >
+      {#each RACE_SETS as s (s)}<option value={s}>{text.sets[s]}</option>{/each}
+    </select>{GAP}{GAP}{GAP}<span style:color={role(headerRole)}>{text.inputs.rain}</span> {#if planningInputs !== null}<TextCell
         text={planningInputs.rainPct.known ? formatPercent(planningInputs.rainPct.value) : ''}
         reason={planningInputs.rainPct.known ? undefined : planningInputs.rainPct.reason}
       />{/if}{GAP}{GAP}{GAP}<span style:color={role(headerRole)}>{text.inputs.n}</span> {#if value !== undefined}{formatCount(
@@ -388,7 +437,7 @@
           {@render editor(draft)}
         {:else}
           <!-- the race: a blank, then the picker or the actions; the planning round: the last line holds them (layout.ts) -->
-          {#if !planning}<div class="line"> </div>{/if}
+          {#if !planning}{@render rejectionLine()}{/if}
           {#if pickFor !== null && acting}
             <div class="line" data-testid="picker">{LEAD}{' '.repeat(cols.slot)}{GAP}{text.arrow}{#each PLAN_SLOTS as s (s)}{GAP}<button
                   type="button"
@@ -414,7 +463,7 @@
                   onclick={() => remove(slot)}>{text.remove}</button
                 >{/if}</div>
           {:else if planning}
-            <div class="line"> </div>
+            {@render rejectionLine()}
           {/if}
         {/if}
       {/if}

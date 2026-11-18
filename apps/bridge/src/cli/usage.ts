@@ -3,7 +3,8 @@ export const USAGE = `usage: pitwall <live|replay|tap|reprocess|import> …
 
   live [--dev]              listen for the game's UDP telemetry, record it and serve the topics
   replay <file> [--realtime] [--paused] [--speed n] [--at-lap n | --at-time ms] [--dev]
-                            serve a .pwrec.gz recording; --realtime keeps the recorded pace
+                            serve a .pwrec.gz recording; its basis is read from the data dir's database,
+                            the replayed session is not stored; --realtime keeps the recorded pace
                             --paused starts paused, --speed sets the playback factor (1 = recorded pace),
                             --at-lap / --at-time jump there before the server reports it is listening
                             --dev publishes per-calculator compute times (dev.calcStats) and the catalogue (dev.catalogue)
@@ -44,6 +45,13 @@ export const USAGE = `usage: pitwall <live|replay|tap|reprocess|import> …
   drivers show <person>     each entry with laps, sessions, age and every linked session's own value
                             <session> is <sessionUid>/<weekendId>/<feedCar>; with a running bridge an edit goes to
                             it and the list reads its topics; show needs the bridge stopped
+  basis [--feed id]         print the feed's basis of a running bridge: per kind each session with its date, the plan
+  basis choose --practice <session>|none [--practice <session> …] --qualifying <session>|none [--plan <id|name>|none]
+                            choose the feed's basis (and its plan; without --plan the plan stays)
+  plans [--feed id]         list the team's saved plans of a running bridge's open planning round
+  plans open --qualifying <session> [--practice <session>|none …] [--laps n --sets carried|fresh]
+                            open a planning round on a qualifying and a practice basis, with its race assumptions
+                            <session> is <sessionUid>/<weekendId>; --feed defaults to the bridge's only feed
 
 The WebSocket server listens on 127.0.0.1 only. Ports, the UDP bind address and the data directory
 come from PITWALL_WS_PORT, PITWALL_UDP_PORT, PITWALL_UDP_HOST (default 0.0.0.0) and PITWALL_DATA_DIR.`;

@@ -1,17 +1,17 @@
 // The race's grid from qualifying (SP4.3d2 Task 7, spec §7.0 rule 5, §7.2; contract C3, C25, C62): `shared/grid.ts`'s
 // `gridOf(view)` orders the session's cars by their best valid lap (the current lap records, `currentLaps`, C25; on a
 // tie the earlier lap first). In a long format's last segment (Q3, SQ3) the cars it eliminated earlier follow from
-// `view.weekend`: the newest stored session of segment 2 of the same qualifying format (a league restart's newest
+// `view.basis`: the newest stored session of segment 2 of the same qualifying format (a league restart's newest
 // attempt), then the newest of segment 1, each's eliminated cars by their best valid lap there, matched to this
 // session's slots by team and race number (`fixed.carKeys` and each stored session's `cars`, C62). Cars without a valid
 // time come last, in car order. Outside qualifying the grid is `notApplicable`.
 //
 // How these tests read the interface (the test agent's decisions, Task 7): "the session's cars" are the slots with a
 // car-status span other than `absent` (C17); a stored session's weekend phase is its projection's `weekend-phase` span
-// (`WeekendContext`); a stored session's slots differ from this session's (a league lobby reorders them), so only the
+// (`BasisContext`); a stored session's slots differ from this session's (a league lobby reorders them), so only the
 // car keys match them.
 import { carId, known, unknown, type CarId, type CarKey, type FactRef, type LapRecord, type Span, type WeekendPhase } from '@pitwall/domain';
-import type { AsOfView, Projection, StoredSession, WeekendContext } from '@pitwall/engine/readers';
+import type { AsOfView, Projection, StoredSession, BasisContext } from '@pitwall/engine/readers';
 import { describe, expect, it } from 'vitest';
 import { history, lap } from '../../../../test-support/builders/index.ts';
 import { gridOf } from '../../src/shared/grid.ts';
@@ -75,17 +75,17 @@ function stored(uid: string, phase: WeekendPhase, times: readonly Timed[], slotO
   const laps = lapsOf(times.map((t) => ({ ...t, car: slotOf(t.car) })));
   const projection: Projection = history({ laps, spans: { 'weekend-phase': [phaseSpan(phase)] } });
   const cars = Array.from({ length: CARS }, (_, k) => ({ carId: carId(slotOf(k)), carKey: keyOf(k) }));
-  return { sessionUid: uid as StoredSession['sessionUid'], playerCar: carId(slotOf(0)), cars, projection };
+  return { sessionUid: uid as StoredSession['sessionUid'], weekendId: 'w1', playerCar: carId(slotOf(0)), cars, projection };
 }
 
 /** The weekend context with `sessions` (oldest first), our car slot 0's key. */
-const weekendOf = (sessions: StoredSession[]): WeekendContext => ({ weekendId: 'w1', player: keyOf(0), sessions });
+const weekendOf = (sessions: StoredSession[]): BasisContext => ({ basis: { practice: [], qualifying: null }, player: keyOf(0), sessions });
 
 /**
  * The ended session's as-of view in `phase` with `times`: 20 competing cars (slots 0 … 19, each its car key), slots 20
  * and 21 absent (no key), `weekend` as given.
  */
-function sessionView(phase: WeekendPhase, times: readonly Timed[], weekend?: WeekendContext): AsOfView {
+function sessionView(phase: WeekendPhase, times: readonly Timed[], weekend?: BasisContext): AsOfView {
   const status = Array.from({ length: SLOTS }, (_, k) => openSpan('car-status', k < CARS ? 'competing' : 'absent', { car: k }));
   const weekendSpan = phase.kind === 'pending' ? [] : [openSpan('weekend-phase', phase.kind, { detail: detailOf(phase) })];
   const keys: (CarKey | null)[] = Array.from({ length: SLOTS }, (_, k) => (k < CARS ? keyOf(k) : null));
@@ -98,7 +98,7 @@ function sessionView(phase: WeekendPhase, times: readonly Timed[], weekend?: Wee
     priors: unknown('notApplicable'),
     drivers: Array.from({ length: SLOTS }, () => unknown('notApplicable')),
     track: unknown('notApplicable'),
-    weekend,
+    basis: weekend,
     outputs: new Map(),
     fixed: {
       totalLaps: known(30, 0),

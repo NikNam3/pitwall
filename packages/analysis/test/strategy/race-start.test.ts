@@ -10,14 +10,14 @@
 //   builds on the race's grid before the leader's lap 2) with its open `session-phase-race` span recast as `grid` (or
 //   `formation`); the builder opens `startLights` at once. This file's grid rows need Task 7 merged.
 // - On the grid no car has a race lap, so its pace is `weekend-pace`'s (C3: without one the start is unknown; ruling
-//   R28): the grid view carries an earlier qualifying session of the weekend (`view.weekend`, C62), every race car
+//   R28): the grid view carries an earlier qualifying session of the weekend (`view.basis`, C62), every race car
 //   matched by its team and race number and holding valid qualifying laps.
 // - "On racing" is the view at the leader's lap 3 as `slots.test.ts` takes it (its span `racing`).
 // - The fitted compound of our car is its fitted set's visual compound (`tyre-model`'s `fittedCompound`, R22): the
 //   first set of the view's sets (`fittedIdx` 0). "Played with the fitted compound": the slot's candidate starts on the
 //   fitted compound (its `startCompound` the fitted one, or none), its stops as saved.
 import { carId, type CarId, type FrameNumber, type LapRecord, type McRow, type NoiseCompound, type Policy, type Slot, type Span, type StrategyOutput, type TyreSet } from '@pitwall/domain';
-import { createRng, type EngineView, type StoredSession, type WeekendContext } from '@pitwall/engine/readers';
+import { createRng, type EngineView, type StoredSession, type BasisContext } from '@pitwall/engine/readers';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { history, lap } from '../../../../test-support/builders/index.ts';
 import type * as mc from '../../src/race-monte-carlo/index.ts';
@@ -62,7 +62,7 @@ const qualiLap = (car: CarId, lapNumber: number, lapTimeMs: number): LapRecord =
  * The weekend's earlier qualifying session of `view`'s race (C62): every car with Participants in the race, keyed by its
  * team and race number there, with three valid push laps (laps 2 to 4) about 1.5 s under its race pace, slower per slot.
  */
-function qualifyingBefore(view: EngineView): WeekendContext {
+function qualifyingBefore(view: EngineView): BasisContext {
   const seated = view.live.cars.filter((c) => c.updatedAt.participants !== undefined);
   const closed = (machine: string, kind: string, detail: unknown, car?: CarId): Span => ({
     machine,
@@ -83,18 +83,19 @@ function qualifyingBefore(view: EngineView): WeekendContext {
   };
   const session: StoredSession = {
     sessionUid: 'quali' as StoredSession['sessionUid'],
+    weekendId: 'w1',
     playerCar: carId(view.live.playerCar),
     cars: seated.map((c) => ({ carId: c.id, carKey: { teamId: c.identity.teamId, raceNumber: c.identity.raceNumber } })),
     projection: history({ laps, spans }),
   };
   const player = seated.find((c) => c.id === view.live.playerCar)!;
-  return { weekendId: 'w1', player: { teamId: player.identity.teamId, raceNumber: player.identity.raceNumber }, sessions: [session] };
+  return { basis: { practice: [], qualifying: null }, player: { teamId: player.identity.teamId, raceNumber: player.identity.raceNumber }, sessions: [session] };
 }
 
 /** The race's view on the grid (or in the formation lap), with the weekend's qualifying before it (R28). */
 function onGrid(spec: ViewSpec = {}, kind: 'grid' | 'formation' = 'grid'): EngineView {
   const view = inPhase(viewAtFrame(RACE(), frameOf(RACE(), 1, 0), spec), kind);
-  return { ...view, weekend: qualifyingBefore(view) };
+  return { ...view, basis: qualifyingBefore(view) };
 }
 /** The race's view at the leader's lap 3, racing. */
 const racing = (spec: ViewSpec = {}): EngineView => viewAt(RACE(), 3, spec);

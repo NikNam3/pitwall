@@ -2,7 +2,7 @@
 // actions (save to a slot, activate, edit, remove). Once the race is finished a plan changes nothing: the rows stay, the
 // actions are hidden. The machine decided the situation (C43); the display only maps it. The planning round's state
 // (open, closed) to the variant `source: auto` draws (SP4.3d2 Task 12).
-import type { MachineSpans, PlanningRound } from '@pitwall/contracts';
+import type { MachineSpans, PlanningRoundState } from '@pitwall/contracts';
 import type { sessionPhaseRaceSpans } from '@pitwall/domain';
 import type { PresentationTable } from '../../kit/presentation.ts';
 import { openSpanOf } from '../../kit/situation.ts';
@@ -44,7 +44,7 @@ export type RoundRow = { readonly variant: Variant };
  * The variant: `live` and `planning` as chosen; `auto` the round state's row (closed without the topic's value). A
  * source not set (the panel without options) is `auto`, the declaration's default.
  */
-export function variantOf(source: 'auto' | Variant | undefined, prepared: PlanningRound | undefined): Variant {
+export function variantOf(source: 'auto' | Variant | undefined, prepared: PlanningRoundState | undefined): Variant {
   if (source !== undefined && source !== 'auto') return source;
   return presentation.round[prepared?.open === true ? 'open' : 'closed'].variant;
 }

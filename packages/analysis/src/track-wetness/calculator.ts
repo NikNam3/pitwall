@@ -8,7 +8,7 @@ export const trackWetnessCalculator: QuickCalculator<TrackWetnessOutput> = {
   id: TRACK_WETNESS,
   kind: 'quick',
   // `miniSectors`: the change tag of the crossings list (the brief's `crossings`); `decisions`: it reads `view.priors`
-  // (the dry reference's priors entry, C62a)
+  // (the dry reference's priors entry, C62a) and `view.basis` (the dry reference's weekend sessions, C62)
   reads: ['laps', 'stints', 'miniSectors', 'session', 'decisions', 'spans:weekend-phase', 'spans:session-phase-race', { calculator: 'degradation' }],
   cadence: 'lapCompleted',
   compute: (view) => trackWetnessAsOf(asOfNow(view)),

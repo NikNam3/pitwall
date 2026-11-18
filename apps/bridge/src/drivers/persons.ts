@@ -4,7 +4,7 @@
 // race number, or by one session's slot) is read once and dropped (SP4.3b spec 10, U8): the file is rewritten without it.
 import { closeSync, mkdirSync, openSync, readdirSync, rmSync, writeSync } from 'node:fs';
 import { join } from 'node:path';
-import type { CarId, DriverLink, DriverPerson, SessionRef, SessionUid } from '@pitwall/domain';
+import type { CarId, DriverLink, DriverPerson, StoredSessionRef, SessionUid } from '@pitwall/domain';
 import type { Logger } from '../log.ts';
 import { parseJson, readText, writeAtomic } from '../ui-state/ui-files.ts';
 
@@ -78,14 +78,14 @@ function isAlive(pid: number): boolean {
 }
 
 /** Whether two refs name the same stored session (C60's key). */
-export const sameSession = (a: SessionRef, b: SessionRef): boolean => a.sessionUid === b.sessionUid && a.weekendId === b.weekendId && a.feedCar === b.feedCar;
+export const sameSession = (a: StoredSessionRef, b: StoredSessionRef): boolean => a.sessionUid === b.sessionUid && a.weekendId === b.weekendId && a.feedCar === b.feedCar;
 
 type Json = Record<string, unknown>;
 const isObject = (v: unknown): v is Json => typeof v === 'object' && v !== null && !Array.isArray(v);
 const isString = (v: unknown): v is string => typeof v === 'string';
 const isInteger = (v: unknown): v is number => Number.isInteger(v);
 
-export function decodeSessionRef(raw: unknown): SessionRef | undefined {
+export function decodeSessionRef(raw: unknown): StoredSessionRef | undefined {
   if (!isObject(raw) || !isString(raw.sessionUid) || !isString(raw.weekendId) || !isInteger(raw.feedCar)) return undefined;
   return { sessionUid: raw.sessionUid as SessionUid, weekendId: raw.weekendId, feedCar: raw.feedCar as CarId };
 }
@@ -112,7 +112,7 @@ function decodePerson(raw: unknown): { person: DriverPerson; dropped: number } |
   const links = decoded.filter((l): l is DriverLink => l !== undefined && l !== 'old');
   return {
     person: {
-      id: raw.id, displayName: raw.displayName, links, excluded: excluded as SessionRef[],
+      id: raw.id, displayName: raw.displayName, links, excluded: excluded as StoredSessionRef[],
       overrides: Object.fromEntries(overrides) as Record<string, number>,
     },
     dropped: decoded.length - links.length,

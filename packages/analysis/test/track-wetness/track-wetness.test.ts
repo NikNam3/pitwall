@@ -140,7 +140,7 @@ describe('track-wetness (spec 5.1)', () => {
         priors: view.priors,
         drivers: view.drivers,
         track: view.track,
-        weekend: view.weekend,
+        basis: view.basis,
         outputs: view.outputs,
       };
       expect(trackWetnessAsOf(asOf), `frame ${frame}`).toEqual(calc.compute(view));

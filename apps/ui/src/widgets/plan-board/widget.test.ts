@@ -32,7 +32,7 @@ describe('plan-board declaration', () => {
 
   it('invokes the six planning commands, nothing else (C72, C74)', () => {
     expect([...widget.commands].sort()).toEqual(
-      ['plan.accept', 'plans.prepare.accept', 'plans.prepare.activate', 'plans.prepare.laps', 'plans.prepare.remove', 'plans.prepare.save'],
+      ['plan.accept', 'plans.prepare.accept', 'plans.prepare.activate', 'plans.prepare.remove', 'plans.prepare.save', 'plans.race.set'],
     );
   });
 
@@ -89,12 +89,12 @@ describe('plan-board gallery', () => {
     expect(preview.known && preview.value.rows.filter((x) => x.slot !== null).map((x) => x.slot)).toEqual(['G1']);
     // in the planning round every plan carries its start compound (SP4.3d spec §7.2)
     for (const row of preview.known ? preview.value.rows : []) expect(row.policy.startCompound).toBeDefined();
-    expect(r.prepared.open && r.prepared.laps.entered).toBe(44);
+    expect(r.prepared.open && r.prepared.race.laps).toBe(44);
     expect(cases.planningComputing.prepared.open && cases.planningComputing.prepared.running).toBe(true);
     expect('preview' in cases.planningComputing).toBe(false);
-    expect(cases.planningNoLaps.prepared.open && cases.planningNoLaps.prepared.laps.entered).toBeNull();
+    expect(cases.planningNoLaps.prepared.open && cases.planningNoLaps.prepared.race.laps).toBeNull();
     expect('preview' in cases.planningNoLaps).toBe(false);
-    expect(cases.planningNotApplicable.prepared).toEqual({ open: false });
+    expect(cases.planningNotApplicable.prepared).toEqual({ open: false, saved: [] });
     const grid = cases.gridPrefill.plan.value;
     expect(grid.known && Object.keys(grid.value.prefill).sort()).toEqual(['A', 'B']);
     expect(grid.known && grid.value.rows.every((x) => x.slot === null)).toBe(true);

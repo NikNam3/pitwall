@@ -1,10 +1,10 @@
-// The storage of one session (C24, C59–C62): its row and cars, its log, its weekend context.
-import { carKeyOf, known, unknown, type CarId, type CarKey, type SessionState, type SessionUid } from '@pitwall/domain';
-import type { DeepReadonly, EngineState, WeekendContext } from '@pitwall/engine/readers';
+// The storage of one session (C24, C59–C62): its row and cars, its log, the reads of its basis.
+import { carKeyOf, known, unknown, type CarId, type CarKey, type SessionBasis, type SessionRef, type SessionState, type SessionUid, type WeekendPhase } from '@pitwall/domain';
+import type { DeepReadonly, EngineState, BasisContext } from '@pitwall/engine/readers';
 import type { Logger } from '../log.ts';
-import type { Db, SessionKey, SessionRow, StoredSessionRow } from '../storage/db.ts';
+import type { Db, SessionKey, StoredSessionKind, SessionRow, StoredSessionRow } from '../storage/db.ts';
 import { StorageWriter } from '../storage/storage-writer.ts';
-import { WeekendRepository } from '../storage/weekend-repository.ts';
+import { isStale, WeekendRepository } from '../storage/weekend-repository.ts';
 
 /**
  * A session row from the engine's values (C6: storage sees no packet type) and the recording's: the session as the live
@@ -20,7 +20,12 @@ export type SessionRowInput = {
   startedAt: string;
   pwrecPath: string | null;
   cars: SessionRow['cars'];
+  /** The session's weekend phase as the machine decided it (C14); `pending` until it has. The row keeps its kind (C62). */
+  weekendPhase: WeekendPhase;
 };
+
+/** The kind a session's row stores for its weekend phase: `none` while pending or for the `none` phase. */
+export const sessionKindOf = (phase: WeekendPhase): StoredSessionKind => (phase.kind === 'pending' ? 'none' : phase.kind);
 
 export const sessionRowOf = (s: SessionRowInput): SessionRow => ({
   sessionUid: s.sessionUid,
@@ -34,6 +39,7 @@ export const sessionRowOf = (s: SessionRowInput): SessionRow => ({
   // the race's laps with the settings (fixed for the session, ruling R17): the planning round suggests them (§7.1 step 3)
   settings: { ...s.session.settings, totalLaps: s.session.totalLaps },
   cars: s.cars,
+  kind: sessionKindOf(s.weekendPhase),
 });
 
 /**
@@ -60,14 +66,11 @@ export type SessionStorageOptions = {
   /** The rules version the session's log is stored with (C61). */
   rulesVersion: string;
   mode: StorageMode;
-  /** Rebuilds a stored session the weekend context skipped as stale, in the background (C61). */
-  rebuild?: (row: StoredSessionRow) => Promise<void>;
   /** Live only: called once the session's log is stored complete (the calibration store's candidates change, C62a). */
   onStored?: () => void;
 };
 
 const keyOf = (row: SessionKey): SessionKey => ({ sessionUid: row.sessionUid, weekendId: row.weekendId, playerCar: row.playerCar });
-const sameKey = (a: SessionKey, b: SessionKey): boolean => a.sessionUid === b.sessionUid && a.weekendId === b.weekendId && a.playerCar === b.playerCar;
 
 /**
  * One session's access to the database. Never throws: the first failure goes to `onError` and turns storage off
@@ -137,29 +140,47 @@ export class SessionStorage {
   }
 
   /**
-   * The player's earlier sessions of the weekend (C62); `undefined` when storage is off. Stale ones (not complete, or of
-   * another rules version) are left out and handed to `rebuild`, in the background.
+   * The basis of a recording without a basis sidecar (C62): the seat's earlier sessions of the weekend, stale ones left
+   * out; `undefined` when storage is off.
    */
-  weekendContext(row: SessionRow, player: CarKey): WeekendContext | undefined {
+  weekendContext(row: SessionRow, player: CarKey): BasisContext | undefined {
+    return this.#read((repo) => repo.weekendContext(row.weekendId, player, keyOf(row), { startedAt: row.startedAt }).context);
+  }
+
+  /** The rows of the seat's earlier sessions of the weekend, stale ones included (the preselection's own weekend, C62). */
+  seatSessionsBefore(row: SessionRow, player: CarKey): StoredSessionRow[] | undefined {
+    return this.#read((repo) => repo.seatSessionsBefore(row.weekendId, player, row.startedAt));
+  }
+
+  /** The stored rows of `refs` of the seat (C62): a ref the seat never stored is missing. */
+  seatRowsOf(refs: readonly SessionRef[], player: CarKey): StoredSessionRow[] | undefined {
+    return this.#read((repo) => repo.seatRowsOf(refs, player));
+  }
+
+  /** The rows of every stored session of the seat on `trackId`, stale ones included (the picker's candidates, C54, C62). */
+  seatSessionsOnTrack(trackId: number, player: CarKey): StoredSessionRow[] | undefined {
+    return this.#read((repo) => repo.seatSessionsOnTrack(trackId, player));
+  }
+
+  /** The context of `basis` for the seat (C62): the named sessions the seat stored and that are current. */
+  basisContext(basis: SessionBasis, player: CarKey): BasisContext | undefined {
+    return this.#read((repo) => repo.contextOf(basis, player));
+  }
+
+  /** Whether a stored row is stale under the session's rules version (C61). */
+  isStale(row: StoredSessionRow): boolean {
+    return isStale(row, this.#o.rulesVersion);
+  }
+
+  /** A read of the database; `undefined` when storage is off or the read failed (storage is off from then on). */
+  #read<T>(read: (repo: WeekendRepository) => T): T | undefined {
     const repo = this.#access?.repo;
     if (repo === undefined) return undefined;
     try {
-      const { context, incomplete } = repo.weekendContext(row.weekendId, player, keyOf(row), { startedAt: row.startedAt });
-      if (incomplete.length > 0) this.#rebuildInBackground(repo.sessionsOf(row.weekendId).filter((s) => incomplete.some((k) => sameKey(k, s))));
-      return context;
+      return read(repo);
     } catch (error) {
       this.#fail(error);
       return undefined;
-    }
-  }
-
-  #rebuildInBackground(rows: readonly StoredSessionRow[]): void {
-    const { rebuild, log } = this.#o;
-    if (rebuild === undefined) return;
-    for (const stored of rows) {
-      rebuild(stored).catch((error: unknown) => {
-        log.error({ sessionUid: stored.sessionUid, weekendId: stored.weekendId, playerCar: stored.playerCar, err: error }, 'stored session not rebuilt');
-      });
     }
   }
 

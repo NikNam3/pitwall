@@ -1,9 +1,9 @@
 import { existsSync } from 'node:fs';
-import { known, unknown, type CarId, type CarKey, type Known, type SessionUid, type TrackData, type WeekendPhase } from '@pitwall/domain';
+import { known, unknown, type CarId, type CarKey, type Known, type SessionBasis, type SessionRef, type SessionUid, type TrackData, type WeekendPhase } from '@pitwall/domain';
 import { projectionOfLog } from '@pitwall/engine/log';
-import type { DeepReadonly, Projection, ProjectionState, StoredSession, WeekendContext } from '@pitwall/engine/readers';
+import type { DeepReadonly, Projection, ProjectionState, BasisContext, StoredSession } from '@pitwall/engine/readers';
 import { createLogger, type Logger } from '../log.ts';
-import type { Db, SessionKey, SessionRow, StoredSessionRow } from './db.ts';
+import type { Db, SessionKey, StoredSessionKind, SessionRow, StoredSessionRow } from './db.ts';
 import { logOfRows, type StoredFact } from './log-rows.ts';
 
 type SessionDbRow = {
@@ -18,6 +18,13 @@ type SessionDbRow = {
   settings: string;
   rules_version: string;
   complete: number;
+  kind: string;
+};
+
+/** The basis that names `sessions` (C62): per session its weekend-phase span's kind; the practice ones and the newest qualifying. */
+const basisOf = (sessions: readonly StoredSession[]): SessionBasis => {
+  const ofKind = (kind: string) => sessions.filter((s) => s.projection.spans['weekend-phase']?.[0]?.kind === kind).map((s) => ({ sessionUid: s.sessionUid, weekendId: s.weekendId }));
+  return { practice: ofKind('practice'), qualifying: ofKind('qualifying').at(-1) ?? null };
 };
 
 type CarDbRow = { car_id: number; team_id: number; race_number: number; name: string | null };
@@ -96,7 +103,7 @@ export class WeekendRepository {
     this.#rebuild = opts.rebuild;
     this.#rulesVersion = opts.rulesVersion;
     this.#track = opts.track ?? (() => unknown('notApplicable'));
-    const sessionColumns = `s.session_uid, s.weekend_id, w.season_id, s.player_car, s.teammate_car, s.track_id, s.started_at, s.pwrec_path, s.settings, s.rules_version, s.complete`;
+    const sessionColumns = `s.session_uid, s.weekend_id, w.season_id, s.player_car, s.teammate_car, s.track_id, s.started_at, s.pwrec_path, s.settings, s.rules_version, s.complete, s.kind`;
     const sessionsFrom = `FROM sessions s JOIN weekends w ON w.weekend_id = s.weekend_id`;
     this.#statements = {
       weekendSessions: db.prepare(`SELECT ${sessionColumns} ${sessionsFrom} WHERE s.weekend_id = ? ORDER BY s.started_at, s.session_uid, s.player_car`),
@@ -120,6 +127,28 @@ export class WeekendRepository {
                AND c.car_id = s.player_car AND c.team_id = @teamId AND c.race_number = @raceNumber)
          ORDER BY s.started_at, s.session_uid, s.player_car`,
       ),
+      // The stored sessions of one session ref whose own player car had the seat's team and race number (C62).
+      seatSessions: db.prepare(
+        `SELECT ${sessionColumns} ${sessionsFrom}
+         WHERE s.session_uid = @sessionUid AND s.weekend_id = @weekendId
+           AND EXISTS (
+             SELECT 1 FROM cars c
+             WHERE c.session_uid = s.session_uid AND c.weekend_id = s.weekend_id AND c.player_car = s.player_car
+               AND c.car_id = s.player_car AND c.team_id = @teamId AND c.race_number = @raceNumber)
+         ORDER BY s.started_at, s.player_car`,
+      ),
+      // The stored sessions on a track whose own player car had the seat's team and race number (C62), oldest first.
+      seatSessionsOnTrack: db.prepare(
+        `SELECT ${sessionColumns} ${sessionsFrom}
+         WHERE s.track_id = @trackId
+           AND EXISTS (
+             SELECT 1 FROM cars c
+             WHERE c.session_uid = s.session_uid AND c.weekend_id = s.weekend_id AND c.player_car = s.player_car
+               AND c.car_id = s.player_car AND c.team_id = @teamId AND c.race_number = @raceNumber)
+         ORDER BY s.started_at, s.session_uid, s.player_car`,
+      ),
+      // Every stored session of one session ref, of any player car.
+      refSessions: db.prepare(`SELECT ${sessionColumns} ${sessionsFrom} WHERE s.session_uid = @sessionUid AND s.weekend_id = @weekendId ORDER BY s.player_car`),
       newestTrack: db.prepare(`SELECT track_id FROM sessions ORDER BY started_at DESC, session_uid DESC, player_car DESC LIMIT 1`).pluck(),
       cars: db.prepare(`SELECT car_id, team_id, race_number, name FROM cars WHERE ${OF_SESSION} ORDER BY car_id`),
       facts: db.prepare(`SELECT list, record FROM facts WHERE ${OF_SESSION} ORDER BY list, seq`),
@@ -212,17 +241,83 @@ export class WeekendRepository {
   }
 
   /**
-   * The weekend context of the session `before` (C39, C62): the weekend's sessions that started before it whose player
-   * car had `player`'s team and race number, oldest first, each with its cars by car id and its projection. A stale
-   * session (`isStale`) is skipped with a warning and its key returned in `incomplete`, so the caller rebuilds it.
-   * `startedAt` stands for `before`'s start when its row is not stored yet (a rebuild writes it at the end).
+   * The rows of the weekend's sessions that started before `startedAt` whose own player car had `player`'s team and race
+   * number (the seat's, C62), oldest first, stale ones included: what the preselection's own weekend is (SP4.3e §4.2).
+   */
+  seatSessionsBefore(weekendId: string, player: CarKey, startedAt: string): StoredSessionRow[] {
+    const rows = this.#statements.playerSessionsBefore.all({ weekendId, startedAt, teamId: player.teamId, raceNumber: player.raceNumber }) as SessionDbRow[];
+    return rows.map((row) => this.#toSession(row));
+  }
+
+  /**
+   * The stored rows of `refs` of `player`'s seat (C62): per ref the stored session whose own player car had the seat's
+   * team and race number, in the order of `refs`; a ref the seat never stored is missing, never an error.
+   */
+  seatRowsOf(refs: readonly SessionRef[], player: CarKey): StoredSessionRow[] {
+    return refs.flatMap((ref) => {
+      const rows = this.#statements.seatSessions.all({ sessionUid: ref.sessionUid, weekendId: ref.weekendId, teamId: player.teamId, raceNumber: player.raceNumber }) as SessionDbRow[];
+      return rows.slice(0, 1).map((row) => this.#toSession(row));
+    });
+  }
+
+  /**
+   * The rows of every stored session on `trackId` whose own player car had `player`'s team and race number (the seat's,
+   * C62), oldest first, stale ones included: the basis picker's candidates (`basis.active`, C54).
+   */
+  seatSessionsOnTrack(trackId: number, player: CarKey): StoredSessionRow[] {
+    const rows = this.#statements.seatSessionsOnTrack.all({ trackId, teamId: player.teamId, raceNumber: player.raceNumber }) as SessionDbRow[];
+    return rows.map((row) => this.#toSession(row));
+  }
+
+  /**
+   * The rows of `refs` of every player car, stale ones included, in the order of `refs`: what a replay makes current
+   * before its first frame, its seat not yet known (C61).
+   */
+  rowsOf(refs: readonly SessionRef[]): StoredSessionRow[] {
+    return refs.flatMap((ref) =>
+      (this.#statements.refSessions.all({ sessionUid: ref.sessionUid, weekendId: ref.weekendId }) as SessionDbRow[]).map((row) => this.#toSession(row)),
+    );
+  }
+
+  /**
+   * The context of `basis` for `player`'s seat (C39, C62): the named sessions the seat stored (`seatRowsOf`), oldest
+   * first, each with its cars by car id and its projection; `basis` itself names them all. A session the seat never
+   * stored is missing; a stale one (`isStale`) is left out with a warning, never read (C61): a basis enters the engine
+   * only once its sessions are current, so the caller has made them current first.
+   */
+  contextOf(basis: SessionBasis, player: CarKey): BasisContext {
+    const refs = [...basis.practice, ...(basis.qualifying === null ? [] : [basis.qualifying])];
+    const sessions = this.seatRowsOf(refs, player)
+      .filter((row) => {
+        if (!isStale(row, this.#rulesVersion)) return true;
+        this.#log.warn({ sessionUid: row.sessionUid, weekendId: row.weekendId, playerCar: row.playerCar }, 'stored session stale, left out of the basis');
+        return false;
+      })
+      .sort((a, b) => Date.parse(a.startedAt) - Date.parse(b.startedAt))
+      .map((row) => this.#storedSession({ sessionUid: row.sessionUid, weekendId: row.weekendId, playerCar: row.playerCar }));
+    return { basis, player: { teamId: player.teamId, raceNumber: player.raceNumber }, sessions };
+  }
+
+  /** A stored session as the view carries it (C39, C62): only the slots' team and race number, and its projection. */
+  #storedSession(key: SessionKey): StoredSession {
+    // The driver name is the calibration panel's, never the view's.
+    const cars = this.#carsOf(key).map(({ carId, carKey }) => ({ carId, carKey }));
+    return { sessionUid: key.sessionUid as SessionUid, weekendId: key.weekendId, playerCar: key.playerCar, cars, projection: this.#projectionOfStored(key) };
+  }
+
+  /**
+   * The basis of a recording without a basis sidecar (C62): the weekend's sessions that started before the session
+   * `before` whose player car had `player`'s team and race number, oldest first, each with its cars by car id and its
+   * projection. A stale session (`isStale`) is skipped with a warning and its key returned in `incomplete`. `startedAt`
+   * stands for `before`'s start when its row is not stored yet (a rebuild writes it at the end). The context's `basis`
+   * names the loaded sessions by their weekend-phase span: the practice ones, and the newest qualifying.
    */
   weekendContext(
     weekendId: string,
     player: CarKey,
     before: SessionKey,
     opts: { startedAt?: string } = {},
-  ): { context: WeekendContext; incomplete: SessionKey[] } {
+  ): { context: BasisContext; incomplete: SessionKey[] } {
     const startedAt = opts.startedAt ?? (this.#statements.startedAt.get(keyParams(before)) as string | undefined);
     const rows =
       startedAt === undefined
@@ -237,11 +332,9 @@ export class WeekendRepository {
         incomplete.push(key);
         continue;
       }
-      // Only the slots' team and race number reach the view (C39, C62); the driver name is the calibration panel's.
-      const cars = this.#carsOf(key).map(({ carId, carKey }) => ({ carId, carKey }));
-      sessions.push({ sessionUid: key.sessionUid, playerCar: key.playerCar, cars, projection: this.#projectionOfStored(key) });
+      sessions.push(this.#storedSession(key));
     }
-    return { context: { weekendId, player: { teamId: player.teamId, raceNumber: player.raceNumber }, sessions }, incomplete };
+    return { context: { basis: basisOf(sessions), player: { teamId: player.teamId, raceNumber: player.raceNumber }, sessions }, incomplete };
   }
 
   #canRebuild(row: StoredSessionRow): boolean {
@@ -288,6 +381,7 @@ export class WeekendRepository {
       cars: this.#carsOf(keyOf(row)),
       rulesVersion: row.rules_version,
       complete: row.complete === 1,
+      kind: row.kind as StoredSessionKind,
     };
   }
 }

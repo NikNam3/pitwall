@@ -136,16 +136,23 @@ export function priorsSnapshot(byCompound: Partial<Record<VisualCompound, Compou
 /** `view.priors` holding `snapshot` (C62a). */
 export const viewPriors = (snapshot: PriorsSnapshot): EngineView['priors'] => known(snapshot, 0);
 
-/** A stored source (C62a) of car 0: its stint's laps in a session of weekend phase `phase`; no track file. */
-export function storedSource(laps: LapRecord[], { phase = RACE, pitStops = [] }: { phase?: WeekendPhase; pitStops?: PitStopRecord[] } = {}): StoredSource {
+/**
+ * A stored source (C62a): its stint's laps in session `sessionUid` (default '42') of weekend phase `phase`, of car `car`
+ * (default the laps' car); the feed's car is car 0; no track file.
+ */
+export function storedSource(
+  laps: LapRecord[],
+  { phase = RACE, pitStops = [], sessionUid = '42', car }: { phase?: WeekendPhase; pitStops?: PitStopRecord[]; sessionUid?: string; car?: number } = {},
+): StoredSource {
   const first = laps[0]!;
   const last = laps.at(-1)!;
+  const sourceCar = car === undefined ? first.carId : carId(car);
   return {
-    source: { sessionUid: '42', weekendId: 'w1', feedCar: carId(0), car: first.carId, firstLap: first.lapNumber, excludedLaps: [] },
+    source: { sessionUid, weekendId: 'w1', feedCar: carId(0), car: sourceCar, firstLap: first.lapNumber, excludedLaps: [] },
     phase,
     aiDifficulty: unknown('notReceived'),
     projection: history(),
-    stint: stintRecord({ carId: first.carId, firstLap: first.lapNumber, lastLap: last.lapNumber, actualCompound: first.actualCompound, visualCompound: first.visualCompound, tyreAgeAtFitting: first.tyreAgeAtStart }),
+    stint: stintRecord({ carId: sourceCar, firstLap: first.lapNumber, lastLap: last.lapNumber, actualCompound: first.actualCompound, visualCompound: first.visualCompound, tyreAgeAtFitting: first.tyreAgeAtStart }),
     laps,
     pitStops,
     sessionLaps: laps,

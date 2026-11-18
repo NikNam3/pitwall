@@ -71,4 +71,19 @@ export const FORECAST_FIELD_CONFIG = defineConfig('forecast-field', {
   rivalStartOddsMedium: 0.35,
   /** See `rivalStartOddsSoft`. Source: as there (0 of 94). */
   rivalStartOddsHard: 0,
+  /**
+   * A fresh race allocation's sets per compound (`freshRaceSets*`, SP4.3e Task 3, spec §4.4 item 3): the planning round's
+   * race sets with the race assumptions' `sets: 'fresh'`, per our car, every set new. Source: measured 2026-11-18 from
+   * the first TyreSets of both cars of the fresh-lobby race `2026-11-18_00-37-17_6ca2663a73e7b608_car18.pwrec.gz` and
+   * `_car19`: available new dry sets S×3 (recommended for sessions 5, 5, 6), M×2 (15, 6), H×1 (15); inters ×4, wets ×3.
+   */
+  freshRaceSetsSoft: 3,
+  /** See `freshRaceSetsSoft`. Source: as there (M×2). */
+  freshRaceSetsMedium: 2,
+  /** See `freshRaceSetsSoft`. Source: as there (H×1). */
+  freshRaceSetsHard: 1,
+  /** See `freshRaceSetsSoft`. Source: as there (inters ×4). */
+  freshRaceSetsInter: 4,
+  /** See `freshRaceSetsSoft`. Source: as there (wets ×3). */
+  freshRaceSetsWet: 3,
 });

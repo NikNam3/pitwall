@@ -33,7 +33,7 @@ export type AsOfFixed = {
   safetyCar: Known<GameSettings['safetyCar']>;
   /**
    * Team and race number per car slot, from Participants (C62; `null` for an empty slot): how a unit matches the
-   * session's slots to `view.weekend`'s. `unknown('notReceived')` before Participants.
+   * session's slots to `view.basis`'s. `unknown('notReceived')` before Participants.
    */
   carKeys: Known<readonly (CarKey | null)[]>;
   setsNow: readonly LiveSets[] | null;
@@ -41,7 +41,7 @@ export type AsOfFixed = {
 };
 
 /** What an "as of frame N" form reads (C39 minus live, delta, changed, feed): the projection cut at N and the situation at N. */
-export type AsOfView = Pick<EngineView, 'config' | 'priors' | 'drivers' | 'track' | 'weekend'> & {
+export type AsOfView = Pick<EngineView, 'config' | 'priors' | 'drivers' | 'track' | 'basis'> & {
   fixed: AsOfFixed;
   history: Projection;
   situation: Situation;
@@ -83,7 +83,7 @@ export function asOfNow(view: EngineView): AsOfView {
     get priors() { return view.priors; },
     get drivers() { return view.drivers; },
     get track() { return view.track; },
-    get weekend() { return view.weekend; },
+    get basis() { return view.basis; },
     get outputs() { return view.outputs; },
     fixed: {
       get totalLaps() { return known(view.live.session.totalLaps, view.live.sessionTime); },
@@ -182,7 +182,7 @@ export function asOfStored(session: StoredDriverSession, ctx: ProfileCtx): AsOfV
     priors: unknown('notApplicable'),
     drivers: [],
     track: session.track,
-    weekend: undefined,
+    basis: undefined,
     outputs: new Map(),
     fixed: { totalLaps: session.totalLaps, playerCar: known(session.session.feedCar, 0), teammateCar: unknown('notReceived'), aiDifficulty: session.aiDifficulty, safetyCar: unknown('notReceived'), carKeys: carKeysStored(session), setsNow: null, weatherNow: null },
   };

@@ -154,12 +154,19 @@ export class UiState {
       case 'plan.accept':
         // The team's feed pipelines' decisions, routed by `PlanRouting` (C76, SP4.3b Task 17, SP4.3d1 Task 10), not UI state.
         return INVALID;
-      case 'plans.prepare.laps':
       case 'plans.prepare.save':
       case 'plans.prepare.accept':
       case 'plans.prepare.remove':
       case 'plans.prepare.activate':
         // The planning round's prepared plans (SP4.3d spec §7.4, C62d), not UI state.
+        return INVALID;
+      case 'basis.choose':
+      case 'plans.round.open':
+      case 'plans.race.set':
+      case 'plans.save':
+      case 'plans.rename':
+      case 'plans.delete':
+        // The basis routing and the saved plans (C62, C62d, SP4.3e), not UI state.
         return INVALID;
     }
   }

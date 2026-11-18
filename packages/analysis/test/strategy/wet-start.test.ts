@@ -130,7 +130,7 @@ const DRY_QUALIFYING = once((): AsOfView => {
   const config = { ...asOf.config, 'forecast-field': { ...asOf.config['forecast-field'], interOffsetMs: -1_500, wetOffsetMs: -1_200 } } as AsOfView['config'];
   return { ...asOf, config };
 });
-const DRY_INPUT = once((): StrategyInput => planningInputFrom(DRY_QUALIFYING(), { laps: PLANNING_LAPS, prepared: NO_PLANS(OURS) }));
+const DRY_INPUT = once((): StrategyInput => planningInputFrom(DRY_QUALIFYING(), { laps: PLANNING_LAPS, race: { laps: PLANNING_LAPS, sets: 'carried' }, prepared: NO_PLANS(OURS) }));
 
 type CarRows = Extract<StrategyOutput[CarId], { known: true }>['value'];
 function entryOf(out: StrategyOutput, car: CarId): CarRows {

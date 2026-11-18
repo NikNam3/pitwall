@@ -23,7 +23,7 @@ const viewWith = (outputs: AsOfView['outputs'] = new Map()): AsOfView => ({
   priors: unknown('notApplicable'),
   drivers: [],
   track: unknown('notApplicable'),
-  weekend: undefined,
+  basis: undefined,
   outputs,
 });
 
@@ -35,7 +35,7 @@ describe('asOfNow', () => {
     expect(now.history).toBe(view.history);
     expect(now.situation).toBe(view.situation);
     expect(now.at).toBe(view.live.sessionTime);
-    expect([now.config, now.priors, now.drivers, now.track, now.weekend]).toEqual([view.config, view.priors, view.drivers, view.track, view.weekend]);
+    expect([now.config, now.priors, now.drivers, now.track, now.basis]).toEqual([view.config, view.priors, view.drivers, view.track, view.basis]);
     expect(now.outputs.get('a')).toBe(1);
   });
 });
@@ -108,7 +108,7 @@ describe('asOfStored', () => {
     expect(v.situation).toEqual({ weekendPhase: session.phase, byMachine: {} });
     expect(v.config).toBe(config);
     expect(v.track).toBe(track);
-    expect(v.weekend).toBeUndefined();
+    expect(v.basis).toBeUndefined();
     expect([...v.outputs.keys()]).toEqual([]);
   });
 });

@@ -15,7 +15,9 @@ export type ShellOverlay =
   | { kind: 'keys' }
   | { kind: 'workbooks' }
   | { kind: 'saveAs' }
-  | { kind: 'picker'; group: number };
+  | { kind: 'picker'; group: number }
+  /** The basis and plan picker of the window's feed (SP4.3e spec §4.2). */
+  | { kind: 'basis' };
 
 /** What the commands need from the shell. */
 export type CommandContext = {
@@ -247,7 +249,7 @@ export function planSlotCommands(
 }
 
 /**
- * The planning round's commands (SP4.3d2 call 10, C72): `plans.prepare.laps`, `.save`, `.accept`, `.remove`,
+ * The planning round's commands (SP4.3d2 call 10, C72): `plans.race.set`, `plans.prepare.save`, `.accept`, `.remove`,
  * `.activate` and `plan.accept`, each taking its uiAction's fields (the feed included) as arguments and sending that
  * uiAction; each resolves with its outcome (C73). The window keeps no copy: a plan takes effect when the bridge publishes it.
  */
@@ -261,7 +263,7 @@ export function planningCommands(send: (action: UiAction) => Promise<ActionOutco
     run: (args: WidgetCommandArgs<K>) => send({ kind: id, ...args } as Extract<UiAction, { kind: K }>),
   });
   const all: { [K in WidgetCommandId]: ArgCommand<K> } = {
-    'plans.prepare.laps': make('plans.prepare.laps', t.plansPrepareLaps),
+    'plans.race.set': make('plans.race.set', t.plansPrepareLaps),
     'plans.prepare.save': make('plans.prepare.save', t.plansPrepareSave),
     'plans.prepare.accept': make('plans.prepare.accept', t.plansPrepareAccept),
     'plans.prepare.remove': make('plans.prepare.remove', t.plansPrepareRemove),
@@ -316,6 +318,14 @@ export function sessionEndCommand(ctx: Pick<CommandContext, 'send'> & { feedId: 
     group: text.commandGroups.session,
     run: () => ctx.send({ kind: 'session.end', feedId: ctx.feedId }),
   };
+}
+
+/**
+ * `basis.pick` (SP4.3e spec §4.2, C72): opens the basis and plan picker of the window's feed; the picker's Confirm sends
+ * the choice (C73). Registered only while the window has a feed.
+ */
+export function basisPickCommand(ctx: Pick<CommandContext, 'open'>): Command {
+  return { id: 'basis.pick', title: text.commandTitles.basisPick, group: text.commandGroups.session, run: () => ctx.open({ kind: 'basis' }) };
 }
 
 /** `layout.edit.toggle`: turns the window's edit mode (window-local, C73) on or off. */

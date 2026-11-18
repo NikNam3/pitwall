@@ -212,6 +212,24 @@ describe('strategy-dp: a free start compound (SP4.3d2 Task 8, spec §7.2)', () =
     expect(fresh.plans[0]!.expectedMs).not.toBe(r.plans[0]!.expectedMs);
   });
 
+  // SP4.3e Task 3 (report F4a): with the race's reserved sets the DP sees two mediums, so M-M-S is a plan
+  it('with S×2, M×2, H×1 new, a medium-medium-soft 2-stop is among the DP\'s 2-stop plans', () => {
+    const r = solveDp(
+      dpInput({
+        startCompound: null,
+        totalLaps: 30,
+        lap: { ...LAP, compoundOffsetMs: { soft: -300, medium: 0, hard: 250, inter: 0, wet: 0 } },
+        car: { degMsPerLap: { soft: 60, medium: 30, hard: 20 } },
+        sets: { soft: 2, medium: 2, hard: 1 },
+        owesSecondCompound: true,
+      }),
+    );
+    const twoStops = r.plans.filter((p) => p.stops.length === 2);
+    expect(twoStops.length, '2-stop plans').toBeGreaterThan(0);
+    const seqs = twoStops.map((p) => [p.startCompound, ...p.stops.map((s) => s.compound)].join('-'));
+    expect(seqs, 'M-M-S among the 2-stop plans').toContain('medium-medium-soft');
+  });
+
   // Step 1 row 6 (the DP's part)
   it('same input → bit-identical output with a free start', () => {
     const input = dpInput({

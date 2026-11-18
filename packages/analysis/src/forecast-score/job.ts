@@ -56,7 +56,7 @@ export type ScoreInput = {
   priors: EngineView['priors'];
   drivers: EngineView['drivers'];
   track: EngineView['track'];
-  weekend: EngineView['weekend'];
+  basis: EngineView['basis'];
   fixed: AsOfView['fixed'];
 };
 
@@ -97,7 +97,7 @@ export function prepareScore(view: EngineView): ScoreInput {
     priors: view.priors,
     drivers: view.drivers,
     track: view.track,
-    weekend: view.weekend,
+    basis: view.basis,
     fixed: { totalLaps: fixed.totalLaps, playerCar: fixed.playerCar, teammateCar: fixed.teammateCar, aiDifficulty: fixed.aiDifficulty, safetyCar: fixed.safetyCar, carKeys: fixed.carKeys, setsNow: null, weatherNow: null },
   };
 }

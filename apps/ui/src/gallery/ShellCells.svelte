@@ -5,8 +5,10 @@
   import type { SessionInfo } from '@pitwall/contracts';
   import { carId, feedId } from '@pitwall/domain';
   import { TopicStore } from '../connection/topic-store.svelte.ts';
+  import { BASIS_CASES, type BasisCaseName } from './basis-cases.ts';
   import * as text from '../kit/text.ts';
   import type { ResolvedLink } from '../kit/types.ts';
+  import BasisPicker from '../shell/basis/BasisPicker.svelte';
   import Inspector from '../shell/inspector/Inspector.svelte';
   import { Inspection } from '../shell/inspector/inspection.svelte.ts';
   import { DEFAULT_KEYS, defaultCommands } from '../shell/commands/default-commands.ts';
@@ -35,8 +37,11 @@
   /** The race the top bar cases are drawn on, and the feed it is on. */
   const BASE_MOMENT = 'raceSingaporeStart.grid';
   const FEED = feedId('gallery');
-  /** The top bar is one line wide; the overlays are as wide as they are plus a margin. */
-  const TOP_BAR_COLS = 140;
+  /**
+   * The top bar is one line, as wide as its longest case (`basis-laps-differ`: the race, the basis segment with two
+   * practice days, a plan and its laps, the feed and realism); the overlays are as wide as they are plus a margin.
+   */
+  const TOP_BAR_COLS = 160;
   const OVERLAY_MARGIN_COLS = 4;
   const OVERLAY_ROWS = 40;
   /** Wide enough for the longest value the inspector prints. */
@@ -53,6 +58,9 @@
     { topic: 'ui.settings', value: { realismNextSession: true, keys: {} } },
     { topic: 'ui.alerts', value: { acknowledged: [], muted: [] } },
   ];
+
+  const basisStore = (name: BasisCaseName): TopicStore =>
+    new TopicStore(new GalleryConnection(base ?? [], BASIS_CASES[name], [{ feedId: FEED, kind: 'udp', label: 'gallery', team: null }]));
 
   const topBarStore = (name: keyof typeof TOP_BAR_CASES): TopicStore =>
     new TopicStore(
@@ -137,6 +145,10 @@
     {:else if cell.kind === 'inspector'}
       <ShellCell id={cell.id} {theme} baseline={cell.hasBaseline} cols={stageCols(cell.kind)} prepare={settleClock}>
         <Inspector store={inspectorStore} catalogue={INSPECTOR_CATALOGUE} widget={cell.detail ?? INSPECTOR_WIDGET} link={inspectorLink} host={{ openPath: noop }} />
+      </ShellCell>
+    {:else if cell.kind === 'basis-picker'}
+      <ShellCell id={cell.id} {theme} baseline={cell.hasBaseline} cols={stageCols(cell.kind)} rows={OVERLAY_ROWS} overlay>
+        <BasisPicker store={basisStore(cell.detail as BasisCaseName)} feedId={FEED} send={() => Promise.resolve({ ok: true })} onClose={noop} />
       </ShellCell>
     {/if}
   {/each}

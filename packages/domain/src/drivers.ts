@@ -8,13 +8,13 @@ import type { WeekendPhase } from './weekend-phase.ts';
 export type PersonId = string;
 
 /** A stored session (C60): session uid, weekend id and the feed's player car. */
-export type SessionRef = { sessionUid: SessionUid; weekendId: string; feedCar: CarId };
+export type StoredSessionRef = { sessionUid: SessionUid; weekendId: string; feedCar: CarId };
 
 /** A link of a person to a seat (C62c): every session's car slot with this team and race number (from Participants). */
 export type DriverLink = { team: TeamId; raceNumber: number };
 
 /** A person as its file holds it: display name, confirmed links, excluded sessions, overrides per entry key. */
-export type DriverPerson = { id: PersonId; displayName: string; links: DriverLink[]; excluded: SessionRef[]; overrides: Record<string, number> };
+export type DriverPerson = { id: PersonId; displayName: string; links: DriverLink[]; excluded: StoredSessionRef[]; overrides: Record<string, number> };
 
 /** One entry of a profile: its value, the laps and sessions it rests on, and the date of its newest session (ISO date). */
 export type ProfileEntry = { value: Known<number>; laps: number; sessions: number; newestSession: string };
@@ -33,7 +33,7 @@ export type ProfileSnapshot = { fingerprint: string; bySlot: (PersonId | null)[]
  * and where, its car, its seat (team and race number) and the name the game gave (`null` when hidden online).
  */
 export type UnlinkedSlot = {
-  session: SessionRef;
+  session: StoredSessionRef;
   /** ISO date of the session. */
   date: string;
   trackId: number;
@@ -49,7 +49,7 @@ export type UnlinkedSlot = {
  * C13), the person's laps in it, and whether the user excluded it.
  */
 export type LinkedSession = {
-  session: SessionRef;
+  session: StoredSessionRef;
   /** ISO date of the session. */
   date: string;
   trackId: number;
@@ -66,7 +66,7 @@ export type LinkedSession = {
 export type DriversProfilesValue = {
   persons: (DriverProfile & {
     links: DriverLink[];
-    excluded: SessionRef[];
+    excluded: StoredSessionRef[];
     overrides: Record<string, number>;
     sessions: LinkedSession[];
     kept: { sessions: number; laps: number };

@@ -22,7 +22,12 @@
 //   A line in the pit lane (garage boxes before the line, §2.3) is no line.
 // - `inLap` once the car heads for the pit lane (the in-lap driver status on a push lap, which AI cars show from the line
 //   after their push lap, SgQ; the pit entry, car-location `track -> pitLane`) or the session's end ends its push (the
-//   result status turning finished mid-lap, the session phase turning finished or post-session, §2.10).
+//   result status turning finished mid-lap, the session phase turning finished or post-session, §2.10). The in-lap
+//   driver status on a push frame without a line is a pending confirmation (C18): the push holds; the next frame at the
+//   line opens `inLap` on that frame (the game sets the status at the line, on the tick before or after it by feed,
+//   planner report 2026-11-17 §2); the status held without a line opens `inLap` a frame later; the status gone clears it. A frame whose lap
+//   distance has not moved since the pending began confirms nothing (ruling R6, Texas ASY car 9 frame 94): the pending
+//   resolves on the car's next frame with a new lap distance by the same rules.
 // - `finished` at the line once the session has ended for the car (its result status finished, or the session phase
 //   finished or post-session): the chequered flag's last lap. A car set to finished mid-lap (the last frame of SgQ and
 //   MiP) is not finished by that alone (Review Focus 3): its push ends, `inLap`.
@@ -37,8 +42,8 @@ export const timedActivityRows = (t: Timed, push: 'pushLap' | 'flyingLap'): Tran
   const onPush = () => inputs().frames(3, f(pushing(2_000, 2)));
   /** Car 0 on its out lap on track, three frames. */
   const onOut = () => inputs().frames(3, f(onOutLap(2_500)));
-  /** Car 0 on an in lap: the push lap, then the in-lap driver status on track. */
-  const onIn = () => onPush().frames(2, f(inLapOnTrack(2_100, 2)));
+  /** Car 0 on an in lap: the push lap, then the in-lap driver status on track on two frames that move (R6: a frozen frame confirms nothing). */
+  const onIn = () => onPush().frame(f(inLapOnTrack(2_100, 2))).frame(f(inLapOnTrack(2_150, 2)));
   /** Car 0 in the garage, three frames. */
   const inBox = () => inputs().frames(3, f(inGarage()));
   /** Car 0 retired: three frames, car-status retired. */
@@ -73,7 +78,7 @@ export const timedActivityRows = (t: Timed, push: 'pushLap' | 'flyingLap'): Tran
     { name: 'back into the garage box from the pit lane on the out lap (not yet seen): outLap -> garage', from: 'outLap', to: 'garage', input: inBox().frames(3, f(leavingGarage())).frame(f(inGarage(70))) },
     { name: `the player’s return to the garage mid-lap, a teleport (ds 1 -> 0, ps 0, d 739 -> 33; SgQ 467.514): ${push} -> garage`, from: push, to: 'garage', input: inputs().frames(3, f(pushing(739, 4))).frame(f(car0({ ds: 'inGarage', ps: 'none', d: 33, lap: 4 }))) },
     { name: 'into the garage box: one frame of ps 2, then ds 2 -> 0 with ps 2 -> 1 (MiP 542.845 / 542.879): inLap -> garage', from: 'inLap', to: 'garage', input: onIn().frames(2, f(inPitLane(30, 2))).frame(f(car0({ ds: 'inLap', ps: 'inPitArea', d: 40, lap: 2 }))).frame(f(inGarage(40, 2))) },
-    { name: 'an AI in lap teleported into the garage under time acceleration (ds 2 -> 0, ps 0 -> 1, d 4500 -> 4929; SgQ 501.014): inLap -> garage', from: 'inLap', to: 'garage', input: onPush().frames(2, f(inLapOnTrack(4_500, 2))).frame(f(car0({ ds: 'inGarage', ps: 'pitting', d: 4_929, lap: 2 }))) },
+    { name: 'an AI in lap teleported into the garage under time acceleration (ds 2 -> 0, ps 0 -> 1, d 4500 -> 4929; SgQ 501.014): inLap -> garage', from: 'inLap', to: 'garage', input: onPush().frame(f(inLapOnTrack(4_500, 2))).frame(f(inLapOnTrack(4_550, 2))).frame(f(car0({ ds: 'inGarage', ps: 'pitting', d: 4_929, lap: 2 }))) },
     { name: 'a finished car into the garage (not yet seen): finished -> garage', from: 'finished', to: 'garage', input: finished().frame(f(car0({ ds: 'inGarage', ps: 'pitting', d: 60, lap: 3, rs: 'finished' }))) },
     // out of the garage
     { name: 'leaving the garage, ds 0 -> 3 with ps still 1 (MiP 641.422): garage -> outLap', from: 'garage', to: 'outLap', input: inBox().frame(f(leavingGarage())) },
@@ -89,7 +94,30 @@ export const timedActivityRows = (t: Timed, push: 'pushLap' | 'flyingLap'): Tran
     // the in lap
     { name: 'into the pit lane on the out lap (seen once in practice, not yet seen in qualifying): outLap -> inLap', from: 'outLap', to: 'inLap', input: onOut().frame(f(car0({ ds: 'outLap', ps: 'pitting', d: 2_700 }))) },
     { name: 'the session’s end on the out lap: the result status finished mid-lap (not yet seen): outLap -> inLap', from: 'outLap', to: 'inLap', input: onOut().frame(f(car0({ ds: 'outLap', ps: 'none', d: 2_600, rs: 'finished' }))) },
-    { name: `the in-lap driver status on track, a frame after the line (SgQ car 8 at 221.986): ${push} -> inLap`, from: push, to: 'inLap', input: inputs().frames(2, f(pushing(4_920, 1))).frame(f(pushing(1, 2, 0))).frame(f(inLapOnTrack(2, 2, 33))) },
+    {
+      name: `in-lap status mid-lap, then held: ${push} -> inLap a frame later (SgQ car 8: the status a frame after the line, 221.986)`,
+      from: push,
+      to: 'inLap',
+      input: inputs().frames(2, f(pushing(4_920, 1))).frame(f(pushing(1, 2, 0))).frame(f(inLapOnTrack(2, 2, 33))).frame(f(inLapOnTrack(40, 2, 700))),
+    },
+    {
+      name: `in-lap status on the tick before the line: ${push} stays ${push}, inLap on the crossing frame (Texas 2026-11-17 DR car 18 at 216.830 / 216.847): ${push} -> inLap`,
+      from: push,
+      to: 'inLap',
+      input: inputs().frames(2, f(pushing(4_920, 1))).frame(f(inLapOnTrack(4_990, 1))).frame(f(inLapOnTrack(2, 2, 33))),
+    },
+    {
+      name: `in-lap status, then a frame with unchanged lap distance, then the crossing: ${push} until the crossing frame, inLap from it (Texas 2026-11-17 ASY car 9: frame 94 repeats frame 93's lap data; ruling R6): ${push} -> inLap`,
+      from: push,
+      to: 'inLap',
+      input: inputs().frames(2, f(pushing(4_920, 1))).frame(f(inLapOnTrack(4_990, 1))).frame(f(inLapOnTrack(4_990, 1))).frame(f(inLapOnTrack(2, 2, 33))),
+    },
+    {
+      name: `in-lap status, a frame with unchanged lap distance, then a moved distance mid-lap with the status held: ${push} -> inLap on the moved frame (ruling R6)`,
+      from: push,
+      to: 'inLap',
+      input: inputs().frames(2, f(pushing(2_000, 2))).frame(f(inLapOnTrack(2_100, 2))).frame(f(inLapOnTrack(2_100, 2))).frame(f(inLapOnTrack(2_150, 2))),
+    },
     { name: `the pit entry with the driver status still flying (ps 0 -> 1): ${push} -> inLap`, from: push, to: 'inLap', input: onPush().frame(f(car0({ ds: 'flyingLap', ps: 'pitting', d: 4_960, lap: 2 }))) },
     {
       name: `the session’s end: the result status finished mid-lap, the lap number up, the lap distance not at the line (SgQ 900.594 car 0): ${push} -> inLap`,

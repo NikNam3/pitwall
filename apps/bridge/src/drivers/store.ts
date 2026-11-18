@@ -7,12 +7,13 @@
 // requested once; once that settles, the store recomputes.
 import { join } from 'node:path';
 import { canonicalJson, type TopicName } from '@pitwall/contracts';
-import { known, unknown, type CarId, type DriverPerson, type Known, type DriverProfile, type ProfileEntry, type PersonId, type ProfileSnapshot, type SessionRef, type TeamId, type UnlinkedSlot, type DriversLinksValue, type FeedId, type LiveSeat, type LinkedSession as PersonSession } from '@pitwall/domain';
+import { known, unknown, type CarId, type DriverPerson, type Known, type DriverProfile, type ProfileEntry, type PersonId, type ProfileSnapshot, type StoredSessionRef, type TeamId, type UnlinkedSlot, type DriversLinksValue, type FeedId, type LiveSeat, type LinkedSession as PersonSession } from '@pitwall/domain';
 import type { FeatureConfig } from '../feature-config.ts';
 import type { Feature } from '../features/feature.ts';
 import type { ValueFor } from '../hub/topic-hub.ts';
 import type { Logger } from '../log.ts';
 import type { SessionKey } from '../storage/db.ts';
+import type { RebuildPriority } from '../storage/rebuild-service-types.ts';
 import type { DriverSessionRow, DriverSessions } from '../storage/weekend-repository.ts';
 import { ProfileRunner, ProfilesCache, sha256, withOverrides, type LinkedSession } from './compute.ts';
 import { linkMatches, newestFirst, personOf, seatLinks, storedSlots, unlinkedSlots, type StoredSlot } from './links.ts';
@@ -33,7 +34,7 @@ export type ApplyResult = { ok: true } | { ok: false; reason: 'invalid'; message
 export type SlotIdentity = { carId: CarId; teamId: number; raceNumber: number; name: string | null };
 
 /** One linked session of a person with its own value of each entry: the entry's aggregate over that one session. */
-export type DriverSessionValues = { session: SessionRef; date: string; entries: Record<string, Known<number>> };
+export type DriverSessionValues = { session: StoredSessionRef; date: string; entries: Record<string, Known<number>> };
 
 export type ProfileStoreDeps = {
   /** The features whose `profiles` declarations the store runs (C63). */
@@ -45,10 +46,11 @@ export type ProfileStoreDeps = {
   hub: { publishGlobal(topic: TopicName, valueFor: ValueFor): void };
   log: Logger;
   /**
-   * Rebuilds stored sessions from their recordings (C61). The store asks once per session it read stale and recomputes
-   * once the rebuild settles; a rejection is logged and the session stays skipped.
+   * Rebuilds stored sessions from their recordings (C61). The store asks once per session it read stale, at its first
+   * real read (never while it opens: nothing at bridge start), with priority `firstRead`, and recomputes once the
+   * rebuild settles; a rejection is logged and the session stays skipped.
    */
-  rebuild: (keys: readonly SessionKey[]) => Promise<void>;
+  rebuild: (keys: readonly SessionKey[], opts?: { priority?: RebuildPriority }) => Promise<void>;
   /** Now as an ISO date. Default: the wall clock. */
   now?: () => string;
 };
@@ -90,6 +92,10 @@ export class ProfileStore {
   #unlinked: UnlinkedSlot[] = [];
   /** The stale sessions whose rebuild was requested (`keyText`): never requested again in this run. */
   readonly #rebuildRequested = new Set<string>();
+  /** The stale sessions the last recompute read: asked for at the next first read (`snapshotFor`). */
+  #stale: DriverSessionRow[] = [];
+  /** While the store opens it reads what is current and asks for nothing (C61: nothing at bridge start). */
+  #opening = true;
   /** Each running feed's human seats as it last told them (`feedSeats`). */
   readonly #feedSeats = new Map<FeedId, readonly Omit<LiveSeat, 'feedId'>[]>();
   /** `unlinkedSeats` as last published, as JSON: a seat report publishes only when it changes. */
@@ -116,6 +122,7 @@ export class ProfileStore {
       store.#persons = loadPersons(dataDir, deps.log).toSorted(byId);
       store.#recomputeAll();
       store.#publishAll();
+      store.#opening = false;
       return store;
     } catch (error) {
       if (store === undefined) release();
@@ -152,8 +159,11 @@ export class ProfileStore {
    * session's slots by team and race number (`bySlot`, `null` for an unlinked one) and the linked persons' profiles.
    * The session does not change the match (a seat is the same in every session).
    */
-  snapshotFor(slots: readonly SlotIdentity[], _session: SessionRef): ProfileSnapshot {
+  snapshotFor(slots: readonly SlotIdentity[], _session: StoredSessionRef): ProfileSnapshot {
     this.#reloadPersons();
+    // The first real read (C61): a stale session read is asked for now; the snapshot goes on without it (a running
+    // session never waits), and the store recomputes once it settles.
+    this.#requestRebuild(this.#stale);
     const bySlot: (string | null)[] = Array.from({ length: slots.reduce((n, s) => Math.max(n, s.carId + 1), 0) }, () => null);
     const profiles: Record<string, DriverProfile> = {};
     for (const slot of slots) {
@@ -224,7 +234,8 @@ export class ProfileStore {
     for (const person of this.#persons) this.#entries.set(person.id, this.#runner.entries(person, this.#linkedSessions(person)));
     this.#unlinked = unlinkedSlots(this.#slots, this.#persons);
     // The links and the suggestions read every stored session: a stale one awaits its rebuild.
-    this.#requestRebuild(rows.filter((r) => r.stale));
+    this.#stale = rows.filter((r) => r.stale);
+    if (!this.#opening) this.#requestRebuild(this.#stale);
   }
 
   /** The person's linked, not excluded slots with a `human` span, of the sessions that are not stale (C61). */
@@ -242,7 +253,7 @@ export class ProfileStore {
     if (keys.length === 0) return;
     for (const key of keys) this.#rebuildRequested.add(keyText(key));
     const { log } = this.#deps;
-    (async () => this.#deps.rebuild(keys))()
+    (async () => this.#deps.rebuild(keys, { priority: 'firstRead' }))()
       .then(
         () => {
           if (!this.#closed) this.recompute('rebuild');

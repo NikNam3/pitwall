@@ -251,10 +251,10 @@ describe('FeedPipeline: the session end', () => {
     expect(new Set((projection.spans['car-status'] ?? []).map((s) => s.carId))).toEqual(new Set(Array.from({ length: 22 }, (_, i) => i)));
   });
 
-  it('the next session of the weekend starts with the earlier one\'s projection as its weekend context (C39, C62)', async () => {
+  it('the next session of the weekend starts with the earlier one\'s projection as its basis (C39, C62)', async () => {
     const seen: unknown[] = [];
-    const probe: QuickCalculator<number> = { kind: 'quick', id: 'probe.weekend', reads: ['session'], cadence: 'frame',
-      compute: ({ weekend }) => { seen.push(weekend === undefined ? undefined : structuredClone(weekend)); return seen.length; }, insights: () => [] };
+    const probe: QuickCalculator<number> = { kind: 'quick', id: 'probe.basis', reads: ['session'], cadence: 'frame',
+      compute: ({ basis }) => { seen.push(basis === undefined ? undefined : structuredClone(basis)); return seen.length; }, insights: () => [] };
     const db = openDatabase(join(tmp(), 'weekend.db'));
     let wall = Date.UTC(2026, 10, 4, 12, 0, 0);
     await run([...scenario(77n), ...shifted(scenario(78n), 60_000)], {
@@ -264,8 +264,8 @@ describe('FeedPipeline: the session end', () => {
     const first = repo.sessionsOf('0').find((s) => s.sessionUid === '77')!;
     const firstProjection = await repo.projectionOf({ sessionUid: '77', weekendId: '0', playerCar: first.playerCar });
     expect(seen.at(-1)).toEqual({
-      weekendId: '0', player: { teamId: 0, raceNumber: 1 },
-      sessions: [{ sessionUid: '77', playerCar: 0, cars: first.cars.map(({ carId, carKey }) => ({ carId, carKey })), projection: firstProjection }],
+      basis: { practice: [], qualifying: null }, player: { teamId: 0, raceNumber: 1 },
+      sessions: [{ sessionUid: '77', weekendId: '0', playerCar: 0, cars: first.cars.map(({ carId, carKey }) => ({ carId, carKey })), projection: firstProjection }],
     });
   });
 });

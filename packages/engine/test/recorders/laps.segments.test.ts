@@ -11,6 +11,7 @@ import { membershipOf } from '../../src/readers.ts';
 import { situationOf } from '../../src/situations/run.ts';
 import type { DeepReadonly } from '../../src/util/deep-readonly.ts';
 import { replaySegment, type SegmentRun } from '../support/segment-run.ts';
+import { SEGMENTS } from '../../../../test-support/segments.ts';
 
 const CARS = [9, 19] as const;
 /** A lap of the projection, with the kinds of the car's activity and the session phase it belongs to (`membershipOf`). */
@@ -59,5 +60,47 @@ describe('laps: race-miami-finish (MiR: car 9 crosses at 2267.670, the player at
     const activity = seg.spans('car-activity-race').find((s) => s.carId === car && s.startFrame <= crossing && crossing < s.endFrame)!;
     expect(['racingLap', 'finished']).toContain(activity.kind);
     for (const lap of finalLaps(car)) expect([lap.activity, lap.phase]).toEqual([activity.kind, 'finished']);
+  });
+});
+
+// SP4.3e Task 1 (planner report §1; facts in fixtures/index.json): the last seconds of the Texas short qualifying of
+// 2026-11-17, cut from both feeds. Before SEND the game raises some cars' lap number from 3 to 4 without a crossing of
+// the line (the lap distance keeps rising) and Session History then lists their lap 3 with only sector 1: a lap
+// completes only at a crossing, so those cars have no lap 3. The rises are read from the segment's own values.
+type EndSeen = { trackLengthM: number; lap: number[]; distance: number[]; laps: Array<{ carId: number; lapNumber: number; status: string }> };
+const endSeenOf = (state: StepResult['state']): EndSeen => ({
+  trackLengthM: state.session.trackLengthM,
+  lap: state.cars.map((c) => c.timing.lap),
+  distance: state.cars.map((c) => c.timing.lapDistanceM),
+  laps: state.history.laps.map((l) => ({ carId: l.carId, lapNumber: l.lapNumber, status: l.status })),
+});
+/** The cars whose lap number rises on a frame without a crossing of the line, with the lap number they leave. */
+const risesWithoutCrossing = (seg: SegmentRun<EndSeen>): Array<[number, number]> =>
+  seg.frames.flatMap((f, i) => {
+    const before = seg.frames[i - 1]?.value;
+    if (!before) return [];
+    return f.value.lap.flatMap((lap, car): Array<[number, number]> => {
+      const b = before.distance[car]!;
+      const now = f.value.distance[car]!;
+      const crossed = (b < 0 && now >= 0) || (f.value.trackLengthM > 0 && b - now > f.value.trackLengthM / 2);
+      return lap > before.lap[car]! && before.lap[car]! > 0 && !crossed ? [[car, before.lap[car]!]] : [];
+    });
+  });
+
+describe.each([
+  { name: 'DR', file: SEGMENTS.qualifyingTexas2026EndDr, cars: [11, 16, 18] },
+  { name: 'ASY', file: SEGMENTS.qualifyingTexas2026EndAsy, cars: [6] },
+])('laps: $file ($name feed; the session-end roll-over without a crossing)', ({ file, cars }) => {
+  let seg: SegmentRun<EndSeen>;
+  beforeAll(async () => {
+    seg = await replaySegment(file, endSeenOf);
+  });
+
+  it(`cars ${cars.join(', ')} get a lap number rise from 3 without a crossing of the line`, () => {
+    expect(risesWithoutCrossing(seg)).toEqual(cars.map((car) => [car, 3]));
+  });
+  it(`cars ${cars.join(', ')} have no lap 3: neither provisional nor confirmed`, () => {
+    const last = seg.frames.at(-1)!.value;
+    for (const car of cars) expect(last.laps.filter((l) => l.carId === car && l.lapNumber === 3).map((l) => l.status), `car ${car}`).toEqual([]);
   });
 });

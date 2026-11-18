@@ -52,7 +52,7 @@ function storedOrder(session: DeepReadonly<StoredSession>, slotOf: ReadonlyMap<s
  * The race's grid from the qualifying session of `view` (spec §7.0 rule 5): its cars (car-status other than `absent`,
  * C17) by their best valid lap (`currentLaps`, C25; earlier lap first on a tie); in a later segment of a long format,
  * per earlier segment (newest segment first) the newest stored session of the weekend of that segment and the same
- * qualifying format (`view.weekend`, C62), its cars not yet placed by their best valid lap there, matched by team and
+ * qualifying format (`view.basis`, C62), its cars not yet placed by their best valid lap there, matched by team and
  * race number (`fixed.carKeys`, each stored session's `cars`); then the cars without a valid time, in car order.
  * `notApplicable` outside qualifying (C3).
  */
@@ -77,13 +77,13 @@ export function gridOf(view: AsOfView): Known<CarId[]> {
 
   const segment = phase.segment;
   const keys = view.fixed.carKeys;
-  if (segment !== undefined && segment > 1 && keys.known && view.weekend !== undefined) {
+  if (segment !== undefined && segment > 1 && keys.known && view.basis !== undefined) {
     const slotOf = new Map<string, CarId>();
     keys.value.forEach((k, slot) => {
       if (k !== null) slotOf.set(keyOf(k), slot as CarId);
     });
     for (let s = segment - 1; s >= 1; s--) {
-      const session = view.weekend.sessions.findLast((x) => {
+      const session = view.basis.sessions.findLast((x) => {
         const q = qualifyingOf(x);
         return q !== undefined && q.format === phase.format && q.segment === s;
       });

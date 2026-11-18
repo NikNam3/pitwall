@@ -27,7 +27,7 @@ const baseInput = (() => {
   let base: MachineInput | undefined;
   return (): MachineInput => {
     if (base === undefined) {
-      const { open: _open, history: _history, weekend: _weekend, signals, log: _log, ...live } = initialState(
+      const { open: _open, history: _history, basis: _basis, signals, log: _log, ...live } = initialState(
         initFor(new ScenarioBuilder({ cars: 2 }).frames(1, () => {}).build()),
       );
       base = { at: 0, frameId: 0, frameNumber: 0, signals, live, clock: { paused: false, offsetMs: 0, simulatedEnd: undefined }, upstream: {}, weekendPhase: { kind: 'pending' } };

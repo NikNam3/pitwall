@@ -53,7 +53,7 @@ describe('asOfEnded (Task 10, plan call 1)', () => {
     expect(v.frame).toBe('now');
     expect(v.history).toBe(view.history);
     expect(v.at).toBe(view.live.sessionTime);
-    expect([v.config, v.priors, v.drivers, v.track, v.weekend]).toEqual([view.config, view.priors, view.drivers, view.track, view.weekend]);
+    expect([v.config, v.priors, v.drivers, v.track, v.basis]).toEqual([view.config, view.priors, view.drivers, view.track, view.basis]);
     expect(v.fixed.playerCar).toEqual(now.fixed.playerCar);
     expect(v.fixed.teammateCar).toEqual(now.fixed.teammateCar);
     expect(v.fixed.carKeys).toEqual(now.fixed.carKeys);

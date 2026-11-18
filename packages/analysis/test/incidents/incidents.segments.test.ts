@@ -26,7 +26,7 @@ async function lastFeed(file: string): Promise<IncidentEntry[]> {
   const onResult = (r: StepResult): void => {
     if (r.delta.rewound !== undefined) scheduler.reset();
     const { state, changed, delta } = r;
-    const scheduled = scheduler.run({ live: state, situation: situationOf(state), history: state.history, changed, delta, weekend: state.weekend, feed: IDLE_FEED, config: {}, priors: NO_PRIORS, drivers: NO_DRIVERS, track: unknown('notApplicable') });
+    const scheduled = scheduler.run({ live: state, situation: situationOf(state), history: state.history, changed, delta, basis: state.basis, feed: IDLE_FEED, config: {}, priors: NO_PRIORS, drivers: NO_DRIVERS, track: unknown('notApplicable') });
     expect(scheduled.errors).toEqual([]);
     if (scheduled.ran.includes(INCIDENTS)) out = scheduled.outputs.get(INCIDENTS) as IncidentsOutput;
   };

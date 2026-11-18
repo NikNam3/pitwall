@@ -38,7 +38,7 @@ async function lastRun(file: string): Promise<LastRun> {
   const scheduler = new Scheduler(CalculatorRegistry.build([guarded(lapOverviewCalculator)]), { freezeOutputs: true });
   scheduler.setNeeded([LAP_OVERVIEW]);
   const { state, changed, delta } = last;
-  const scheduled = scheduler.run({ live: state, situation: situationOf(state), history: state.history, changed, delta, weekend: state.weekend, feed: IDLE_FEED, config: {}, priors: NO_PRIORS, drivers: NO_DRIVERS, track: unknown('notApplicable') });
+  const scheduled = scheduler.run({ live: state, situation: situationOf(state), history: state.history, changed, delta, basis: state.basis, feed: IDLE_FEED, config: {}, priors: NO_PRIORS, drivers: NO_DRIVERS, track: unknown('notApplicable') });
   expect(scheduled.errors).toEqual([]);
   expect(scheduled.ran).toContain(LAP_OVERVIEW);
   return { overview: scheduled.outputs.get(LAP_OVERVIEW) as LapOverviewOutput, state };

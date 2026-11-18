@@ -1,11 +1,13 @@
 // `weekend-pace` (SP4.3d2 Task 6b, plan call 9): each car's race pace before its first race lap, from the weekend's
-// earlier sessions (`view.weekend`, a car matched across sessions by team and race number, C62). Its practice long runs
+// earlier sessions (`view.basis`, a car matched across sessions by team and race number, C62). Its practice long runs
 // (stints of at least `minLongRunLaps` pace laps) give the median of their laps on degradation's basis (ruling R4): each
 // lap's fuel-free time is degradation's (`correctedMs`, γ = `lapModelParams`' `fuelMsPerKg`; a car's pace less fuel is
 // degradation's alone, C43), taken to tyre age 0 by the priors' slope of the compound (`view.priors`, C62a), else by
 // the stint's own `ν` as degradation fits it; a soft or hard run is moved to medium by `lapModelParams`'
 // `compoundOffsetMs` (ruling R6). Else its best valid qualifying lap (lap-classes' `forPace` rule) plus
-// `raceTrimOffsetMs` (ruling R5); else `unknown('insufficientData')` (C3). Quick: from scratch on each run; it runs on
+// `raceTrimOffsetMs` (ruling R5); else the declared stand-in (SP4.3e Task 6): the median of the qualifying-sourced
+// cars' paces plus `noPaceStandInOffsetMs`, `source: 'standIn'`; without qualifying evidence in the field
+// `unknown('insufficientData')` (C3). Quick: from scratch on each run; it runs on
 // a lap record and at the session's start.
 import { currentLaps, known, scopeOf, unknown, type CarId, type CarKey, type LapRecord, type VisualCompound, type WeekendPace, type WeekendPhase } from '@pitwall/domain';
 import {
@@ -100,7 +102,7 @@ function phaseOf(projection: DeepReadonly<Projection>): WeekendPhase | undefined
  */
 function storedStints(session: DeepReadonly<StoredSession>, phase: WeekendPhase, view: AsOfView): DeepReadonly<Record<CarId, StintDegradation[]>> {
   const stored: StoredDriverSession = {
-    session: { sessionUid: session.sessionUid, weekendId: view.weekend?.weekendId ?? '', feedCar: session.playerCar },
+    session: { sessionUid: session.sessionUid, weekendId: session.weekendId, feedCar: session.playerCar },
     carId: session.playerCar,
     startedAt: '',
     phase,
@@ -201,7 +203,7 @@ export function weekendPaceAsOf(view: AsOfView): WeekendPace {
   // no qualifying session is a race: lap 1 is a pace lap there (C14)
   const classes: LapClassOptions = { isRace: false, ...configOf(LAP_CLASSES_CONFIG, view) };
   const evidence: Evidence = { longRun: new Map(), qualifying: new Map() };
-  for (const session of view.weekend?.sessions ?? []) addStored(evidence, session, view, correction, classes, config);
+  for (const session of view.basis?.sessions ?? []) addStored(evidence, session, view, correction, classes, config);
   const seatNow = (car: CarId): string | undefined => {
     const k = keys.value[car];
     return k === null || k === undefined ? undefined : seatOf(k);
@@ -212,6 +214,8 @@ export function weekendPaceAsOf(view: AsOfView): WeekendPace {
       if (seat !== undefined) addBest(evidence.qualifying, seat, ms);
     }
   }
+  const without: CarId[] = [];
+  const qualifyingPaces: number[] = [];
   for (const car of rows.cars) {
     const seat = seatNow(car);
     if (seat === undefined) {
@@ -225,10 +229,22 @@ export function weekendPaceAsOf(view: AsOfView): WeekendPace {
       continue;
     }
     const best = evidence.qualifying.get(seat);
+    if (best === undefined) {
+      without.push(car);
+      continue;
+    }
+    const paceMs = best + config.raceTrimOffsetMs;
+    qualifyingPaces.push(paceMs);
+    out[car] = known({ paceMs, sdMs: config.qualifyingPaceSdMs, source: 'qualifying', laps: 1 }, view.at);
+  }
+  // the declared stand-in (C3): the median of the qualifying-sourced cars' paces (one kind of evidence, long runs
+  // excluded) plus `noPaceStandInOffsetMs`; without qualifying evidence in the field, insufficientData
+  const fieldMedian = median(qualifyingPaces);
+  for (const car of without) {
     out[car] =
-      best === undefined
+      fieldMedian === undefined
         ? unknown('insufficientData')
-        : known({ paceMs: best + config.raceTrimOffsetMs, sdMs: config.qualifyingPaceSdMs, source: 'qualifying', laps: 1 }, view.at);
+        : known({ paceMs: Math.round(fieldMedian) + config.noPaceStandInOffsetMs, sdMs: config.qualifyingPaceSdMs, source: 'standIn', laps: 0 }, view.at);
   }
   return out;
 }

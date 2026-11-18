@@ -83,7 +83,7 @@ const generated = (() => {
       priors: now.priors,
       drivers: now.drivers,
       track: now.track,
-      weekend: now.weekend,
+      basis: now.basis,
       outputs: new Map(),
     };
   };

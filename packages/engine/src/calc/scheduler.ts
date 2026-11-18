@@ -351,7 +351,7 @@ export class Scheduler implements Snapshotable<SchedulerBookkeeping> {
         history: input.history,
         delta: pending.delta,
         changed: pending.changed,
-        weekend: input.weekend,
+        basis: input.basis,
         config: input.config,
         priors,
         track: input.track,

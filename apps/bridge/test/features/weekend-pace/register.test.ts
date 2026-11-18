@@ -10,8 +10,8 @@ describe('weekend-pace feature', () => {
     expect(weekendPace.topics).toEqual([]);
   });
 
-  it('registers its config section with minLongRunLaps, raceTrimOffsetMs and qualifyingPaceSdMs', () => {
+  it('registers its config section with minLongRunLaps, raceTrimOffsetMs, qualifyingPaceSdMs and noPaceStandInOffsetMs', () => {
     expect((weekendPace.config ?? []).map((d) => d.key)).toEqual(['weekend-pace']);
-    expect(Object.keys(weekendPace.config?.[0]?.defaults ?? {}).sort()).toEqual(['minLongRunLaps', 'qualifyingPaceSdMs', 'raceTrimOffsetMs']);
+    expect(Object.keys(weekendPace.config?.[0]?.defaults ?? {}).sort()).toEqual(['minLongRunLaps', 'noPaceStandInOffsetMs', 'qualifyingPaceSdMs', 'raceTrimOffsetMs']);
   });
 });

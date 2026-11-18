@@ -14,7 +14,7 @@
 // - a rival's tyre sets are visible where `tyre-model`'s `freshSets` are known (C43: availability is tyre-model's); a
 //   compound with 0 fresh sets has no set; `rivalStartOdds` is read only through its effect (options summing to 1);
 // - `weekend-pace`'s output is given as a plain `WeekendPace` (Task 6b's unit is written apart), under `WEEKEND_PACE`.
-import { carId, known, NOISE_COMPOUNDS, unknown, type CarId, type ForecastSample, type Known, type LapRecord, type NoiseCompound, type RivalStop, type RivalStops, type StartingPoint, type WeekendPace } from '@pitwall/domain';
+import { carId, known, NOISE_COMPOUNDS, unknown, type CarId, type ForecastSample, type Known, type LapRecord, type NoiseCompound, type RaceAssumptions, type RivalStop, type RivalStops, type StartingPoint, type TyreSet, type WeekendPace } from '@pitwall/domain';
 import { asOfNow, createRng, type AsOfView, type CalculatorId, type Projection } from '@pitwall/engine/readers';
 import { describe, expect, it } from 'vitest';
 import { history, lap } from '../../../../../test-support/builders/index.ts';
@@ -140,7 +140,7 @@ function qualifyingView(o: { nextForecast?: ForecastSample[]; weatherNow?: null 
     priors: unknown('notApplicable'),
     drivers: Array.from({ length: CARS }, () => unknown('notApplicable')),
     track: TRACK,
-    weekend: undefined,
+    basis: undefined,
     outputs: new Map(),
     fixed: {
       totalLaps: known(LAPS, 0),
@@ -179,9 +179,12 @@ function qualifyingOutputs(pace: WeekendPace | null = weekendPace()): Map<Calcul
 const planningCompound = (car: CarId): Known<NoiseCompound> | 'free' =>
   car === PLAYER || car === TEAMMATE ? 'free' : car === 5 ? known<NoiseCompound>('medium', 0) : unknown('notApplicable');
 
-/** The grid start of the qualifying view (`view`, `outputs` as given); throws when unknown. */
-function gridStart(view: AsOfView = qualifyingView(), outputs: Map<CalculatorId, unknown> = qualifyingOutputs()): StartingPoint {
-  const sp = buildGridStart(view, outputs, { laps: LAPS, grid: GRID, fittedCompound: planningCompound });
+/** The race assumptions of these tests (C62d): the entered laps, the qualifying's sets carried over (SP4.3e Task 3). */
+const CARRIED: RaceAssumptions = { laps: LAPS, sets: 'carried' };
+
+/** The grid start of the qualifying view (`view`, `outputs`, `race` as given); throws when unknown. */
+function gridStart(view: AsOfView = qualifyingView(), outputs: Map<CalculatorId, unknown> = qualifyingOutputs(), race: RaceAssumptions = CARRIED): StartingPoint {
+  const sp = buildGridStart(view, outputs, { laps: race.laps, grid: GRID, fittedCompound: planningCompound, race });
   if (!sp.known) throw new Error(`the grid start is unknown (${sp.reason})`);
   return sp.value;
 }
@@ -309,10 +312,16 @@ describe('the grid start (SP4.3d2 Task 7)', () => {
     }
   });
 
-  it("6b: pace: a car without weekend-pace's pace and without degradation's stand-in makes the grid start unknown('insufficientData'), never 0 (C3)", () => {
-    const missing = buildGridStart(qualifyingView(), qualifyingOutputs(weekendPace([3])), { laps: LAPS, grid: GRID, fittedCompound: planningCompound });
+  it("6b: pace: weekend-pace's declared stand-in is read like any pace (SP4.3e Task 6); a car without weekend-pace's pace and without degradation's stand-in makes the grid start unknown('insufficientData'), never 0 (C3)", () => {
+    const pace = weekendPace();
+    pace[carId(3)] = known({ paceMs: 91_234, sdMs: 900, source: 'standIn', laps: 0 }, 0);
+    const standIn = gridStart(qualifyingView(), qualifyingOutputs(pace));
+    expect(standIn.paceMs[3], 'car 3: the stand-in pace').toBeCloseTo(91_234, 6);
+    expect(standIn.paceSdMs[3], 'car 3: the stand-in sd').toBeCloseTo(900, 6);
+    // without qualifying evidence in the field weekend-pace has no stand-in (G5): still insufficientData
+    const missing = buildGridStart(qualifyingView(), qualifyingOutputs(weekendPace([3])), { laps: LAPS, grid: GRID, fittedCompound: planningCompound, race: CARRIED });
     expect(missing).toEqual(unknown('insufficientData'));
-    const none = buildGridStart(qualifyingView(), qualifyingOutputs(null), { laps: LAPS, grid: GRID, fittedCompound: planningCompound });
+    const none = buildGridStart(qualifyingView(), qualifyingOutputs(null), { laps: LAPS, grid: GRID, fittedCompound: planningCompound, race: CARRIED });
     expect(none).toEqual(unknown('insufficientData'));
   });
 
@@ -387,5 +396,109 @@ describe('the grid start (SP4.3d2 Task 7)', () => {
   it("6: weather: without the race forecast's samples unknown('notReceived'); the grid start stays known", () => {
     expect(gridStart(qualifyingView({ nextForecast: [] })).weather).toEqual(unknown('notReceived'));
     expect(gridStart(qualifyingView({ weatherNow: null })).weather).toEqual(unknown('notReceived'));
+  });
+});
+
+// The race's sets on the grid start (SP4.3e Task 3, spec §4.4 item 3; report F3a; C8, C43, C47, C50). How these tests
+// read the builder (the test agent's decisions):
+// - the qualifying's sets are the view's `fixed.setsNow` (the live TyreSets of the as-of view's end); the race is a grand
+//   prix's (`recommendedSession` 15, the race's session type);
+// - `race.sets: 'carried'`: a car's race sets are those `available` now plus those with `recommendedSession` 15; a set
+//   enters with its wear, so the new ones (`wearPct` 0) are exactly the new sets among them;
+// - `race.sets: 'fresh'`: per our car the config's `freshRaceSets` counts, every set new; the qualifying's sets unread.
+describe('the race sets on the grid start (SP4.3e Task 3)', () => {
+  const RACE_SESSION = 15;
+  /** The config's fresh race allocation, one scalar entry per compound. */
+  const FRESH_KEYS = [
+    ['soft', 'freshRaceSetsSoft'],
+    ['medium', 'freshRaceSetsMedium'],
+    ['hard', 'freshRaceSetsHard'],
+    ['inter', 'freshRaceSetsInter'],
+    ['wet', 'freshRaceSetsWet'],
+  ] as const;
+  const tyreSet = (visualCompound: 'soft' | 'medium' | 'hard' | 'inter' | 'wet', o: { wearPct?: number; available?: boolean; fitted?: boolean; recommendedSession?: number }): TyreSet => ({
+    actualCompound: visualCompound === 'soft' ? 'C3' : visualCompound === 'medium' ? 'C2' : visualCompound === 'hard' ? 'C1' : visualCompound === 'inter' ? 'inter' : 'wet',
+    visualCompound,
+    wearPct: o.wearPct ?? 0,
+    available: o.available ?? true,
+    fitted: o.fitted ?? false,
+    recommendedSession: o.recommendedSession ?? 0,
+    lifeSpanLaps: 20,
+    usableLifeLaps: 18,
+    lapDeltaMs: 0,
+  });
+  /**
+   * Our cars' qualifying sets: M used, S used (fitted), both available; H and M2 reserved for the race (`recommendedSession`
+   * 15, `available` 0 in qualifying, as the 2026-11-17 recordings show them).
+   */
+  const QUALIFYING_SETS: TyreSet[] = [
+    tyreSet('medium', { wearPct: 22, recommendedSession: 5 }),
+    tyreSet('soft', { wearPct: 18, fitted: true, recommendedSession: 5 }),
+    tyreSet('hard', { available: false, recommendedSession: RACE_SESSION }),
+    tyreSet('medium', { available: false, recommendedSession: RACE_SESSION }),
+  ];
+  /** The qualifying view with our cars' sets `QUALIFYING_SETS` (fitted: the soft), every rival's hidden (realism). */
+  const withSets = (): AsOfView => {
+    const view = qualifyingView();
+    const setsNow = Array.from({ length: CARS }, (_, k) => (k === PLAYER || k === TEAMMATE ? known({ sets: QUALIFYING_SETS, fittedIdx: 1 }, view.at) : unknown('realism')));
+    return { ...view, fixed: { ...view.fixed, setsNow } };
+  };
+  /** `tyre-model`'s output with our cars' `raceSets` as Task 3b builds them from `QUALIFYING_SETS`: the available sets and the race-reserved ones (C43: availability is tyre-model's). */
+  const withRaceSets = (outputs: Map<CalculatorId, unknown> = qualifyingOutputs()): Map<CalculatorId, unknown> => {
+    const model = { ...(outputs.get(TYRE_MODEL) as Record<number, object>) };
+    const raceSets = known(QUALIFYING_SETS.map((x) => ({ compound: x.visualCompound as NoiseCompound, wearPct: x.wearPct })), 0);
+    for (const k of [PLAYER, TEAMMATE]) model[k] = { ...model[k], raceSets };
+    return new Map([...outputs, [TYRE_MODEL, model]]);
+  };
+  const newOf = (sets: readonly { compound: NoiseCompound; wearPct: number }[]): NoiseCompound[] => sets.filter((s) => s.wearPct <= 0).map((s) => s.compound).sort();
+  const countsOf = (sets: readonly { compound: NoiseCompound; wearPct: number }[]): Partial<Record<NoiseCompound, number>> => {
+    const out: Partial<Record<NoiseCompound, number>> = {};
+    for (const s of sets) out[s.compound] = (out[s.compound] ?? 0) + 1;
+    return out;
+  };
+
+  it("carried: the qualifying's used M and S and the race's H and M2 (recommendedSession 15, available 0) → start.sets holds H and M2 new", () => {
+    const sp = gridStart(withSets(), withRaceSets(), { laps: LAPS, sets: 'carried' });
+    for (const car of [PLAYER, TEAMMATE].map(carId)) {
+      const sets = sp.sets[car];
+      expect(sets, `car ${car}: its race sets`).toBeDefined();
+      expect(newOf(sets!), `car ${car}: the new sets are the race's reserved H and M2`).toEqual(['hard', 'medium']);
+      // every set it holds is one of the qualifying's available or race-reserved sets, with its wear
+      for (const s of sets!) expect(QUALIFYING_SETS.some((q) => q.visualCompound === s.compound && q.wearPct === s.wearPct), `car ${car}: ${JSON.stringify(s)}`).toBe(true);
+    }
+    // rivals: our cars only
+    expect(Object.keys(sp.sets).map(Number).sort()).toEqual([PLAYER, TEAMMATE]);
+  });
+
+  // which sets are the race's is tyre-model's judgement (`raceSets`, Task 3b; its rows in test/tyre-model/race-sets.test.ts):
+  // the builder reads it, never the sets themselves (C43)
+  it('carried: a set neither available now nor reserved for the race is not a race set', () => {
+    const view = withSets();
+    const extra = [...QUALIFYING_SETS, tyreSet('soft', { available: false, recommendedSession: 6 })];
+    const setsNow = view.fixed.setsNow!.map((s, k) => (k === PLAYER ? known({ sets: extra, fittedIdx: 1 }, view.at) : s));
+    const sp = gridStart({ ...view, fixed: { ...view.fixed, setsNow } }, withRaceSets(), { laps: LAPS, sets: 'carried' });
+    expect(newOf(sp.sets[carId(PLAYER)]!), 'no new soft: the Q3 set is not the race\'s').toEqual(['hard', 'medium']);
+  });
+
+  it("fresh: start.sets is the config's freshRaceSets per our car, S×3, M×2, H×1 (plus I×4, W×3), all new", () => {
+    // a config entry is a scalar (`ConfigValue`): one entry per compound, as `rivalStartOdds*`
+    const defaults = FORECAST_FIELD_CONFIG.defaults as Record<string, unknown>;
+    const fresh = Object.fromEntries(FRESH_KEYS.map(([c, key]) => [c, defaults[key]]));
+    expect(fresh, 'the config declares freshRaceSets* (C47)').toEqual({ soft: 3, medium: 2, hard: 1, inter: 4, wet: 3 });
+    const sp = gridStart(withSets(), qualifyingOutputs(), { laps: LAPS, sets: 'fresh' });
+    for (const car of [PLAYER, TEAMMATE].map(carId)) {
+      const sets = sp.sets[car];
+      expect(sets, `car ${car}: its race sets`).toBeDefined();
+      expect(countsOf(sets!), `car ${car}: the fresh allocation`).toEqual({ soft: 3, medium: 2, hard: 1, inter: 4, wet: 3 });
+      for (const s of sets!) expect(s.wearPct, `car ${car}: ${s.compound} new`).toBe(0);
+    }
+    expect(Object.keys(sp.sets).map(Number).sort()).toEqual([PLAYER, TEAMMATE]);
+  });
+
+  it('fresh: the counts come from the config (an override of freshRaceSets* is read through view.config)', () => {
+    const view = withSets();
+    const config: AsOfView['config'] = { ...view.config, 'forecast-field': { freshRaceSetsSoft: 2, freshRaceSetsMedium: 2, freshRaceSetsHard: 2, freshRaceSetsInter: 1, freshRaceSetsWet: 1 } };
+    const sp = gridStart({ ...view, config }, qualifyingOutputs(), { laps: LAPS, sets: 'fresh' });
+    expect(countsOf(sp.sets[carId(PLAYER)]!)).toEqual({ soft: 2, medium: 2, hard: 2, inter: 1, wet: 1 });
   });
 });

@@ -908,6 +908,58 @@
         "the race of the weekend of qualifying-texas-send (practiceLiveTest, oneShotQualifyingLiveTest); not in the acceptance gate (a segment)",
         "duration 167425.321 ms"
       ]
+    },
+    {
+      "file": "qualifying-texas-2026-end-dr.pwrec.gz",
+      "source": "2026-11-17_23-07-29_a7f15ad7b64a2754_car01.pwrec.gz (DR feed, player car 1)",
+      "fromS": 1115,
+      "toS": 1121,
+      "records": 1863,
+      "features": [
+        "526 323 bytes; context Session and Participants in front; Texas (track 15) short qualifying of 2026-11-17 (session 12101553556244014932, weekend 548397152)",
+        "the session's last seconds: cars 11, 16 and 18 get a lap number rise without crossing the line (lap distance keeps rising), so they have no completed lap 3 (planner report §1); SessionHistory then lists lap 3 with only sector 1",
+        "not in the acceptance gate (a segment)",
+        "duration 5239.846 ms"
+      ]
+    },
+    {
+      "file": "qualifying-texas-2026-end-asy.pwrec.gz",
+      "source": "2026-11-17_23-07-46_a7f15ad7b64a2754_car00.pwrec.gz (ASY feed, player car 0)",
+      "fromS": 1115,
+      "toS": 1121,
+      "records": 1305,
+      "features": [
+        "386 649 bytes; context Session and Participants in front; Texas (track 15) short qualifying of 2026-11-17 (session 12101553556244014932, weekend 548397152)",
+        "the session's last seconds: car 6 gets a lap number rise without crossing the line, so it has no completed lap 3 (planner report §1)",
+        "not in the acceptance gate (a segment)",
+        "duration 6796.143 ms"
+      ]
+    },
+    {
+      "file": "qualifying-texas-2026-l1-dr.pwrec.gz",
+      "source": "2026-11-17_23-07-29_a7f15ad7b64a2754_car01.pwrec.gz (DR feed, player car 1)",
+      "fromS": 214,
+      "toS": 219,
+      "records": 1799,
+      "features": [
+        "375 865 bytes; context Session and Participants in front; Texas (track 15) short qualifying of 2026-11-17 (session 12101553556244014932, weekend 548397152)",
+        "car 18 shows driverStatus in-lap on the tick before it crosses the line at the end of its flying lap 1: lap 1 is a flying lap, not an in-lap (planner report §2)",
+        "not in the acceptance gate (a segment)",
+        "duration 4975.272 ms"
+      ]
+    },
+    {
+      "file": "qualifying-texas-2026-l1-asy.pwrec.gz",
+      "source": "2026-11-17_23-07-46_a7f15ad7b64a2754_car00.pwrec.gz (ASY feed, player car 0)",
+      "fromS": 443,
+      "toS": 448,
+      "records": 1244,
+      "features": [
+        "243 945 bytes; context Session and Participants in front; Texas (track 15) short qualifying of 2026-11-17 (session 12101553556244014932, weekend 548397152)",
+        "car 9 shows driverStatus in-lap on the tick before it crosses the line at the end of its flying lap 1: lap 1 is a flying lap, not an in-lap (planner report §2)",
+        "not in the acceptance gate (a segment)",
+        "duration 4969.229 ms"
+      ]
     }
   ]
 }

@@ -4,7 +4,7 @@
 //  - the panel hands its `invoke` prop (the registry's `invoke`) to the widget through `kit/commands.ts`
 //    (`getWidgetCommands().invoke(id, args)`), for the declared ids only; the outcome resolves back to the widget (C73);
 //  - an undeclared id never reaches `invoke`: in dev it throws, in production it resolves `notSupported`;
-//  - outside a panel `invoke` runs nothing and resolves `ok`.
+//  - outside a panel `invoke` runs nothing and resolves `notSupported` (SP4.3e Task 8).
 import type { ActionOutcome, PanelSpec } from '@pitwall/contracts';
 import { carId, feedId } from '@pitwall/domain';
 import { cleanup, fireEvent, render, screen } from '@testing-library/svelte';
@@ -48,7 +48,7 @@ describe('the declaration lists the commands a widget invokes', () => {
   it('commands defaults to none', () => {
     const w = declareWidget({ name: 'plain', title: 'P', data: { status: topic('feed.status') }, sizes: { c: { minCols: 1, minRows: 1 } } });
     expect(w.commands).toEqual([]);
-    expect(commandProbe.decl.commands).toEqual(['plans.prepare.laps']);
+    expect(commandProbe.decl.commands).toEqual(['plans.race.set']);
   });
 });
 
@@ -58,7 +58,7 @@ describe('the panel path: a widget invokes a declared command by id with argumen
     await mountProbe(invoke);
     await click('laps');
     expect(invoke).toHaveBeenCalledTimes(1);
-    expect(invoke).toHaveBeenCalledWith('plans.prepare.laps', { feedId: FEED, laps: 52 });
+    expect(invoke).toHaveBeenCalledWith('plans.race.set', { feedId: FEED, race: { laps: 52, sets: 'carried' } });
     await vi.waitFor(() => expect(screen.getByTestId('outcome').textContent).toBe('invalid'));
   });
 

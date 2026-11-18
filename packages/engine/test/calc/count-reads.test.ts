@@ -27,7 +27,7 @@ const VIEW: EngineView = {
   history: { laps: [], stints: [], pitStops: [], events: [], penalties: [], decisions: [], clock: [], crossings: [0, 1, 2, 3, 4].map(crossing), spans: { 'car-status': [span(0, 1, 5), span(1, 5, 9)] }, appendedAt: {} },
   changed: new Set(),
   delta: { before: { crossings: 3 }, after: { crossings: 5 } },
-  weekend: undefined,
+  basis: undefined,
   feed,
   config: {},
   priors: unknown('notApplicable'),

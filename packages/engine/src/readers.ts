@@ -2,7 +2,7 @@
 // UI. Only domain-level types and protocol-free helpers; nothing here reaches `frame/frame.ts` or `@pitwall/protocol`
 // (depcruise `readers-never-reach-the-game`). The adapter side (frames, `step`, the runner) is the package's main entry.
 export type * from './state/engine-state.ts';
-export type * from './state/weekend-context.ts';
+export type * from './state/basis-context.ts';
 export type { LiveState } from './state/live-state.ts';
 export type * from './util/deep-readonly.ts';
 export type { FrameMetrics } from './frame/metrics.ts';

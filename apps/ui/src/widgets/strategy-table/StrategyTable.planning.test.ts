@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // The strategy table in the planning round (SP4.3d2 Task 12; SP4.3d spec §7.4; plan-workbook.html "Planning round": the
 // table below each board shows the planning job's ranking, `plans.preview`; C65, C66). Contract assumed:
-//  - `source.ts` `variantOf(source: 'auto' | 'live' | 'planning', prepared: PlanningRound | undefined): 'live' | 'planning'`:
+//  - `source.ts` `variantOf(source: 'auto' | 'live' | 'planning', prepared: PlanningRoundState | undefined): 'live' | 'planning'`:
 //    `live` and `planning` as chosen; `auto` planning while `prepared.open`, live when closed or without the topic's
 //    value (the board's rule, plan-board `presentation.ts`; the table reads no sub-machine, so it holds no
 //    presentation.ts, test/presentation-completeness.test.ts);

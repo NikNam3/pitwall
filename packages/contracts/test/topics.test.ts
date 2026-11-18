@@ -24,12 +24,13 @@ import carDetail from '../src/topics/car.detail.ts';
 import laps from '../src/topics/laps.ts';
 
 describe('TOPICS', () => {
-  it('has exactly the 15 feed topics besides the situation topics (spec 8.4, replay.status of 8.5, calibration.active of SP4.1a, config.effective of SP4.3b, plans.prepared and plans.preview of SP4.3d2) with their modes and rates', () => {
+  it('has exactly the 16 feed topics besides the situation topics (spec 8.4, replay.status of 8.5, calibration.active of SP4.1a, config.effective of SP4.3b, plans.prepared and plans.preview of SP4.3d2, basis.active of SP4.3e) with their modes and rates', () => {
     const table = Object.entries(TOPICS)
       .filter(([key, d]) => d.scope === 'feed' && d.owner === 'core' && !key.startsWith('situation.'))
       .map(([key, d]) => [key, d.name, d.mode, d.maxHz] as const)
       .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
     expect(table).toEqual([
+      ['basis.active', 'basis.active', 'state', Infinity],
       ['calibration.active', 'calibration.active', 'state', Infinity],
       ['car.detail', 'car.detail', 'state', 30],
       ['car.telemetry', 'car.telemetry', 'state', 60],
@@ -62,7 +63,7 @@ describe('TOPICS', () => {
   });
   it('gives every core topic outside dev, ui, the calibration store\'s and the profile module\'s scope feed', () => {
     const core = Object.entries(TOPICS).filter(([name, d]) => d.owner === 'core' && !/^(dev|ui)\./.test(name) && !['calibration.sets', 'calibration.values', 'calibration.candidates', 'drivers.profiles', 'drivers.links'].includes(name));
-    expect(core).toHaveLength(15 + 20);
+    expect(core).toHaveLength(16 + 20);
     for (const [, d] of core) expect(d.scope).toBe('feed');
   });
   it.each(['calibration.sets', 'calibration.values', 'calibration.candidates'] as const)('has the global topic %s of the calibration store (C54, C62a): owner core, state', (name) => {
@@ -123,7 +124,8 @@ describe('TOPICS', () => {
     expect(TOPICS[name]).toMatchObject({ name, owner: 'core', scope: 'global', mode: 'state' });
   });
   // M7-R: cars.overview lost `stops`, pitStopCount.byCar is new
-  it('exports the contract version', () => { expect(CONTRACT_VERSION).toBe(14); });
+  // SP4.3e Task 7b: plans.prepared publishes PlanningRoundState, plans.prepare.laps gives way to plans.race.set
+  it('exports the contract version', () => { expect(CONTRACT_VERSION).toBe(15); });
 });
 
 describe('defineTopic', () => {
@@ -170,7 +172,7 @@ describe('topic types', () => {
       | 'rejoin.car' | 'rejoin.ghostLines' | 'rejoinGhost.car' | 'scCall.car' | 'pitWindow.car'
       | 'calibration.sets' | 'calibration.values' | 'calibration.candidates' | 'calibration.active'
       | 'drivers.profiles' | 'drivers.links' | 'forecastScore.report' | 'config.effective' | 'strategy.plans' | 'strategyOverview.car' | 'circle.car'
-      | 'strategy.car' | 'undercut.car' | 'pitSweep.car' | 'plans.prepared' | 'plans.preview'
+      | 'strategy.car' | 'undercut.car' | 'pitSweep.car' | 'plans.prepared' | 'plans.preview' | 'basis.active'
       | 'situation.carActivityPractice' | 'situation.carActivityQualifying' | 'situation.carActivityRace' | 'situation.carFlags'
       | 'situation.carDriver' | 'situation.carLocation' | 'situation.carStatus' | 'situation.clock' | 'situation.compoundRule' | 'situation.lapValidity'
       | 'situation.penalties' | 'situation.raceControlPractice' | 'situation.raceControlQualifying' | 'situation.raceControlRace'

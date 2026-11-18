@@ -11,6 +11,7 @@
   import { WIDGETS } from '../../widgets/index.generated.ts';
   import {
     alertCommands,
+    basisPickCommand,
     calibrationCommands,
     defaultCommands,
     DEFAULT_KEYS,
@@ -34,6 +35,7 @@
   import { OverlayStack, provideOverlayStack } from '../commands/overlay-stack.ts';
   import Palette from '../commands/Palette.svelte';
   import { CommandRegistry } from '../commands/registry.ts';
+  import BasisPicker from '../basis/BasisPicker.svelte';
   import { mountDock, type DockHandle, type PanelView } from '../docking/index.ts';
   import { INITIAL_WINDOW, type Host } from '../host/host.ts';
   import { Inspection } from '../inspector/inspection.svelte.ts';
@@ -303,7 +305,7 @@
     ...(defaultFeed === undefined || activeCalibration === undefined
       ? []
       : calibrationCommands(trackSets, { send, feedId: defaultFeed, pick: () => openGarage('calibration-panel') })),
-    ...(defaultFeed === undefined ? [] : [sessionEndCommand({ send, feedId: defaultFeed })]),
+    ...(defaultFeed === undefined ? [] : [sessionEndCommand({ send, feedId: defaultFeed }), basisPickCommand(commandContext)]),
     ...planRegistry,
     ...(editing
       ? [
@@ -510,6 +512,7 @@
         {calibrationName}
         onPickCalibration={() => registry.run('calibration.pick')}
         onOpenDrivers={() => registry.run('drivers.open')}
+        onPickBasis={() => registry.run('basis.pick')}
         {editing}
         onToggleEditing={() => registry.run('layout.edit.toggle')}
       />
@@ -565,6 +568,8 @@
     {#if picked !== undefined}
       <GroupPicker {store} group={picked} feedId={picked.feedId ?? defaultFeed} {send} onClose={closeOverlay} />
     {/if}
+  {:else if overlay?.kind === 'basis' && defaultFeed !== undefined}
+    <BasisPicker {store} feedId={defaultFeed} {send} onClose={closeOverlay} />
   {/if}
 </div>
 

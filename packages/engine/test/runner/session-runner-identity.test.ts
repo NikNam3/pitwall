@@ -1,17 +1,17 @@
 // SessionRunner: the identity wait (C61; moved from the bridge's session processor). Frames wait for the first
-// Participants, which names the player's car and so the weekend context; the runner asks the injected `contextFor`
+// Participants, which names the player's car and so the weekend context; the runner asks the injected `basis.start`
 // for it once, then applies the frames it held, in order. Without Participants it starts after IDENTITY_WAIT_FRAMES
 // frames (about 10 s at 60 Hz), and at the session's end, with no weekend context.
 import { describe, expect, it, vi } from 'vitest';
 import { carId, type ParticipantsValues, type SessionUid } from '@pitwall/domain';
-import { IDENTITY_WAIT_FRAMES, SessionRunner, type Frame, type WeekendContext } from '../../src/index.ts';
+import { IDENTITY_WAIT_FRAMES, SessionRunner, type Frame, type BasisContext } from '../../src/index.ts';
 import { ScenarioBuilder } from '../builders/index.ts';
 import { initFor } from '../support/run.ts';
 import { applyOne, timeline } from '../support/runner.ts';
 
 const player = { teamId: 0, raceNumber: 1 };
 /** One earlier session (Task 27: its projection and the car key of each slot, C62); empty, the runner never reads it. */
-const WEEKEND: WeekendContext = { weekendId: 'w', player, sessions: [{ sessionUid: '1' as SessionUid, playerCar: carId(0),
+const WEEKEND: BasisContext = { basis: { practice: [], qualifying: null }, player, sessions: [{ sessionUid: '1' as SessionUid, weekendId: 'w', playerCar: carId(0),
   cars: [{ carId: carId(0), carKey: player }], projection: { laps: [], stints: [], pitStops: [], crossings: [], events: [], penalties: [], decisions: [], clock: [], spans: {}, appendedAt: {} } }] };
 
 /** The frame without its Participants packet. */
@@ -25,8 +25,8 @@ const framesWithParticipantsAt = (n: number, at: number | undefined): Frame[] =>
 };
 
 /** Applies `frames` and notes, per result handed out, its frame id, the state's frame id and its weekend context then. */
-const applyNoting = (runner: SessionRunner, frames: Frame[], seen: Array<{ frameId: number; stateFrameId: number; weekend: unknown }>) => {
-  for (const f of frames) runner.apply(f, (r, applied) => seen.push({ frameId: applied.frameId, stateFrameId: r.state.lastFrameId, weekend: r.state.weekend }));
+const applyNoting = (runner: SessionRunner, frames: Frame[], seen: Array<{ frameId: number; stateFrameId: number; basis: unknown }>) => {
+  for (const f of frames) runner.apply(f, (r, applied) => seen.push({ frameId: applied.frameId, stateFrameId: r.state.lastFrameId, basis: r.state.basis }));
 };
 
 describe('SessionRunner: the identity wait', () => {
@@ -34,14 +34,17 @@ describe('SessionRunner: the identity wait', () => {
     expect(IDENTITY_WAIT_FRAMES).toBe(600);
   });
 
-  it('frames before the first Participants are held and applied after `contextFor` returns, in order', () => {
+  it('frames before the first Participants are held and applied after `basis.start` returns, in order', () => {
     const frames = framesWithParticipantsAt(10, 5);
-    const seen: Array<{ frameId: number; stateFrameId: number; weekend: unknown }> = [];
+    const seen: Array<{ frameId: number; stateFrameId: number; basis: unknown }> = [];
     const asked: Array<{ participants: ParticipantsValues | undefined; resultsBefore: number }> = [];
     const runner = new SessionRunner(initFor(frames), {
-      contextFor: (participants) => {
-        asked.push({ participants, resultsBefore: seen.length });
-        return WEEKEND;
+      basis: {
+        start: (participants) => {
+          asked.push({ participants, resultsBefore: seen.length });
+          return WEEKEND;
+        },
+        registered: () => undefined,
       },
     });
     applyNoting(runner, frames.slice(0, 5), seen);
@@ -61,8 +64,8 @@ describe('SessionRunner: the identity wait', () => {
       { carId: carId(1), carKey: { teamId: 0, raceNumber: 2 } },
     ]);
     // then every held frame and the Participants frame, in order, each on its own state and with the weekend context
-    expect(seen).toEqual([0, 1, 2, 3, 4, 5].map((id) => ({ frameId: id, stateFrameId: id, weekend: WEEKEND })));
-    expect(runner.state.weekend).toBe(WEEKEND);
+    expect(seen).toEqual([0, 1, 2, 3, 4, 5].map((id) => ({ frameId: id, stateFrameId: id, basis: WEEKEND })));
+    expect(runner.state.basis).toBe(WEEKEND);
     // from then on every frame is applied at once, and the context is not asked again
     applyNoting(runner, frames.slice(6), seen);
     expect(seen.map((s) => s.frameId)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
@@ -74,38 +77,38 @@ describe('SessionRunner: the identity wait', () => {
   it('a player in a slot at or above numActiveCars gets its weekend context', () => {
     const frames = new ScenarioBuilder({ cars: 4, player: 3 }).participants({ numActiveCars: 2 }).frames(3, () => {}).build();
     // as the bridge looks the weekend up: by the player's car key in the list
-    const contextFor = (participants: ParticipantsValues | undefined): WeekendContext | undefined =>
+    const contextFor = (participants: ParticipantsValues | undefined): BasisContext | undefined =>
       participants?.cars.some((c) => c.carId === participants.playerCar) === true ? WEEKEND : undefined;
-    const runner = new SessionRunner(initFor(frames), { contextFor });
+    const runner = new SessionRunner(initFor(frames), { basis: { start: contextFor, registered: () => undefined } });
     for (const f of frames) runner.apply(f);
     expect([frames[0]!.participants!.numActiveCars, frames[0]!.playerCarIndex]).toEqual([2, 3]);
-    expect(runner.state.weekend).toBe(WEEKEND);
+    expect(runner.state.basis).toBe(WEEKEND);
   });
 
   it('a session whose first frame carries Participants starts at once', () => {
     const frames = timeline(3, []);
     const contextFor = vi.fn(() => WEEKEND);
-    const runner = new SessionRunner(initFor(frames), { contextFor });
-    expect(applyOne(runner, frames[0]!).state.weekend).toBe(WEEKEND);
+    const runner = new SessionRunner(initFor(frames), { basis: { start: contextFor, registered: () => undefined } });
+    expect(applyOne(runner, frames[0]!).state.basis).toBe(WEEKEND);
     expect(contextFor).toHaveBeenCalledTimes(1);
   });
 
   it('without Participants the runner starts after 600 frames with no weekend context', () => {
     const frames = framesWithParticipantsAt(605, 602);
-    const seen: Array<{ frameId: number; stateFrameId: number; weekend: unknown }> = [];
+    const seen: Array<{ frameId: number; stateFrameId: number; basis: unknown }> = [];
     const contextFor = vi.fn((participants: ParticipantsValues | undefined) => (participants === undefined ? undefined : WEEKEND));
-    const runner = new SessionRunner(initFor(frames), { contextFor });
+    const runner = new SessionRunner(initFor(frames), { basis: { start: contextFor, registered: () => undefined } });
     applyNoting(runner, frames.slice(0, 599), seen);
     expect(seen).toEqual([]);
     expect(contextFor).not.toHaveBeenCalled();
     applyNoting(runner, frames.slice(599, 600), seen);
     expect(contextFor.mock.calls).toEqual([[undefined]]);
-    expect(seen).toEqual(Array.from({ length: 600 }, (_, id) => ({ frameId: id, stateFrameId: id, weekend: undefined })));
+    expect(seen).toEqual(Array.from({ length: 600 }, (_, id) => ({ frameId: id, stateFrameId: id, basis: undefined })));
     // a Participants packet later changes nothing: the session runs on without a weekend context
     applyNoting(runner, frames.slice(600), seen);
     expect(seen.map((s) => s.frameId)).toEqual(Array.from({ length: 605 }, (_, id) => id));
     expect(contextFor).toHaveBeenCalledTimes(1);
-    expect(runner.state.weekend).toBeUndefined();
+    expect(runner.state.basis).toBeUndefined();
   });
 
   // Review F2 of Task 3: an exception on a frame skips that frame (the bridge reports it, naming `applying`), also in the
@@ -116,9 +119,9 @@ describe('SessionRunner: the identity wait', () => {
       framesWithParticipantsAt(10, 5).map((f) => (f.frameId === 2 ? { ...f, lapData: { ...f.lapData!, lapData: null as never } } : f));
     const releaseThrowing = () => {
       const frames = withBrokenFrame();
-      const seen: Array<{ frameId: number; stateFrameId: number; weekend: unknown }> = [];
+      const seen: Array<{ frameId: number; stateFrameId: number; basis: unknown }> = [];
       const contextFor = vi.fn(() => WEEKEND);
-      const runner = new SessionRunner(initFor(frames), { contextFor });
+      const runner = new SessionRunner(initFor(frames), { basis: { start: contextFor, registered: () => undefined } });
       applyNoting(runner, frames.slice(0, 5), seen);
       expect(() => applyNoting(runner, frames.slice(5, 6), seen)).toThrow(TypeError);
       return { frames, seen, contextFor, runner };
@@ -131,28 +134,28 @@ describe('SessionRunner: the identity wait', () => {
       expect(seen.map((s) => s.frameId)).toEqual([0, 1]);
       // the next call applies the frames still held first, each on its own state, then its own frame
       applyNoting(runner, frames.slice(6), seen);
-      expect(seen).toEqual([0, 1, 3, 4, 5, 6, 7, 8, 9].map((id) => ({ frameId: id, stateFrameId: id, weekend: WEEKEND })));
+      expect(seen).toEqual([0, 1, 3, 4, 5, 6, 7, 8, 9].map((id) => ({ frameId: id, stateFrameId: id, basis: WEEKEND })));
       expect(contextFor).toHaveBeenCalledTimes(1);
     });
     it('`end()` applies the frames still held after the throw', () => {
       const { seen, runner } = releaseThrowing();
-      runner.end((r, applied) => seen.push({ frameId: applied.frameId, stateFrameId: r.state.lastFrameId, weekend: r.state.weekend }));
+      runner.end((r, applied) => seen.push({ frameId: applied.frameId, stateFrameId: r.state.lastFrameId, basis: r.state.basis }));
       expect(seen.map((s) => s.frameId)).toEqual([0, 1, 3, 4, 5]);
     });
   });
 
   it('frames still held when the session ends are applied by `end()`, with no weekend context', () => {
     const frames = framesWithParticipantsAt(10, undefined);
-    const seen: Array<{ frameId: number; stateFrameId: number; weekend: unknown }> = [];
+    const seen: Array<{ frameId: number; stateFrameId: number; basis: unknown }> = [];
     const contextFor = vi.fn((participants: ParticipantsValues | undefined) => (participants === undefined ? undefined : WEEKEND));
-    const runner = new SessionRunner(initFor(frames), { contextFor });
+    const runner = new SessionRunner(initFor(frames), { basis: { start: contextFor, registered: () => undefined } });
     applyNoting(runner, frames, seen);
     expect(seen).toEqual([]);
-    runner.end((r, applied) => seen.push({ frameId: applied.frameId, stateFrameId: r.state.lastFrameId, weekend: r.state.weekend }));
+    runner.end((r, applied) => seen.push({ frameId: applied.frameId, stateFrameId: r.state.lastFrameId, basis: r.state.basis }));
     expect(contextFor.mock.calls).toEqual([[undefined]]);
-    expect(seen).toEqual(Array.from({ length: 10 }, (_, id) => ({ frameId: id, stateFrameId: id, weekend: undefined })));
+    expect(seen).toEqual(Array.from({ length: 10 }, (_, id) => ({ frameId: id, stateFrameId: id, basis: undefined })));
     // nothing is held any more: a second `end()` applies nothing
-    runner.end(() => seen.push({ frameId: -1, stateFrameId: -1, weekend: undefined }));
+    runner.end(() => seen.push({ frameId: -1, stateFrameId: -1, basis: undefined }));
     expect(seen).toHaveLength(10);
   });
 });

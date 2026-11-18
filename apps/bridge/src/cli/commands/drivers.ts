@@ -5,15 +5,15 @@
 // running bridge it says so and exits 1 (ruling R29). `<session>` is printed and parsed as
 // `<sessionUid>/<weekendId>/<feedCar>`, a seat as `<team> <raceNumber>` (the team by name or id). A rejected action
 // prints its reason and exits 1 (C73).
-import WebSocket from 'ws';
-import { decodeServerMessage, encodeMessage, type ClientMessage, type DriverAction, type ServerMessage, type TopicName } from '@pitwall/contracts';
-import { carId, teamIdByName, trackName, type DriversLinksValue, type DriversProfilesValue, type Known, type PersonId, type SessionRef, type TeamId, type UnlinkedSlot } from '@pitwall/domain';
+import type { DriverAction, TopicName } from '@pitwall/contracts';
+import { carId, teamIdByName, trackName, type DriversLinksValue, type DriversProfilesValue, type Known, type PersonId, type StoredSessionRef, type TeamId, type UnlinkedSlot } from '@pitwall/domain';
 import { loadConfig } from '../../config.ts';
 import type { ApplyResult, DriverSessionValues } from '../../drivers/store.ts';
 import type { ValueFor } from '../../hub/topic-hub.ts';
 import { dataDir } from '../../storage/data-dir.ts';
 import type { CliIo } from '../io.ts';
 import { UsageError } from '../usage.ts';
+import { connect, sendAction, topicValue, type Bridge } from './bridge-client.ts';
 
 export type { ApplyResult, DriverSessionValues } from '../../drivers/store.ts';
 
@@ -39,15 +39,13 @@ export type DriversDeps = {
 
 export type DriversValues = { name?: string | undefined };
 
-/** How long the command waits for a running bridge to greet and to answer. */
-const BRIDGE_TIMEOUT_MS = 5000;
 const DAY_MS = 86_400_000;
 
 // ---- parsing ----
 
-const sessionText = (s: SessionRef): string => `${s.sessionUid}/${s.weekendId}/${s.feedCar}`;
+const sessionText = (s: StoredSessionRef): string => `${s.sessionUid}/${s.weekendId}/${s.feedCar}`;
 
-function parseSession(text: string | undefined): SessionRef {
+function parseSession(text: string | undefined): StoredSessionRef {
   const [sessionUid, weekendId, feedCar] = /^([^/\s]+)\/([^/\s]+)\/(\d+)$/.exec(text ?? '')?.slice(1) ?? [];
   if (sessionUid === undefined || weekendId === undefined || feedCar === undefined) {
     throw new UsageError(`a session is <sessionUid>/<weekendId>/<feedCar>, got "${text ?? ''}"`);
@@ -230,93 +228,27 @@ async function defaultDeps(io: CliIo): Promise<DriversDeps> {
 
 // ---- a running bridge ----
 
-/** A connection to a running bridge, open once it has greeted; `undefined` when nothing listens on its port. */
-type Bridge = { send(message: ClientMessage): void; next(match: (m: ServerMessage) => boolean): Promise<ServerMessage>; close(): void };
-
-function connect(port: number, io: CliIo): Promise<Bridge | undefined> {
-  return new Promise((resolve, reject) => {
-    const socket = new WebSocket(`ws://127.0.0.1:${port}`);
-    const waiting: Array<{ match: (m: ServerMessage) => boolean; resolve: (m: ServerMessage) => void }> = [];
-    let greeted = false;
-    const fail = (message: string): void => {
-      clearTimeout(timer);
-      socket.terminate();
-      if (greeted) for (const w of waiting.splice(0)) w.resolve({ type: 'error', reason: 'malformed' });
-      reject(new Error(message));
-    };
-    const timer = setTimeout(() => fail(`the bridge on port ${port} did not answer`), BRIDGE_TIMEOUT_MS);
-    io.signal.addEventListener('abort', () => fail('interrupted'), { once: true });
-    const bridge: Bridge = {
-      send: (message) => socket.send(encodeMessage(message)),
-      next: (match) => new Promise((res) => waiting.push({ match, resolve: res })),
-      close: () => {
-        clearTimeout(timer);
-        socket.terminate();
-      },
-    };
-    socket.on('error', (error: NodeJS.ErrnoException) => {
-      if (!greeted && error.code === 'ECONNREFUSED') {
-        clearTimeout(timer);
-        resolve(undefined);
-      } else fail(`the bridge on port ${port}: ${error.message}`);
-    });
-    socket.on('close', () => {
-      if (greeted) fail('the bridge closed the connection');
-    });
-    socket.on('message', (data, isBinary) => {
-      const message = isBinary ? undefined : decodeServerMessage(data.toString());
-      if (message === undefined) return;
-      if (!greeted) {
-        if (message.type === 'starting') fail('the bridge is still starting (rebuilding stored sessions); try again once it serves');
-        if (message.type !== 'hello') return;
-        greeted = true;
-        clearTimeout(timer);
-        resolve(bridge);
-        return;
-      }
-      const i = waiting.findIndex((w) => w.match(message));
-      if (i >= 0) waiting.splice(i, 1)[0]?.resolve(message);
-    });
-  });
+/** A global topic's current value; a bridge that publishes none is an error. */
+async function globalValue(bridge: Bridge, topic: TopicName, id: string): Promise<unknown> {
+  const value = await topicValue(bridge, topic, id);
+  if (value === undefined) throw new Error(`the bridge publishes no ${topic}`);
+  return value;
 }
 
-/** Within `BRIDGE_TIMEOUT_MS`, else a rejection naming what was awaited. */
-function inTime<T>(promise: Promise<T>, what: string): Promise<T> {
-  let timer: NodeJS.Timeout | undefined;
-  const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new Error(`the bridge did not answer ${what}`)), BRIDGE_TIMEOUT_MS);
-  });
-  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
-}
-
-/** The current value of a global topic of the bridge (its snapshot). */
-async function topicValue(bridge: Bridge, topic: TopicName, id: string): Promise<unknown> {
-  const answer = bridge.next((m) => 'id' in m && m.id === id && (m.type === 'snapshot' || m.type === 'topicStatus' || m.type === 'error'));
-  bridge.send({ type: 'subscribe', id, topic, params: {} });
-  const message = await inTime(answer, `the subscription to ${topic}`);
-  if (message.type !== 'snapshot' || message.value === undefined) throw new Error(`the bridge publishes no ${topic}`);
-  return message.value;
-}
-
-async function withBridge(bridge: Bridge, verb: string | undefined, args: string[], values: DriversValues, io: CliIo): Promise<number> {
+async function onBridge(bridge: Bridge, verb: string | undefined, args: string[], values: DriversValues, io: CliIo): Promise<number> {
   if (verb === 'show') {
     io.err('pitwall: the bridge is running and holds the profile store; "drivers show" needs it: stop the bridge first');
     return 1;
   }
   if (verb === undefined) {
-    const profiles = (await topicValue(bridge, 'drivers.profiles', 'drivers-profiles')) as DriversProfilesValue;
-    const links = (await topicValue(bridge, 'drivers.links', 'drivers-links')) as DriversLinksValue;
+    const profiles = (await globalValue(bridge, 'drivers.profiles', 'drivers-profiles')) as DriversProfilesValue;
+    const links = (await globalValue(bridge, 'drivers.links', 'drivers-links')) as DriversLinksValue;
     for (const line of listLines(profiles, links.unlinked)) io.out(line);
     return 0;
   }
-  const action = actionOf(verb, args, values);
-  const id = 'drivers-action';
-  const answer = bridge.next((m) => m.type === 'actionResult' && m.id === id);
-  bridge.send({ type: 'uiAction', id, action });
-  const result = await inTime(answer, 'the action');
-  if (result.type !== 'actionResult') throw new Error('the bridge did not answer the action');
-  if (result.ok) return 0;
-  io.err(`pitwall: ${result.message ?? `the bridge rejected the action (${result.reason})`}`);
+  const refusal = await sendAction(bridge, actionOf(verb, args, values), 'drivers-action');
+  if (refusal === undefined) return 0;
+  io.err(`pitwall: ${refusal}`);
   return 1;
 }
 
@@ -327,7 +259,7 @@ export async function run(positionals: string[], values: DriversValues, io: CliI
   const bridge = await connect(loadConfig(io.env).wsPort, io);
   if (bridge !== undefined) {
     try {
-      return await withBridge(bridge, verb, args, values, io);
+      return await onBridge(bridge, verb, args, values, io);
     } finally {
       bridge.close();
     }

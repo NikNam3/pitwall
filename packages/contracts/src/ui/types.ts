@@ -1,5 +1,5 @@
 // UI state shared by the bridge and every window (spec 7.2, 7.5, 7.7, 7.8). JSON-safe.
-import type { CalibrationSource, CarId, FeedId, InsightCategory, PersonId, Policy, SessionRef, Slot, TeamId } from '@pitwall/domain';
+import type { CalibrationSource, CarId, FeedId, InsightCategory, PersonId, Policy, RaceAssumptions, SessionBasis, SessionRef, StoredSessionRef, Slot, TeamId } from '@pitwall/domain';
 
 export type WindowId = string;
 export type Geometry = { screen: number; x: number; y: number; width: number; height: number };
@@ -49,9 +49,9 @@ export type UiAction =
   | { kind: 'drivers.add'; displayName: string; person?: PersonId; seat?: { team: TeamId; raceNumber: number } }
   /** Links a seat (team and race number) to `person` for every stored session; `null` unlinks the seat (C62c). */
   | { kind: 'drivers.link'; team: TeamId; raceNumber: number; person: PersonId | null }
-  | { kind: 'drivers.exclude'; person: PersonId; session: SessionRef }
+  | { kind: 'drivers.exclude'; person: PersonId; session: StoredSessionRef }
   /** Undoes `drivers.exclude`. */
-  | { kind: 'drivers.include'; person: PersonId; session: SessionRef }
+  | { kind: 'drivers.include'; person: PersonId; session: StoredSessionRef }
   /** `value` within the entry's declared range (`ProfileEntryDecl.range`). */
   | { kind: 'drivers.override'; person: PersonId; key: string; value: number }
   | { kind: 'drivers.override.clear'; person: PersonId; key: string }
@@ -67,11 +67,8 @@ export type UiAction =
   | { kind: 'plan.activate'; feedId: FeedId; carId: CarId; slot: Slot }
   /** Saves `policy` in `slot` and commits it as the active plan, in one change (the prefill's accept, SP4.3d spec §7.1). */
   | { kind: 'plan.accept'; feedId: FeedId; carId: CarId; slot: Slot; policy: Policy }
-  // The planning round (SP4.3d spec §7.1, §7.4, C62d): the team's prepared plans for the next race, bridge user state
-  // changed only by these (C70, C73); the only plan input between sessions (§7.0 rule 3). `carId` is a slot of the
-  // qualifying session.
-  /** The race's laps the engineer entered (a whole number of at least 1). */
-  | { kind: 'plans.prepare.laps'; feedId: FeedId; laps: number }
+  // The planning round's slots (SP4.3d spec §7.1, §7.4, C62d): per car of the round its prepared plans, changed only by
+  // these (C73); saved only as a saved plan (`plans.save`). `carId` is a slot of the qualifying session.
   | { kind: 'plans.prepare.save'; feedId: FeedId; carId: CarId; slot: Slot; policy: Policy }
   /** Saves `policy` in `slot` and makes it the car's active prepared plan. */
   | { kind: 'plans.prepare.accept'; feedId: FeedId; carId: CarId; slot: Slot; policy: Policy }
@@ -79,7 +76,18 @@ export type UiAction =
   /** Makes the prepared plan in `slot` the car's active one. */
   | { kind: 'plans.prepare.activate'; feedId: FeedId; carId: CarId; slot: Slot }
   /** Ends the feed's session recording now (C59): the run finishes as at the session's end; the rest of that session is ignored. */
-  | { kind: 'session.end'; feedId: FeedId };
+  | { kind: 'session.end'; feedId: FeedId }
+  // The basis and the saved plans (C62, C62d, C76, SP4.3e spec §4.2–4.3).
+  /** Chooses the feed's basis (a `basisChosen` decision on each of the team's feeds) and its plan: an id, `null` for none, `undefined` to keep it. */
+  | { kind: 'basis.choose'; feedId: FeedId; basis: SessionBasis; plan: string | null | undefined }
+  /** Opens a planning round on a qualifying (of the feed's seat) and a practice basis. */
+  | { kind: 'plans.round.open'; feedId: FeedId; qualifying: SessionRef; practice: SessionRef[] }
+  /** The round's race assumptions (laps a whole number of at least 1). */
+  | { kind: 'plans.race.set'; feedId: FeedId; race: RaceAssumptions }
+  /** Saves the round's (or the race board's) slot choices as a saved plan of the team; `replaces` names the plan it overwrites. */
+  | { kind: 'plans.save'; feedId: FeedId; name?: string; replaces?: string }
+  | { kind: 'plans.rename'; feedId: FeedId; id: string; name: string }
+  | { kind: 'plans.delete'; feedId: FeedId; id: string };
 
 /** The driver-profile uiActions (C62c), for the CLI's and the driver-profile panel's edits; answered as every uiAction (`ActionOutcome`, C73). */
 export type DriverAction = Extract<UiAction, { kind: `drivers.${string}` }>;

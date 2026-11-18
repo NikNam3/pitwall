@@ -24,7 +24,7 @@ export const viewFrom = (frames: readonly Frame[], feed: Partial<FeedMetricsView
     history: last.state.history,
     changed: last.changed,
     delta: last.delta,
-    weekend: last.state.weekend,
+    basis: last.state.basis,
     feed: { ...IDLE_FEED, ...feed },
     outputs: new Map(),
     config,

@@ -146,16 +146,25 @@ export function candidatesForRun(input: StrategyInput, rng: Rng): { mc: McInput 
     const solutions = solveAll(dpInput);
     const dp = solveDp(dpInput, solutions);
     const candidatesConfig = { ...config, rainPct: RAIN_OUTLOOK_CONFIG.read(input).rainPct };
+    const best = bestPlanOf(field, car, dp, candidatesConfig);
+    // no plan the rain filter allows (C3): the car is not planned
+    if (best === undefined) {
+      out[car] = unknown('insufficientData');
+      continue;
+    }
     // the reaction table on the candidates' best plan's start compound, its one owner (R31; C43)
-    reactions[car] = reactionOf(dpInput, solutions, bestPlanOf(field, car, dp, candidatesConfig).startCompound ?? null);
+    reactions[car] = reactionOf(dpInput, solutions, best.startCompound ?? null);
     const own = candidatesOf(field, car, dp, solutions, candidatesConfig);
     const plan = carPlanOf(field, car, own, input.committed[car] ?? null, input.slots?.[car]);
     perCar.set(car, plan);
     candidates[car] = plan.candidates;
     committed[car] = plan.followed;
   }
+  if (perCar.size === 0) return { mc: null, perCar, out };
   const { rivalRules, points } = mcSettingsFrom(input.config);
-  return { mc: { start: field, candidates, committed, hazard, rivalRules, config: mcConfigOf(config, points, input.planning != null), reactions }, perCar, out };
+  // a car the rain filter left unplanned is no longer ours in the field
+  const mcStart = perCar.size === planned.size ? field : plannedField(start, perCar.keys());
+  return { mc: { start: mcStart, candidates, committed, hazard, rivalRules, config: mcConfigOf(config, points, input.planning != null), reactions }, perCar, out };
 }
 
 /** The job's parts (C51): one per our car planned, in our cars' order, each `{ ...input, planCar }`; the input as it is when none can be planned. */
@@ -204,8 +213,9 @@ export function partFinalCall(input: StrategyInput, rng: Rng): { final: FinalCal
     return { car: c, mc: { ...all, start: { ...all.start, sets: callSets }, candidates: { [c]: own.candidates }, committed, config: { ...all.config, maxScenarioPolicies: cap } } };
   };
 
-  // the cap (a count, C2) is the part's whole: round 1 its share rounded down, the final call the rest
-  const total = config.maxScenarioPolicies;
+  // the cap (a count, C2) is the part's whole, the one `mcConfigOf` chose (the planning round's its own, R34): round 1
+  // its share rounded down, the final call the rest
+  const total = all.config.maxScenarioPolicies;
   const mate = [...cars.keys()].find((c) => c !== car);
   if (mate === undefined) return done(callOf(car, total));
   // the committed teammate as every job models it (C43, `committedField`): its followed commit, as `perCar` holds it

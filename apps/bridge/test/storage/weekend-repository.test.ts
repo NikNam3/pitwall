@@ -126,14 +126,14 @@ describe('WeekendRepository.weekendContext (C39, C62)', () => {
    * fx2: the name is stored with the row for the calibration panel only).
    */
   const storedSession = (row: SessionRow, l: Log) => ({
-    sessionUid: row.sessionUid, playerCar: row.playerCar,
+    sessionUid: row.sessionUid, weekendId: row.weekendId, playerCar: row.playerCar,
     cars: [...row.cars].sort((a, b) => a.carId - b.carId).map(({ carId, carKey }) => ({ carId, carKey })), projection: projected(l),
   });
 
   it('matches cars by team and race number when the slots differ between sessions: the player\'s earlier sessions, oldest first', () => {
     const repo = new WeekendRepository(weekend());
     expect(repo.weekendContext('W1', FERRARI_16, keyOf(race))).toEqual({
-      context: { weekendId: 'W1', player: FERRARI_16, sessions: [storedSession(practice, practiceLog), storedSession(qualifying, qualifyingLog)] },
+      context: { basis: { practice: [{ sessionUid: 'P', weekendId: 'W1' }], qualifying: { sessionUid: 'Q', weekendId: 'W1' } }, player: FERRARI_16, sessions: [storedSession(practice, practiceLog), storedSession(qualifying, qualifyingLog)] },
       incomplete: [],
     });
   });
@@ -175,7 +175,7 @@ describe('WeekendRepository.weekendContext (C39, C62)', () => {
     put(current);
     const repo = new WeekendRepository(db);
     expect(repo.weekendContext('W1', FERRARI_16, keyOf(current))).toEqual({
-      context: { weekendId: 'W1', player: FERRARI_16, sessions: [storedSession(inW1, w1Log)] },
+      context: { basis: { practice: [], qualifying: null }, player: FERRARI_16, sessions: [storedSession(inW1, w1Log)] },
       incomplete: [],
     });
     // MERCEDES_44 was the player car only of the W2 session

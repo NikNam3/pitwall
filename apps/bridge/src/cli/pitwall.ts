@@ -26,6 +26,11 @@ const OPTIONS = {
   json: { type: 'string' },
   compare: { type: 'string' },
   runs: { type: 'string' },
+  practice: { type: 'string', multiple: true },
+  qualifying: { type: 'string' },
+  plan: { type: 'string' },
+  laps: { type: 'string' },
+  sets: { type: 'string' },
   help: { type: 'boolean', short: 'h' },
 } as const;
 
@@ -49,6 +54,8 @@ const COMMANDS: Record<string, () => Promise<{ run: Command }>> = {
   drivers: () => import('./commands/drivers.ts'),
   score: () => import('./commands/score.ts'),
   strategy: () => import('./commands/strategy.ts'),
+  basis: () => import('./commands/basis.ts'),
+  plans: () => import('./commands/plans.ts'),
 };
 
 /** SQLite codes of a file that is not (or no longer) a database. */

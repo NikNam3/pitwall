@@ -4,7 +4,7 @@
 // age`) minus its compound's offset against medium (the lap model's parameters, `lapModelParams`). Sources, in order: a
 // car's own dry slick laps this session; else the field's dry reference: the median of the cars' own references this
 // session, else the calibration set's priors entry `trackWetness.dryRefMs` (C62a), else the median of the cars' dry
-// slick stints in the weekend's earlier sessions (`view.weekend`, C39, C62). A lap on inters or wets goes on the slick
+// slick stints in the weekend's earlier sessions (`view.basis`, C39, C62). A lap on inters or wets goes on the slick
 // scale through the lap model's inter and wet terms: w = (excess − offset) / slope.
 //
 // Without any dry reference (no slick lap anywhere), the game's slick delta is a wetness reading, never a second dry
@@ -110,10 +110,10 @@ function storedReferences(session: DeepReadonly<StoredSession>, view: Pick<AsOfV
 }
 
 /** The field's dry reference from the weekend's earlier sessions: the median of their cars' references; `undefined` without one. */
-export function weekendFieldReference(view: Pick<AsOfView, 'weekend' | 'config'>, scale: SlickScale): number | undefined {
-  const weekend = view.weekend;
-  if (weekend === undefined) return undefined;
-  return median(weekend.sessions.flatMap((s) => storedReferences(s, view, scale)));
+export function weekendFieldReference(view: Pick<AsOfView, 'basis' | 'config'>, scale: SlickScale): number | undefined {
+  const basis = view.basis;
+  if (basis === undefined) return undefined;
+  return median(basis.sessions.flatMap((s) => storedReferences(s, view, scale)));
 }
 
 /** The calibration set's dry reference (`view.priors`' entry `trackWetness.dryRefMs`) with its set, if the run has one. */

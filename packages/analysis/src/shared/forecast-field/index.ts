@@ -19,6 +19,7 @@ import {
   type LapRecord,
   type MiniSectorCrossing,
   type NoiseCompound,
+  type RaceAssumptions,
   type RaceInteraction,
   type RivalStop,
   type RivalStops,
@@ -155,7 +156,8 @@ export function buildStartingPoint(view: AsOfView, outputs: ReadonlyMap<Calculat
   if (leaderNewest === undefined || leaderNewest.lap < 2) {
     const grid = Array.from(order).filter((k) => retired[k] === 0) as CarId[];
     const fittedCompound = (car: CarId): Known<NoiseCompound> => (tyreModel[car]?.fittedCompound as Known<NoiseCompound> | undefined) ?? unknown('notReceived');
-    return buildGridStart(view, outputs, { laps: fixed.totalLaps.value, grid, fittedCompound });
+    const laps = fixed.totalLaps.value;
+    return buildGridStart(view, outputs, { laps, grid, fittedCompound, race: { laps, sets: 'carried' } });
   }
 
   const laps = view.history.laps as readonly LapRecord[];
@@ -310,6 +312,11 @@ export type GridStartOptions = {
   grid: readonly CarId[];
   /** A car's start compound: known (fitted), `'free'` (our cars in the planning round: the policy's) or unknown (drawn). */
   fittedCompound: (car: CarId) => Known<NoiseCompound> | 'free';
+  /**
+   * The race assumptions (C62d, SP4.3e Task 3): outside the race, `sets` says whether our cars race on the qualifying's
+   * sets carried over or on a fresh allocation (`raceSetsOf`); in the race the builder reads the race's own sets.
+   */
+  race: RaceAssumptions;
 };
 
 /** The dry compounds a rival's start compound is drawn from (`rivalStartOdds*`). */
@@ -430,7 +437,7 @@ export function buildGridStart(view: AsOfView, outputs: ReadonlyMap<CalculatorId
     sp.lapFraction[k] = short > 0 && short < 1 ? 1 - short : 0;
   }
 
-  sp.sets = setsOf(view, tyreModel, cars);
+  sp.sets = raceSetsOf(view, tyreModel, cars, opts.race);
   // the race's forecast: in qualifying the next session's samples (spec §7.3), on the race's grid its own
   const w = view.fixed.weatherNow;
   const samples = view.situation.weekendPhase.kind === 'race' ? w?.forecast : w?.nextForecast;
@@ -695,15 +702,52 @@ function trackOf(view: AsOfView, pitLoss: DeepReadonly<PitLossOutput> | undefine
 
 /** Our cars' sets left (the shared `ourCars` rule, C43): `tyre-model`'s used sets, where it knows them. */
 function setsOf(view: AsOfView, tyreModel: DeepReadonly<TyreModelOutput>, cars: number): StartingPoint['sets'] {
-  const fixed = view.fixed;
   const out: StartingPoint['sets'] = {};
-  if (!fixed.playerCar.known) return out;
-  const teammate = fixed.teammateCar.known ? fixed.teammateCar.value : undefined;
-  for (const car of ourCars({ playerCar: fixed.playerCar.value, teammateCar: teammate })) {
+  for (const car of oursIn(view, cars)) {
     const used = tyreModel[car]?.usedSets;
-    if (car >= cars || used === undefined || !used.known) continue;
+    if (used === undefined || !used.known) continue;
     out[car] = used.value.map((s) => ({ compound: s.compound, wearPct: s.wearPct }));
   }
+  return out;
+}
+
+/** Our cars in the view that are slots of a field of `cars` (the shared `ourCars` rule, C43). */
+function oursIn(view: AsOfView, cars: number): CarId[] {
+  const fixed = view.fixed;
+  if (!fixed.playerCar.known) return [];
+  const teammate = fixed.teammateCar.known ? fixed.teammateCar.value : undefined;
+  return ourCars({ playerCar: fixed.playerCar.value, teammateCar: teammate }).filter((car) => car < cars);
+}
+
+/**
+ * Our cars' race sets on a grid start (SP4.3e Task 3, spec §4.4 item 3; the one builder, C50): in the race, and with
+ * `race.sets` `'carried'`, `tyre-model`'s sets (`setsOf`; availability is `tyre-model`'s, C43); with `'fresh'` outside
+ * the race the config's `freshRaceSets*` per compound, every set new (C47).
+ */
+// SP4.3e Task 3: the carried race's reserved sets (`recommendedSession` the race's session type, R8d) wait on a
+// requested `tyre-model` output and step-1 value (the weekend structure is a signal, C12, C13); see the task's report.
+/**
+ * Our cars' sets carried into the race from the qualifying: `tyre-model`'s `raceSets` (the sets available now and those
+ * the game reserves for the next race, Task 3b; availability is tyre-model's, C43); a car without them gets none.
+ */
+function carriedSetsOf(view: AsOfView, tyreModel: DeepReadonly<TyreModelOutput>, cars: number): StartingPoint['sets'] {
+  const out: StartingPoint['sets'] = {};
+  for (const car of oursIn(view, cars)) {
+    const sets = tyreModel[car]?.raceSets;
+    if (sets === undefined || !sets.known) continue;
+    out[car] = sets.value.map((s) => ({ compound: s.compound, wearPct: s.wearPct }));
+  }
+  return out;
+}
+
+function raceSetsOf(view: AsOfView, tyreModel: DeepReadonly<TyreModelOutput>, cars: number, race: RaceAssumptions): StartingPoint['sets'] {
+  if (view.situation.weekendPhase.kind === 'race') return setsOf(view, tyreModel, cars);
+  if (race.sets === 'carried') return carriedSetsOf(view, tyreModel, cars);
+  const c = configOf(FORECAST_FIELD_CONFIG, view);
+  const counts: Record<NoiseCompound, number> = { soft: c.freshRaceSetsSoft, medium: c.freshRaceSetsMedium, hard: c.freshRaceSetsHard, inter: c.freshRaceSetsInter, wet: c.freshRaceSetsWet };
+  const fresh = NOISE_COMPOUNDS.flatMap((compound) => Array.from({ length: Math.max(0, Math.floor(counts[compound])) }, () => ({ compound, wearPct: 0 })));
+  const out: StartingPoint['sets'] = {};
+  for (const car of oursIn(view, cars)) out[car] = fresh.map((s) => ({ ...s }));
   return out;
 }
 

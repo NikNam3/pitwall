@@ -7,16 +7,18 @@
 //      (`StaleSessions.rebuild` runs one recording at a time): a restore that begins while the rebuild waits wins.
 //
 // Each test runs a live `serve` over temporary data dirs (C84) on the live bridge's rebuild (`sessionRebuilder`), the
-// stored sessions made by earlier stopped runs of committed segments. `processRecording` (what each rebuild runs) is
-// observed, and in (b) held, by the test; it is the real one.
+// stored sessions made by earlier stopped runs of committed segments. The rebuild replays in a worker thread (SP4.3e
+// Task 7d), so the test observes it on the main thread: the rebuilds `serve` hands to the live bridge's rebuild (its
+// `storage.rebuild`, wrapped by the test, and in (b) held), their `pitwall: rebuilding` lines, and the stored rows
+// (rules version, `complete`). The rebuild itself is the real one.
+//
+// SP4.3e Task 7d fix round, F4: ported from a main-thread `vi.mock` of `processRecording`, which the worker never sees.
 import { mkdirSync, mkdtempSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { FeedId } from '@pitwall/domain';
 import { PacketId, peekHeader } from '@pitwall/protocol';
-import type * as ProcessRecordingModule from '../../src/cli/process-recording.ts';
-import { processRecording } from '../../src/cli/process-recording.ts';
 import { sessionRebuilder } from '../../src/cli/rebuild-database.ts';
 import { serve } from '../../src/cli/serve.ts';
 import { effectiveConfig } from '../../src/feature-config.ts';
@@ -25,19 +27,20 @@ import { TopicHub } from '../../src/hub/topic-hub.ts';
 import { createLogger } from '../../src/log.ts';
 import { FeedPipeline } from '../../src/pipeline/feed-pipeline.ts';
 import { readPwrec } from '../../src/pwrec/reader.ts';
-import { openDatabase, type Db, type SessionKey } from '../../src/storage/db.ts';
+import { openDatabase, type Db, type SessionKey, type StoredSessionRow } from '../../src/storage/db.ts';
 import { segmentPath } from '../fixtures/replay.ts';
 import type { PreparedPacket } from '../helpers/array-source.ts';
 import { ManualSource } from '../helpers/manual-source.ts';
 import { factRows } from '../storage/records.ts';
 
-vi.mock('../../src/cli/process-recording.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof ProcessRecordingModule>();
-  return { ...actual, processRecording: vi.fn(actual.processRecording) };
-});
-const processed = vi.mocked(processRecording);
-/** The recordings the rebuilds processed, in call order. */
-const processedPaths = (): string[] => processed.mock.calls.map(([path]) => path);
+/** The recordings whose rebuild `serve` started (handed to the live bridge's rebuild), in call order. */
+let rebuilt: string[] = [];
+const processedPaths = (): string[] => rebuilt;
+/** When set, the next rebuild `serve` starts waits for it before it runs (the hold of test b). */
+let holdNext: Promise<void> | undefined;
+/** The recordings named by the `pitwall: rebuilding <file> (a stale stored session)` lines. */
+const rebuildingLines = (err: readonly string[]): string[] =>
+  err.flatMap((line) => /^pitwall: rebuilding (.+) \(a stale stored session\)$/.exec(line)?.[1] ?? []);
 
 const RULES = 'unversioned';
 const A = 'udp-20777' as FeedId;
@@ -116,7 +119,8 @@ async function stoppedRun(packets: readonly PreparedPacket[], place: Place, wall
 const cleanup: Array<() => unknown> = [];
 afterEach(async () => {
   for (const c of cleanup.splice(0).reverse()) await c();
-  processed.mockClear();
+  rebuilt = [];
+  holdNext = undefined;
 });
 
 /**
@@ -130,11 +134,20 @@ async function liveServe(place: Place, feeds: readonly FeedId[]) {
   const abort = new AbortController();
   const io = { out: (line: string) => out.push(line), err: (line: string) => err.push(line), env: {}, signal: abort.signal };
   const db = openDatabase(place.dbPath);
+  const rebuilder = sessionRebuilder(db, effectiveConfig(FEATURES), io, RULES);
+  /** The live bridge's rebuild, observed: each rebuild `serve` starts is noted, and the held one waits for its release. */
+  const rebuild = async (row: StoredSessionRow): Promise<void> => {
+    rebuilt.push(row.pwrecPath ?? '');
+    const hold = holdNext;
+    holdNext = undefined;
+    if (hold !== undefined) await hold;
+    return rebuilder(row);
+  };
   const done = serve({
     sources: feeds.map((id) => ({ source: sources.get(id)!, feed: { kind: 'udp', label: id } as const })),
     wsPort: 0,
     dumpsDir: join(tmp(), 'dumps'),
-    storage: { db, recordingsDir: place.recordingsDir, rulesVersion: RULES, rebuild: sessionRebuilder(db, effectiveConfig(FEATURES), io, RULES) },
+    storage: { db, recordingsDir: place.recordingsDir, rulesVersion: RULES, rebuild },
     io,
   });
   let stopped = false;
@@ -212,6 +225,8 @@ describe('the stale sweep spares every session a feed of the run may continue (C
     await vi.waitFor(() => expect(factsOf(place.db, uidB).length).toBeGreaterThan(beforeB.facts.length), { timeout: 60_000, interval: 100 });
     await settle();
     expect(processedPaths()).toEqual([fileC]);
+    expect(rebuildingLines(live.err)).toEqual([fileC]);
+    expect(rowOf(place.db, uidC).rules_version).toBe(RULES);
 
     await live.stop();
     // B's session is the continuation's alone: its own recording grown, no second recording of its key
@@ -230,6 +245,7 @@ describe('the stale sweep spares every session a feed of the run may continue (C
     await settle();
     await live.stop();
     expect(processedPaths()).toEqual([]);
+    expect(rebuildingLines(live.err)).toEqual([]);
     expect(rowOf(place.db, uidOf(stale)).complete).toBe(0);
   });
 
@@ -244,13 +260,8 @@ describe('the stale sweep spares every session a feed of the run may continue (C
     const [uidX, uidY] = [uidOf(staleX), uidOf(y.first)];
     const beforeY = { payloads: await datagramPayloads(fileY), facts: factsOf(place.db, uidY) };
 
-    const { processRecording: actual } = await vi.importActual<typeof ProcessRecordingModule>('../../src/cli/process-recording.ts');
     let release!: () => void;
-    const gate = new Promise<void>((resolve) => { release = resolve; });
-    processed.mockImplementationOnce(async (...args) => {
-      await gate;
-      return actual(...args);
-    });
+    holdNext = new Promise<void>((resolve) => { release = resolve; });
 
     // one feed: its new session continues nothing and every feed has its first Session packet, so the sweep queues X and Y
     const live = await liveServe(place, [A]);
@@ -265,10 +276,12 @@ describe('the stale sweep spares every session a feed of the run may continue (C
     expect(processedPaths()).toEqual([fileX]);
     await vi.waitFor(() => expect(factsOf(place.db, uidY).length).toBeGreaterThan(beforeY.facts.length), { timeout: 60_000, interval: 100 });
     expect(processedPaths()).toEqual([fileX]);
+    expect(rebuildingLines(live.err)).toEqual([fileX]);
 
     await live.stop();
     await expectContinued(place, uidY, fileY, beforeY);
-    expect(rowOf(place.db, uidX).pwrec_path).toBe(fileX);
+    // X was rebuilt under this bridge's rules version, from its own recording
+    expect(rowOf(place.db, uidX)).toMatchObject({ pwrec_path: fileX, rules_version: RULES, complete: 1 });
     expect(recordingsOf(place.recordingsDir)).toHaveLength(3);
   });
 });

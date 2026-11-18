@@ -133,7 +133,7 @@ export function racesAcceptance(group: readonly FixtureName[]): void {
         const scheduler = new Scheduler(CalculatorRegistry.build([pitLossCalculator, lapOverviewCalculator, degradationCalculator, trackWetnessCalculator, crossoverCalculator]), { freezeOutputs: true });
         scheduler.setNeeded([LAP_OVERVIEW, CROSSOVER]);
         const { changed, delta } = last;
-        const scheduled = scheduler.run({ live: state, situation: situationOf(state), history: state.history, changed, delta, weekend: state.weekend, feed: IDLE_FEED, config: {}, priors: NO_PRIORS, drivers: NO_DRIVERS, track: unknown('notApplicable') });
+        const scheduled = scheduler.run({ live: state, situation: situationOf(state), history: state.history, changed, delta, basis: state.basis, feed: IDLE_FEED, config: {}, priors: NO_PRIORS, drivers: NO_DRIVERS, track: unknown('notApplicable') });
         expect(scheduled.errors).toEqual([]);
         expect(scheduled.ran).toEqual(expect.arrayContaining([LAP_OVERVIEW, CROSSOVER]));
         overview = scheduled.outputs.get(LAP_OVERVIEW) as LapOverviewOutput;

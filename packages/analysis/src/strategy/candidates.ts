@@ -8,12 +8,13 @@
 //   `race-monte-carlo`'s one rival policy, `rivalPlainPolicy`, as a `bestWith` query of the first world that gives
 //   one).
 // A `bestWith` query that gives `null` gives no candidate. Inter and wet plans (stops or a free start's start
-// compound) only where rain can come (Task 23a; SP4.3c O3a). The best plan is `bestPlanOf`'s, its one owner (C43). Every policy is `policyOf(plan)`; no policy twice. The committed row is the job's.
+// compound) only where rain can come, by the one wet rule (`shared/wet-allowed.ts`; SP4.3e Task 4), on every
+// candidate, the best plan, box this lap and continue included. The best plan is `bestPlanOf`'s, its one owner (C43). Every policy is `policyOf(plan)`; no policy twice. The committed row is the job's.
 import type { CarId, Policy, StartingPoint } from '@pitwall/domain';
 import { rivalPlainPolicy, type McCandidate } from '../race-monte-carlo/index.ts';
-import { startLapOf } from '../race-forecast/index.ts';
-import { RAIN_OUTLOOK_CONFIG, rainComing } from '../rain-outlook/index.ts';
+import { RAIN_OUTLOOK_CONFIG } from '../rain-outlook/index.ts';
 import { policyOf } from '../shared/strategy-input/index.ts';
+import { allowedPolicy } from '../shared/wet-allowed.ts';
 import { bestWith, type DpPlan, type DpResult, type DpSolution } from '../strategy-dp/index.ts';
 import type { StrategyConfig } from './config.ts';
 
@@ -37,34 +38,19 @@ function rivalNext(start: StartingPoint, car: CarId, step: -1 | 1): CarId | unde
   return undefined;
 }
 
-const WET: ReadonlySet<string> = new Set(['inter', 'wet']);
-
-/**
- * Whether rain can come for inter and wet plans (Task 23a; SP4.3c O3a): the track is wet by `track-wetness`'s `wet`, or
- * rain is coming over the starting point's remaining laps by `rain-outlook`'s rule and threshold (`rainComing`,
- * `rainPct`); no forecast counts as no rain.
- */
-function rainCanCome(start: StartingPoint, fromLap: number, rainPct: number): boolean {
-  if (start.wetness.wet) return true;
-  return start.weather.known && rainComing(start.weather.value.byLap, fromLap, start.lapsTotal, rainPct);
-}
-
-/**
- * The "rain can come" filter of car `car`'s plans (Task 23a; SP4.3c O3a): a plan that starts on (a free start's
- * `startCompound`) or stops for inters or wets is allowed only where rain can come (`rainCanCome`).
- */
-function allowedOf(start: StartingPoint, car: CarId, config: CandidatesConfig): (p: Pick<DpPlan, 'stops' | 'startCompound'>) => boolean {
-  const rain = rainCanCome(start, startLapOf(start, car), config.rainPct ?? RAIN_OUTLOOK_CONFIG.defaults.rainPct);
-  return (p) => rain || (!(p.startCompound !== undefined && WET.has(p.startCompound)) && !p.stops.some((s) => WET.has(s.compound)));
-}
+/** Car `car`'s plan filter: the one wet rule (`shared/wet-allowed.ts`, C43) at the candidates' rain threshold. */
+const allowedOf = (start: StartingPoint, car: CarId, config: CandidatesConfig): ((p: Pick<DpPlan, 'stops' | 'startCompound'>) => boolean) =>
+  allowedPolicy(start, car, config.rainPct ?? RAIN_OUTLOOK_CONFIG.defaults.rainPct);
 
 /**
  * Car `car`'s best plan, the one owner of it (C43): the least `expectedMs` of its DP plans the rain filter allows, else
- * continue. The candidates' first and the start compound of the job's reaction table (R31).
+ * continue, else box this lap, where allowed; `undefined` when the filter allows none (the job then plans the car not,
+ * `unknown('insufficientData')`, C3). The candidates' first and the start compound of the job's reaction table (R31).
  */
-export function bestPlanOf(start: StartingPoint, car: CarId, dp: DpResult, config: CandidatesConfig): DpPlan {
+export function bestPlanOf(start: StartingPoint, car: CarId, dp: DpResult, config: CandidatesConfig): DpPlan | undefined {
   const allowed = allowedOf(start, car, config);
-  return [...dp.plans].sort((a, b) => a.expectedMs - b.expectedMs).find(allowed) ?? dp.continue;
+  const fallback = [dp.continue, ...(dp.boxThisLap === null ? [] : [dp.boxThisLap])];
+  return [...dp.plans].sort((a, b) => a.expectedMs - b.expectedMs).find(allowed) ?? fallback.find(allowed);
 }
 
 /** `plans` per world and stop count, each group's best `max` by `expectedMs` (the bound within a stop count, B5). */
@@ -93,9 +79,11 @@ export function candidatesOf(start: StartingPoint, car: CarId, dp: DpResult, sol
   };
   const allowed = allowedOf(start, car, config);
   const best = bestPlanOf(start, car, dp, config);
+  // no plan the rain filter allows: no candidate (the job plans the car not)
+  if (best === undefined) return out;
 
   // base: the best plan first, then every other base plan of each world and stop count, box this lap and continue
-  add(policyOf(best), 'dp');
+  if (allowed(best)) add(policyOf(best), 'dp');
   for (const plan of [...perStopCount(dp.plans.filter(allowed), config.dpPlansMax), ...(dp.boxThisLap === null ? [] : [dp.boxThisLap]), dp.continue]) {
     if (plan !== best && allowed(plan)) add(policyOf(plan), 'dp');
   }

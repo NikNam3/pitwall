@@ -18,7 +18,7 @@ import {
   type ParticipantsValues,
   type PriorsSnapshot,
   type ProfileSnapshot,
-  type SessionRef,
+  type StoredSessionRef,
   type RunPriors,
   type SessionTime,
   type SessionUid,
@@ -37,7 +37,7 @@ import {
   type Frame,
   type SchedulerInput,
   type StepResult,
-  type WeekendContext,
+  type BasisContext,
 } from '@pitwall/engine';
 import { driversOf, priorsOf, type DeepReadonly, type EngineView } from '@pitwall/engine/readers';
 import type { TopicName } from '@pitwall/contracts';
@@ -47,11 +47,12 @@ import type { SlotIdentity } from '../drivers/store.ts';
 import type { FeatureConfig } from '../feature-config.ts';
 import type { FeedJobs } from '../jobs/feed-jobs.ts';
 import type { Logger } from '../log.ts';
-import type { SessionKey, SessionRow } from '../storage/db.ts';
+import type { SessionKey, StoredSessionKind, SessionRow } from '../storage/db.ts';
 import type { SessionFile } from '../storage/session-files.ts';
+import type { BasisRun } from './basis-run.ts';
 import { MAX_DUMPS_PER_SESSION, writeDebugDump } from './debug-dump.ts';
 import { PendingDecisions, SessionRecords, type Placed } from './decision-placement.ts';
-import { carsOf, sessionRowOf, type SessionStorage } from './session-storage.ts';
+import { carsOf, sessionKindOf, sessionRowOf, type SessionStorage } from './session-storage.ts';
 import type { PublishError, SpansOf, TopicPublisher } from './topic-publisher.ts';
 
 /** The feed's player car in a session (C60's key): the player car index of its first frame, whose Session packet starts it. */
@@ -79,6 +80,8 @@ export type SessionProcessorOptions = {
   /** The session's track file, resolved once when it starts (C62b); the same for every frame. */
   track: Known<TrackFile>;
   storage?: SessionStorage;
+  /** The session's basis (C62): its start, the context of a chosen one, `basis.active`. Without it the session has none. */
+  basis?: Pick<BasisRun, 'start' | 'registered' | 'applied'>;
   file?: SessionFile;
   /**
    * The run continues the session's stored recording after a bridge restart (C59): `file` is that recording, resumed,
@@ -95,7 +98,7 @@ export type SessionProcessorOptions = {
    * (before the runner applies it, so every frame the scheduler sees has it, live and replayed alike, C38). Without it,
    * or before that frame, `drivers` is `null`.
    */
-  profilesFor?: (slots: readonly SlotIdentity[], session: SessionRef) => ProfileSnapshot | null;
+  profilesFor?: (slots: readonly SlotIdentity[], session: StoredSessionRef) => ProfileSnapshot | null;
   /**
    * The feed's human seats (C17, C62c; SP4.3b2 Task 10): its player car and teammate while their open `car-driver` span
    * is `human`, with their team and race number from Participants. Handed on after a frame when they changed.
@@ -111,7 +114,7 @@ const ACTIVE_AT = 0;
 /**
  * Runs one session (spec 5.4, 7.3). The runner holds the frames until the first Participants packet, which names the
  * player's car (its team and race number) and so the weekend context (C61, C62); this processor supplies that context
- * from storage (`contextFor`). The scheduler is attached to the runner, so a flashback rewinds its bookkeeping with the state
+ * from storage (`basis.start`). The scheduler is attached to the runner, so a flashback rewinds its bookkeeping with the state
  * (C27). An exception on a frame skips that frame, also among the held frames the runner releases after its identity
  * wait (the rest stay queued for the next call); a topic that fails to publish is marked errored while the other topics
  * go out. Either way the failure is logged and, up to `MAX_DUMPS_PER_SESSION` times, the frame is dumped with its place
@@ -144,6 +147,8 @@ export class SessionProcessor {
   #active: string | undefined;
   /** The teammate of the row last built (`#row`): a row is written again when the engine's teammate is another. */
   #storedTeammate: CarId | null = null;
+  /** The kind of the row last built (`#row`): a row is written again once the weekend phase is decided (R9, C62). */
+  #storedKind: StoredSessionKind = 'none';
   /** The run's profile snapshot (C62c): `undefined` until the first frame with Participants asks for it, fixed after. */
   #drivers: ProfileSnapshot | null | undefined;
   /** The human seats last handed to `onSeats`, as JSON: handed on only when they change. */
@@ -165,7 +170,11 @@ export class SessionProcessor {
     this.#scheduler = new Scheduler(registry, { freezeOutputs, ...(opts.calcStats && { onCalculatorRun: opts.calcStats.hook }) });
     this.#runner = new SessionRunner(
       { feedId, sessionUid, session, realism: opts.config.realism?.enabled === true },
-      { attach: this.#scheduler, contextFor: (participants) => this.#contextFor(participants) },
+      {
+        attach: this.#scheduler,
+        // The session's basis (C62): its start at the first Participants, the context of each chosen one.
+        basis: { start: (participants) => this.#contextFor(participants), registered: (basis) => opts.basis?.registered(basis) },
+      },
     );
     const { storage } = opts;
     if (storage !== undefined) this.#storeRow((row) => storage.start(row, { continued: opts.continued === true }));
@@ -247,7 +256,7 @@ export class SessionProcessor {
       history: input.history,
       delta: input.delta,
       changed: input.changed,
-      weekend: input.weekend,
+      basis: input.basis,
       config: input.config,
       priors: priorsOf(input.history.decisions, input.priors),
       track: input.track,
@@ -335,10 +344,15 @@ export class SessionProcessor {
     }
   }
 
-  /** The player's earlier sessions of the weekend (C62): those whose player car had this player's team and race number; none without Participants. */
-  #contextFor(participants: ParticipantsValues | undefined): WeekendContext | undefined {
+  /** The session-start basis of the player's seat (C62, `BasisRun.start`); none without Participants. */
+  #contextFor(participants: ParticipantsValues | undefined): BasisContext | undefined {
     const player = participants?.cars.find((c) => c.carId === participants.playerCar)?.carKey;
-    return player && this.#o.storage?.weekendContext(this.#row(), player);
+    return player && this.#o.basis?.start(player, this.#row(), this.weekendPhase);
+  }
+
+  /** Whether the run holds a `basisChosen` decision, in its projection or pending for the next frame (C62). */
+  get hasBasisChoice(): boolean {
+    return [...this.#runner.state.history.decisions, ...this.#pending.list].some((d) => d.kind === 'basisChosen');
   }
 
   /**
@@ -389,7 +403,9 @@ export class SessionProcessor {
     try {
       // The row stores every slot's car key from the live identity and the teammate the engine placed: whenever either
       // changes (a rewind included), the row follows (the newest wins). Then the log's new facts are appended (C24).
-      if (storage !== undefined && (result.changed.has('identity') || this.#teammate() !== this.#storedTeammate)) this.#storeRow((row) => storage.upsertSession(row));
+      // The row's kind follows the weekend phase once the machine decided it (C14, C62).
+      const rowChanged = result.changed.has('identity') || this.#teammate() !== this.#storedTeammate || sessionKindOf(this.weekendPhase) !== this.#storedKind;
+      if (storage !== undefined && rowChanged) this.#storeRow((row) => storage.upsertSession(row));
       storage?.writeLog(this.#key, result.state.log);
       // A session time that fell back with no flashback and no start: the engine keeps its race clock monotonic (spec 3.3); worth knowing.
       if (result.clockFall) log.info({ feedId, sessionUid: this.#uid, clockFall: result.clockFall }, 'session time fell back');
@@ -417,6 +433,13 @@ export class SessionProcessor {
         ...publisher.publishInsights(scheduled.insights, { frameId: frame.frameId }),
       );
       this.#publishActive(result.state.history.decisions);
+      this.#o.basis?.applied({
+        basis: result.state.basis?.basis,
+        phase: this.weekendPhase,
+        totalLaps: result.state.session.totalLaps,
+        frameNumber: result.state.frameNumber,
+        rewound: rewound !== undefined,
+      });
       this.#reportSeats(result.state);
       const { cars, playerCar } = result.state;
       this.#o.jobs?.triggerRan(scheduled, { lap: cars[playerCar]?.timing.lap ?? 0, frameId: frame.frameId });
@@ -490,7 +513,7 @@ export class SessionProcessor {
       history: state.history,
       changed,
       delta,
-      weekend: state.weekend,
+      basis: state.basis,
       feed: this.#o.feedView(),
       config: this.#o.config,
       priors: this.#priors,
@@ -551,6 +574,7 @@ export class SessionProcessor {
     const { state } = this.#runner;
     return sessionRowOf({
       sessionUid: this.#uid, session: state.session, playerCar: this.#key.playerCar, teammateCar: this.#teammate(), startedAt, pwrecPath, cars: carsOf(state),
+      weekendPhase: this.weekendPhase,
     });
   }
 
@@ -558,6 +582,7 @@ export class SessionProcessor {
   #storeRow(write: (row: SessionRow) => void): void {
     const row = this.#row();
     this.#storedTeammate = row.teammateCar;
+    this.#storedKind = row.kind;
     write(row);
   }
 

@@ -6,7 +6,7 @@ import { copyPlainSharingKnown } from '../util/copy-plain.ts';
 
 /**
  * The state after frame `frameId`. The append-only log is kept by its lengths only (spec 5.4) and the projection not at
- * all (a restore projects the log again); the read-only weekend context is not kept either, a restore carries the
+ * all (a restore projects the log again); the read-only basis context is not kept either, a restore carries the
  * current one over. `attached`: the attached bookkeeping as it stood once the frame's result was handed out (C27).
  * The state is copied except its `Known`s, which no later frame changes (`copyPlainSharingKnown`).
  */
@@ -14,7 +14,7 @@ export type Snapshot = {
   frameId: number;
   sessionTime: SessionTime;
   lengths: LogLengths;
-  state: Omit<EngineState, 'log' | 'history' | 'weekend'>;
+  state: Omit<EngineState, 'log' | 'history' | 'basis'>;
   attached: unknown;
 };
 
@@ -29,7 +29,7 @@ export const KEEP_OLDER_EVERY_MS = 30_000;
 const slotOf = (s: Snapshot): number => Math.floor(s.sessionTime / KEEP_OLDER_EVERY_MS);
 
 const snapshotOf = (state: EngineState, frameId: number, attached: unknown): Snapshot => {
-  const { log, history: _projected, weekend: _readOnly, ...rest } = state;
+  const { log, history: _projected, basis: _readOnly, ...rest } = state;
   return { frameId, sessionTime: state.sessionTime, lengths: logLengths(log), state: copyPlainSharingKnown(rest), attached };
 };
 

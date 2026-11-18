@@ -1,28 +1,33 @@
-// SP4.3d2 Task 11, the race-start commit and `plan.accept` (C1a, C27a, C59, C62, C62d, C73, C76; SP4.3d spec §7.0
-// rules 6–9, §7.1 steps 6–8). At a live race session's first frame with its weekend phase `race` and the feed's team
-// known, the team's first feed in the race reads the prepared plans for (weekend, the race's format, team) once and, per
-// prepared car whose race number a car slot of the race carries (C62), commits `planSaved` per slot in `PLAN_SLOTS`
-// order and then `planCommitted` with the active slot's policy and slot, to every team feed then running (each engine's
-// current frame, each decisions sidecar), without the lap range check; a feed that joins later is handed them through
-// `TeamFeeds` (C76), never the file again. `plan.accept` saves the slot and, when the car has no active plan, activates
-// it, on the team's feeds, with `plan.save`'s range check (C73). After a bridge restart (Task 11 F1, C59, C76) a feed
-// whose recording continued keeps its team's plan decisions as its projection holds them (a voided one not, C27a), so a
-// teammate that joins later is handed them.
+// SP4.3e Task 7b, row (e): choosing a saved plan in a race (C1a, C27a, C59, C62, C62d, C73, C76; spec §4.3 "Choosing a
+// plan in a race"). Ported from the SP4.3d2 Task 11 race-start commit (its prepared-plans file per weekend, format and
+// team is deleted with `RaceKey`): at a live race's (or sprint's) first frame with its weekend phase decided and the
+// feed's team known, the team's first feed in the race reads the team's last chosen or saved plan on the track (the last
+// choice, `basis/<team>.json`, naming a saved plan, `plans/<team>/<id>.json`) once and commits it as plan decisions
+// (`planDecisionsOf`, by race number, C62: `planSaved` per slot in `PLAN_SLOTS` order, then `planCommitted` with the
+// active slot) to every team feed then running (each engine's current frame, each decisions sidecar), without the lap
+// range check; a feed that joins later is handed them through `TeamFeeds` (C76), never the plan again. "None" (no last
+// choice, or a last choice naming no plan) commits nothing. A plan chosen later (`basis.choose { plan }`) commits its
+// slots and removes the slots it lacks, on each of the team's feeds. A saved-plan edit changes nothing of a running race
+// (C62d). `plan.accept` saves the slot and, when the car has no active plan, activates it, on the team's feeds, with
+// `plan.save`'s range check (C73). After a bridge restart (C59, C76) a feed whose recording continued keeps its team's
+// plan decisions as its projection holds them (a voided one not, C27a), so a teammate that joins later is handed them.
 //
-// No seam beyond Task 10's: every run is a live `serve` (manual sources, live-like) on a temporary data dir (C84), its
-// prepared plans written as the planning module stores them (`plans/<weekendId>/<format>/<team>.json`) or through the
-// planning round's uiActions; the logs are read from storage (the stored facts, the void facts applied as the projection
-// applies them, C28) and from the recordings' decisions sidecars; sessions end by Task 3's timer on the test's receive
-// clock. The segment pair (row 10) is `qualifying-texas-send` then `race-texas-grid` (C84).
+// Seams this file assumes (the implement phase adds them): `new SavedPlanStore(dataDir, log)` (`src/planning/saved-plans.ts`)
+// and `createLastChoiceStore(dataDir, log)` (`src/pipeline/last-choice.ts`, Task 7a-1) write the team's plan and its last
+// choice as the bridge reads them; `basis.choose` is routed by Task 7a-2 to `PlanChoice.choosePlan` (this task's). Every
+// run is a live `serve` (manual sources, live-like) on a temporary data dir (C84); the logs are read from storage (the
+// stored facts, the void facts applied as the projection applies them, C28) and from the recordings' decisions sidecars,
+// their plan decisions only (a `basisChosen` is Task 7a-2's); sessions end by the timer on the test's receive clock. The
+// segment pair is `qualifying-texas-send` then `race-texas-grid` (C84).
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import WebSocket from 'ws';
-import type { PlanningRound, ServerMessage } from '@pitwall/contracts';
+import type { BasisActive, PlanningRoundState, ServerMessage } from '@pitwall/contracts';
 import {
-  activeSlot, carId, feedId, latestPlan, PLAN_SLOTS, planSlots,
-  type DecisionRecord, type FeedId, type GivenDecision, type Policy, type PreparedCar, type PreparedPlans, type Slot, type StrategyOutput, type VoidFact,
+  activeSlot, carId, feedId, latestPlan, NO_BASIS, PLAN_SLOTS, planSlots,
+  type DecisionRecord, type FeedId, type GivenDecision, type Policy, type PreparedCar, type SavedPlan, type Slot, type StrategyOutput, type VoidFact,
 } from '@pitwall/domain';
 import type { QuickCalculator } from '@pitwall/engine';
 import type { StrategyInput } from '@pitwall/analysis';
@@ -35,7 +40,10 @@ import { PwrecSource } from '../../src/input/pwrec-source.ts';
 import { createLogger } from '../../src/log.ts';
 import { recordingDecisions } from '../../src/pipeline/decision-sidecars.ts';
 import { FeedPipeline } from '../../src/pipeline/feed-pipeline.ts';
+import { createLastChoiceStore } from '../../src/pipeline/last-choice.ts';
+import { SavedPlanStore } from '../../src/planning/saved-plans.ts';
 import { TeamFeeds } from '../../src/pipeline/team-feeds.ts';
+import { recordingBasis } from '../../src/pipeline/basis-sidecar.ts';
 import { readPwrec } from '../../src/pwrec/reader.ts';
 import { openDatabase, type Db } from '../../src/storage/db.ts';
 import { segmentPath } from '../fixtures/replay.ts';
@@ -133,15 +141,39 @@ const afterFlashback = (fork: Packets, first: number, undoneFrames: number): Pac
       packet: { ...packet, header: { ...packet.header, overallFrameIdentifier: undoneFrames + packet.header.frameIdentifier - first } },
     }) as Packets[number]);
 
-const tmp = (name: string): string => mkdtempSync(join(tmpdir(), `race-start-commit-${name}-`));
+const tmp = (name: string): string => mkdtempSync(join(tmpdir(), `race-plan-commit-${name}-`));
 const log = createLogger({ level: 'silent' });
 
-/** The prepared plans' file of the weekend's race of `format`, as the planning module stores it (§7.0 rule 6). */
-const preparedFile = (dataDir: string, format: string, team = TEAM): string => join(dataDir, 'plans', String(WEEKEND), format, `${team}.json`);
-const writePrepared = (dataDir: string, format: string, plans: PreparedPlans): void => {
-  const file = preparedFile(dataDir, format);
-  mkdirSync(dirname(file), { recursive: true });
-  writeFileSync(file, `${JSON.stringify(plans, null, 2)}\n`);
+/** The builder sessions' track (the builder's default `trackId`). */
+const TRACK = 0;
+const AT = '2026-11-18T09:40:00.000Z';
+
+/** A saved plan of the team on the track with `cars`. */
+const savedPlan = (id: string, cars: PreparedCar[]): SavedPlan => ({
+  id,
+  name: `plan ${id}`,
+  team: TEAM,
+  trackId: TRACK,
+  savedAt: AT,
+  computedOn: { basis: NO_BASIS, race: { laps: RACE_LAPS, sets: 'carried' } },
+  cars,
+});
+
+/** Saves `plan` as the team's saved plan (`plans/<team>/<id>.json`), as the bridge stores it. */
+const writePlan = (dataDir: string, plan: SavedPlan): void => new SavedPlanStore(dataDir, log).save(plan);
+
+/** The team's last choice on the track names `planId` (`null`: none), as the bridge stores it (`basis/<team>.json`). */
+const writeLastChoice = (dataDir: string, planId: string | null): void =>
+  createLastChoiceStore(dataDir, log).write(TEAM, {
+    trackId: TRACK,
+    basis: { practice: { refs: [], at: AT }, qualifying: { ref: null, at: AT } },
+    plan: { id: planId, at: AT },
+  });
+
+/** `plan` saved and chosen last: the plan a race on the track commits at its start. */
+const choosePlan = (dataDir: string, plan: SavedPlan): void => {
+  writePlan(dataDir, plan);
+  writeLastChoice(dataDir, plan.id);
 };
 
 const POLICY_A: Policy = { startCompound: 'medium', stops: [{ lap: 5, compound: 'hard' }] };
@@ -152,13 +184,10 @@ const POLICY_C: Policy = { startCompound: 'medium', stops: [{ lap: 4, compound: 
 const POLICY_X: Policy = { startCompound: 'soft', stops: [{ lap: 2, compound: 'hard' }] };
 
 /** Car 0 (race number 1): A, B and G1, A active; car 1 (race number 2): C active. */
-const PREPARED: PreparedPlans = {
-  laps: RACE_LAPS,
-  cars: [
-    { raceNumber: RACE_NUMBER(0), slots: { A: POLICY_A, B: POLICY_B, G1: POLICY_G1 }, active: 'A' },
-    { raceNumber: RACE_NUMBER(1), slots: { C: POLICY_C }, active: 'C' },
-  ],
-};
+const PREPARED = savedPlan('morning', [
+  { raceNumber: RACE_NUMBER(0), slots: { A: POLICY_A, B: POLICY_B, G1: POLICY_G1 }, active: 'A' },
+  { raceNumber: RACE_NUMBER(1), slots: { C: POLICY_C }, active: 'C' },
+]);
 
 /** The decisions the commit makes for `prepared` on car `car`: its slots in `PLAN_SLOTS` order, then its active one. */
 const committedFor = (car: number, prepared: PreparedCar): GivenDecision[] => [
@@ -171,6 +200,9 @@ const committedFor = (car: number, prepared: PreparedCar): GivenDecision[] => [
 
 /** A decision without the frame it describes. */
 const given = ({ frame: _frame, ...rest }: DecisionRecord): GivenDecision => rest as GivenDecision;
+const PLAN_KINDS: ReadonlySet<string> = new Set(['planSaved', 'planRemoved', 'planCommitted', 'planCleared']);
+/** The plan decisions of `decisions` (a `basisChosen` is the basis routing's, Task 7a-2). */
+const plansOnly = <D extends { kind: string }>(decisions: readonly D[]): D[] => decisions.filter((d) => PLAN_KINDS.has(d.kind));
 const ofCar = (decisions: readonly GivenDecision[], car: number): GivenDecision[] => decisions.filter((d) => 'carId' in d && d.carId === car);
 
 /** Asserts `decisions` are exactly `prepared`'s commit, per car in order (car `car` → its prepared car). */
@@ -231,9 +263,15 @@ async function bridge(o: { dataDir?: string; feeds?: readonly FeedId[] } = {}) {
   await new Promise((r) => ws.once('open', r));
   cleanup.push(() => ws.terminate());
   for (const id of feeds) ws.send(JSON.stringify({ type: 'subscribe', id: `prepared:${id}`, topic: 'plans.prepared', params: {}, feedId: id }));
-  const prepared = (feed: FeedId = A): PlanningRound[] =>
-    got.flatMap((m) => ((m.type === 'snapshot' || m.type === 'update') && m.id === `prepared:${feed}` && 'value' in m ? [m.value as PlanningRound] : []));
-  const round = (feed: FeedId = A): Extract<PlanningRound, { open: true }> => {
+  for (const id of feeds) ws.send(JSON.stringify({ type: 'subscribe', id: `active:${id}`, topic: 'basis.active', params: {}, feedId: id }));
+  /** Every `basis.active` of `feed` published so far, oldest first (Task 7e). */
+  const actives = (feed: FeedId = A): BasisActive[] =>
+    got.flatMap((m) => ((m.type === 'snapshot' || m.type === 'update') && m.id === `active:${feed}` && 'value' in m ? [m.value as BasisActive] : []));
+  /** The newest `basis.active` of `feed`; `undefined` before any. */
+  const active = (feed: FeedId = A): BasisActive | undefined => actives(feed).at(-1);
+  const prepared = (feed: FeedId = A): PlanningRoundState[] =>
+    got.flatMap((m) => ((m.type === 'snapshot' || m.type === 'update') && m.id === `prepared:${feed}` && 'value' in m ? [m.value as PlanningRoundState] : []));
+  const round = (feed: FeedId = A): Extract<PlanningRoundState, { open: true }> => {
     const last = prepared(feed).at(-1);
     if (last?.open !== true) throw new Error(`feed ${feed}: no open round (${JSON.stringify(last)})`);
     return last;
@@ -310,7 +348,7 @@ async function bridge(o: { dataDir?: string; feeds?: readonly FeedId[] } = {}) {
       .all(uid.toString(), playerCar, list) as Array<{ seq: number; record: string }>;
     const voids = rows('voids').map((r) => JSON.parse(r.record) as VoidFact);
     const voided = (seq: number): boolean => voids.some((v) => v.ranges.decisions !== undefined && seq >= v.ranges.decisions[0] && seq < v.ranges.decisions[1]);
-    return rows('decisions').filter((r) => !voided(r.seq)).map((r) => JSON.parse(r.record) as DecisionRecord);
+    return plansOnly(rows('decisions').filter((r) => !voided(r.seq)).map((r) => JSON.parse(r.record) as DecisionRecord));
   };
   /** The void facts of the stored log of session `uid` (feed `playerCar`'s run). */
   const voids = (uid: bigint, playerCar: number): VoidFact[] =>
@@ -327,13 +365,13 @@ async function bridge(o: { dataDir?: string; feeds?: readonly FeedId[] } = {}) {
   const sidecar = (uid: bigint, playerCar: number): GivenDecision[] => {
     const path = `${recording(uid, playerCar)}.decisions.json`;
     if (!existsSync(path)) return [];
-    return (JSON.parse(readFileSync(path, 'utf8')) as Array<{ decision: GivenDecision }>).map((e) => e.decision);
+    return plansOnly((JSON.parse(readFileSync(path, 'utf8')) as Array<{ decision: GivenDecision }>).map((e) => e.decision));
   };
   /** Whether the stored log of session `uid` (feed `playerCar`'s run) holds a lap `lap` of car `car`. */
   const lapStored = (uid: bigint, playerCar: number, car: number, lap: number): boolean =>
     (reader.prepare("SELECT record FROM facts WHERE session_uid = ? AND player_car = ? AND list = 'laps'").all(uid.toString(), playerCar) as Array<{ record: string }>)
       .some((r) => { const l = JSON.parse(r.record) as { carId: number; lapNumber: number }; return l.carId === car && l.lapNumber === lap; });
-  return { dataDir, reader, send, prepared, round, player, play, playRaw, ended, endedSession, stored, decisions, voids, recording, sidecar, lapStored, stop };
+  return { dataDir, reader, send, prepared, round, active, actives, player, play, playRaw, ended, endedSession, stored, decisions, voids, recording, sidecar, lapStored, stop };
 }
 
 type Bridge = Awaited<ReturnType<typeof bridge>>;
@@ -359,7 +397,7 @@ async function replayDecisions(file: string, id: FeedId): Promise<DecisionRecord
     reads: ['feed', 'decisions'],
     cadence: 'frame',
     compute: (view) => {
-      last = structuredClone([...(view.history as unknown as { decisions: readonly DecisionRecord[] }).decisions]);
+      last = plansOnly(structuredClone([...(view.history as unknown as { decisions: readonly DecisionRecord[] }).decisions]));
       return last.length;
     },
   };
@@ -388,10 +426,10 @@ const CAR1: readonly [number, PreparedCar] = [1, PREPARED.cars[1]!];
 /** Car 0's A, B, G1 saved and A active; car 1's C saved and active. */
 const COMMIT_COUNT = committedFor(...CAR0).length + committedFor(...CAR1).length;
 
-describe('the race-start commit (Task 11; C62d, C76, C1a)', { timeout: 120_000 }, () => {
-  it('commit', async () => {
+describe('choosing a saved plan in a race (Task 7b row e, ported from SP4.3d2 Task 11; C62d, C76, C1a)', { timeout: 120_000 }, () => {
+  it('(e) a race\'s first frame with team known commits the team\'s last chosen or saved plan on the track on each team feed', async () => {
     const b = await bridge();
-    writePrepared(b.dataDir, 'grandPrix', PREPARED);
+    choosePlan(b.dataDir, PREPARED);
     const a = b.player(sessionPackets({ uid: RACE, type: 15, frames: 120 }), A);
     const bb = b.player(sessionPackets({ uid: RACE, type: 15, frames: 120, player: 1 }), B);
     // the race's first frames on both team feeds (player cars 0 and 1 of team 3)
@@ -402,8 +440,8 @@ describe('the race-start commit (Task 11; C62d, C76, C1a)', { timeout: 120_000 }
     await decisionsReach(b, RACE, 0, COMMIT_COUNT);
     await decisionsReach(b, RACE, 1, COMMIT_COUNT);
 
-    // an edit of the file after the commit changes nothing of the running race (C62d)
-    writePrepared(b.dataDir, 'grandPrix', { laps: RACE_LAPS, cars: [{ raceNumber: RACE_NUMBER(0), slots: { A: POLICY_X }, active: 'A' }] });
+    // a saved-plan edit after the commit changes nothing of the running race (C62d, C75)
+    writePlan(b.dataDir, savedPlan(PREPARED.id, [{ raceNumber: RACE_NUMBER(0), slots: { A: POLICY_X }, active: 'A' }]));
     a.rest();
     bb.rest();
     await b.ended(2);
@@ -423,13 +461,13 @@ describe('the race-start commit (Task 11; C62d, C76, C1a)', { timeout: 120_000 }
 
   it('late feed', async () => {
     const b = await bridge();
-    writePrepared(b.dataDir, 'grandPrix', PREPARED);
+    choosePlan(b.dataDir, PREPARED);
     // feed A runs the race alone to lap 3: it commits
     const a = b.player(sessionPackets({ uid: RACE, type: 15, frames: 330 }), A);
     a.to(250);
     await decisionsReach(b, RACE, 0, COMMIT_COUNT);
-    // the file changes before the teammate's feed joins: a joining feed is handed the team's plans, never the file again
-    writePrepared(b.dataDir, 'grandPrix', { laps: RACE_LAPS, cars: [{ raceNumber: RACE_NUMBER(1), slots: { A: POLICY_X }, active: 'A' }] });
+    // the saved plan changes before the teammate's feed joins: a joining feed is handed the team's plan decisions, never the plan again
+    writePlan(b.dataDir, savedPlan(PREPARED.id, [{ raceNumber: RACE_NUMBER(1), slots: { A: POLICY_X }, active: 'A' }]));
 
     // the teammate's feed joins at lap 3
     const bb = b.player(sessionPackets({ uid: RACE, type: 15, frames: 60, player: 1, lapOf: () => 3 }), B);
@@ -451,21 +489,19 @@ describe('the race-start commit (Task 11; C62d, C76, C1a)', { timeout: 120_000 }
 
   it('slot moved', async () => {
     const b = await bridge({ feeds: [A] });
-    // the qualifying: 20 cars, ours are slot 0 (race number 1) and slot 19 (race number 20), both of team 3
-    const qualifying: Participant[] = Array.from({ length: 20 }, (_, i) => ({ teamId: i === 0 || i === 19 ? TEAM : 4 + Math.floor(i / 2), raceNumber: i + 1 }));
-    b.play(sessionPackets({ uid: 70n, type: 7, participants: qualifying }));
-    await b.ended(1);
-    await vi.waitFor(() => expect(b.round().cars[carId(19)]).toMatchObject({ raceNumber: 20 }));
-    expect(await b.send({ kind: 'plans.prepare.accept', feedId: A, carId: 19, slot: 'A', policy: POLICY_A })).toEqual({ ok: true });
-    expect(await b.send({ kind: 'plans.prepare.accept', feedId: A, carId: 0, slot: 'B', policy: POLICY_B })).toEqual({ ok: true });
+    // the plan was computed on a qualifying whose car 19 carried race number 20: it holds the cars by race number
+    choosePlan(b.dataDir, savedPlan('moved', [
+      { raceNumber: 20, slots: { A: POLICY_A }, active: 'A' },
+      { raceNumber: 1, slots: { B: POLICY_B }, active: 'B' },
+    ]));
 
-    // the race: 8 cars; race number 20 (qualifying's car 19) drives car 7, race number 1 still car 0
+    // the race: 8 cars; race number 20 drives car 7, race number 1 car 0
     const race: Participant[] = [
       { teamId: TEAM, raceNumber: 1 }, { teamId: 4, raceNumber: 2 }, { teamId: 4, raceNumber: 3 }, { teamId: 5, raceNumber: 4 },
       { teamId: 5, raceNumber: 5 }, { teamId: 6, raceNumber: 6 }, { teamId: 6, raceNumber: 7 }, { teamId: TEAM, raceNumber: 20 },
     ];
     b.play(sessionPackets({ uid: RACE, type: 15, participants: race, frames: 60 }));
-    await b.ended(2);
+    await b.ended(1);
     await b.stop();
 
     // committed by race number (C62): race number 20's plan to car 7, none to slot 19
@@ -480,10 +516,7 @@ describe('the race-start commit (Task 11; C62d, C76, C1a)', { timeout: 120_000 }
   it('missing car', async () => {
     const b = await bridge({ feeds: [A] });
     // race number 99 drives in no slot of the race
-    writePrepared(b.dataDir, 'grandPrix', {
-      laps: RACE_LAPS,
-      cars: [PREPARED.cars[0]!, { raceNumber: 99, slots: { A: POLICY_X, B: POLICY_C }, active: 'B' }],
-    });
+    choosePlan(b.dataDir, savedPlan('missing', [PREPARED.cars[0]!, { raceNumber: 99, slots: { A: POLICY_X, B: POLICY_C }, active: 'B' }]));
     b.play(sessionPackets({ uid: RACE, type: 15, frames: 60 }));
     await b.ended(1);
     await b.stop();
@@ -493,18 +526,19 @@ describe('the race-start commit (Task 11; C62d, C76, C1a)', { timeout: 120_000 }
     expectCommitted(b.sidecar(RACE, 0), [CAR0], 'the sidecar');
   });
 
-  it('formats', async () => {
+  it('sprint', async () => {
     const b = await bridge({ feeds: [A] });
-    const sprint: PreparedPlans = { laps: RACE_LAPS, cars: [{ raceNumber: RACE_NUMBER(0), slots: { A: POLICY_B }, active: 'A' }] };
-    const grandPrix: PreparedPlans = { laps: RACE_LAPS, cars: [{ raceNumber: RACE_NUMBER(0), slots: { B: POLICY_A, C: POLICY_C }, active: 'C' }] };
-    writePrepared(b.dataDir, 'sprint', sprint);
-    writePrepared(b.dataDir, 'grandPrix', grandPrix);
+    const sprint = savedPlan('sprint', [{ raceNumber: RACE_NUMBER(0), slots: { A: POLICY_B }, active: 'A' }]);
+    const grandPrix = savedPlan('grand-prix', [{ raceNumber: RACE_NUMBER(0), slots: { B: POLICY_A, C: POLICY_C }, active: 'C' }]);
+    writePlan(b.dataDir, grandPrix);
+    choosePlan(b.dataDir, sprint);
 
-    // a sprint weekend: the sprint (type 15, a later race in the structure) commits only the sprint's file
+    // a sprint weekend: the sprint (type 15, a later race in the structure) commits the team's last chosen plan (C62d)
     b.play(sessionPackets({ uid: 110n, type: 15, structure: SPRINT_WEEKEND, frames: 60 }));
     await b.ended(1);
     expectCommitted(b.decisions(110n, 0).map(given), [[0, sprint.cars[0]!]], 'the sprint');
-    // the grand prix (type 16) only its own
+    // the plan chosen for the grand prix (type 16) is the one it commits
+    writeLastChoice(b.dataDir, grandPrix.id);
     b.play(sessionPackets({ uid: 111n, type: 16, structure: SPRINT_WEEKEND, frames: 60 }));
     await b.ended(2);
     await b.stop();
@@ -515,7 +549,7 @@ describe('the race-start commit (Task 11; C62d, C76, C1a)', { timeout: 120_000 }
 
   it('restart', async () => {
     const b = await bridge({ feeds: [A] });
-    writePrepared(b.dataDir, 'grandPrix', PREPARED);
+    choosePlan(b.dataDir, PREPARED);
     // the first attempt: lap 1 only, no SEND; the league restarts the race with a new session uid
     b.play(sessionPackets({ uid: 120n, type: 15, frames: 60, send: false }));
     await decisionsReach(b, 120n, 0, COMMIT_COUNT);
@@ -537,7 +571,7 @@ describe('the race-start commit (Task 11; C62d, C76, C1a)', { timeout: 120_000 }
 
   it('flashback', async () => {
     const b = await bridge({ feeds: [A] });
-    writePrepared(b.dataDir, 'grandPrix', PREPARED);
+    choosePlan(b.dataDir, PREPARED);
     // the race to lap 3 (frames 0–299), then the game flashes back to frame 150 (lap 2): FLBK, and the frames from 151
     // again, with their frame ids and session times
     const original = sessionPackets({ uid: RACE, type: 15, frames: 300, send: false });
@@ -559,7 +593,7 @@ describe('the race-start commit (Task 11; C62d, C76, C1a)', { timeout: 120_000 }
 
   it('accept', async () => {
     const b = await bridge();
-    // no prepared plans: the race commits nothing; the engineer accepts the board's prefill (§7.1 step 7)
+    // no plan chosen: the race commits nothing; the engineer accepts the board's prefill (SP4.3d spec §7.1 step 7)
     const a = b.player(sessionPackets({ uid: RACE, type: 15, frames: 200 }), A);
     const bb = b.player(sessionPackets({ uid: RACE, type: 15, frames: 200, player: 1 }), B);
     a.to(20);
@@ -601,8 +635,10 @@ describe('the race-start commit (Task 11; C62d, C76, C1a)', { timeout: 120_000 }
     }
   });
 
-  it('no file', async () => {
+  /** Both team feeds run the race through; `setup` prepares the data dir first. */
+  const raceOnBoth = async (setup: (dataDir: string) => void): Promise<Bridge> => {
     const b = await bridge();
+    setup(b.dataDir);
     const a = b.player(sessionPackets({ uid: RACE, type: 15, frames: 120 }), A);
     const bb = b.player(sessionPackets({ uid: RACE, type: 15, frames: 120, player: 1 }), B);
     for (const at of [5, 10, 20, 40]) {
@@ -613,18 +649,88 @@ describe('the race-start commit (Task 11; C62d, C76, C1a)', { timeout: 120_000 }
     bb.rest();
     await b.ended(2);
     await b.stop();
-    // no prepared plans: nothing committed, nothing written (the race's board prefills on the grid, Task 9)
+    return b;
+  };
+
+  it('(e) none: no last choice commits nothing', async () => {
+    // a saved plan on the track, but the team never chose or saved one last: nothing committed, nothing written (the
+    // race's board prefills on the grid)
+    const b = await raceOnBoth((dataDir) => writePlan(dataDir, PREPARED));
     for (const player of [0, 1]) {
       expect(b.decisions(RACE, player), `feed of car ${player}`).toEqual([]);
       expect(b.sidecar(RACE, player), `feed of car ${player}: the sidecar`).toEqual([]);
     }
-    expect(existsSync(join(b.dataDir, 'plans'))).toBe(false);
+  });
+
+  it('(e) none: a last choice naming no plan commits nothing', async () => {
+    const b = await raceOnBoth((dataDir) => {
+      writePlan(dataDir, PREPARED);
+      writeLastChoice(dataDir, null);
+    });
+    for (const player of [0, 1]) {
+      expect(b.decisions(RACE, player), `feed of car ${player}`).toEqual([]);
+      expect(b.sidecar(RACE, player), `feed of car ${player}: the sidecar`).toEqual([]);
+    }
+  });
+
+  it('(e) a later basis.choose with another plan commits its decisions on each team feed', async () => {
+    const b = await bridge();
+    choosePlan(b.dataDir, PREPARED);
+    /** Car 0: A (another policy) and C, C active; car 1: B active. Car 0's B and G1 and car 1's C are slots it lacks. */
+    const evening = savedPlan('evening', [
+      { raceNumber: RACE_NUMBER(0), slots: { A: POLICY_X, C: POLICY_C }, active: 'C' },
+      { raceNumber: RACE_NUMBER(1), slots: { B: POLICY_B }, active: 'B' },
+    ]);
+    writePlan(b.dataDir, evening);
+    const a = b.player(sessionPackets({ uid: RACE, type: 15, frames: 200 }), A);
+    const bb = b.player(sessionPackets({ uid: RACE, type: 15, frames: 200, player: 1 }), B);
+    for (const at of [5, 10, 20, 40]) {
+      a.to(at);
+      bb.to(at);
+    }
+    await decisionsReach(b, RACE, 0, COMMIT_COUNT);
+    await decisionsReach(b, RACE, 1, COMMIT_COUNT);
+
+    // the engineer chooses the evening plan on feed A (the basis unchanged: none)
+    expect(await b.send({ kind: 'basis.choose', feedId: A, basis: NO_BASIS, plan: evening.id })).toEqual({ ok: true });
+    a.to(80);
+    bb.to(80);
+    // its slots saved, the slots it lacks removed, its active slot committed, per car (`planDecisionsOf`)
+    const chosen: GivenDecision[] = [
+      { kind: 'planSaved', carId: carId(0), slot: 'A', policy: POLICY_X },
+      { kind: 'planSaved', carId: carId(0), slot: 'C', policy: POLICY_C },
+      { kind: 'planRemoved', carId: carId(0), slot: 'B' },
+      { kind: 'planRemoved', carId: carId(0), slot: 'G1' },
+      { kind: 'planCommitted', carId: carId(0), policy: POLICY_C, slot: 'C' },
+      { kind: 'planSaved', carId: carId(1), slot: 'B', policy: POLICY_B },
+      { kind: 'planRemoved', carId: carId(1), slot: 'C' },
+      { kind: 'planCommitted', carId: carId(1), policy: POLICY_B, slot: 'B' },
+    ];
+    await decisionsReach(b, RACE, 0, COMMIT_COUNT + chosen.length);
+    await decisionsReach(b, RACE, 1, COMMIT_COUNT + chosen.length);
+    // "none" afterwards commits nothing
+    expect(await b.send({ kind: 'basis.choose', feedId: A, basis: NO_BASIS, plan: null })).toEqual({ ok: true });
+    a.rest();
+    bb.rest();
+    await b.ended(2);
+    await b.stop();
+
+    for (const player of [0, 1]) {
+      const decisions = b.decisions(RACE, player);
+      const later = decisions.slice(COMMIT_COUNT).map(given);
+      for (const c of [0, 1]) expect(ofCar(later, c), `feed of car ${player}: car ${c}`).toEqual(ofCar(chosen, c));
+      expect(later, `feed of car ${player}: nothing else`).toHaveLength(chosen.length);
+      expect(planSlots({ decisions }, carId(0))).toEqual({ A: POLICY_X, C: POLICY_C });
+      expect(activeSlot({ decisions }, carId(0))).toBe('C');
+      expect(planSlots({ decisions }, carId(1))).toEqual({ B: POLICY_B });
+      expect(b.sidecar(RACE, player).slice(COMMIT_COUNT), `feed of car ${player}: the sidecar`).toHaveLength(chosen.length);
+    }
   });
 
   it('restart then join', async () => {
-    // the first bridge: feed A runs the race alone to lap 3, commits the prepared plans, then the engineer saves car 0's C
+    // the first bridge: feed A runs the race alone to lap 3, commits the chosen plan, then the engineer saves car 0's C
     const first = await bridge();
-    writePrepared(first.dataDir, 'grandPrix', PREPARED);
+    choosePlan(first.dataDir, PREPARED);
     // the game resends Session and Participants at frame 280: the restarted bridge's first packet continues the recording
     const race = sessionPackets({ uid: RACE, type: 15, frames: 400, resendAt: [280] });
     const a1 = first.player(race, A);
@@ -634,8 +740,8 @@ describe('the race-start commit (Task 11; C62d, C76, C1a)', { timeout: 120_000 }
     a1.to(280);
     await decisionsReach(first, RACE, 0, COMMIT_COUNT + 1);
     await first.stop();
-    // the file changes while the bridge is down: the joining feed is handed the team's plans, never the file
-    writePrepared(first.dataDir, 'grandPrix', { laps: RACE_LAPS, cars: [{ raceNumber: RACE_NUMBER(1), slots: { A: POLICY_X }, active: 'A' }] });
+    // the saved plan changes while the bridge is down: the joining feed is handed the team's plan decisions, never the plan
+    writePlan(first.dataDir, savedPlan(PREPARED.id, [{ raceNumber: RACE_NUMBER(1), slots: { A: POLICY_X }, active: 'A' }]));
 
     // the restarted bridge on the same data dir: feed A's recording continues (C59) and goes live past lap 3
     const b = await bridge({ dataDir: first.dataDir });
@@ -662,10 +768,10 @@ describe('the race-start commit (Task 11; C62d, C76, C1a)', { timeout: 120_000 }
   });
 
   it('restart then join, voided', async () => {
-    // the first bridge: feed A runs the race to lap 3 (frames 0–299) and commits the prepared plans at its start; at frame
+    // the first bridge: feed A runs the race to lap 3 (frames 0–299) and commits the chosen plan at its start; at frame
     // 250 the engineer saves car 0's C; then the game flashes back to frame 150: the save is voided (C27a), the commit stays
     const first = await bridge();
-    writePrepared(first.dataDir, 'grandPrix', PREPARED);
+    choosePlan(first.dataDir, PREPARED);
     const a1 = first.player(sessionPackets({ uid: RACE, type: 15, frames: 300, send: false }), A);
     a1.to(250);
     await decisionsReach(first, RACE, 0, COMMIT_COUNT);
@@ -712,15 +818,22 @@ describe('the race-start commit (Task 11; C62d, C76, C1a)', { timeout: 120_000 }
       for await (const r of readPwrec(segmentPath(file))) out.push({ bytes: r.payload, t: r.t });
       return out;
     };
-    // the one-shot qualifying ends by the timer (the fake clock runs through the gap): the round opens for the grand prix
+    // the one-shot qualifying ends by the timer (the fake clock runs through the gap): its round opens (the runner
+    // replays its recording); the engineer accepts A for our car and saves the round as the team's plan
     b.playRaw(await records('qualifying-texas-send.pwrec.gz'));
     await b.ended(1);
-    await vi.waitFor(() => expect(b.round().format).toBe('grandPrix'));
+    await vi.waitFor(() => expect(b.prepared().at(-1)).toMatchObject({ open: true, running: false }), { timeout: 60_000 });
     const [ours, prepared] = Object.entries(b.round().cars)[0]!;
+    // no stored race suggests the laps: the engineer enters them before the round plans (ruling R16)
+    expect(await b.send({ kind: 'plans.race.set', feedId: A, race: { laps: 56, sets: 'carried' } })).toEqual({ ok: true });
+    await vi.waitFor(() => expect(b.round().race).toEqual({ laps: 56, sets: 'carried' }));
     expect(await b.send({ kind: 'plans.prepare.accept', feedId: A, carId: Number(ours), slot: 'A', policy: POLICY_A })).toEqual({ ok: true });
+    expect(await b.send({ kind: 'plans.save', feedId: A, name: 'Texas' })).toEqual({ ok: true });
+    await vi.waitFor(() => expect(b.round().saved).toHaveLength(1));
     const qualifyingUid = b.reader.prepare('SELECT session_uid FROM sessions WHERE complete = 1').pluck().get() as string;
 
-    // the race loads on the same feed: a prepared A lands in its log as planSaved and planCommitted with slot A
+    // the race loads on the same feed: the saved plan, the team's last saved one on the track, lands in its log as
+    // planSaved and planCommitted with slot A
     b.playRaw(await records('race-texas-grid.pwrec.gz'));
     const raceUid = (): string | undefined =>
       b.reader.prepare('SELECT session_uid FROM sessions WHERE session_uid != ?').pluck().get(qualifyingUid) as string | undefined;
@@ -751,11 +864,8 @@ describe('the race-start commit takes the race slots from car-status (final revi
       { teamId: TEAM, raceNumber: 1 }, { teamId: 4, raceNumber: 2 }, { teamId: 4, raceNumber: 3 }, { teamId: 5, raceNumber: 4 },
       { teamId: 5, raceNumber: 5 }, { teamId: 6, raceNumber: 6 }, { teamId: 6, raceNumber: 7 }, { teamId: TEAM, raceNumber: 20 },
     ];
-    const prepared: PreparedPlans = {
-      laps: RACE_LAPS,
-      cars: [PREPARED.cars[0]!, { raceNumber: 20, slots: { C: POLICY_C }, active: 'C' }],
-    };
-    writePrepared(b.dataDir, 'grandPrix', prepared);
+    const prepared = savedPlan('slot-7', [PREPARED.cars[0]!, { raceNumber: 20, slots: { C: POLICY_C }, active: 'C' }]);
+    choosePlan(b.dataDir, prepared);
     b.play(sessionPackets({ uid: RACE, type: 15, participants: race, numActiveCars: 7, resultStatusOf: (car) => (car === 3 ? 7 : 2), frames: 60 }));
     await b.ended(1);
     await b.stop();
@@ -767,7 +877,7 @@ describe('the race-start commit takes the race slots from car-status (final revi
 
   it('absent slot', async () => {
     const b = await bridge({ feeds: [A] });
-    writePrepared(b.dataDir, 'grandPrix', PREPARED);
+    choosePlan(b.dataDir, PREPARED);
     // slot 1 (race number 2, team 3) lies below numActiveCars but is inactive: car-status has it absent
     b.play(sessionPackets({ uid: RACE, type: 15, resultStatusOf: (car) => (car === 1 ? 1 : 2), frames: 60 }));
     await b.ended(1);
@@ -780,3 +890,335 @@ describe('the race-start commit takes the race slots from car-status (final revi
     expectCommitted(b.sidecar(RACE, 0), [CAR0], 'the sidecar');
   });
 });
+
+// SP4.3e Task 7e: `basis.active.plan` shows the chosen plan (C1a, C54, C55, C62d, C65; spec §2 anti-goal, §4.3). Per
+// feed it is the plan named by the newest plan choice that reached the feed (the race-start commit of the team's last
+// chosen or saved plan, or a later `basis.choose` with `plan` set; `plan: null` there is none), looked up in the saved
+// plans as `{ id, name, laps: computedOn.race.laps }`, beside the race's laps (`raceLaps`), never adjusted; `null`
+// before any choice, for none, and outside a race or sprint. Republished on each of the team's feeds when the choice
+// changes. Ruling R22 (replaces R20's rename part): the shown plan is the plan as it was committed to the race; a later
+// rename, overwrite (`replaces`) or delete of the saved plan changes nothing of it (C62d, C75); after a flashback it is
+// the newest plan entry at or before the target frame (C27a, C33).
+describe('basis.active shows the chosen plan (Task 7e; C1a, C54, C55, C62d)', { timeout: 120_000 }, () => {
+  /** The race laps the plans here were computed for: not the race's, shown beside them, not judged (C65). */
+  const PLAN_LAPS = 56;
+  const planOf = (id: string, name: string): SavedPlan => ({
+    ...savedPlan(id, PREPARED.cars),
+    name,
+    computedOn: { basis: NO_BASIS, race: { laps: PLAN_LAPS, sets: 'carried' } },
+  });
+  const P = planOf('p', 'Texas morning');
+  const Q = planOf('q', 'Texas evening');
+  const shown = (plan: SavedPlan, name = plan.name): BasisActive['plan'] => ({ id: plan.id, name, laps: PLAN_LAPS });
+
+  /** Waits until both team feeds' newest `basis.active` shows `plan`. */
+  const bothShow = async (b: Bridge, plan: BasisActive['plan'], what: string): Promise<void> => {
+    await vi.waitFor(() => {
+      for (const feed of [A, B]) expect(b.active(feed)?.plan, `${what}: feed ${feed}`).toEqual(plan);
+    }, { timeout: 20_000 });
+  };
+
+  /** A race (10 laps) on both team feeds, run to frame 40: the race-start commit has been made. */
+  const raceOnBoth = async (b: Bridge) => {
+    const a = b.player(sessionPackets({ uid: RACE, type: 15, frames: 300 }), A);
+    const bb = b.player(sessionPackets({ uid: RACE, type: 15, frames: 300, player: 1 }), B);
+    for (const at of [5, 10, 20, 40]) {
+      a.to(at);
+      bb.to(at);
+    }
+    await decisionsReach(b, RACE, 0, COMMIT_COUNT);
+    await decisionsReach(b, RACE, 1, COMMIT_COUNT);
+    return { to: (frame: number): void => { a.to(frame); bb.to(frame); } };
+  };
+
+  it('(a) a race whose team\'s last choice names saved plan P publishes plan { id, name, laps } and raceLaps on both team feeds at the first frame with the team known', async () => {
+    const b = await bridge();
+    choosePlan(b.dataDir, P);
+    await raceOnBoth(b);
+    await bothShow(b, shown(P), 'the race-start commit');
+    for (const feed of [A, B]) {
+      const value = b.active(feed)!;
+      // the plan's laps beside the race's, never adjusted (C65)
+      expect(value.plan?.laps, `feed ${feed}: the plan's laps`).toBe(PLAN_LAPS);
+      expect(value.raceLaps, `feed ${feed}: the race's laps`).toBe(RACE_LAPS);
+    }
+  });
+
+  it('(b) basis.choose with plan Q republishes Q on both feeds; with plan null it is null; with plan undefined it is unchanged', async () => {
+    const b = await bridge();
+    choosePlan(b.dataDir, P);
+    writePlan(b.dataDir, Q);
+    const race = await raceOnBoth(b);
+    await bothShow(b, shown(P), 'the race-start commit');
+
+    expect(await b.send({ kind: 'basis.choose', feedId: A, basis: NO_BASIS, plan: Q.id })).toEqual({ ok: true });
+    race.to(80);
+    await bothShow(b, shown(Q), 'Q chosen on feed A');
+
+    // `plan` undefined keeps the plan: Q stays, also after more frames (the answer comes once the choice is committed)
+    expect(await b.send({ kind: 'basis.choose', feedId: A, basis: NO_BASIS })).toEqual({ ok: true });
+    race.to(120);
+    // Q's commit (the same cars as the race-start commit's plan) reached the log: the frames after the choices applied
+    await decisionsReach(b, RACE, 0, 2 * COMMIT_COUNT);
+    for (const feed of [A, B]) expect(b.active(feed)?.plan, `plan kept: feed ${feed}`).toEqual(shown(Q));
+
+    // `plan: null` is none
+    expect(await b.send({ kind: 'basis.choose', feedId: B, basis: NO_BASIS, plan: null })).toEqual({ ok: true });
+    race.to(160);
+    await bothShow(b, null, 'none chosen on feed B');
+  });
+
+  // Ruling R22 (ported from round 1's "renaming Q republishes its new name; deleting it gives null"): the shown plan is
+  // the plan as it was committed to the race; a saved-plan edit during the race changes nothing of it (C62d, C75).
+  it('(c) renaming Q or deleting it during the race leaves basis.active.plan unchanged on both feeds, with no new sidecar entry', async () => {
+    const b = await bridge();
+    choosePlan(b.dataDir, P);
+    writePlan(b.dataDir, Q);
+    const race = await raceOnBoth(b);
+    expect(await b.send({ kind: 'basis.choose', feedId: A, basis: NO_BASIS, plan: Q.id })).toEqual({ ok: true });
+    race.to(80);
+    await bothShow(b, shown(Q), 'Q chosen');
+    const before = { [A]: b.actives(A).length, [B]: b.actives(B).length };
+
+    expect(await b.send({ kind: 'plans.rename', feedId: A, id: Q.id, name: 'Texas final' })).toEqual({ ok: true });
+    // more frames applied after the rename (lap 1 recorded at the crossing on frame 100)
+    race.to(140);
+    await vi.waitFor(() => expect(b.lapStored(RACE, 0, 0, 1) && b.lapStored(RACE, 1, 0, 1)).toBe(true), { timeout: 20_000 });
+    for (const feed of [A, B]) expect(b.active(feed)?.plan, `Q renamed: feed ${feed}`).toEqual(shown(Q));
+
+    expect(await b.send({ kind: 'plans.delete', feedId: B, id: Q.id })).toEqual({ ok: true });
+    race.to(240);
+    await vi.waitFor(() => expect(b.lapStored(RACE, 0, 0, 2) && b.lapStored(RACE, 1, 0, 2)).toBe(true), { timeout: 20_000 });
+    for (const feed of [A, B]) {
+      expect(b.active(feed)?.plan, `Q deleted: feed ${feed}`).toEqual(shown(Q));
+      // nothing published after the edits shows another plan
+      for (const value of b.actives(feed).slice(before[feed])) expect(value.plan, `after the edits: feed ${feed}`).toEqual(shown(Q));
+    }
+    race.to(Infinity);
+    await b.ended(2);
+    await b.stop();
+    // the basis sidecars record the two choices only: an edit adds no entry
+    for (const player of [0, 1]) {
+      expect(sidecarPlans(b.recording(RACE, player)).map((p) => p.plan), `feed of car ${player}: the sidecar's plans`).toEqual([shown(P), shown(Q)]);
+    }
+  });
+
+  // Ruling R22 (C27a, C33, C38): each plan entry carries the frame its decisions describe; after a flashback the shown
+  // plan is the newest entry at or before the target frame, as in a run that never saw the frames after it.
+  it('(f) plan P at race start, Q chosen at frame 200, a flashback to frame 150: plan P again, equal to a run that never saw the frames after 150; its replay the same', async () => {
+    const b = await bridge({ feeds: [A] });
+    choosePlan(b.dataDir, P);
+    writePlan(b.dataDir, Q);
+    const original = b.player(sessionPackets({ uid: RACE, type: 15, frames: 300, send: false }), A);
+    original.to(200);
+    await decisionsReach(b, RACE, 0, COMMIT_COUNT);
+    await vi.waitFor(() => expect(b.active(A)?.plan).toEqual(shown(P)), { timeout: 20_000 });
+    expect(await b.send({ kind: 'basis.choose', feedId: A, basis: NO_BASIS, plan: Q.id })).toEqual({ ok: true });
+    original.rest();
+    await vi.waitFor(() => expect(b.active(A)?.plan).toEqual(shown(Q)), { timeout: 20_000 });
+    await decisionsReach(b, RACE, 0, 2 * COMMIT_COUNT);
+
+    // the game flashes back to frame 150: Q's decisions are voided (C27a), and so is its choice in the display
+    const fork = sessionPackets({
+      uid: RACE, type: 15, frames: 260,
+      events: (i) => (i === 151 ? [{ code: 'FLBK', flashbackFrameIdentifier: 150, flashbackSessionTime: (150 * 16) / 1000 }] : []),
+    });
+    b.play(afterFlashback(fork, 151, 300));
+    await vi.waitFor(() => expect(b.voids(RACE, 0).length).toBeGreaterThan(0), { timeout: 20_000 });
+    await vi.waitFor(() => expect(b.active(A)?.plan, 'after the flashback').toEqual(shown(P)), { timeout: 20_000 });
+    await b.ended(1);
+    await b.stop();
+    expect(b.active(A)?.plan, 'at the race\'s end').toEqual(shown(P));
+    expect(changes(b.actives(A).map((v) => v.plan)), 'the plans shown, in order').toEqual([shown(P), shown(Q), shown(P)]);
+    expectCommitted(b.decisions(RACE, 0).map(given), [CAR0, CAR1], 'the log: P\'s commit only');
+
+    // the sidecar keeps both entries (append-only), each with the frame its decisions describe
+    const file = b.recording(RACE, 0);
+    const plans = sidecarPlans(file);
+    expect(plans.map((p) => p.plan), 'the sidecar\'s plans').toEqual([shown(P), shown(Q)]);
+    for (const p of plans) expect(Number.isInteger(p.frame) && p.frame! >= 0, `a frame number: ${JSON.stringify(p)}`).toBe(true);
+    expect(plans[0]!.frame!, 'P before the target').toBeLessThanOrEqual(150);
+    expect(plans[1]!.frame!, 'Q after the target').toBeGreaterThan(150);
+
+    // a run that never saw the frames after 150 (P only): the same plan and race laps at its end (C33)
+    const never = await bridge({ feeds: [A] });
+    choosePlan(never.dataDir, P);
+    writePlan(never.dataDir, Q);
+    never.play(sessionPackets({ uid: RACE, type: 15, frames: 260 }));
+    await never.ended(1);
+    await never.stop();
+    const reference = never.active(A)!;
+    expect(reference.plan).toEqual(shown(P));
+    expect({ plan: b.active(A)!.plan, raceLaps: b.active(A)!.raceLaps }, 'equal to the run without the undone frames').toEqual({ plan: reference.plan, raceLaps: reference.raceLaps });
+
+    // the replay: P, Q, then P again from the flashback on, as the live run showed them (C38)
+    const replayed = await replayPlans(file, A);
+    expect(replayed.length, 'the replay ran').toBeGreaterThan(260);
+    expect(changes(replayed), 'the replay\'s plans, in order').toEqual([shown(P), shown(Q), shown(P)]);
+    expect(replayed.at(-1), 'the replay\'s last frame').toEqual(shown(P));
+  });
+
+  // Ruling R22 (C62d, C75): overwriting the shown plan (`plans.save` with `replaces`) during the race changes nothing of
+  // what the race shows: the laps and name stay those committed.
+  it('(g) overwriting Q with replaces during the race leaves basis.active.plan unchanged, with no new sidecar entry', async () => {
+    const b = await bridge();
+    // feed B's Q3 ends first: its planning round stays open (feed B runs no other session)
+    b.play(sessionPackets({ uid: 130n, type: 7, player: 1 }), B);
+    await b.ended(1);
+    await vi.waitFor(() => expect(b.prepared(B).at(-1)).toMatchObject({ open: true }), { timeout: 60_000 });
+    const OVERWRITE_LAPS = 44;
+    expect(await b.send({ kind: 'plans.race.set', feedId: B, race: { laps: OVERWRITE_LAPS, sets: 'carried' } })).toEqual({ ok: true });
+    await vi.waitFor(() => expect(b.round(B)).toMatchObject({ race: { laps: OVERWRITE_LAPS, sets: 'carried' }, running: false }), { timeout: 60_000 });
+
+    // the race on feed A commits Q, the team's last choice
+    choosePlan(b.dataDir, Q);
+    const race = b.player(sessionPackets({ uid: RACE, type: 15, frames: 300 }), A);
+    for (const at of [5, 10, 20, 40]) race.to(at);
+    await decisionsReach(b, RACE, 0, COMMIT_COUNT);
+    await vi.waitFor(() => expect(b.active(A)?.plan).toEqual(shown(Q)), { timeout: 20_000 });
+    const before = b.actives(A).length;
+
+    // the round on feed B overwrites Q (another name, other laps)
+    expect(await b.send({ kind: 'plans.save', feedId: B, name: 'Texas overwritten', replaces: Q.id })).toEqual({ ok: true });
+    race.to(140);
+    await vi.waitFor(() => expect(b.lapStored(RACE, 0, 0, 1)).toBe(true), { timeout: 20_000 });
+    expect(b.active(A)?.plan, 'Q overwritten').toEqual(shown(Q));
+    for (const value of b.actives(A).slice(before)) expect(value.plan, 'after the overwrite').toEqual(shown(Q));
+    race.rest();
+    await b.ended(2);
+    await b.stop();
+    expect(sidecarPlans(b.recording(RACE, 0)).map((p) => p.plan), 'the sidecar\'s plans').toEqual([shown(Q)]);
+  });
+
+  it('(d) a qualifying session shows plan null', async () => {
+    const b = await bridge({ feeds: [A] });
+    choosePlan(b.dataDir, P);
+    b.play(sessionPackets({ uid: 120n, type: 5, frames: 120 }));
+    await b.ended(1);
+    await b.stop();
+    const values = b.actives(A);
+    expect(values.length, 'basis.active published').toBeGreaterThan(0);
+    for (const value of values) {
+      expect(value.plan, 'a qualifying chooses no plan').toBeNull();
+      expect(value.raceLaps, 'a qualifying has no race laps').toBeNull();
+    }
+  });
+
+  // Ruling R20 (C38, C59, C76): the bridge records each plan choice that reaches a feed in the feed's basis sidecar,
+  // `<recording>.basis.json` `plans: { at: <record index>, plan: { id, name, laps } | null }[]`, positional like the
+  // decisions sidecar's record index; a replay and a reprocess republish `basis.active.plan` from it at the same record.
+  // A rename after the race is not replayed: the recorded name stands. A recording without `plans` replays `plan: null`.
+  it('(e) a live race with plan choices, then its replay: basis.active.plan equal at every frame; a recording without plans in its sidecar replays plan null', async () => {
+    const b = await bridge();
+    choosePlan(b.dataDir, P);
+    writePlan(b.dataDir, Q);
+    const race = await raceOnBoth(b);
+    await bothShow(b, shown(P), 'the race-start commit');
+    // what each live feed showed after frame 39, 79 and 159 (the checkpoints the replay is read at)
+    const live: Record<string, BasisActive['plan'][]> = {};
+    const checkpoint = (): void => {
+      for (const feed of [A, B]) (live[feed] ??= []).push(b.active(feed)!.plan);
+    };
+    checkpoint();
+    expect(await b.send({ kind: 'basis.choose', feedId: A, basis: NO_BASIS, plan: Q.id })).toEqual({ ok: true });
+    race.to(80);
+    await bothShow(b, shown(Q), 'Q chosen on feed A');
+    checkpoint();
+    expect(await b.send({ kind: 'basis.choose', feedId: B, basis: NO_BASIS, plan: null })).toEqual({ ok: true });
+    race.to(160);
+    await bothShow(b, null, 'none chosen on feed B');
+    checkpoint();
+    race.to(Infinity);
+    await b.ended(2);
+    // renamed after the race: the replay keeps the name the race recorded
+    expect(await b.send({ kind: 'plans.rename', feedId: A, id: Q.id, name: 'Texas renamed later' })).toEqual({ ok: true });
+    await b.stop();
+    expect(live[A]).toEqual([shown(P), shown(Q), null]);
+    expect(live[B]).toEqual([shown(P), shown(Q), null]);
+
+    for (const [feed, player] of [[A, 0], [B, 1]] as const) {
+      const file = b.recording(RACE, player);
+      // the basis sidecar records each choice that reached the feed, at its record index, in order
+      const plans = (JSON.parse(readFileSync(`${file}.basis.json`, 'utf8')) as { plans?: Array<{ at: number; plan: BasisActive['plan'] }> }).plans;
+      expect(plans?.map((p) => p.plan), `feed ${feed}: the sidecar's plans`).toEqual([shown(P), shown(Q), null]);
+      const at = plans!.map((p) => p.at);
+      for (const index of at) expect(Number.isInteger(index) && index >= 0, `feed ${feed}: a record index`).toBe(true);
+      expect([...at].sort((x, y) => x - y), `feed ${feed}: in record order`).toEqual(at);
+
+      // the replay: the same plan at every frame as the live run showed it (C38)
+      const replayed = await replayPlans(file, feed);
+      expect(replayed.length, `feed ${feed}: the replay ran`).toBeGreaterThan(160);
+      expect([replayed[30], replayed[75], replayed[150]], `feed ${feed}: the checkpoints`).toEqual(live[feed]);
+      expect(replayed.at(-1), `feed ${feed}: the last frame`).toBeNull();
+      expect(changes(replayed), `feed ${feed}: the plans shown, in order`).toEqual(changes(b.actives(feed).map((v) => v.plan)));
+      expect(changes(replayed)).toEqual([shown(P), shown(Q), null]);
+    }
+
+    // a recording whose basis sidecar has no `plans`: plan null at every frame
+    const file = b.recording(RACE, 0);
+    const { plans: _plans, ...without } = JSON.parse(readFileSync(`${file}.basis.json`, 'utf8')) as Record<string, unknown>;
+    writeFileSync(`${file}.basis.json`, JSON.stringify(without));
+    const bare = await replayPlans(file, A);
+    expect(bare.length, 'the replay ran').toBeGreaterThan(160);
+    expect(bare.some((plan) => plan === null), 'basis.active published').toBe(true);
+    expect(bare.every((plan) => plan === null || plan === undefined), 'no plans recorded: none shown').toBe(true);
+  });
+});
+
+/** A recording's basis sidecar's plan entries (`[]` without `plans`): the record index, the frame its decisions describe (R22). */
+const sidecarPlans = (file: string): Array<{ at: number; frame?: number; plan: BasisActive['plan'] }> =>
+  (JSON.parse(readFileSync(`${file}.basis.json`, 'utf8')) as { plans?: Array<{ at: number; frame?: number; plan: BasisActive['plan'] }> }).plans ?? [];
+
+/** The values of `plans`, each change once, the leading `null`s (and `undefined`s: nothing published yet) left out. */
+const changes = (plans: ReadonlyArray<BasisActive['plan'] | undefined>): Array<BasisActive['plan']> => {
+  const out: Array<BasisActive['plan']> = [];
+  for (const plan of plans) {
+    if (plan === undefined || (plan === null && out.length === 0)) continue;
+    if (out.length > 0 && JSON.stringify(out.at(-1)) === JSON.stringify(plan)) continue;
+    out.push(plan);
+  }
+  return out;
+};
+
+/**
+ * Replays (reprocesses) a recording alone with its sidecars (C38, C76), as `serve`'s replay hands them to the pipeline
+ * (no saved plans: what it shows comes from the recording): the `basis.active` plan published as of each frame (the
+ * newest one when the frame's calculators run; `undefined` before any), one entry per frame.
+ */
+async function replayPlans(file: string, id: FeedId): Promise<Array<BasisActive['plan'] | undefined>> {
+  const hub = new TopicHub({ now: () => 0 });
+  const published = vi.spyOn(hub, 'publishState');
+  const newest = (): BasisActive['plan'] | undefined => {
+    const call = published.mock.calls.filter(([feed, topic]) => feed === id && topic === 'basis.active').at(-1);
+    return call === undefined ? undefined : (call[2]({}) as BasisActive).plan;
+  };
+  const perFrame: Array<BasisActive['plan'] | undefined> = [];
+  const probe: QuickCalculator<number> = {
+    kind: 'quick',
+    id: 'test.plan-probe',
+    reads: ['feed'],
+    cadence: 'frame',
+    compute: () => {
+      perFrame.push(structuredClone(newest()));
+      return perFrame.length;
+    },
+  };
+  const db = openDatabase(join(tmp('replay'), 'replay.db'));
+  cleanup.push(() => db.close());
+  const pipeline = new FeedPipeline({
+    feedId: id,
+    source: new PwrecSource({ feedId: id, path: file, mode: 'asFastAsPossible' }),
+    hub,
+    features: [defineFeature({ name: 'plan-probe', calculators: [probe], topics: [] })],
+    log,
+    teams: new TeamFeeds(),
+    recorded: recordingDecisions(file),
+    recordedBasis: recordingBasis(file, log),
+    storage: { db, rulesVersion: RULES, mode: 'replace', sourcePath: file },
+  });
+  pipeline.start();
+  await pipeline.done;
+  // the value after the last frame counts too
+  if (perFrame.length > 0) perFrame[perFrame.length - 1] = structuredClone(newest());
+  return perFrame;
+}
