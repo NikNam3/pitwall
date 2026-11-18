@@ -17,6 +17,11 @@ import type { PacketSource } from '../input/packet-source.ts';
 import { WorkerLimit } from '../jobs/worker-limit.ts';
 import { FeedPipeline, type FeedPipelineOptions } from '../pipeline/feed-pipeline.ts';
 import { PlanRouting, type PlanAction } from '../pipeline/plan-routing.ts';
+import { BasisRouting, type BasisAction } from '../pipeline/basis-routing.ts';
+import { recordingBasis } from '../pipeline/basis-sidecar.ts';
+import { createLastChoiceStore } from '../pipeline/last-choice.ts';
+import type { LastChoiceStore, PlanChoice } from '../pipeline/last-choice-types.ts';
+import type { RebuildService } from '../storage/rebuild-service-types.ts';
 import { StaleSweep } from '../pipeline/stale-sweep.ts';
 import { TeamFeeds } from '../pipeline/team-feeds.ts';
 import { ReplayController } from '../replay/replay-controller.ts';
@@ -87,6 +92,8 @@ type ServeBase = {
   startup?: { progress: RebuildProgress; close: () => Promise<void> };
   /** The planning job the planning round runs (C62d); default `PLANNING_JOB`. */
   planningJob?: Job<StrategyInput, StrategyOutput>;
+  /** The saved plans' choice a `basis.choose` with a plan makes (C62d); without it such a plan is `notSupported`. */
+  planChoice?: PlanChoice;
   io: CliIo;
 };
 
@@ -181,8 +188,8 @@ export async function serve(opts: ServeOptions): Promise<number> {
       rebuilds = turn.catch(() => {});
       return turn;
     });
-    // The stale sessions a set, a person's links or the suggestions read (C61), rebuilt from their recordings as a session
-    // start's weekend context rebuilds its stale ones; a failed rebuild is logged and its session stays stale (C3).
+    // The stale sessions a set, a person's links or the suggestions read (C61), rebuilt from their recordings at their
+    // first read; a failed rebuild is logged and its session stays stale (C3).
     // Nothing is rebuilt at bridge start (C61): what the stores read while they open is what is current.
     let storesOpening = true;
     const rebuildStored = async (keys: readonly SessionKey[]): Promise<void> => {
@@ -221,6 +228,35 @@ export async function serve(opts: ServeOptions): Promise<number> {
       await checkedRebuild(row);
       calibration?.recompute('rebuild');
       profiles?.recompute('rebuild');
+    });
+    // The basis's sessions made current before they enter a running session (C61, C62), through the bridge's one rebuild
+    // queue (`checkedRebuild`): a session not stored, or current, waits for nothing; one that fails stays stale (C3).
+    const ensureCurrent: RebuildService['ensureCurrent'] = async (keys, o) => {
+      const stale = keys.flatMap((key) => {
+        const row = calibrationRepo?.sessionOf(key);
+        return row !== undefined && storage !== undefined && isStale(row, storage.rulesVersion) ? [row] : [];
+      });
+      let done = 0;
+      o?.onProgress?.(done, stale.length);
+      for (const row of stale) {
+        await rebuildThenRecompute?.(row).catch((error: unknown) => {
+          calibrationLog.error({ sessionUid: row.sessionUid, weekendId: row.weekendId, playerCar: row.playerCar, err: error }, 'stored session not rebuilt');
+        });
+        o?.onProgress?.(++done, stale.length);
+      }
+    };
+    // The team's last confirmed choices (C62): bridge user state in `<data dir>/basis/`, so only a run with a data dir keeps them.
+    const lastChoice: Pick<LastChoiceStore, 'read' | 'write'> = opts.uiDir === undefined
+      ? { read: () => undefined, write: () => {} }
+      : createLastChoiceStore(dirname(opts.uiDir), cliLogger(io, 'warn'));
+    // A basis choice is a decision of the team's running sessions (C1a, C62, C76); the plan with it is the saved plans' (C62d).
+    const basisRouting = new BasisRouting({
+      teams,
+      pipelines,
+      rebuild: { ensureCurrent },
+      plans: opts.planChoice ?? { choosePlan: () => ({ ok: false, reason: 'notSupported', message: 'no saved plans' }) },
+      lastChoice,
+      log: calibrationLog,
     });
     // Live: one sweep of stale stored sessions for the run's feeds (C59, C1a); it waits for every feed's first Session packet.
     const staleSweep = isLive && storage && rebuildThenRecompute
@@ -266,6 +302,9 @@ export async function serve(opts: ServeOptions): Promise<number> {
         // A plan is a decision of the team's running sessions (C1a, C76): the plan routing takes it.
         plan: (action: PlanAction): ActionOutcome =>
           feedIds.includes(action.feedId) ? planRouting.commit(action) : { ok: false, reason: 'invalid', message: `no feed ${action.feedId}` },
+        // A basis is a decision of the team's running sessions (C1a, C62, C76): the basis routing takes it.
+        basis: (action: BasisAction): Promise<ActionOutcome> =>
+          feedIds.includes(action.feedId) ? basisRouting.choose(action) : Promise.resolve({ ok: false, reason: 'invalid', message: `no feed ${action.feedId}` }),
         // The planning round's prepared plans are the planning module's (C62d, C70, C73).
         ...(planning && {
           prepare: (action: PrepareAction): ActionOutcome =>
@@ -347,6 +386,9 @@ export async function serve(opts: ServeOptions): Promise<number> {
       // Live: each session starts on the profile store's snapshot of its slots; a replay on its profiles sidecar (C38, C62c).
       ...(profiles && isLive && { profiles }),
       ...(opts.replay && { recordedProfiles: recordingProfiles(opts.replay.path, pipelineLog) }),
+      // Live: each session preselects its basis (C62); a replay starts on its basis sidecar (C38).
+      ...(isLive && opts.storage && { basis: { rebuild: { ensureCurrent }, lastChoice } }),
+      ...(opts.replay && { recordedBasis: recordingBasis(opts.replay.path, pipelineLog) }),
       ...(opts.staleCheck && { staleCheck: opts.staleCheck }),
       ...(staleSweep && { staleSweep }),
       ...(calcStats && { calcStats }),

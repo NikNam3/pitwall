@@ -49,6 +49,7 @@ import type { FeedJobs } from '../jobs/feed-jobs.ts';
 import type { Logger } from '../log.ts';
 import type { SessionKey, SessionKind, SessionRow } from '../storage/db.ts';
 import type { SessionFile } from '../storage/session-files.ts';
+import type { BasisRun } from './basis-run.ts';
 import { MAX_DUMPS_PER_SESSION, writeDebugDump } from './debug-dump.ts';
 import { PendingDecisions, SessionRecords, type Placed } from './decision-placement.ts';
 import { carsOf, sessionKindOf, sessionRowOf, type SessionStorage } from './session-storage.ts';
@@ -79,6 +80,8 @@ export type SessionProcessorOptions = {
   /** The session's track file, resolved once when it starts (C62b); the same for every frame. */
   track: Known<TrackFile>;
   storage?: SessionStorage;
+  /** The session's basis (C62): its start, the context of a chosen one, `basis.active`. Without it the session has none. */
+  basis?: Pick<BasisRun, 'start' | 'registered' | 'applied'>;
   file?: SessionFile;
   /**
    * The run continues the session's stored recording after a bridge restart (C59): `file` is that recording, resumed,
@@ -169,8 +172,8 @@ export class SessionProcessor {
       { feedId, sessionUid, session, realism: opts.config.realism?.enabled === true },
       {
         attach: this.#scheduler,
-        // The session-start basis is today's weekend context; a chosen basis is registered by SP4.3e Task 7a-2.
-        basis: { start: (participants) => this.#contextFor(participants), registered: () => undefined },
+        // The session's basis (C62): its start at the first Participants, the context of each chosen one.
+        basis: { start: (participants) => this.#contextFor(participants), registered: (basis) => opts.basis?.registered(basis) },
       },
     );
     const { storage } = opts;
@@ -341,10 +344,15 @@ export class SessionProcessor {
     }
   }
 
-  /** The player's earlier sessions of the weekend (C62): those whose player car had this player's team and race number; none without Participants. */
+  /** The session-start basis of the player's seat (C62, `BasisRun.start`); none without Participants. */
   #contextFor(participants: ParticipantsValues | undefined): BasisContext | undefined {
     const player = participants?.cars.find((c) => c.carId === participants.playerCar)?.carKey;
-    return player && this.#o.storage?.weekendContext(this.#row(), player);
+    return player && this.#o.basis?.start(player, this.#row(), this.weekendPhase);
+  }
+
+  /** Whether the run holds a `basisChosen` decision, in its projection or pending for the next frame (C62). */
+  get hasBasisChoice(): boolean {
+    return [...this.#runner.state.history.decisions, ...this.#pending.list].some((d) => d.kind === 'basisChosen');
   }
 
   /**
@@ -425,6 +433,7 @@ export class SessionProcessor {
         ...publisher.publishInsights(scheduled.insights, { frameId: frame.frameId }),
       );
       this.#publishActive(result.state.history.decisions);
+      this.#o.basis?.applied({ basis: result.state.basis?.basis, phase: this.weekendPhase, totalLaps: result.state.session.totalLaps });
       this.#reportSeats(result.state);
       const { cars, playerCar } = result.state;
       this.#o.jobs?.triggerRan(scheduled, { lap: cars[playerCar]?.timing.lap ?? 0, frameId: frame.frameId });

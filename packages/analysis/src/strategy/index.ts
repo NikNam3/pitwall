@@ -47,13 +47,14 @@ export const PLANNING = 'planning';
 /**
  * The planning job (C51, C62d; SP4.3d spec §7.1 step 4): the strategy job's module and parts on the ended qualifying
  * session's as-of view. Declared in no feature: the bridge's planning module builds its input with
- * `planningInputFrom` and runs it in the job runner on a planning uiAction, never the scheduler; so it reads nothing
- * and its `prepare` from a live view gives no starting point (`notApplicable`, C3).
+ * `planningInputFrom` and runs it in the job runner on a planning uiAction, never the scheduler; its `prepare` from a
+ * live view gives no starting point (`notApplicable`, C3). It reads `decisions`: the as-of view's basis follows the
+ * projection's newest `basisChosen` decision (`gridOf` reads `view.basis`, C62).
  */
 export const PLANNING_JOB: Job<StrategyInput, StrategyOutput> = {
   kind: 'job',
   id: PLANNING,
-  reads: [],
+  reads: ['decisions'],
   // never scheduled (no feature declares it); a cadence the registry accepts: the round follows a session's end
   trigger: 'sessionChange',
   prepare: () => ({ start: unknown('notApplicable'), hazard: unknown('notApplicable'), ourCars: [], planned: [], committed: {}, positions: {}, config: {} }),

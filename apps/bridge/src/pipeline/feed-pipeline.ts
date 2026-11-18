@@ -4,10 +4,12 @@ import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { ConfigEffectiveValue } from '@pitwall/contracts';
 import { asOfEnded, CAR_STATUS, carsInSessionOf, copyPlain, type AsOfView, type DeepReadonly, type EngineView } from '@pitwall/engine/readers';
-import { carId, carKeyOf, sessionUidString, toSessionTime, type CalibrationActiveValue, type CarKey, type RaceFormat, type DecisionRecord, type FeedId, type Known, type LiveSeat, type PriorsSnapshot, type ProfileSnapshot, type RunPriors, type StoredSessionRef, type SessionTime, type TeamId, type TrackFile, type WeekendPhase } from '@pitwall/domain';
+import { carId, carKeyOf, sessionUidString, toSessionTime, type BasisSidecar, type CalibrationActiveValue, type CarKey, type RaceFormat, type DecisionRecord, type FeedId, type Known, type LiveSeat, type PriorsSnapshot, type ProfileSnapshot, type RunPriors, type SessionBasis, type StoredSessionRef, type SessionTime, type TeamId, type TrackFile, type WeekendPhase } from '@pitwall/domain';
 import type { CalibrationStore } from '../calibration/store.ts';
 import type { ProfileStore, SlotIdentity } from '../drivers/store.ts';
 import { profilesSidecarPath, recordingProfiles } from './profile-sidecar.ts';
+import { BasisRun, type BasisInputs, type BasisProgress } from './basis-run.ts';
+import { recordingBasis } from './basis-sidecar.ts';
 import { CalculatorRegistry, SessionTracker, type Frame, type FrameMetrics, type InsightChange, type TrackerEvent } from '@pitwall/engine';
 import { decode, PacketId, peekHeader } from '@pitwall/protocol';
 import { effectiveConfig, overriddenFields, recordingConfig, sessionConfigPath, sessionConfigSidecar, type FeatureConfig } from '../feature-config.ts';
@@ -64,9 +66,8 @@ export type FeedPipelineOptions = {
    * processed: its start dates the sessions, so a replay stores the same times on every run, and its absolute path
    * is stored as the sessions' recording (`reprocess` reads them from there). `rulesVersion`: the rules version the logs
    * are stored with (C61). `mode`: `append` (default, live) appends each session's log as it grows; `replace` (a
-   * rebuild of a recording) writes it once, at the session's end, replacing the stored one (C24). `rebuild`: rebuilds,
-   * in the background, an earlier session of the weekend whose stored log is not complete (C61), and live, when a session
-   * starts that continues no stored recording, every other stored session not complete (C59). Live, with
+   * rebuild of a recording) writes it once, at the session's end, replacing the stored one (C24). `rebuild`: live, when
+   * a session starts that continues no stored recording, rebuilds every other stored session not complete (C59). Live, with
    * `recordingsDir`, a session whose key is stored with a recording continues that recording after a restart (C59); live,
    * a key stored complete is never replaced or reopened: its packets are ignored (C24).
    */
@@ -108,6 +109,21 @@ export type FeedPipelineOptions = {
   profiles?: Pick<ProfileStore, 'snapshotFor' | 'feedSeats'>;
   /** A replay: the recording's profiles sidecar (`recordingProfiles`, C38); `null` for a recording without one. */
   recordedProfiles?: ProfileSnapshot | null;
+  /**
+   * Live: the session basis's inputs (C61, C62; SP4.3e spec §4.2): at a session's first Participants it is preselected
+   * (the seat's earlier sessions of the weekend and `lastChoice.read(team, track)`), starts on the preselection's current
+   * sessions, writes `<file>.basis.json` `{ start, preselected }`, and the stale ones are made current with
+   * `rebuild.ensureCurrent` (priority `runningBasis`; no frame waits) and enter by a `basisChosen` naming the whole
+   * preselection, unless a basis was chosen since. A feed joining its team is handed the team's newest choice once its
+   * sessions are current. Without it (and without `recordedBasis`) a session's basis is the seat's earlier sessions of
+   * the weekend, stale ones left out.
+   */
+  basis?: BasisInputs;
+  /**
+   * A replay or reprocess: the recording's basis sidecar (`recordingBasis`, C38); every session starts on its `start`,
+   * never preselects and never commits; `null`: a recording without one (the seat's earlier sessions of the weekend, C62).
+   */
+  recordedBasis?: BasisSidecar | null;
   /** Where debug dumps go; without it none are written. */
   dumpsDir?: string;
   /** Names the session files and dates live sessions. Default `Date.now`. */
@@ -232,6 +248,8 @@ type Continuation = {
   priors: RunPriors;
   decisions: RecordedDecision[];
   profiles: ProfileSnapshot | null;
+  /** The first run's basis sidecar (C62); `null` for a recording without one. */
+  basis: BasisSidecar | null;
 };
 
 /**
@@ -260,6 +278,8 @@ const planDecisionOf = (record: DecisionRecord): PlanDecision | undefined => {
       return { kind: record.kind, carId: record.carId, slot: record.slot };
     case 'planCleared':
       return { kind: record.kind, carId: record.carId };
+    case 'basisChosen':
+      return undefined;
   }
 };
 
@@ -268,6 +288,7 @@ type QueuedDecision =
   | { kind: 'pick'; setId: string | null }
   | { kind: 'edit'; setId: string }
   | { kind: 'plan'; decision: PlanDecision }
+  | { kind: 'basis'; basis: SessionBasis }
   | { kind: 'end' };
 
 /**
@@ -312,6 +333,8 @@ export class FeedPipeline {
   /** Session files still closing; each leaves the set once closed. */
   readonly #closing = new Set<Promise<void>>();
   #session: SessionProcessor | undefined;
+  /** The running session's basis (C62); `undefined` without a running session. */
+  #basisRun: BasisRun | undefined;
   /** The last session that ended, file closed; it stays evaluable for late subscribers until the next session starts. */
   #ended: SessionProcessor | undefined;
   #lastReceivedAtMs = 0;
@@ -489,6 +512,43 @@ export class FeedPipeline {
     run.decisions.push(session.place(decision));
     if (run.file !== undefined) this.#writeSidecar(decisionsSidecarPath(run.file), run.decisions);
     return { ok: true };
+  }
+
+  /**
+   * A basis for the running session (`basisChosen`, C62, C76), as `BasisRouting` hands it to each of the team's feeds
+   * once its sessions are current, or as the session's own preselection enters: it goes to the runner with the next
+   * frame, which loads the named sessions of the feed's own seat (`BasisRun.registered`), and, placed at the session's
+   * record index, to the decisions sidecar. Without a running session it is not taken; during a restart's restore it is
+   * answered ok and queued (`#applyQueued`).
+   */
+  commitBasis(basis: SessionBasis): DecisionResult {
+    if (this.#restore !== undefined) return this.#queue({ kind: 'basis', basis });
+    const run = this.#decisions;
+    const session = this.#session;
+    if (run === undefined || session === undefined) return { ok: false, reason: 'notSupported', message: 'this feed runs no session' };
+    const decision: GivenDecision = { kind: 'basisChosen', basis };
+    session.decide(decision);
+    run.decisions.push(session.place(decision));
+    if (run.file !== undefined) this.#writeSidecar(decisionsSidecarPath(run.file), run.decisions);
+    return { ok: true };
+  }
+
+  /**
+   * The stored sessions of `basis` of the running session's seat (C62): what to make current before it enters (C61);
+   * none without a running session or before its first Participants named the seat.
+   */
+  basisKeys(basis: SessionBasis): SessionKey[] {
+    return this.#session === undefined ? [] : (this.#basisRun?.keysOf(basis) ?? []);
+  }
+
+  /** The rebuild of a chosen basis's sessions, for `basis.active`: its progress, `null` once done. */
+  basisRebuilding(progress: BasisProgress): void {
+    this.#guarded('basis progress', () => this.#basisRun?.rebuilding(progress));
+  }
+
+  /** The running session's track id; `undefined` without a running session. */
+  runningTrackId(): number | undefined {
+    return this.#session?.trackId;
   }
 
   /**
@@ -764,7 +824,10 @@ export class FeedPipeline {
           this.calibrationEdited(entry.setId);
           return;
         }
-        const result = entry.kind === 'pick' ? this.commitDecision(entry.setId) : entry.kind === 'plan' ? this.commitPlan(entry.decision) : this.endSession();
+        const result = entry.kind === 'pick' ? this.commitDecision(entry.setId)
+          : entry.kind === 'plan' ? this.commitPlan(entry.decision)
+          : entry.kind === 'basis' ? this.commitBasis(entry.basis)
+          : this.endSession();
         if (!result.ok) this.#log.warn({ feedId: this.#feedId, decision: entry, reason: result.reason, message: result.message }, 'a decision sent during the restore was not taken');
       });
     }
@@ -809,6 +872,7 @@ export class FeedPipeline {
       priors: recorded.priors,
       decisions: recorded.decisions,
       profiles: recordingProfiles(path, log),
+      basis: recordingBasis(path, log),
     };
     const placement = new RecordedPlacement(recorded.decisions);
     let records = 0;
@@ -960,8 +1024,15 @@ export class FeedPipeline {
     if (seat === undefined || team === undefined || team === seat.team) return;
     this.#reportSeat({ sessionUid: seat.sessionUid, team });
     // A continued recording's replay (C59) has them in its decisions sidecar, like a replay.
-    if (seat.team !== null || this.#o.recorded !== undefined || this.#replaying || this.#o.teams === undefined) return;
-    for (const decision of this.#o.teams.plansOf(this.#feedId)) this.commitPlan(decision);
+    const teams = this.#o.teams;
+    if (seat.team !== null || this.#o.recorded !== undefined || this.#replaying || teams === undefined) return;
+    // The team's newest basis choice (C1a, C62), for the feed's own seat, once its sessions are current.
+    const basis = teams.basisOf(this.#feedId);
+    const raceNumber = packet?.participants[frame.playerCarIndex]?.raceNumber;
+    if (basis !== undefined && raceNumber !== undefined) {
+      this.#basisRun?.enter(basis, { teamId: team, raceNumber }, () => teams.basisOf(this.#feedId) === basis);
+    }
+    for (const decision of teams.plansOf(this.#feedId)) this.commitPlan(decision);
   }
 
   #reportSeat(seat: Seat): void {
@@ -1018,7 +1089,9 @@ export class FeedPipeline {
     // A session processed from a recording points at that recording (so `reprocess` finds it), a live one at its own file.
     const sourcePath = this.#o.storage?.sourcePath;
     const pwrecPath = sourcePath !== undefined ? resolve(sourcePath) : (continued?.pwrecPath ?? file?.path ?? null);
-    this.#session = new SessionProcessor({
+    const basis = this.#basisRunOf(storage, continued, file?.path);
+    this.#basisRun = basis;
+    const session = new SessionProcessor({
       feedId,
       sessionUid: event.sessionUid,
       session: event.session,
@@ -1038,13 +1111,41 @@ export class FeedPipeline {
       ...(this.#o.profiles && { onSeats: (seats: Omit<LiveSeat, 'feedId'>[]) => this.#reportHumanSeats(seats) }),
       feedView: () => this.#monitor.view(this.#tracker.metrics, this.#lastReceivedAtMs),
       ...(storage && { storage }),
+      basis,
       ...(file && { file }),
       ...(dumpsDir !== undefined && { dumpsDir }),
       ...(this.#o.calcStats && { calcStats: this.#o.calcStats }),
     });
+    this.#session = session;
     // A live session that continues nothing (C59): every other stored session nobody continues is finished from its
     // recording, in the background, once every feed of the run has received its first Session packet (C1a).
     if (continued === undefined && this.#continuesRecordings) this.#sweep?.request();
+  }
+
+  /**
+   * A new session's basis (C38, C62): a continued recording's or a replay's sidecar, else, live, the preselection; the
+   * preselection's commit and the joining feed's hand-off go to this session only while it runs.
+   */
+  #basisRunOf(storage: SessionStorage | undefined, continued: Continuation | undefined, file: string | undefined): BasisRun {
+    const live = this.#o.recorded === undefined && this.#restoringEnded === undefined ? this.#o.basis : undefined;
+    const recorded = continued !== undefined ? continued.basis : this.#o.recordedBasis;
+    const run: BasisRun = new BasisRun({
+      feedId: this.#feedId,
+      hub: this.#o.hub,
+      log: this.#log,
+      storage,
+      ...(live && { live }),
+      ...(recorded !== undefined && { recorded }),
+      ...(file !== undefined && continued === undefined && { file }),
+      writeSidecar: (path, value) => this.#writeSidecar(path, value),
+      commit: (basis) => {
+        if (this.#basisRun !== run) return;
+        const result = this.commitBasis(basis);
+        if (!result.ok) this.#log.warn({ feedId: this.#feedId, reason: result.reason, message: result.message }, 'a basis was not committed');
+      },
+      chosen: () => this.#basisRun === run && this.#session?.hasBasisChoice === true,
+    });
+    return run;
   }
 
   /** A new session's storage, if the pipeline stores. */
@@ -1056,7 +1157,6 @@ export class FeedPipeline {
       onError: (error) => this.#writeFailed('storage', error),
       rulesVersion: storage.rulesVersion,
       mode: this.#restoringEnded?.mode ?? storage.mode ?? 'append',
-      ...(storage.rebuild && { rebuild: storage.rebuild }),
       ...(storage.onStored && { onStored: storage.onStored }),
     });
   }
@@ -1162,6 +1262,8 @@ export class FeedPipeline {
     const session = this.#session;
     if (session === undefined) return;
     this.#session = undefined;
+    this.#basisRun?.close();
+    this.#basisRun = undefined;
     this.#ended = session;
     this.#betweenSessions = true;
     // A session that ended runs no seat any more (C62c).

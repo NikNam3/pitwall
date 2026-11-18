@@ -95,9 +95,9 @@ function decodeDecision(json: unknown): RecordedDecision | undefined {
 }
 
 /**
- * A decision of the sidecar: `calibrationChosen`, or a plan decision (`planCommitted` with its optional slot,
+ * A decision of the sidecar: `calibrationChosen`, a plan decision (`planCommitted` with its optional slot,
  * `planCleared`, `planSaved`, `planRemoved`), whose car, slot and policy follow the shape rules of the plan uiActions
- * (the contracts package's decoder, C73).
+ * (the contracts package's decoder, C73), or `basisChosen`, whose basis follows the shape rule of `basis.choose`.
  */
 function decodeGivenDecision(decision: unknown): GivenDecision | undefined {
   if (!isObject(decision)) return undefined;
@@ -125,6 +125,11 @@ function decodeGivenDecision(decision: unknown): GivenDecision | undefined {
     case 'planRemoved': {
       const action = decodeUiAction({ kind: 'plan.remove', feedId: '', carId: decision['carId'], slot: decision['slot'] });
       return action?.kind === 'plan.remove' ? { kind: 'planRemoved', carId: action.carId, slot: action.slot } : undefined;
+    }
+    case 'basisChosen': {
+      // the basis by the shape rule of `basis.choose` (C62, C76): the sessions it names, never their data
+      const action = decodeUiAction({ kind: 'basis.choose', feedId: '', basis: decision['basis'], plan: undefined });
+      return action?.kind === 'basis.choose' ? { kind: 'basisChosen', basis: action.basis } : undefined;
     }
     default:
       return undefined;

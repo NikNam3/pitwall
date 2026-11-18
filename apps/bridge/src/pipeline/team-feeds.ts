@@ -1,4 +1,4 @@
-import { PLAN_SLOTS, type CarId, type FeedId, type GivenDecision, type Slot, type TeamId } from '@pitwall/domain';
+import { PLAN_SLOTS, type CarId, type FeedId, type GivenDecision, type SessionBasis, type Slot, type TeamId } from '@pitwall/domain';
 
 /** What a feed reported last: its session uid, and its player car's team once Participants name it. */
 type FeedSeat = { sessionUid: string; team: TeamId | null };
@@ -94,6 +94,23 @@ export class TeamFeeds {
         }),
         ...(car.active === undefined ? [] : [car.active]),
       ]);
+  }
+
+  /** Per team of a session, its newest basis choice (C1a, C62): what a feed joining the team later is handed. */
+  readonly #bases = new Map<string, SessionBasis>();
+
+  /** A basis chosen for feed `feedId`'s team, kept as its newest. A feed without a team keeps none. */
+  noteBasis(feedId: FeedId, basis: SessionBasis): void {
+    const seat = this.#seats.get(feedId);
+    if (seat === undefined || seat.team === null) return;
+    this.#bases.set(teamKey({ sessionUid: seat.sessionUid, team: seat.team }), basis);
+  }
+
+  /** The newest basis chosen for feed `feedId`'s team in its session; none while its team is not known or none was chosen. */
+  basisOf(feedId: FeedId): SessionBasis | undefined {
+    const seat = this.#seats.get(feedId);
+    if (seat === undefined || seat.team === null) return undefined;
+    return this.#bases.get(teamKey({ sessionUid: seat.sessionUid, team: seat.team }));
   }
 
   /** Feed `feedId` runs session `sessionUid` with its player car on `team` (`null` before Participants). */
