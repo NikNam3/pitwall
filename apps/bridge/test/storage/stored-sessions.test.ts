@@ -84,7 +84,8 @@ describe('WeekendRepository.storedSessions (C61, C62)', () => {
     expect(rows.map((r) => [r.sessionUid, r.kind])).toEqual([['1', 'practice'], ['2', 'qualifying']]);
     for (const r of rows) {
       expect(r).toMatchObject({ weekendId: String(WEEKEND), trackId: TEXAS, playerCar: car(3), complete: true, rulesVersion: RULES });
-      expect(r.cars.map((c) => [c.carId, c.carKey])).toEqual([
+      // storage keeps every decoded slot (22; the unused ones zero-padded): the session's four come first
+      expect(r.cars.slice(0, 4).map((c) => [c.carId, c.carKey])).toEqual([
         [0, { teamId: 5, raceNumber: 10 }],
         [1, { teamId: 5, raceNumber: 11 }],
         [2, { teamId: 0, raceNumber: 64 }],
