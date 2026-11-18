@@ -35,7 +35,8 @@ async function teamOf(bridge: Bridge, qualifying: SessionRef, asked: TeamId | un
   const name = `${qualifying.sessionUid}/${qualifying.weekendId}`;
   if (teams.length === 0) return `qualifying ${name} is not stored`;
   if (asked !== undefined) return teams.includes(asked) ? asked : `qualifying ${name} is not stored for team ${asked} (stored for ${teams.join(', ')})`;
-  return teams.length === 1 ? teams[0]! : `qualifying ${name} is stored for teams ${teams.join(', ')}: choose one with --team`;
+  const [only] = teams;
+  return teams.length === 1 && only !== undefined ? only : `qualifying ${name} is stored for teams ${teams.join(', ')}: choose one with --team`;
 }
 
 /** `pitwall plans [open --qualifying <session> [--practice <session>|none …] [--laps n --sets carried|fresh]] [--feed id]`. */
