@@ -6,9 +6,8 @@
 import type { ActionOutcome, UiAction } from '@pitwall/contracts';
 import { endsQualifying, raceFormatOf, type CarKey, type FeedId, type Known, type RaceFormat, type TrackId } from '@pitwall/domain';
 import type { Logger } from '../log.ts';
-import type { EndedSession, PlanningHooks, PlanTarget } from '../pipeline/feed-pipeline.ts';
+import type { EndedSession, PlanningHooks, PlanTarget, RaceStartPlan } from '../pipeline/feed-pipeline.ts';
 import type { LastChoiceStore } from '../pipeline/last-choice-types.ts';
-import type { PlanDecision } from '../pipeline/team-feeds.ts';
 import type { FeedSeatStore, RememberedSeat } from './feed-seats.ts';
 import { lastPlanOf, planDecisionsOf } from './plan-choice.ts';
 import { MAX_RACE_LAPS, type PlanningRunner, type PrepareAction } from './runner.ts';
@@ -108,11 +107,11 @@ export class Planning implements PlanningHooks {
 
   /**
    * A live race's first frame with its team known, on the team's first feed (C62d, C76): the team's last chosen or saved
-   * plan on the track as the plan decisions the team's feeds commit; none for "none".
+   * plan on the track (`undefined` for "none") with the plan decisions the team's feeds commit (none for "none").
    */
-  raceStarted(race: PlanTarget): PlanDecision[] {
+  raceStarted(race: PlanTarget): RaceStartPlan {
     const plan = lastPlanOf(this.#o, race.team, race.trackId);
-    return plan === undefined ? [] : planDecisionsOf(plan, race.cars, race.decisions);
+    return { plan, decisions: plan === undefined ? [] : planDecisionsOf(plan, race.cars, race.decisions) };
   }
 
   /** A planning uiAction (C73): checked against the feed's round (without one `notSupported`); a rejection changes nothing. */

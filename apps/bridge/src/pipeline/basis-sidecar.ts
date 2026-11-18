@@ -1,14 +1,31 @@
-// The basis sidecar of a recording (C38, C59, C62; SP4.3e spec §4.2): a live session writes `<file>.basis.json` at its
-// first Participants, `{ start, preselected }`: the current sessions it started with, and, for display only, the whole
-// preselection. A replay or reprocess starts on its `start`; the basis-chosen decisions come back from the decisions
-// sidecar (C76). A recording without one has the session's own weekend's earlier sessions as its basis (C62).
+// The basis sidecar of a recording (C38, C59, C62, C62d; SP4.3e spec §4.2, ruling R20): a live session writes
+// `<file>.basis.json` at its first Participants, `{ start, preselected }`: the current sessions it started with, and, for
+// display only, the whole preselection; each plan choice that reaches the feed in a race adds an entry to `plans`
+// (`{ at, plan }`: the record index it reached the feed at, positional like the decisions sidecar's, and the plan shown,
+// `{ id, name, laps }`, or `null` for none); a rename or delete of the shown plan adds one too. A replay or reprocess
+// starts on its `start` and shows each recorded plan before record `at`, as the live run did; the basis-chosen decisions
+// come back from the decisions sidecar (C76). A recording without one has the session's own weekend's earlier sessions
+// as its basis (C62); one without `plans` shows no plan.
+import type { BasisActive } from '@pitwall/contracts';
 import { decodeUiAction } from '@pitwall/contracts/ui/decode';
-import type { BasisSidecar, SessionBasis } from '@pitwall/domain';
+import type { BasisSidecar, SavedPlan, SessionBasis } from '@pitwall/domain';
 import type { Logger } from '../log.ts';
 import { readSidecar } from './decision-sidecars.ts';
 
+/** The plan `basis.active` shows: a saved plan's id, name and the race laps it was computed on; `null`: none. */
+export type ShownPlan = BasisActive['plan'];
+
+/** A plan choice as the basis sidecar records it: the record index it reached the feed at, and the plan shown. */
+export type PlanEntry = { at: number; plan: ShownPlan };
+
+/** The basis sidecar as the bridge writes and reads it: the domain's, with the plan choices (R20). */
+export type RecordedBasis = BasisSidecar & { plans?: PlanEntry[] };
+
 /** Where a recording's basis sidecar lives. */
 export const basisSidecarPath = (recordingPath: string): string => `${recordingPath}.basis.json`;
+
+/** A saved plan as `basis.active` shows it (C54, C65: its laps beside the race's, not judged). */
+export const shownPlanOf = (plan: SavedPlan): NonNullable<ShownPlan> => ({ id: plan.id, name: plan.name, laps: plan.computedOn.race.laps });
 
 /** A basis by the shape rule of `basis.choose` (the contracts package's decoder, C73). */
 const decodeBasis = (json: unknown): SessionBasis | undefined => {
@@ -16,15 +33,39 @@ const decodeBasis = (json: unknown): SessionBasis | undefined => {
   return action?.kind === 'basis.choose' ? action.basis : undefined;
 };
 
-function decodeBasisSidecar(json: unknown): BasisSidecar | undefined {
-  if (typeof json !== 'object' || json === null || Array.isArray(json)) return undefined;
-  const { start, preselected } = json as Record<string, unknown>;
+const isRecord = (json: unknown): json is Record<string, unknown> => typeof json === 'object' && json !== null && !Array.isArray(json);
+
+const decodeShown = (json: unknown): ShownPlan | undefined => {
+  if (json === null) return null;
+  if (!isRecord(json)) return undefined;
+  const { id, name, laps } = json;
+  return typeof id === 'string' && typeof name === 'string' && typeof laps === 'number' && Number.isInteger(laps) && laps > 0 ? { id, name, laps } : undefined;
+};
+
+/** The recorded plan choices; `undefined` when any entry fails to decode (the whole list is ignored then). */
+const decodePlans = (json: unknown): PlanEntry[] | undefined => {
+  if (!Array.isArray(json)) return undefined;
+  const plans: PlanEntry[] = [];
+  for (const entry of json) {
+    if (!isRecord(entry) || typeof entry['at'] !== 'number' || !Number.isInteger(entry['at']) || entry['at'] < 0) return undefined;
+    const plan = decodeShown(entry['plan']);
+    if (plan === undefined) return undefined;
+    plans.push({ at: entry['at'], plan });
+  }
+  return plans;
+};
+
+function decodeBasisSidecar(json: unknown): RecordedBasis | undefined {
+  if (!isRecord(json)) return undefined;
+  const { start, preselected, plans } = json;
   const startBasis = decodeBasis(start);
   const preselectedBasis = decodeBasis(preselected);
-  return startBasis === undefined || preselectedBasis === undefined ? undefined : { start: startBasis, preselected: preselectedBasis };
+  if (startBasis === undefined || preselectedBasis === undefined) return undefined;
+  const planEntries = plans === undefined ? undefined : decodePlans(plans);
+  return { start: startBasis, preselected: preselectedBasis, ...(planEntries !== undefined && { plans: planEntries }) };
 }
 
 /** The recording's basis sidecar; `null` without one, or when it fails to read or decode (with a warning). */
-export function recordingBasis(recordingPath: string, log?: Logger): BasisSidecar | null {
+export function recordingBasis(recordingPath: string, log?: Logger): RecordedBasis | null {
   return readSidecar(basisSidecarPath(recordingPath), decodeBasisSidecar, log) ?? null;
 }

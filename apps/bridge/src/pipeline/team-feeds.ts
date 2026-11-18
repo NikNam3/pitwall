@@ -1,3 +1,4 @@
+import type { BasisActive } from '@pitwall/contracts';
 import { PLAN_SLOTS, type CarId, type FeedId, type GivenDecision, type SessionBasis, type Slot, type TeamId } from '@pitwall/domain';
 
 /** What a feed reported last: its session uid, and its player car's team once Participants name it. */
@@ -12,8 +13,18 @@ type CarPlans = { slots: Map<Slot, Extract<PlanDecision, { kind: 'planSaved' }>>
 /** The key of one team in one session. */
 const teamKey = (seat: { sessionUid: string; team: TeamId }): string => `${seat.sessionUid}:${seat.team}`;
 
-/** What takes a feed's plan decisions: its running session (`FeedPipeline.commitPlan`). */
-export type PlanSink = { commitPlan(decision: PlanDecision): unknown };
+/** The plan `basis.active` shows (C62d): a saved plan's id, name and laps; `null`: none. */
+type ShownPlan = BasisActive['plan'];
+
+/**
+ * What takes a feed's plan decisions: its running session (`FeedPipeline.commitPlan`), and the plan choice that goes
+ * with them (`showPlan`) and changes of a saved plan (`savedPlanChanged`), for `basis.active` (C62d).
+ */
+export type PlanSink = {
+  commitPlan(decision: PlanDecision): unknown;
+  showPlan?(plan: ShownPlan): void;
+  savedPlanChanged?(id: string, plan: ShownPlan): void;
+};
 
 /**
  * The team's feeds (C1a): the feeds of one session uid whose player cars have the same team (Participants). Bookkeeping
@@ -94,6 +105,33 @@ export class TeamFeeds {
         }),
         ...(car.active === undefined ? [] : [car.active]),
       ]);
+  }
+
+  /** Per team of a session, its newest plan choice (C1a, C62d): what a feed joining the team later shows. */
+  readonly #shown = new Map<string, ShownPlan>();
+
+  /**
+   * A plan chosen for feed `feedId`'s team (the race-start commit's plan, a `basis.choose` with a plan; `null`: none):
+   * every feed of the team then running shows it, and it is kept for a feed that joins later. Called with the choice's
+   * plan decisions (`commitToTeam`), so each feed records it where they reached it.
+   */
+  showToTeam(feedId: FeedId, plan: ShownPlan): void {
+    for (const id of this.teamOf(feedId)) this.#sinks.get(id)?.showPlan?.(plan);
+    const seat = this.#seats.get(feedId);
+    if (seat !== undefined && seat.team !== null) this.#shown.set(teamKey({ sessionUid: seat.sessionUid, team: seat.team }), plan);
+  }
+
+  /** The newest plan chosen for feed `feedId`'s team in its session; `undefined` while its team is not known or none was chosen. */
+  shownOf(feedId: FeedId): ShownPlan | undefined {
+    const seat = this.#seats.get(feedId);
+    if (seat === undefined || seat.team === null) return undefined;
+    return this.#shown.get(teamKey({ sessionUid: seat.sessionUid, team: seat.team }));
+  }
+
+  /** The saved plan `id` was renamed (`plan`) or deleted (`null`): every feed showing it, and every team keeping it, follows. */
+  savedPlanChanged(id: string, plan: ShownPlan): void {
+    for (const [key, shown] of this.#shown) if (shown?.id === id) this.#shown.set(key, plan);
+    for (const sink of this.#sinks.values()) sink.savedPlanChanged?.(id, plan);
   }
 
   /** Per team of a session, its newest basis choice (C1a, C62): what a feed joining the team later is handed. */

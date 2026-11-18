@@ -6,6 +6,7 @@
 import { PLAN_SLOTS, planSlots, type CarId, type DecisionRecord, type SavedPlan, type TeamId, type TrackId } from '@pitwall/domain';
 import type { ActionOutcome } from '@pitwall/contracts';
 import type { DeepReadonly } from '@pitwall/engine/readers';
+import { shownPlanOf, type ShownPlan } from '../pipeline/basis-sidecar.ts';
 import type { PlanTarget } from '../pipeline/feed-pipeline.ts';
 import type { LastChoiceStore, PlanChoice } from '../pipeline/last-choice-types.ts';
 import type { PlanDecision } from '../pipeline/team-feeds.ts';
@@ -46,6 +47,8 @@ export type PlanFeeds = {
   feeds(): Iterable<{ feedId: string; target(): PlanTarget | undefined }>;
   /** `decisions` to every feed of `feedId`'s team then running, each kept for a feed that joins later (`TeamFeeds.commitToTeam`). */
   commitToTeam(feedId: string, decisions: readonly PlanDecision[]): void;
+  /** The chosen plan (`null`: none) shown on every feed of `feedId`'s team then running, kept likewise (`TeamFeeds.showToTeam`). */
+  showToTeam(feedId: string, plan: ShownPlan): void;
 };
 
 /** The team's last chosen or saved plan on the track (`LastChoice.plan`); `undefined` for none or a plan no longer saved. */
@@ -58,22 +61,32 @@ export function lastPlanOf(o: { lastChoice: Pick<LastChoiceStore, 'read'>; store
 
 /**
  * The bridge's `PlanChoice` (C62d, C76): a plan chosen in a race commits its decisions (`planDecisionsOf`, read against
- * the first running feed's projection of the team on the track) on each of the team's feeds then running; `null`
- * commits nothing.
+ * the first running feed's projection of the team on the track) on each of the team's feeds then running, and they show
+ * it (`basis.active`); `null` commits nothing and they show none.
  */
 export function createPlanChoice(o: { feeds: PlanFeeds; store: Pick<SavedPlanStore, 'read'> }): PlanChoice {
+  /** The first running feed of the team's race on the track and its race; `undefined` without one. */
+  const raceOf = (team: TeamId, trackId: TrackId): { feedId: string; target: PlanTarget } | undefined => {
+    for (const feed of o.feeds.feeds()) {
+      const target = feed.target();
+      if (target !== undefined && target.team === team && target.trackId === trackId) return { feedId: feed.feedId, target };
+    }
+    return undefined;
+  };
   return {
     choosePlan(team: TeamId, trackId: TrackId, planId: string | null): ActionOutcome {
-      if (planId === null) return { ok: true };
-      const plan = o.store.read(planId);
-      if (plan === undefined || plan.team !== team || plan.trackId !== trackId) return { ok: false, reason: 'invalid', message: `no saved plan ${planId} of team ${team} on track ${trackId}` };
-      for (const feed of o.feeds.feeds()) {
-        const target = feed.target();
-        if (target === undefined || target.team !== team || target.trackId !== trackId) continue;
-        o.feeds.commitToTeam(feed.feedId, planDecisionsOf(plan, target.cars, target.decisions));
+      if (planId === null) {
+        const race = raceOf(team, trackId);
+        if (race !== undefined) o.feeds.showToTeam(race.feedId, null);
         return { ok: true };
       }
-      return { ok: false, reason: 'notSupported', message: `no race of team ${team} on track ${trackId} runs` };
+      const plan = o.store.read(planId);
+      if (plan === undefined || plan.team !== team || plan.trackId !== trackId) return { ok: false, reason: 'invalid', message: `no saved plan ${planId} of team ${team} on track ${trackId}` };
+      const race = raceOf(team, trackId);
+      if (race === undefined) return { ok: false, reason: 'notSupported', message: `no race of team ${team} on track ${trackId} runs` };
+      o.feeds.commitToTeam(race.feedId, planDecisionsOf(plan, race.target.cars, race.target.decisions));
+      o.feeds.showToTeam(race.feedId, shownPlanOf(plan));
+      return { ok: true };
     },
   };
 }
