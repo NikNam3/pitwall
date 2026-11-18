@@ -24,7 +24,9 @@ import type * as mc from '../../src/race-monte-carlo/index.ts';
 import type { McInput, McResult } from '../../src/race-monte-carlo/index.ts';
 import { prepareStrategy, runStrategy, STRATEGY_CONFIG } from '../../src/strategy/index.ts';
 import { candidatesForRun } from '../../src/strategy/job.ts';
-import { fixedIn, json, oursIn, plannedIn, PLAYER, RACE, stopIn, TEAMMATE, TEST_CAP, viewAt, type ViewSpec } from './support.ts';
+import { planningInputFrom } from '../../src/shared/strategy-input/index.ts';
+import { NO_PLANS, qualifyingAsOf, runPlanning } from './planning-support.ts';
+import { fixedIn, json, OURS, oursIn, plannedIn, PLAYER, RACE, stopIn, TEAMMATE, TEST_CAP, viewAt, type ViewSpec } from './support.ts';
 
 const calls = vi.hoisted(() => ({ list: [] as { input: McInput; cap: number; result: McResult }[] }));
 
@@ -142,5 +144,29 @@ describe('strategy: one candidate step (Task 20d)', () => {
     for (const step of ['hazardOf', 'plainRoad', 'trafficOf', 'dpInputOf', 'mcConfigOf']) {
       expect(script, `the script defines no ${step}`).not.toMatch(new RegExp(`(function|const)\\s+${step}\\b`));
     }
+  });
+});
+
+// The planning cap (SP4.3e Task 3, spec §4.4 item 5; report F4c; ruling R34; C2, C51): with `planning` set, each part's
+// calls share the planning cap (`planningMaxScenarioPolicies`, default 6,000), never the race's `maxScenarioPolicies`.
+// Read with the caps overridden small (the search's speed), the planning cap apart from the race's; the default read
+// from the config.
+describe('strategy: the planning cap (SP4.3e Task 3)', () => {
+  const PLANNING_CAP = 300;
+  const RACE_CAP = 401;
+
+  it("with planning set, the parts' maxScenarioPolicies sum to the planning cap (6,000 by default), not the race's", () => {
+    expect((STRATEGY_CONFIG.defaults as Record<string, unknown>).planningMaxScenarioPolicies, 'the default planning cap').toBe(6_000);
+    const asOf = qualifyingAsOf(RACE(), { laps: 20, config: { maxScenarioPolicies: RACE_CAP, planningMaxScenarioPolicies: PLANNING_CAP } });
+    const input = planningInputFrom(asOf, { laps: 20, race: { laps: 20, sets: 'carried' }, prepared: NO_PLANS(OURS) });
+    expect(input.planning, 'a planning input').not.toBeNull();
+    runPlanning(input, SEED);
+    const read = calls.list.map((c) => ({ ...callOf(c), cap: c.cap, config: c.input.config.maxScenarioPolicies }));
+    // our two cars uncommitted: per part round 1 for the teammate, then the car's final call
+    expect(read.map((c) => c.round1), 'round 1, final, round 1, final').toEqual([true, false, true, false]);
+    for (const c of read) expect(c.config, "a call's config carries its cap").toBe(c.cap);
+    const r1 = Math.floor(PLANNING_CAP * 0.2);
+    expect(read.map((c) => c.cap), "each part's calls").toEqual([r1, PLANNING_CAP - r1, r1, PLANNING_CAP - r1]);
+    for (const k of [0, 2]) expect(read[k]!.cap + read[k + 1]!.cap, "a part's total: the planning cap").toBe(PLANNING_CAP);
   });
 });

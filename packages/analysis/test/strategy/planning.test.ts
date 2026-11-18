@@ -59,7 +59,8 @@ function entryOf(out: StrategyOutput, car: CarId): CarRows {
 }
 
 /** The planning input on the qualifying view with `prepared` (default: none). */
-const inputOf = (prepared: PreparedRound = NO_PLANS(OURS), asOf = QUALIFYING()): StrategyInput => planningInputFrom(asOf, { laps: LAPS, prepared });
+const inputOf = (prepared: PreparedRound = NO_PLANS(OURS), asOf = QUALIFYING(), sets: 'carried' | 'fresh' = 'carried'): StrategyInput =>
+  planningInputFrom(asOf, { laps: LAPS, race: { laps: LAPS, sets }, prepared });
 
 /** The grid place of car `car` on the qualifying view: its index in `gridOf` plus 1. */
 function gridPlaceOf(car: CarId): number {
@@ -170,4 +171,27 @@ describe('the planning job (SP4.3d2 Task 9)', () => {
     expect(json(second)).toBe(json(first));
     expect(second).toEqual(first);
   }, 180_000);
+});
+
+// SP4.3e Task 3 (spec §4.3, §4.4 item 3; C62d): the planning round's race assumptions reach the one builder.
+describe('the planning round forwards its race assumptions (SP4.3e Task 3)', () => {
+  it("race.sets 'fresh' → the race's start holds the config's fresh allocation per our car, all new; 'carried' does not", () => {
+    const count = (sets: readonly { compound: string }[]): Record<string, number> => {
+      const out: Record<string, number> = {};
+      for (const s of sets) out[s.compound] = (out[s.compound] ?? 0) + 1;
+      return out;
+    };
+    const fresh = inputOf(NO_PLANS(OURS), QUALIFYING(), 'fresh');
+    expect(fresh.start.known, fresh.start.known ? '' : fresh.start.reason).toBe(true);
+    const carried = inputOf(NO_PLANS(OURS), QUALIFYING(), 'carried');
+    expect(carried.start.known, carried.start.known ? '' : carried.start.reason).toBe(true);
+    if (!fresh.start.known || !carried.start.known) return;
+    for (const car of OURS) {
+      const sets = fresh.start.value.sets[car] ?? [];
+      expect(count(sets), `car ${car}: the fresh allocation`).toEqual({ soft: 3, medium: 2, hard: 1, inter: 4, wet: 3 });
+      for (const s of sets) expect(s.wearPct, `car ${car}: ${s.compound} new`).toBe(0);
+      expect(count(carried.start.value.sets[car] ?? []), `car ${car}: carried, the qualifying's sets`).not.toEqual(count(sets));
+    }
+    expect(fresh.planning?.laps).toBe(LAPS);
+  });
 });

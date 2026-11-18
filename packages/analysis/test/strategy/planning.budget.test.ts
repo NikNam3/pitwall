@@ -34,7 +34,7 @@ describe('planning budget (SP4.3d2 Task 9)', () => {
     const cap = STRATEGY_CONFIG.defaults.maxScenarioPolicies;
     const asOf = qualifyingAsOf(longRace(), { laps: LAPS, sets: LONG_RACE_OURS_SETS, config: { maxScenarioPolicies: cap } });
     const prepared = Object.fromEntries(OURS.map((car) => [car, { saved: { ...SLOTS }, active: 'A' }])) as PreparedRound;
-    const input = structuredClone(planningInputFrom(asOf, { laps: LAPS, prepared }));
+    const input = structuredClone(planningInputFrom(asOf, { laps: LAPS, race: { laps: LAPS, sets: 'carried' }, prepared }));
     expect(input.start.known, input.start.known ? '' : input.start.reason).toBe(true);
     const parts = planningParts().split(input);
     expect(parts.map((p) => p.planCar), 'one part per our car').toEqual([...OURS]);
