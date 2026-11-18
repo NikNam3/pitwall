@@ -1,6 +1,5 @@
 // UI state shared by the bridge and every window (spec 7.2, 7.5, 7.7, 7.8). JSON-safe.
-import type { RoundRace } from '../topics/plans.prepared.ts';
-import type { CalibrationSource, CarId, FeedId, InsightCategory, PersonId, Policy, RaceAssumptions, SessionBasis, SessionRef, StoredSessionRef, Slot, TeamId } from '@pitwall/domain';
+import type { CalibrationSource, CarId, FeedId, InsightCategory, PersonId, Policy, RaceAssumptions, RoundRace, SessionBasis, SessionRef, StoredSessionRef, Slot, TeamId } from '@pitwall/domain';
 
 export type WindowId = string;
 export type Geometry = { screen: number; x: number; y: number; width: number; height: number };

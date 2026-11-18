@@ -42,6 +42,12 @@ export type RaceConditions = { kind: 'imported' } | { kind: 'entered'; samples: 
 /** The imported race conditions. */
 export const IMPORTED: RaceConditions = { kind: 'imported' };
 
+/**
+ * A round's race assumptions: `laps` is `null` while the bridge has no suggestion and none was entered (C3: never a
+ * made-up number); the round runs no planning job until it is known.
+ */
+export type RoundRace = { laps: number | null; sets: RaceAssumptions['sets']; conditions: RaceConditions };
+
 /** A planning round's race assumptions (C62d): the race laps, whether its tyre sets carry over from the qualifying, and its forecast. */
 export type RaceAssumptions = { laps: number; sets: 'carried' | 'fresh'; conditions: RaceConditions };
 

@@ -1,7 +1,6 @@
 // Structural validation of UI state (spec 7.2). Input is untrusted: decoders return `undefined`, never throw,
 // and rebuild values from the known fields only. Widget names and option values are the UI's business.
-import { NOISE_COMPOUNDS, PLAN_SLOTS, type Slot, type CalibrationSource, type CarId, type FeedId, type ForecastSample, type InsightCategory, type NoiseCompound, type Policy, type RaceAssumptions, type RaceConditions, type SessionBasis, type SessionRef, type StoredSessionRef, type SessionUid } from '@pitwall/domain';
-import type { RoundRace } from '../topics/plans.prepared.ts';
+import { NOISE_COMPOUNDS, PLAN_SLOTS, type Slot, type CalibrationSource, type CarId, type FeedId, type ForecastSample, type InsightCategory, type NoiseCompound, type Policy, type RaceAssumptions, type RaceConditions, type RoundRace, type SessionBasis, type SessionRef, type StoredSessionRef, type SessionUid } from '@pitwall/domain';
 import type { CarRef, Geometry, LinkGroup, PanelSpec, TimeWindow, UiAction, Workbook, WorkbookWindow } from './types.ts';
 
 type Json = Record<string, unknown>;
