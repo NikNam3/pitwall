@@ -6,7 +6,8 @@ import type { SessionRef, TeamId, TrackId } from '@pitwall/domain';
 
 export type LastChoice = {
   trackId: TrackId;
-  basis: { practice: { refs: SessionRef[]; at: string }; qualifying: { ref: SessionRef | null; at: string } };
+  /** Per kind the last confirmed basis; an absent kind was never confirmed on the track (a save writes only `plan`). */
+  basis: { practice?: { refs: SessionRef[]; at: string }; qualifying?: { ref: SessionRef | null; at: string } };
   /** The plan's id; `null`: none was chosen. */
   plan: { id: string | null; at: string };
 };

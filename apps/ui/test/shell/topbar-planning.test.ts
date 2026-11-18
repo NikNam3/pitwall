@@ -4,7 +4,7 @@
 //    `phase`) reads `text.topBar.phase.planning` (PLANNING) in the role `text`, over any session phase;
 //  - while `feed.status.betweenSessions` the feed segment reads `text.topBar.feedBetweenSessions` in `textFaint`
 //    (not stale, not amber), unless the feed is down.
-import type { FeedStatus, MachineSpans, PlanningRound } from '@pitwall/contracts';
+import type { FeedStatus, MachineSpans, PlanningRoundState } from '@pitwall/contracts';
 import { feedId, type OpenSpan } from '@pitwall/domain';
 import { cleanup, render, screen } from '@testing-library/svelte';
 import { tick } from 'svelte';
@@ -20,14 +20,15 @@ afterEach(cleanup);
 
 const span = (machine: string, kind: string): OpenSpan => ({ machine, id: 0, kind, start: 1000, confirmed: true, detail: {}, startFrame: 1 }) as OpenSpan;
 const spans = (...open: OpenSpan[]): MachineSpans => ({ open });
-const OPEN: PlanningRound = {
+const OPEN: PlanningRoundState = {
   open: true,
-  weekendId: 'w1',
-  format: 'grandPrix',
+  qualifying: { sessionUid: '1', weekendId: 'w1' },
+  practice: [],
+  race: { laps: null, sets: 'carried' },
   team: 0,
-  laps: { entered: null, suggested: { known: true, value: 44, at: 0 } },
   cars: {},
   running: false,
+  saved: [],
 };
 const status = (extra: Partial<FeedStatus> = {}): FeedStatus => ({
   feedId: FEED,
@@ -72,7 +73,7 @@ describe('the top bar in the planning round', () => {
   it('no PLANNING while the round is closed or unknown', async () => {
     const push = setup();
     expect(phase()).toBeNull();
-    await push('plans.prepared', { open: false } satisfies PlanningRound);
+    await push('plans.prepared', { open: false, saved: [] } satisfies PlanningRoundState);
     expect(phase()).toBeNull();
   });
 

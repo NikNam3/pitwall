@@ -3,15 +3,15 @@
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { ConfigEffectiveValue } from '@pitwall/contracts';
-import { asOfEnded, CAR_STATUS, carsInSessionOf, copyPlain, type AsOfView, type DeepReadonly, type EngineView } from '@pitwall/engine/readers';
-import { carId, carKeyOf, sessionUidString, toSessionTime, type BasisSidecar, type CalibrationActiveValue, type CarKey, type RaceFormat, type DecisionRecord, type FeedId, type Known, type LiveSeat, type PriorsSnapshot, type ProfileSnapshot, type RunPriors, type SessionBasis, type StoredSessionRef, type SessionTime, type TeamId, type TrackFile, type WeekendPhase } from '@pitwall/domain';
+import { CAR_STATUS, carsInSessionOf, copyPlain, type BasisContext, type DeepReadonly, type EngineView } from '@pitwall/engine/readers';
+import { carId, carKeyOf, sessionUidString, toSessionTime, type BasisSidecar, type CalibrationActiveValue, type CarId, type CarKey, type DecisionRecord, type FeedId, type Known, type LiveSeat, type PriorsSnapshot, type ProfileSnapshot, type RunPriors, type SessionBasis, type StoredSessionRef, type SessionTime, type TeamId, type TrackFile, type TrackId, type WeekendPhase } from '@pitwall/domain';
 import type { CalibrationStore } from '../calibration/store.ts';
 import type { ProfileStore, SlotIdentity } from '../drivers/store.ts';
 import { profilesSidecarPath, recordingProfiles } from './profile-sidecar.ts';
 import { BasisRun, type BasisInputs, type BasisProgress } from './basis-run.ts';
 import { recordingBasis } from './basis-sidecar.ts';
 import { CalculatorRegistry, SessionTracker, type Frame, type FrameMetrics, type InsightChange, type TrackerEvent } from '@pitwall/engine';
-import { decode, PacketId, peekHeader } from '@pitwall/protocol';
+import { decode, PacketId, peekHeader, type Packet } from '@pitwall/protocol';
 import { effectiveConfig, overriddenFields, recordingConfig, sessionConfigPath, sessionConfigSidecar, type FeatureConfig } from '../feature-config.ts';
 import type { Feature } from '../features/feature.ts';
 import { feedStatusOf } from '../features/feed-status/feed-status.ts';
@@ -23,7 +23,7 @@ import type { WorkerLimit } from '../jobs/worker-limit.ts';
 import type { Logger } from '../log.ts';
 import { readPwrec, readPwrecMeta } from '../pwrec/reader.ts';
 import { PwrecWriter } from '../pwrec/writer.ts';
-import type { Db, SessionKey, StoredSessionRow } from '../storage/db.ts';
+import type { Db, SessionKey, SessionRow, StoredSessionRow } from '../storage/db.ts';
 import { SessionFile, sessionRecordingName } from '../storage/session-files.ts';
 import { isStale, WeekendRepository } from '../storage/weekend-repository.ts';
 import { loadTrackFile, recordingTrack, TRACKS_DIR, trackSidecarPath } from '../track-files/load.ts';
@@ -163,40 +163,67 @@ export type FeedPipelineOptions = {
    */
   listenPort?: number;
   /**
-   * The bridge's planning module (C62d, SP4.3d spec §7.0 rules 3–6): told when a session of the feed starts (after the
-   * feed's topics start over) and when one ended (`finish` applied, as a live end, `session.end` or a startup restore
-   * ends it; not when the pipeline is stopped), with what the round needs that the ended run's view (`endedAsOf`) does
-   * not hold.
+   * The bridge's planning module (C62d, SP4.3e spec §4.3): told when a session of the feed starts (after the feed's
+   * topics start over) and when one ended (`finish` applied, as a live end or `session.end` ends it; not when the
+   * pipeline is stopped), and asked at a live race's start for the plan decisions to commit.
    */
   planning?: PlanningHooks;
+  /**
+   * The planning replay (C62d): each session's basis is `basisOverride`'s for the player's seat (its team and race
+   * number), in place of the one storage gives (the recording's own basis). Unset: storage's.
+   */
+  basisOverride?: (player: CarKey) => BasisContext | undefined;
+  /**
+   * The planning replay (C62d): each session that ends (`finish` applied; not when the pipeline is stopped) is handed
+   * over once, its run as of its end, before the next one starts. Nothing keeps it for planning.
+   */
+  onEnded?: (ended: EndedSession & { view: EngineView }) => void;
 };
 
-/** A session of the feed that ended, as the planning module is told it: its weekend, its track and its weekend phase. */
-export type EndedSession = { weekendId: string; trackId: number; phase: WeekendPhase };
+/**
+ * A session of the feed that ended, as the planning module is told it: its key, its track, its weekend phase, the basis
+ * its run used last (`undefined` without one), the player's seat (`undefined` before Participants), and `closed`, which
+ * settles once its recording and storage are closed (a replay of the recording reads it whole then).
+ */
+export type EndedSession = {
+  key: SessionKey;
+  trackId: number;
+  phase: WeekendPhase;
+  basis: SessionBasis | undefined;
+  seat: CarKey | undefined;
+  closed: Promise<void>;
+};
+
+/** A feed's running race as a plan choice reads it: its team, track, its team's car slots by race number, its decisions. */
+export type PlanTarget = { team: TeamId; trackId: TrackId; cars: ReadonlyMap<number, CarId>; decisions: readonly DeepReadonly<DecisionRecord>[] };
 
 /** What a feed's pipeline tells the planning module (`FeedPipelineOptions.planning`). */
 export type PlanningHooks = {
-  sessionStarted(feedId: FeedId): void;
+  /** `trackId`: the starting session's track (`undefined` for a pipeline made anew, before any session). */
+  sessionStarted(feedId: FeedId, trackId?: TrackId): void;
   sessionEnded(feedId: FeedId, ended: EndedSession): void;
+  /** A live session's team became known: the player car's seat (team, race number) on the session's track (R19). */
+  seatKnown?(feedId: FeedId, seat: CarKey, trackId: TrackId): void;
   /**
-   * A live race's first frame with its team known, on the team's first feed (C62d, C76): the prepared plans for the
-   * race as the plan decisions the team's feeds commit; none without prepared plans.
+   * A live race's first frame with its team known, on the team's first feed (C62d, C76): the team's last chosen or
+   * saved plan on the track as the plan decisions the team's feeds commit; none for "none".
    */
-  raceStarted?(race: RaceStart): PlanDecision[];
+  raceStarted?(race: PlanTarget): PlanDecision[];
 };
 
-/** A race as the race-start commit reads it: its weekend, its format, our team, and each car slot's team and race number. */
-export type RaceStart = { weekendId: string; format: RaceFormat; team: TeamId; slots: ReadonlyArray<CarKey | undefined> };
-
 /**
- * The race's car slots by team and race number (C62): the live state's identity (values) of the slots car-status has
- * in the session (C43); `undefined` for every other slot and for one Participants has not filled yet.
+ * The race's slots of `team` by race number (C62): the live state's identity (values) of the slots car-status has in
+ * the session (C43) whose team is `team`; a slot Participants has not filled yet is left out.
  */
-const raceSlotsOf = (view: EngineView): Array<CarKey | undefined> => {
+const teamCarsOf = (view: EngineView, team: TeamId): Map<number, CarId> => {
   const inSession = new Set<number>(carsInSessionOf(view.situation.byMachine[CAR_STATUS]));
-  return view.live.cars.map((car, slot) =>
-    inSession.has(slot) && car.updatedAt.participants !== undefined ? carKeyOf(car.identity) : undefined,
-  );
+  const cars = new Map<number, CarId>();
+  view.live.cars.forEach((car, slot) => {
+    if (!inSession.has(slot) || car.updatedAt.participants === undefined) return;
+    const key = carKeyOf(car.identity);
+    if (key.teamId === team && !cars.has(key.raceNumber)) cars.set(key.raceNumber, carId(slot));
+  });
+  return cars;
 };
 
 /** A feed's session uid and its player car's team (`null` before Participants), as reported to `teams`. */
@@ -300,12 +327,27 @@ type QueuedDecision =
  */
 type Restore = { key: SessionKey; trackId: number; buffer: RawPacket[]; decisions: QueuedDecision[]; done: Promise<void> };
 
+/** A basis as plain data of its own (an ended session's, handed to the planning module). */
+const basisCopy = (basis: DeepReadonly<SessionBasis>): SessionBasis => ({
+  practice: basis.practice.map((ref) => ({ ...ref })),
+  qualifying: basis.qualifying === null ? null : { ...basis.qualifying },
+});
+
 /**
- * A startup restore of an ended session under way (`restoreEnded`): its key starts a run even when stored complete, and
- * its storage reads (`read`, stored complete under the run's rules version) or replaces the stored log at its end
- * (`replace`, stored stale).
+ * A session's storage whose basis is the planning replay's (`basisOverride`, C62d) in place of the one storage gives.
  */
-type EndedRestore = { key: SessionKey; mode: Extract<StorageMode, 'read' | 'replace'> };
+class OverriddenBasisStorage extends SessionStorage {
+  readonly #basis: (player: CarKey) => BasisContext | undefined;
+
+  constructor(db: Db, opts: ConstructorParameters<typeof SessionStorage>[1], basis: (player: CarKey) => BasisContext | undefined) {
+    super(db, opts);
+    this.#basis = basis;
+  }
+
+  override weekendContext(_row: SessionRow, player: CarKey): BasisContext | undefined {
+    return this.#basis(player);
+  }
+}
 
 /**
  * Runs one feed: every datagram updates the feed's health, the tracker splits the stream into sessions and frames,
@@ -351,6 +393,8 @@ export class FeedPipeline {
   #decisions: SessionDecisions | undefined;
   /** The newest session's seat as last reported to `teams`. */
   #seat: Seat | undefined;
+  /** The running session's player seat as last told to the planning module (R19); reset at each session start. */
+  #noticedSeat: CarKey | undefined;
   /** The newest session reached its race's first frame with its team known (the race-start commit's moment, C62d). */
   #raceStarted = false;
   /** Live: a stored session's recording being restored (C59); set from its first Session packet until it is live. */
@@ -374,8 +418,6 @@ export class FeedPipeline {
   readonly #sweep: Pick<StaleSweep, 'request' | 'sessionSeen'> | undefined;
   /** The feed has received its first Session packet (told to the sweep). */
   #sawSession = false;
-  /** A startup restore of an ended session under way (`restoreEnded`). */
-  #restoringEnded: EndedRestore | undefined;
   /** How the newest session that ended ended, as frame assembly split it (`sessionEnded`'s reason). */
   #newestEnd: SessionEndReason | undefined;
 
@@ -932,44 +974,14 @@ export class FeedPipeline {
   }
 
   /**
-   * At startup, before `start` (C59, C61; SP4.3d spec §7.0 rule 4): the stored session `row` (an ended one: its recording
-   * holds its end) is replayed from its recording with its sidecars, as a restart's restore replays it, and ends at the
-   * recording's end; the run stays as the feed's ended session (its topics answer as after a live end, `feed.status`
-   * between sessions). Stored stale (`isStale`: incomplete, or of another rules version), its log is finished and
-   * replaces the stored one, as a rebuild of the recording would write it (C24, C61), so the startup rebuild leaves it
-   * out and it is replayed once; stored complete under the run's rules version, nothing is written. The recording is not
-   * touched. A row without its recording is left as it is.
+   * The running race (or sprint) as a plan choice reads it (C62d, C76): its team, its track, the team's car slots by race
+   * number and its projected decisions; `undefined` without a running race, or before its team is known.
    */
-  async restoreEnded(row: StoredSessionRow): Promise<void> {
-    if (this.#started) throw new Error('FeedPipeline: restoreEnded after start');
-    const path = row.pwrecPath;
-    if (path === null || !existsSync(path)) {
-      this.#log.warn({ feedId: this.#feedId, sessionUid: row.sessionUid, pwrecPath: path }, 'ended session not restored: its recording is missing');
-      return;
-    }
-    const { sessionUid, weekendId, playerCar } = row;
-    const mode = isStale(row, this.#o.storage?.rulesVersion) ? 'replace' : 'read';
-    this.#restoringEnded = { key: { sessionUid, weekendId, playerCar }, mode };
-    try {
-      await this.#replayRecording(path, undefined, 0);
-      this.#guarded('restored session end', () => {
-        for (const event of this.#tracker.end()) this.#handle(event, this.#lastReceivedAtMs);
-      });
-    } finally {
-      this.#continuation = undefined;
-      this.#restoringEnded = undefined;
-    }
-    await Promise.all(this.#closing);
-    this.#guarded('restored session end', () => this.#checkFeed(this.#lastReceivedAtMs));
-  }
-
-  /**
-   * The ended session's run as of its end (C62d, SP4.3d2 plan call 1): `asOfEnded` on its view, with `laps` the race
-   * laps entered for the race it plans; `undefined` while a session runs or before any ended.
-   */
-  endedAsOf(laps: number): AsOfView | undefined {
-    if (this.#session !== undefined || this.#ended === undefined) return undefined;
-    return asOfEnded(this.#ended.view, laps);
+  planTarget(): PlanTarget | undefined {
+    const session = this.#session;
+    const team = this.#seat?.team ?? null;
+    if (session === undefined || team === null || session.weekendPhase.kind !== 'race') return undefined;
+    return { team, trackId: session.trackId, cars: teamCarsOf(session.view, team), decisions: session.decisions };
   }
 
   /** The running session's weekend phase as the machine decided it (C14); `undefined` without a running session. */
@@ -1002,6 +1014,7 @@ export class FeedPipeline {
       const decoded = decode(bytes);
       if (decoded.ok) {
         for (const event of this.#tracker.push(decoded.packet, receivedAtMs)) this.#handle(event, receivedAtMs);
+        this.#noticeSeat(decoded.packet);
       } else {
         this.#monitor.onDecodeError(decoded.error, receivedAtMs);
         this.#log.debug({ feedId: this.#feedId, error: decoded.error }, 'datagram not decoded');
@@ -1017,8 +1030,7 @@ export class FeedPipeline {
     switch (event.type) {
       case 'sessionStarted': {
         const key = keyOfStart(event);
-        const restoring = this.#restoringEnded;
-        if ((restoring !== undefined && sameKey(restoring.key, key)) || !this.#isClosed(key)) {
+        if (!this.#isClosed(key)) {
           this.#startSession(event);
           return;
         }
@@ -1073,6 +1085,25 @@ export class FeedPipeline {
     for (const decision of teams.plansOf(this.#feedId)) this.commitPlan(decision);
   }
 
+  /**
+   * A Participants packet of the running session names the player car's seat (team, race number): the planning module
+   * is told when it changes (R19), at once, not a reorder window later as frames are. A replay run tells it nothing: the
+   * remembered seat is the live feed's.
+   */
+  #noticeSeat(packet: Packet): void {
+    const session = this.#session;
+    if (packet.packetId !== PacketId.participants || session === undefined || packet.header.sessionUid !== session.sessionUid) return;
+    if (this.#o.recorded !== undefined || this.#o.planning?.seatKnown === undefined) return;
+    const player = packet.participants[packet.header.playerCarIndex];
+    if (player === undefined) return;
+    const seat: CarKey = { teamId: player.teamId, raceNumber: player.raceNumber };
+    const noticed = this.#noticedSeat;
+    if (noticed?.teamId === seat.teamId && noticed.raceNumber === seat.raceNumber) return;
+    this.#noticedSeat = seat;
+    const { trackId } = session;
+    this.#guarded('planning', () => this.#o.planning?.seatKnown?.(this.#feedId, seat, trackId));
+  }
+
   #reportSeat(seat: Seat): void {
     this.#seat = seat;
     this.#o.teams?.report(this.#feedId, seat.sessionUid, seat.team);
@@ -1080,10 +1111,11 @@ export class FeedPipeline {
 
   /**
    * The race-start commit (C62d, C76; SP4.3d spec §7.0 rules 7–8): at the session's first frame with its weekend phase
-   * `race` (as the machine decided it up to the frame before) and its team known, the team's first feed in the session commits the prepared plans for (weekend, the race's
-   * format, team) to every team feed then running (`TeamFeeds.commitToTeam`), once; a feed that joins later is handed
-   * them by `#updateTeam`. A replay, also a continued recording's (C59), never reads the file: its decisions sidecar holds
-   * them; it still claims the commit, so no teammate commits it a second time.
+   * `race` (as the machine decided it up to the frame before) and its team known, the team's first feed in the session
+   * commits the team's last chosen or saved plan on the track (`PlanningHooks.raceStarted`) to every team feed then
+   * running (`TeamFeeds.commitToTeam`), once; a feed that joins later is handed them by `#updateTeam`. A replay, also a
+   * continued recording's (C59), never reads the plan: its decisions sidecar holds them; it still claims the commit, so
+   * no teammate commits it a second time.
    */
   #raceStart(): void {
     const session = this.#session;
@@ -1095,7 +1127,7 @@ export class FeedPipeline {
     this.#raceStarted = true;
     if (teams === undefined || !teams.claimRaceStart(this.#feedId)) return;
     if (this.#o.recorded !== undefined || this.#replaying || planning === undefined) return;
-    const race: RaceStart = { weekendId: session.key.weekendId, format: phase.format, team: seat.team, slots: raceSlotsOf(session.view) };
+    const race: PlanTarget = { team: seat.team, trackId: session.trackId, cars: teamCarsOf(session.view, seat.team), decisions: session.decisions };
     this.#guarded('race-start commit', () => teams.commitToTeam(this.#feedId, planning.raceStarted?.(race) ?? []));
   }
 
@@ -1106,13 +1138,14 @@ export class FeedPipeline {
     this.#closedKey = undefined;
     this.#betweenSessions = false;
     this.#raceStarted = false;
+    this.#noticedSeat = undefined;
     this.#reportSeat({ sessionUid: String(event.sessionUid), team: null });
     this.#alerts.clearWriteFailures(this.#sessionTime());
     hub.resetFeed(feedId);
     this.#publisher.sessionStarted();
     this.#publishInsights(this.#alerts.active.map((insight) => ({ type: 'raised', insight })));
     // The planning round of the session that ended closes (C62d): the feed runs a session again.
-    this.#guarded('planning', () => this.#o.planning?.sessionStarted(feedId));
+    this.#guarded('planning', () => this.#o.planning?.sessionStarted(feedId, event.session.trackId));
     // A session continued after a restart (C59) runs on its first run's start, recording and sidecars, unchanged.
     const continued = this.#continuation;
     this.#continuation = undefined;
@@ -1165,7 +1198,7 @@ export class FeedPipeline {
    * preselection's commit and the joining feed's hand-off go to this session only while it runs.
    */
   #basisRunOf(storage: SessionStorage | undefined, continued: Continuation | undefined, file: string | undefined): BasisRun {
-    const live = this.#o.recorded === undefined && this.#restoringEnded === undefined ? this.#o.basis : undefined;
+    const live = this.#o.recorded === undefined ? this.#o.basis : undefined;
     const recorded = continued !== undefined ? continued.basis : this.#o.recordedBasis;
     const run: BasisRun = new BasisRun({
       feedId: this.#feedId,
@@ -1191,13 +1224,15 @@ export class FeedPipeline {
   #sessionStorage(): SessionStorage | undefined {
     const storage = this.#o.storage;
     if (storage === undefined) return undefined;
-    return new SessionStorage(storage.db, {
+    const opts = {
       log: this.#log,
-      onError: (error) => this.#writeFailed('storage', error),
+      onError: (error: unknown) => this.#writeFailed('storage', error),
       rulesVersion: storage.rulesVersion,
-      mode: this.#restoringEnded?.mode ?? storage.mode ?? 'append',
+      mode: storage.mode ?? 'append',
       ...(storage.onStored && { onStored: storage.onStored }),
-    });
+    };
+    const { basisOverride } = this.#o;
+    return basisOverride === undefined ? new SessionStorage(storage.db, opts) : new OverriddenBasisStorage(storage.db, opts, basisOverride);
   }
 
   /**
@@ -1312,8 +1347,20 @@ export class FeedPipeline {
     this.#closing.add(closing);
     // `end` applied `finish` before its file closes: the ended run's view is complete now (C62d).
     if (this.#stopped || opts.unended === true) return;
-    const { weekendId } = session.key;
-    this.#guarded('planning', () => this.#o.planning?.sessionEnded(this.#feedId, { weekendId, trackId: session.trackId, phase: session.weekendPhase }));
+    const { onEnded, planning } = this.#o;
+    if (planning === undefined && onEnded === undefined) return;
+    const view = session.view;
+    const player = view.live.cars[session.key.playerCar];
+    const ended: EndedSession = {
+      key: session.key,
+      trackId: session.trackId,
+      phase: session.weekendPhase,
+      basis: view.basis && basisCopy(view.basis.basis),
+      seat: player !== undefined && player.updatedAt.participants !== undefined ? carKeyOf(player.identity) : undefined,
+      closed: closing.catch(() => {}),
+    };
+    if (onEnded !== undefined) this.#guarded('ended session', () => onEnded({ ...ended, view }));
+    this.#guarded('planning', () => planning?.sessionEnded(this.#feedId, ended));
   }
 
   /** Publishes `feed.status` and the feed-health insights as they stand at `nowMs`. */

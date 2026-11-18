@@ -67,12 +67,8 @@ export type UiAction =
   | { kind: 'plan.activate'; feedId: FeedId; carId: CarId; slot: Slot }
   /** Saves `policy` in `slot` and commits it as the active plan, in one change (the prefill's accept, SP4.3d spec §7.1). */
   | { kind: 'plan.accept'; feedId: FeedId; carId: CarId; slot: Slot; policy: Policy }
-  // The planning round (SP4.3d spec §7.1, §7.4, C62d): the team's prepared plans for the next race, bridge user state
-  // changed only by these (C70, C73); the only plan input between sessions (§7.0 rule 3). `carId` is a slot of the
-  // qualifying session.
-  /** The race's laps the engineer entered (a whole number of at least 1). */
-  // SP4.3e: deleted in Task 7b (replaced by `plans.race.set`)
-  | { kind: 'plans.prepare.laps'; feedId: FeedId; laps: number }
+  // The planning round's slots (SP4.3d spec §7.1, §7.4, C62d): per car of the round its prepared plans, changed only by
+  // these (C73); saved only as a saved plan (`plans.save`). `carId` is a slot of the qualifying session.
   | { kind: 'plans.prepare.save'; feedId: FeedId; carId: CarId; slot: Slot; policy: Policy }
   /** Saves `policy` in `slot` and makes it the car's active prepared plan. */
   | { kind: 'plans.prepare.accept'; feedId: FeedId; carId: CarId; slot: Slot; policy: Policy }

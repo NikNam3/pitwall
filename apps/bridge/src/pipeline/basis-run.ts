@@ -69,7 +69,7 @@ const within = (basis: SessionBasis, rows: readonly StoredSessionRow[]): Session
 };
 
 const lastChoiceOf = (choice: LastChoice | undefined): BasisActive['lastChoice'] =>
-  choice === undefined ? null : { basis: { practice: [...choice.basis.practice.refs], qualifying: choice.basis.qualifying.ref }, plan: choice.plan.id };
+  choice === undefined ? null : { basis: { practice: [...(choice.basis.practice?.refs ?? [])], qualifying: choice.basis.qualifying?.ref ?? null }, plan: choice.plan.id };
 
 /** One session's basis; built when the session starts, closed when it ends. */
 export class BasisRun {

@@ -6,7 +6,7 @@
 // `deltaPlanMs` against the committed row, null without one). The display computes none of it (C65). A policy is a stop
 // list (SP4.3d spec §5.1): the TRG column, its trigger lines and the rival's race number (`cars.overview`) are deleted
 // with the triggers (SP4.3d1 Task 3).
-import type { Computed, PlanningRound } from '@pitwall/contracts';
+import type { Computed, PlanningRoundState } from '@pitwall/contracts';
 import { carId, known, toSessionTime, unknown } from '@pitwall/domain';
 import type { McRow, McSource, NoiseCompound, Policy, Slot, StrategyCar } from '@pitwall/domain';
 import type { GalleryEntry } from '../../kit/gallery-types.ts';
@@ -190,17 +190,18 @@ export const PLANNING = table({
 /** The planning job's result (C51), computed before any race lap. */
 export const preview = (value: PlanTable = PLANNING): Computed<StrategyCar> => ({ computedFor: { lap: 0, frameId: 0 }, value: known(value, at) });
 /** `plans.prepared` while the round is open (KUH, Mercedes #12; nothing prepared yet, the laps entered). */
-export const ROUND: PlanningRound = {
+export const ROUND: PlanningRoundState = {
   open: true,
-  weekendId: 'spa-2026',
-  format: 'grandPrix',
+  qualifying: { sessionUid: '7001', weekendId: 'spa-2026' },
+  practice: [],
+  race: { laps: 44, sets: 'carried' },
   team: 0,
-  laps: { entered: 44, suggested: known(44, at) },
   cars: { [KUH]: { raceNumber: 12, slots: {}, active: null } },
   running: false,
+  saved: [],
 };
-/** `plans.prepared` outside the planning round. */
-export const CLOSED: PlanningRound = { open: false };
+/** `plans.prepared` outside the planning round: no saved plans of the team on the track (ruling R15). */
+export const CLOSED: PlanningRoundState = { open: false, saved: [] };
 
 /** The gallery's synthetic cases (data states only: a highlight is window-local, a component test, P17). */
 export const cases = {

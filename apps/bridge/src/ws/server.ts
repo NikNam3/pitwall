@@ -8,7 +8,7 @@ import { isCalibrationAction, type CalibrationStore } from '../calibration/store
 import { isDriverAction, type ProfileStore } from '../drivers/store.ts';
 import { isBasisAction, type BasisAction } from '../pipeline/basis-routing.ts';
 import { isPlanAction, type PlanAction } from '../pipeline/plan-routing.ts';
-import { isPrepareAction, type PrepareAction } from '../planning/planning.ts';
+import { isPlanningAction, type PlanningAction } from '../planning/planning.ts';
 import type { Logger } from '../log.ts';
 import type { UiState } from '../ui-state/ui-state.ts';
 import type { TopicHub } from '../hub/topic-hub.ts';
@@ -52,10 +52,11 @@ export type WsServerOptions = {
    */
   endSession?: (action: EndSessionAction) => ActionOutcome;
   /**
-   * Takes the planning round's `plans.prepare.*` (C62d, C73): `serve` hands them to the planning module, never to the UI
-   * state. Without it they are answered with `notSupported`.
+   * Takes the planning uiActions (`plans.prepare.*`, `plans.round.open`, `plans.race.set`, `plans.save`, `plans.rename`,
+   * `plans.delete`; C62d, C73): `serve` hands them to the planning module, never to the UI state. Without it they are
+   * answered with `notSupported`.
    */
-  prepare?: (action: PrepareAction) => ActionOutcome;
+  planning?: (action: PlanningAction) => ActionOutcome;
   /**
    * Takes the `basis.*` uiActions (decisions of the team's running sessions, C1a, C62, C76): `serve` hands them to
    * `BasisRouting.choose`, which answers once the named sessions are current and the choice is committed. Without it
@@ -185,7 +186,7 @@ export class WsServer {
           return;
         }
         // The driver-profile actions are the profile store's (C62c).
-        const owner = isPrepareAction(action) ? this.options.prepare?.(action)
+        const owner = isPlanningAction(action) ? this.options.planning?.(action)
           : action.kind === 'calibration.choose'
           ? this.options.choose?.(action)
           : isPlanAction(action) ? this.options.plan?.(action)

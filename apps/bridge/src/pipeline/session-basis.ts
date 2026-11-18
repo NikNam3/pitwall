@@ -33,9 +33,12 @@ function winner(ownNewest: string | undefined, lastAt: string | undefined): Pres
 
 export function preselect(o: PreselectInput): Preselection {
   const practiceRows = ownOfKind(o.own, 'practice');
-  const practiceRule = winner(practiceRows.at(-1)?.startedAt, o.last?.basis.practice.at);
+  // An absent kind of the last choice is no candidate B (it was never confirmed).
+  const lastPractice = o.last?.basis.practice;
+  const lastQualifying = o.last?.basis.qualifying;
+  const practiceRule = winner(practiceRows.at(-1)?.startedAt, lastPractice?.at);
   const practice =
-    practiceRule === 'ownWeekend' ? practiceRows.map(refOf) : practiceRule === 'lastChoice' ? [...(o.last?.basis.practice.refs ?? [])] : NO_BASIS.practice;
+    practiceRule === 'ownWeekend' ? practiceRows.map(refOf) : practiceRule === 'lastChoice' ? [...(lastPractice?.refs ?? [])] : NO_BASIS.practice;
 
   if (o.kind === 'practice' || o.kind === 'qualifying') {
     return { basis: { practice, qualifying: null }, rule: { practice: practiceRule, qualifying: 'none' } };
@@ -43,12 +46,12 @@ export function preselect(o: PreselectInput): Preselection {
 
   const qualifyingRows = ownOfKind(o.own, 'qualifying');
   const newestQualifying = qualifyingRows.at(-1);
-  const qualifyingRule = winner(newestQualifying?.startedAt, o.last?.basis.qualifying.at);
+  const qualifyingRule = winner(newestQualifying?.startedAt, lastQualifying?.at);
   const qualifying =
     qualifyingRule === 'ownWeekend' && newestQualifying !== undefined
       ? refOf(newestQualifying)
       : qualifyingRule === 'lastChoice'
-        ? (o.last?.basis.qualifying.ref ?? null)
+        ? (lastQualifying?.ref ?? null)
         : NO_BASIS.qualifying;
 
   return { basis: { practice, qualifying }, rule: { practice: practiceRule, qualifying: qualifyingRule } };

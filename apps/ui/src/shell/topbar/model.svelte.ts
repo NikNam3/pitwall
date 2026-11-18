@@ -1,5 +1,5 @@
 // What the top bar's segments read: the topics of one feed plus the global alert and settings topics.
-import type { AlertsState, CarOverview, FeedStatus, PlanningRound, ReplayControl, ReplayStatus, SessionInfo, UiAction, UiSettings } from '@pitwall/contracts';
+import type { AlertsState, CarOverview, FeedStatus, PlanningRoundState, ReplayControl, ReplayStatus, SessionInfo, UiAction, UiSettings } from '@pitwall/contracts';
 import type { MachineSpans } from '@pitwall/contracts';
 import type { CarId, DriversLinksValue, FeedId, Insight, Known, Moment, NeutralisedDetail, NeutralisedStage, OpenSpan, RaceMoment, TalkWindow } from '@pitwall/domain';
 import { untrack } from 'svelte';
@@ -23,7 +23,7 @@ export class TopBarModel {
   readonly #alerts: EntryState<AlertsState>;
   readonly #settings: EntryState<UiSettings>;
   readonly #moment: EntryState<Known<RaceMoment>>;
-  readonly #planning: EntryState<PlanningRound>;
+  readonly #planning: EntryState<PlanningRoundState>;
   readonly #weekend: EntryState<MachineSpans>;
   readonly #clock: EntryState<MachineSpans>;
   readonly #phases: Record<'race' | 'qualifying' | 'practice', EntryState<MachineSpans>>;

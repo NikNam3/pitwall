@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Test-only component: a button invokes the declared `plans.prepare.laps` with 52 laps and shows the outcome; another
+  // Test-only component: a button invokes the declared `plans.race.set` with 52 laps, sets carried, and shows the outcome; another
   // invokes the undeclared `plan.accept` and shows what happened.
   import { getWidgetCommands } from '../../../../src/kit/commands.ts';
   import type { WidgetProps } from '../../../../src/kit/types.ts';
@@ -9,7 +9,7 @@
   const commands = getWidgetCommands();
   let outcome = $state('');
   const laps = async (): Promise<void> => {
-    const result = await commands.invoke('plans.prepare.laps', { feedId: link.feedId, laps: 52 });
+    const result = await commands.invoke('plans.race.set', { feedId: link.feedId, race: { laps: 52, sets: 'carried' } });
     outcome = result.ok ? 'ok' : result.reason;
   };
   const undeclared = async (): Promise<void> => {

@@ -75,6 +75,27 @@ describe('preselect (C62)', () => {
     expect(result.rule).toEqual({ practice: 'none', qualifying: 'none' });
   });
 
+  it('(F3) a last choice holding only a plan is no candidate B: the own weekend per kind, else none (Task 7bfix)', () => {
+    const planOnly: LastChoice = { trackId: TRACK, basis: {}, plan: { id: 'plan-1', at: iso(18, '09:40') } };
+    const practice = row('1', iso(17, '21:02'), 'practice');
+    const qualifying = row('2', iso(17, '22:07'), 'qualifying');
+    const own = preselect({ own: [practice, qualifying], last: planOnly, kind: 'race' });
+    expect(own.basis).toEqual({ practice: [ref(practice)], qualifying: ref(qualifying) });
+    expect(own.rule).toEqual({ practice: 'ownWeekend', qualifying: 'ownWeekend' });
+    const none = preselect({ own: [], last: planOnly, kind: 'race' });
+    expect(none.basis).toEqual(NO_BASIS);
+    expect(none.rule).toEqual({ practice: 'none', qualifying: 'none' });
+  });
+
+  it('(F3) a last choice of one kind is candidate B of that kind only (Task 7bfix)', () => {
+    const at = iso(18, '09:40');
+    const qualifyingOnly: LastChoice = { trackId: TRACK, basis: { qualifying: { ref: MORNING_QUALIFYING, at } }, plan: { id: null, at } };
+    const practice = row('1', iso(17, '21:02'), 'practice');
+    const result = preselect({ own: [practice], last: qualifyingOnly, kind: 'race' });
+    expect(result.basis).toEqual({ practice: [ref(practice)], qualifying: MORNING_QUALIFYING });
+    expect(result.rule).toEqual({ practice: 'ownWeekend', qualifying: 'lastChoice' });
+  });
+
   it('(e) a qualifying session gets qualifying: null whatever the last choice holds', () => {
     const earlierQualifying = row('4', iso(18, '08:00'), 'qualifying');
     const fromLast = preselect({ own: [], last: morningChoice(), kind: 'qualifying' });
