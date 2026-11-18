@@ -31,6 +31,7 @@ const OPTIONS = {
   plan: { type: 'string' },
   laps: { type: 'string' },
   sets: { type: 'string' },
+  team: { type: 'string' },
   help: { type: 'boolean', short: 'h' },
 } as const;
 

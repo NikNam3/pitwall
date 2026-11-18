@@ -49,7 +49,7 @@ export const USAGE = `usage: pitwall <live|replay|tap|reprocess|import> …
   basis choose --practice <session>|none [--practice <session> …] --qualifying <session>|none [--plan <id|name>|none]
                             choose the feed's basis (and its plan; without --plan the plan stays)
   plans [--feed id]         list the team's saved plans of a running bridge's open planning round
-  plans open --qualifying <session> [--practice <session>|none …] [--laps n --sets carried|fresh]
+  plans open --qualifying <session> [--team n] [--practice <session>|none …] [--laps n --sets carried|fresh]
                             open a planning round on a qualifying and a practice basis, with its race assumptions
                             <session> is <sessionUid>/<weekendId>; --feed defaults to the bridge's only feed
 
