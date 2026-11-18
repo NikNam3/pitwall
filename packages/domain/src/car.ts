@@ -99,6 +99,11 @@ export type TyreSet = {
   available: boolean;
   fitted: boolean;
   recommendedSession: number;
+  /**
+   * Whether the set is reserved for the next race session of the weekend (its `recommendedSession` is that race's
+   * session type, from the weekend structure; step 1, C8). Absent: false.
+   */
+  forNextRace?: boolean;
   lifeSpanLaps: number;
   usableLifeLaps: number;
   lapDeltaMs: Ms;

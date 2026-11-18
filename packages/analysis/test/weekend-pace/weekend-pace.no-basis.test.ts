@@ -40,7 +40,7 @@ describe('weekend-pace without a basis (SP4.3e Task 6)', () => {
       [WEEKEND_PACE, pace],
     ]);
     const grid = Array.from({ length: CARS }, (_, k) => carId(k));
-    const build = () => buildGridStart(asOfNow(view), outputs, { laps: 30, grid, fittedCompound: (_: CarId) => unknown('notApplicable') });
+    const build = () => buildGridStart(asOfNow(view), outputs, { laps: 30, grid, fittedCompound: (_: CarId) => unknown('notApplicable'), race: { laps: 30, sets: 'carried' } });
     expect(build).not.toThrow();
     expect(build()).toEqual(INSUFFICIENT);
   });

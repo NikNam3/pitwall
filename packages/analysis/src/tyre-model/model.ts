@@ -478,6 +478,19 @@ function usedSetsOf(s: Usable | undefined, sets: CarSets): TyreModelCar['usedSet
   return known(out, s.at);
 }
 
+/**
+ * Our car's sets for the next race (SP4.3e Task 3b): every set available now (the fitted one included) plus those
+ * reserved for it (`forNextRace`, step 1), of a compound the model tells apart, each with its wear.
+ */
+function raceSetsOf(s: Usable | undefined, sets: CarSets): Known<{ compound: NoiseCompound; wearPct: number }[]> {
+  if (s === undefined) return noSets(sets);
+  const out: { compound: NoiseCompound; wearPct: number }[] = [];
+  for (const x of s.sets) {
+    if ((x.available || x.forNextRace === true) && isNoise(x.visualCompound)) out.push({ compound: x.visualCompound, wearPct: x.wearPct });
+  }
+  return known(out, s.at);
+}
+
 /** What a car's fit was computed for: its fitted set and its driver; a fit of another set or driver is not this car's now. */
 type FitBasis = { set: FittedSet | undefined; human: boolean };
 
@@ -550,6 +563,7 @@ function runOf(view: AsOfView, tyresOf: TyresOf) {
       fittedCompound: fittedCompoundOf(tyres.sets),
       fittedLifeSpanLaps: lifeSpanOf(sets, tyres.sets),
       usedSets: ours.includes(id) ? usedSetsOf(sets, tyres.sets) : unknown('notApplicable'),
+      raceSets: ours.includes(id) ? raceSetsOf(sets, tyres.sets) : unknown('notApplicable'),
       basis: { set: tyres.set, human },
       fitted,
     };
@@ -588,6 +602,7 @@ function runOf(view: AsOfView, tyresOf: TyresOf) {
       fittedCompound: fittedCompoundOf(tyres.sets),
       fittedLifeSpanLaps: fit.fittedLifeSpanLaps as Known<number>,
       usedSets: fit.usedSets as TyreModelCar['usedSets'],
+      raceSets: (fit.raceSets ?? unknown('notReceived')) as NonNullable<TyreModelCar['raceSets']>,
     };
   };
 

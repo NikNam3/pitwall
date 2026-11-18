@@ -12,6 +12,7 @@ import { heaviest, reactionTable, solveWorld, STRATEGY_DP_CONFIG, type DpInput, 
 import { weatherPath, weatherWorlds, type WeatherLap, type WeatherWorld } from '../../weather-paths/index.ts';
 import { configOf } from '../config-of.ts';
 import type { StrategyInput } from './input.ts';
+import { newSetsOf } from './sets-used.ts';
 import { strategyConfigOf } from './settings.ts';
 
 type Hazard = McInput['hazard'];
@@ -109,9 +110,8 @@ export function dpInputOn(field: StartingPoint, car: CarId, hazard: Hazard, worl
   const fromLap = startLapOf(field, car);
   const n = field.lapsTotal - fromLap + 1;
   const shifted = (a: Float64Array): Float64Array => Float64Array.from({ length: n }, (_, i) => a[fromLap + i - field.lap] ?? 0);
-  // new sets only (spec §6, K5)
-  const sets = Object.fromEntries(NOISE_COMPOUNDS.map((c) => [c, 0])) as Record<NoiseCompound, number>;
-  for (const s of field.sets[car] ?? []) if (s.wearPct <= 0) sets[s.compound] += 1;
+  // new sets only (spec §6, K5), counted by the one set rule (`newSetsOf`, C43): the DP's free start takes one of them
+  const sets = newSetsOf(field, car);
   const fitted = field.fittedLapsToLimit[car] ?? -1;
   const dpWorlds: DpWorld[] = worlds.map((w) => ({ u: w.u, weight: w.weight, wetnessByLap: shifted(w.path), trafficMsByLap: trafficOf(field, w.road, car, fromLap, trafficGapMs) }));
   const compound = NOISE_COMPOUNDS[field.compound[car] ?? 1] ?? 'medium';
