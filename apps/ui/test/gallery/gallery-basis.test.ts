@@ -20,10 +20,10 @@ const NAMES = Object.keys(BASIS_CASES);
 describe('the picker\'s shell cells', () => {
   it('one basis-picker cell per case, in order; only the first has a baseline', () => {
     const cells = SHELL_CELLS.filter((c) => c.kind === 'basis-picker');
-    expect(NAMES).toEqual(['own-weekend', 'none', 'last-choice', 'rebuilding', 'laps-differ']);
+    expect(NAMES).toEqual(['own-weekend', 'none', 'last-choice', 'rebuilding', 'laps-differ', 'planning-texas-pair', 'planning-two-teams', 'planning-stale', 'planning-none-stored']);
     expect(cells.map((c) => c.id)).toEqual(NAMES.map((n) => `shell/basis-picker/${n}`));
     expect(cells.map((c) => c.detail)).toEqual(NAMES);
-    expect(cells.map((c) => c.hasBaseline)).toEqual([true, false, false, false, false]);
+    expect(cells.map((c) => c.hasBaseline)).toEqual([true, false, false, false, false, false, false, false, false]);
     for (const id of ['shell/topbar/basis-none', 'shell/topbar/basis-laps-differ']) expect(SHELL_CELLS.find((c) => c.id === id)?.hasBaseline).toBe(false);
   });
 });
