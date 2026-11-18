@@ -161,6 +161,14 @@ export class UiState {
       case 'plans.prepare.activate':
         // The planning round's prepared plans (SP4.3d spec §7.4, C62d), not UI state.
         return INVALID;
+      case 'basis.choose':
+      case 'plans.round.open':
+      case 'plans.race.set':
+      case 'plans.save':
+      case 'plans.rename':
+      case 'plans.delete':
+        // The basis routing and the saved plans (C62, C62d, SP4.3e), not UI state.
+        return INVALID;
     }
   }
 

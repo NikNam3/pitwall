@@ -1,7 +1,7 @@
 // Driver-profile declarations and `view.drivers` (contract C62c, SP4.3a spec 4): each estimation unit declares its
 // profile entries with pure functions over a person's linked stored sessions; the bridge's profile store runs them
 // between runs; the scheduler gives each car slot its linked profile from the run's snapshot.
-import { known, unknown, type CarId, type CarKey, type DriverProfile, type FrameNumber, type Known, type ProfileSnapshot, type SessionRef, type TrackData, type WeekendPhase } from '@pitwall/domain';
+import { known, unknown, type CarId, type CarKey, type DriverProfile, type FrameNumber, type Known, type ProfileSnapshot, type StoredSessionRef, type TrackData, type WeekendPhase } from '@pitwall/domain';
 import type { Projection } from '../log/types.ts';
 import type { DeepReadonly } from '../util/deep-readonly.ts';
 import type { EngineView } from './types.ts';
@@ -12,7 +12,7 @@ import type { EngineView } from './types.ts';
  * car-driver spans cover (the only frames a profile counts, C17, C62c), and the session's track file.
  */
 export type StoredDriverSession = {
-  session: SessionRef;
+  session: StoredSessionRef;
   carId: CarId;
   startedAt: string;
   phase: WeekendPhase;

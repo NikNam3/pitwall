@@ -7,7 +7,7 @@
 // prints its reason and exits 1 (C73).
 import WebSocket from 'ws';
 import { decodeServerMessage, encodeMessage, type ClientMessage, type DriverAction, type ServerMessage, type TopicName } from '@pitwall/contracts';
-import { carId, teamIdByName, trackName, type DriversLinksValue, type DriversProfilesValue, type Known, type PersonId, type SessionRef, type TeamId, type UnlinkedSlot } from '@pitwall/domain';
+import { carId, teamIdByName, trackName, type DriversLinksValue, type DriversProfilesValue, type Known, type PersonId, type StoredSessionRef, type TeamId, type UnlinkedSlot } from '@pitwall/domain';
 import { loadConfig } from '../../config.ts';
 import type { ApplyResult, DriverSessionValues } from '../../drivers/store.ts';
 import type { ValueFor } from '../../hub/topic-hub.ts';
@@ -45,9 +45,9 @@ const DAY_MS = 86_400_000;
 
 // ---- parsing ----
 
-const sessionText = (s: SessionRef): string => `${s.sessionUid}/${s.weekendId}/${s.feedCar}`;
+const sessionText = (s: StoredSessionRef): string => `${s.sessionUid}/${s.weekendId}/${s.feedCar}`;
 
-function parseSession(text: string | undefined): SessionRef {
+function parseSession(text: string | undefined): StoredSessionRef {
   const [sessionUid, weekendId, feedCar] = /^([^/\s]+)\/([^/\s]+)\/(\d+)$/.exec(text ?? '')?.slice(1) ?? [];
   if (sessionUid === undefined || weekendId === undefined || feedCar === undefined) {
     throw new UsageError(`a session is <sessionUid>/<weekendId>/<feedCar>, got "${text ?? ''}"`);

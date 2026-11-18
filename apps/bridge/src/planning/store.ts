@@ -9,6 +9,7 @@ import type { Logger } from '../log.ts';
 import { parseJson, readText, writeAtomic } from '../ui-state/ui-files.ts';
 
 /** The race a prepared-plans file is for (§7.0 rule 6): the weekend, the race's format, our team. */
+// SP4.3e: deleted in Task 7b
 export type RaceKey = { weekendId: string; format: RaceFormat; team: TeamId };
 
 /** The entered race laps' range (C73). */

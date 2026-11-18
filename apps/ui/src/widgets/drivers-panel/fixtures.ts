@@ -7,7 +7,7 @@
 import type { ConfigEffectiveValue, SessionInfo } from '@pitwall/contracts';
 import { carId, feedId, known, toSessionTime, unknown } from '@pitwall/domain';
 import type {
-  DriversLinksValue, DriversProfilesValue, GameSettings, LinkedSession, PersonId, ProfileEntry, SessionRef, SessionState,
+  DriversLinksValue, DriversProfilesValue, GameSettings, LinkedSession, PersonId, ProfileEntry, StoredSessionRef, SessionState,
   UnlinkedSlot, WeekendPhase,
 } from '@pitwall/domain';
 import type { GalleryEntry } from '../../kit/gallery-types.ts';
@@ -62,8 +62,8 @@ const phase = {
 } as const satisfies Record<string, WeekendPhase>;
 
 /** A stored session of the feed `kuh`'s car (car 0). */
-export const ref = (sessionUid: string, weekendId: string): SessionRef => ({ sessionUid, weekendId, feedCar: carId(0) });
-const linked = (date: string, trackId: number, p: WeekendPhase, laps: number, session: SessionRef, excluded = false): LinkedSession => ({
+export const ref = (sessionUid: string, weekendId: string): StoredSessionRef => ({ sessionUid, weekendId, feedCar: carId(0) });
+const linked = (date: string, trackId: number, p: WeekendPhase, laps: number, session: StoredSessionRef, excluded = false): LinkedSession => ({
   session, date, trackId, phase: p, laps, excluded,
 });
 
@@ -146,7 +146,7 @@ export const linUnlinkedLive: DriversLinksValue = {
 };
 
 /** A stored session's human slot of seat Mercedes #63 without a link. */
-export const unlinkedSlot = (session: SessionRef, date: string, trackId: number): UnlinkedSlot => ({
+export const unlinkedSlot = (session: StoredSessionRef, date: string, trackId: number): UnlinkedSlot => ({
   session, date, trackId, carId: carId(1), teamId: MERCEDES, raceNumber: 63, name: null,
 });
 /** No session running: #12 linked; #63 only in two stored sessions' unlinked human slots (one seat). */

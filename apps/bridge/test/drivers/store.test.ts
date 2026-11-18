@@ -13,7 +13,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { TopicName } from '@pitwall/contracts';
 import {
   carDriverSpans, carId, known, unknown,
-  type CarId, type DriverPerson, type DriversLinksValue, type DriversProfilesValue, type Known, type ProfileEntry, type SessionRef,
+  type CarId, type DriverPerson, type DriversLinksValue, type DriversProfilesValue, type Known, type ProfileEntry, type StoredSessionRef,
   type LinkedSession, type SessionUid, type Span, type WeekendPhase,
 } from '@pitwall/domain';
 import { defineProfiles, type ProfileCtx, type ProjectionState, type StoredDriverSession } from '@pitwall/engine/readers';
@@ -102,7 +102,7 @@ function fakeRepo(sessions: DriverSessionRow[]): { sessions: DriverSessionRow[];
 }
 
 /** The stored session `s` as a driver-profile action names it (C60's key). */
-const ref = (s: Pick<DriverSessionRow, 'sessionUid' | 'weekendId' | 'playerCar'>): SessionRef => ({ sessionUid: s.sessionUid, weekendId: s.weekendId, feedCar: s.playerCar });
+const ref = (s: Pick<DriverSessionRow, 'sessionUid' | 'weekendId' | 'playerCar'>): StoredSessionRef => ({ sessionUid: s.sessionUid, weekendId: s.weekendId, feedCar: s.playerCar });
 /** The seat (team and race number) of slot `carNumber` of `s`, as `drivers.link` names it (SP4.3b Task 2). */
 const seat = (s: DriverSessionRow, carNumber: number): { team: number; raceNumber: number } => {
   const key = s.cars.find((c) => c.carId === car(carNumber))?.carKey;

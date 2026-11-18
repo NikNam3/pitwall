@@ -4,7 +4,7 @@ import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { ConfigEffectiveValue } from '@pitwall/contracts';
 import { asOfEnded, CAR_STATUS, carsInSessionOf, copyPlain, type AsOfView, type DeepReadonly, type EngineView } from '@pitwall/engine/readers';
-import { carId, carKeyOf, sessionUidString, toSessionTime, type CalibrationActiveValue, type CarKey, type RaceFormat, type DecisionRecord, type FeedId, type Known, type LiveSeat, type PriorsSnapshot, type ProfileSnapshot, type RunPriors, type SessionRef, type SessionTime, type TeamId, type TrackFile, type WeekendPhase } from '@pitwall/domain';
+import { carId, carKeyOf, sessionUidString, toSessionTime, type CalibrationActiveValue, type CarKey, type RaceFormat, type DecisionRecord, type FeedId, type Known, type LiveSeat, type PriorsSnapshot, type ProfileSnapshot, type RunPriors, type StoredSessionRef, type SessionTime, type TeamId, type TrackFile, type WeekendPhase } from '@pitwall/domain';
 import type { CalibrationStore } from '../calibration/store.ts';
 import type { ProfileStore, SlotIdentity } from '../drivers/store.ts';
 import { profilesSidecarPath, recordingProfiles } from './profile-sidecar.ts';
@@ -1084,7 +1084,7 @@ export class FeedPipeline {
    * The run's profile snapshot (C62c), asked once per session, on its first frame with Participants: a replay's recorded
    * one (C38); live, the profile store's for the session's slots, written to the profiles sidecar; else none (`null`).
    */
-  #profilesFor(slots: readonly SlotIdentity[], session: SessionRef, file: string | undefined): ProfileSnapshot | null {
+  #profilesFor(slots: readonly SlotIdentity[], session: StoredSessionRef, file: string | undefined): ProfileSnapshot | null {
     const { recordedProfiles, profiles } = this.#o;
     if (recordedProfiles !== undefined) return recordedProfiles;
     if (profiles === undefined) return null;

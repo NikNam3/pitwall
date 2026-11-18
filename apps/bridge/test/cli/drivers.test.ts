@@ -12,12 +12,12 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { WebSocketServer } from 'ws';
 import { CONTRACT_VERSION, encodeMessage, type DriverAction, type ServerMessage, type TopicName } from '@pitwall/contracts';
-import { carId, known, unknown, type DriverLink, type DriverPerson, type DriversLinksValue, type DriversProfilesValue, type PersonId, type SessionRef, type UnlinkedSlot } from '@pitwall/domain';
+import { carId, known, unknown, type DriverLink, type DriverPerson, type DriversLinksValue, type DriversProfilesValue, type PersonId, type StoredSessionRef, type UnlinkedSlot } from '@pitwall/domain';
 import { run, type ApplyResult, type DriverSessionValues, type DriversDeps, type DriversHub, type DriversStore } from '../../src/cli/commands/drivers.ts';
 import type { CliIo } from '../../src/cli/io.ts';
 
-const S1: SessionRef = { sessionUid: '1234', weekendId: 'w1', feedCar: carId(0) };
-const S2: SessionRef = { sessionUid: '5678', weekendId: 'w1', feedCar: carId(0) };
+const S1: StoredSessionRef = { sessionUid: '1234', weekendId: 'w1', feedCar: carId(0) };
+const S2: StoredSessionRef = { sessionUid: '5678', weekendId: 'w1', feedCar: carId(0) };
 const ZANDVOORT = 26;
 const SCATTER = 'driverNoise.scatter';
 /** The fake's declared range of `SCATTER`; an override outside it is rejected. */

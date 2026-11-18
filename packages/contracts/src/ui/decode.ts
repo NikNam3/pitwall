@@ -1,6 +1,6 @@
 // Structural validation of UI state (spec 7.2). Input is untrusted: decoders return `undefined`, never throw,
 // and rebuild values from the known fields only. Widget names and option values are the UI's business.
-import { NOISE_COMPOUNDS, PLAN_SLOTS, type Slot, type CalibrationSource, type CarId, type FeedId, type InsightCategory, type NoiseCompound, type Policy, type SessionRef, type SessionUid } from '@pitwall/domain';
+import { NOISE_COMPOUNDS, PLAN_SLOTS, type Slot, type CalibrationSource, type CarId, type FeedId, type InsightCategory, type NoiseCompound, type Policy, type RaceAssumptions, type SessionBasis, type SessionRef, type StoredSessionRef, type SessionUid } from '@pitwall/domain';
 import type { CarRef, Geometry, LinkGroup, PanelSpec, TimeWindow, UiAction, Workbook, WorkbookWindow } from './types.ts';
 
 type Json = Record<string, unknown>;
@@ -205,16 +205,68 @@ export const decodeUiAction = (raw: unknown): UiAction | undefined => {
         : undefined;
     case 'session.end':
       return isString(raw.feedId) ? { kind: raw.kind, feedId: raw.feedId as FeedId } : undefined;
+    // The basis and saved-plan actions (C62, C62d, C73, C76): only their shape; the bridge checks sessions and plans.
+    case 'basis.choose': {
+      const basis = decodeSessionBasis(raw.basis);
+      const plan = raw.plan === undefined || raw.plan === null || isString(raw.plan);
+      return isString(raw.feedId) && basis !== undefined && plan
+        ? { kind: raw.kind, feedId: raw.feedId as FeedId, basis, plan: raw.plan as string | null | undefined }
+        : undefined;
+    }
+    case 'plans.round.open': {
+      const qualifying = decodeBasisRef(raw.qualifying);
+      const practice = mapAll(raw.practice, decodeBasisRef);
+      return isString(raw.feedId) && qualifying !== undefined && practice !== undefined
+        ? { kind: raw.kind, feedId: raw.feedId as FeedId, qualifying, practice }
+        : undefined;
+    }
+    case 'plans.race.set': {
+      const race = decodeRaceAssumptions(raw.race);
+      return isString(raw.feedId) && race !== undefined ? { kind: raw.kind, feedId: raw.feedId as FeedId, race } : undefined;
+    }
+    case 'plans.save': {
+      if (!isString(raw.feedId)) return undefined;
+      const action: Extract<UiAction, { kind: 'plans.save' }> = { kind: raw.kind, feedId: raw.feedId as FeedId };
+      if (raw.name !== undefined) {
+        if (!isString(raw.name)) return undefined;
+        action.name = raw.name;
+      }
+      if (raw.replaces !== undefined) {
+        if (!isString(raw.replaces)) return undefined;
+        action.replaces = raw.replaces;
+      }
+      return action;
+    }
+    case 'plans.rename':
+      return isString(raw.feedId) && isString(raw.id) && isString(raw.name) ? { kind: raw.kind, feedId: raw.feedId as FeedId, id: raw.id, name: raw.name } : undefined;
+    case 'plans.delete':
+      return isString(raw.feedId) && isString(raw.id) ? { kind: raw.kind, feedId: raw.feedId as FeedId, id: raw.id } : undefined;
     default:
       return undefined;
   }
 };
 
 /** A stored session as a driver-profile action names it (C60's key). */
-const decodeSessionRef = (raw: unknown): SessionRef | undefined => {
+const decodeSessionRef = (raw: unknown): StoredSessionRef | undefined => {
   if (!isObject(raw) || !isString(raw.sessionUid) || !isString(raw.weekendId) || !isInteger(raw.feedCar)) return undefined;
   return { sessionUid: raw.sessionUid as SessionUid, weekendId: raw.weekendId, feedCar: raw.feedCar as CarId };
 };
+
+/** A stored session as a basis names it (C62): session uid and weekend id. */
+const decodeBasisRef = (raw: unknown): SessionRef | undefined =>
+  isObject(raw) && isString(raw.sessionUid) && isString(raw.weekendId) ? { sessionUid: raw.sessionUid as SessionUid, weekendId: raw.weekendId } : undefined;
+
+/** A basis: a list of practice refs and one qualifying ref or an explicit `null`. */
+const decodeSessionBasis = (raw: unknown): SessionBasis | undefined => {
+  if (!isObject(raw)) return undefined;
+  const practice = mapAll(raw.practice, decodeBasisRef);
+  const qualifying = raw.qualifying === null ? null : decodeBasisRef(raw.qualifying);
+  return practice === undefined || qualifying === undefined ? undefined : { practice, qualifying };
+};
+
+/** The race assumptions (C62d): laps a whole number of at least 1, sets `carried` or `fresh`. */
+const decodeRaceAssumptions = (raw: unknown): RaceAssumptions | undefined =>
+  isObject(raw) && isInteger(raw.laps) && raw.laps >= 1 && (raw.sets === 'carried' || raw.sets === 'fresh') ? { laps: raw.laps, sets: raw.sets } : undefined;
 
 const isInteger = (value: unknown): value is number => Number.isInteger(value);
 

@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { TOPICS, type ServerMessage, type TopicName } from '@pitwall/contracts';
-import { known, type FeedId, type ProfileSnapshot, type SessionRef } from '@pitwall/domain';
+import { known, type FeedId, type ProfileSnapshot, type StoredSessionRef } from '@pitwall/domain';
 import type { EngineView, QuickCalculator } from '@pitwall/engine';
 import type { SlotIdentity } from '../../src/drivers/store.ts';
 import { effectiveConfig, recordingConfig } from '../../src/feature-config.ts';
@@ -55,7 +55,7 @@ const EDITED = snapshotOf('fp-edited', 21);
  */
 function fakeProfiles(start: ProfileSnapshot) {
   const state = { current: start };
-  const snapshotFor = vi.fn((_slots: readonly SlotIdentity[], _session: SessionRef): ProfileSnapshot => state.current);
+  const snapshotFor = vi.fn((_slots: readonly SlotIdentity[], _session: StoredSessionRef): ProfileSnapshot => state.current);
   const feedSeats = vi.fn();
   return { state, store: { snapshotFor, feedSeats } };
 }

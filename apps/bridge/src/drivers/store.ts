@@ -7,7 +7,7 @@
 // requested once; once that settles, the store recomputes.
 import { join } from 'node:path';
 import { canonicalJson, type TopicName } from '@pitwall/contracts';
-import { known, unknown, type CarId, type DriverPerson, type Known, type DriverProfile, type ProfileEntry, type PersonId, type ProfileSnapshot, type SessionRef, type TeamId, type UnlinkedSlot, type DriversLinksValue, type FeedId, type LiveSeat, type LinkedSession as PersonSession } from '@pitwall/domain';
+import { known, unknown, type CarId, type DriverPerson, type Known, type DriverProfile, type ProfileEntry, type PersonId, type ProfileSnapshot, type StoredSessionRef, type TeamId, type UnlinkedSlot, type DriversLinksValue, type FeedId, type LiveSeat, type LinkedSession as PersonSession } from '@pitwall/domain';
 import type { FeatureConfig } from '../feature-config.ts';
 import type { Feature } from '../features/feature.ts';
 import type { ValueFor } from '../hub/topic-hub.ts';
@@ -33,7 +33,7 @@ export type ApplyResult = { ok: true } | { ok: false; reason: 'invalid'; message
 export type SlotIdentity = { carId: CarId; teamId: number; raceNumber: number; name: string | null };
 
 /** One linked session of a person with its own value of each entry: the entry's aggregate over that one session. */
-export type DriverSessionValues = { session: SessionRef; date: string; entries: Record<string, Known<number>> };
+export type DriverSessionValues = { session: StoredSessionRef; date: string; entries: Record<string, Known<number>> };
 
 export type ProfileStoreDeps = {
   /** The features whose `profiles` declarations the store runs (C63). */
@@ -152,7 +152,7 @@ export class ProfileStore {
    * session's slots by team and race number (`bySlot`, `null` for an unlinked one) and the linked persons' profiles.
    * The session does not change the match (a seat is the same in every session).
    */
-  snapshotFor(slots: readonly SlotIdentity[], _session: SessionRef): ProfileSnapshot {
+  snapshotFor(slots: readonly SlotIdentity[], _session: StoredSessionRef): ProfileSnapshot {
     this.#reloadPersons();
     const bySlot: (string | null)[] = Array.from({ length: slots.reduce((n, s) => Math.max(n, s.carId + 1), 0) }, () => null);
     const profiles: Record<string, DriverProfile> = {};

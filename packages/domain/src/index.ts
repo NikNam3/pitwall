@@ -42,6 +42,7 @@ export { spans as weekendPhaseSpans, type PracticePhaseDetail, type QualifyingPh
 export * from './insight.ts';
 export * from './laps.ts';
 export * from './plans.ts';
+export * from './basis.ts';
 export * from './freshness.ts';
 export * from './tracks.ts';
 export * from './track-file.ts';

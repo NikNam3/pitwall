@@ -1,17 +1,17 @@
 // Which car slots a person's seat links name (C62c, SP4.3b spec 10): a link names a seat, a team and a race number
 // (from Participants), and with it every session's slot that carries both, whatever its name. Only the frames of the
 // slot's `human` car-driver spans count (C17): the spans are the machine's, read from the stored projection (C34).
-import { carDriverSpans, type CarId, type DriverLink, type DriverPerson, type DriversLinksValue, type FrameNumber, type SessionRef, type UnlinkedSlot } from '@pitwall/domain';
+import { carDriverSpans, type CarId, type DriverLink, type DriverPerson, type DriversLinksValue, type FrameNumber, type StoredSessionRef, type UnlinkedSlot } from '@pitwall/domain';
 import type { DriverSessionRow } from '../storage/weekend-repository.ts';
 
 /** A car slot of a session as the links see it: the session, the car, its team, race number and name (`null`: hidden). */
-export type SlotOf = { session: SessionRef; carId: CarId; teamId: number; raceNumber: number; name: string | null };
+export type SlotOf = { session: StoredSessionRef; carId: CarId; teamId: number; raceNumber: number; name: string | null };
 
 /** A slot of a stored session with the frames its `human` car-driver spans cover (none while the session is stale). */
 export type StoredSlot = SlotOf & { row: DriverSessionRow; humanSpans: { startFrame: FrameNumber; endFrame?: FrameNumber }[] };
 
 /** A stored session as a driver-profile action names it (C60's key). */
-export const refOf = (row: Pick<DriverSessionRow, 'sessionUid' | 'weekendId' | 'playerCar'>): SessionRef => ({
+export const refOf = (row: Pick<DriverSessionRow, 'sessionUid' | 'weekendId' | 'playerCar'>): StoredSessionRef => ({
   sessionUid: row.sessionUid, weekendId: row.weekendId, feedCar: row.playerCar,
 });
 

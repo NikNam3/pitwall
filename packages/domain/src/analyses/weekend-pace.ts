@@ -4,4 +4,4 @@ import type { CarId } from '../ids.ts';
 import type { Known } from '../known.ts';
 import type { Ms } from '../units.ts';
 
-export type WeekendPace = Record<CarId, Known<{ paceMs: Ms; sdMs: Ms; source: 'longRun' | 'qualifying'; laps: number }>>;
+export type WeekendPace = Record<CarId, Known<{ paceMs: Ms; sdMs: Ms; source: 'longRun' | 'qualifying' | 'standIn'; laps: number }>>;

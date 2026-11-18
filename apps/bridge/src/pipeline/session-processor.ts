@@ -18,7 +18,7 @@ import {
   type ParticipantsValues,
   type PriorsSnapshot,
   type ProfileSnapshot,
-  type SessionRef,
+  type StoredSessionRef,
   type RunPriors,
   type SessionTime,
   type SessionUid,
@@ -95,7 +95,7 @@ export type SessionProcessorOptions = {
    * (before the runner applies it, so every frame the scheduler sees has it, live and replayed alike, C38). Without it,
    * or before that frame, `drivers` is `null`.
    */
-  profilesFor?: (slots: readonly SlotIdentity[], session: SessionRef) => ProfileSnapshot | null;
+  profilesFor?: (slots: readonly SlotIdentity[], session: StoredSessionRef) => ProfileSnapshot | null;
   /**
    * The feed's human seats (C17, C62c; SP4.3b2 Task 10): its player car and teammate while their open `car-driver` span
    * is `human`, with their team and race number from Participants. Handed on after a frame when they changed.

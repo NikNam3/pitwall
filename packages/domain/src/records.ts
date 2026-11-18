@@ -1,5 +1,6 @@
 // History entries (spec 6.3): append-only facts about the session.
 import type { DamageParts } from './analyses/damage.ts';
+import type { SessionBasis } from './basis.ts';
 import type { ActualCompound, VisualCompound } from './compounds.ts';
 import type { TyreSet } from './car.ts';
 import type { Corners } from './corners.ts';
@@ -162,14 +163,16 @@ export type MiniSectorCrossing = {
  * C26). It names the choice, never the values (C23): `calibrationChosen` names the set (`null` for `defaults`) and the
  * priors snapshot it chose (`null` without one, C62a); the snapshot's entries live in the priors sidecar.
  * `planCommitted` carries the whole policy the user chose for one of our cars, thresholds included, as they saw it
- * (SP4.3b spec §8.2): followed exactly until replaced or cleared; `planCleared` drops the car's plan.
+ * (SP4.3b spec §8.2): followed exactly until replaced or cleared; `planCleared` drops the car's plan. `basisChosen`
+ * names the basis the user chose (C62): its sessions, never their data.
  */
 export type DecisionRecord =
   | { kind: 'calibrationChosen'; setId: string | null; snapshot: string | null; frame: FrameNumber }
   | { kind: 'planCommitted'; carId: CarId; policy: Policy; slot?: Slot; frame: FrameNumber }
   | { kind: 'planSaved'; carId: CarId; slot: Slot; policy: Policy; frame: FrameNumber }
   | { kind: 'planRemoved'; carId: CarId; slot: Slot; frame: FrameNumber }
-  | { kind: 'planCleared'; carId: CarId; frame: FrameNumber };
+  | { kind: 'planCleared'; carId: CarId; frame: FrameNumber }
+  | { kind: 'basisChosen'; basis: SessionBasis; frame: FrameNumber };
 
 /** A decision as it enters the engine, before the recorder gives it its frame (C10): one kind at a time. */
 export type GivenDecision = DecisionRecord extends infer D ? (D extends DecisionRecord ? Omit<D, 'frame'> : never) : never;
