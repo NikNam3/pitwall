@@ -203,7 +203,7 @@ export type PlanningHooks = {
   /** `trackId`: the starting session's track (`undefined` for a pipeline made anew, before any session). */
   sessionStarted(feedId: FeedId, trackId?: TrackId): void;
   sessionEnded(feedId: FeedId, ended: EndedSession): void;
-  /** A live session's team became known: the player car's seat (team, race number) on the session's track (R19). */
+  /** A live session's team became known: the player car's seat (team, race number) on the session's track, for this run only. */
   seatKnown?(feedId: FeedId, seat: CarKey, trackId: TrackId): void;
   /**
    * A live race's first frame with its team known, on the team's first feed (C62d, C76): the team's last chosen or
@@ -1140,8 +1140,8 @@ export class FeedPipeline {
 
   /**
    * A Participants packet of the running session names the player car's seat (team, race number): the planning module
-   * is told when it changes (R19), at once, not a reorder window later as frames are. A replay run tells it nothing: the
-   * remembered seat is the live feed's.
+   * is told when it changes, at once, not a reorder window later as frames are (the closed planning state lists its
+   * team's saved plans, C62d). A replay run tells it nothing: the running seat is the live feed's.
    */
   #noticeSeat(packet: Packet): void {
     const session = this.#session;

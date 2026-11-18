@@ -42,6 +42,8 @@ export type PlanningRoundState =
       cars: Record<number, PreparedCar>;
       running: boolean;
       saved: SavedPlanEntry[];
+      /** The saved plan this round was last saved as (SP4.3f Task 10); absent or `null` until a save. */
+      lastSaved?: SavedPlanEntry | null;
     };
 
 export default defineTopic<NoParams, PlanningRoundState>({ owner: 'core', scope: 'feed', mode: 'state', maxHz: Infinity });
