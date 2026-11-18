@@ -3,7 +3,6 @@ import type { FeedId, StrategyOutput } from '@pitwall/domain';
 import { PLANNING_JOB, type StrategyInput } from '@pitwall/analysis';
 import type { Job } from '@pitwall/engine/readers';
 import { dirname } from 'node:path';
-import { createFeedSeatStore } from '../planning/feed-seats.ts';
 import { Planning, type PlanningAction } from '../planning/planning.ts';
 import { suggestedLapsOf } from '../planning/round.ts';
 import { createPlanningRunner } from '../planning/runner.ts';
@@ -395,9 +394,8 @@ export async function serve(opts: ServeOptions): Promise<number> {
     // (C61), its jobs on the feeds' worker limit (C51). The suggestion reads the stored sessions on the track (§7.1 step 3).
     let planning: Planning | undefined;
     if (stores && storage && calibrationRepo && opts.uiDir !== undefined && savedPlans && lastChoiceStore) {
-      const dataDirRoot = dirname(opts.uiDir);
       const warnLog = cliLogger(io, 'warn');
-      // The bridge's one rebuild service (C61): the round's practice is made current through the basis's `ensureCurrent`
+      // The bridge's one rebuild service (C61): the round's picks is made current through the basis's `ensureCurrent`
       // (the stores then see the rebuilt projections) and its replay queued behind it, both at priority `planning`. A run
       // given no service, or one without replays (a test's `serve`), has one of its own here for the replay.
       const replays: Pick<RebuildService, 'ensureCurrent' | 'replayToEnd'> = service?.replayToEnd ? { ensureCurrent: service.ensureCurrent.bind(service), replayToEnd: service.replayToEnd.bind(service) } : (() => {
@@ -424,7 +422,8 @@ export async function serve(opts: ServeOptions): Promise<number> {
         store,
         lastChoice,
         sessions: calibrationRepo,
-        seatOf: (feedId) => planning?.seatOf(feedId),
+        // The round's profile snapshot: the same profile store the pipelines start their sessions on (C62c, C62d).
+        profiles,
         log: pipelineLog,
       });
       planning = new Planning({
@@ -432,8 +431,6 @@ export async function serve(opts: ServeOptions): Promise<number> {
         store,
         lastChoice,
         suggestedLaps: (trackId, format) => suggestedLapsOf(calibrationRepo.sessionsOnTrack(trackId), format),
-        // Each feed's last seat, so a bridge between sessions knows the team (R19).
-        seats: createFeedSeatStore(dataDirRoot, warnLog),
         log: pipelineLog,
       });
       const made = planning;
