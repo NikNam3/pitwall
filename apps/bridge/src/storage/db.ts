@@ -1,12 +1,15 @@
 import Database from 'better-sqlite3';
-import type { CarId, CarKey, Known, SessionUid } from '@pitwall/domain';
+import type { CarId, CarKey, Known, SessionUid, WeekendPhaseKind } from '@pitwall/domain';
 import { SchemaVersionError } from './schema-version-error.ts';
 
 export { SchemaVersionError };
 
 export type Db = Database.Database;
 
-export const SCHEMA_VERSION = 6;
+export const SCHEMA_VERSION = 7;
+
+/** A session's weekend-phase kind as its row stores it: the weekend-phase span's kind; `none` while pending or without one. */
+export type SessionKind = WeekendPhaseKind | 'none';
 
 /** Every per-session table refers to its session by the three key columns (C1a, C60). */
 const SESSION_REF = `session_uid TEXT NOT NULL, weekend_id TEXT NOT NULL, player_car INTEGER NOT NULL`;
@@ -22,12 +25,13 @@ CREATE TABLE weekends (weekend_id TEXT PRIMARY KEY, season_id TEXT NOT NULL, tra
  * Keyed by session uid, weekend id and the feed's player car: the game reuses a session uid across online weekends, and
  * two feeds of one session are stored side by side (C1a). The row holds only values from the recording, the player
  * car, the teammate the engine placed (the newest live.teammateCar of the session's run, NULL without one), the rules
- * version of its log and whether that log is complete (C32, C43, C61).
+ * version of its log, whether that log is complete and its weekend-phase kind (C32, C43, C61, C62). The kind is last,
+ * where schema 6's in-place migration adds it.
  */
 CREATE TABLE sessions (
   session_uid TEXT NOT NULL, weekend_id TEXT NOT NULL REFERENCES weekends(weekend_id), player_car INTEGER NOT NULL,
   teammate_car INTEGER, track_id INTEGER NOT NULL, started_at TEXT NOT NULL, pwrec_path TEXT, settings TEXT NOT NULL /* JSON */,
-  rules_version TEXT NOT NULL, complete INTEGER NOT NULL, PRIMARY KEY (session_uid, weekend_id, player_car)) STRICT;
+  rules_version TEXT NOT NULL, complete INTEGER NOT NULL, kind TEXT NOT NULL DEFAULT 'none', PRIMARY KEY (session_uid, weekend_id, player_car)) STRICT;
 CREATE INDEX sessions_by_weekend ON sessions (weekend_id, started_at);
 /*
  * Every slot's team and race number (C62) and its driver name (shown only, never part of the key; NULL when the game
@@ -67,12 +71,33 @@ export type SessionRow = {
    * part of the key; `notReceived` when the game names none), ordered by car id when read.
    */
   cars: ReadonlyArray<{ carId: CarId; carKey: CarKey; driver: Known<string> }>;
+  /**
+   * The session's weekend-phase kind (C14, C62): its weekend-phase span's kind once the weekend phase is decided, `none`
+   * before (pending) or without one. Row metadata, so a stale session's kind is known without reading its log (C61).
+   */
+  kind: SessionKind;
 };
 
 /** A row as storage returns it: with the rules version of its log and whether that log is complete (C61). */
 export type StoredSessionRow = SessionRow & { rulesVersion: string; complete: boolean };
 
-/** Opens (creating it if empty) the pitwall database; a database of any other schema version is refused. */
+/**
+ * Schema 6 → 7 in place (C24, C60: every stored session kept): the session row gains its kind, backfilled from the
+ * session's first stored weekend-phase span (`none` without one).
+ */
+const MIGRATE_6_TO_7 = `
+ALTER TABLE sessions ADD COLUMN kind TEXT NOT NULL DEFAULT 'none';
+UPDATE sessions SET kind = COALESCE((
+  SELECT json_extract(f.record, '$.kind') FROM facts f
+  WHERE f.session_uid = sessions.session_uid AND f.weekend_id = sessions.weekend_id AND f.player_car = sessions.player_car
+    AND f.list = 'spans:weekend-phase'
+  ORDER BY f.seq LIMIT 1), 'none');
+`;
+
+/**
+ * Opens (creating it if empty) the pitwall database; a schema-6 one is migrated in place to schema 7, a database of any
+ * other schema version is refused.
+ */
 export function openDatabase(path: string): Db {
   const db = new Database(path);
   try {
@@ -82,6 +107,11 @@ export function openDatabase(path: string): Db {
     if (version === 0 && !hasTables(db)) {
       db.transaction(() => {
         db.exec(DDL);
+        db.pragma(`user_version = ${SCHEMA_VERSION}`);
+      })();
+    } else if (version === 6) {
+      db.transaction(() => {
+        db.exec(MIGRATE_6_TO_7);
         db.pragma(`user_version = ${SCHEMA_VERSION}`);
       })();
     } else if (version !== SCHEMA_VERSION) {

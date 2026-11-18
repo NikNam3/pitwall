@@ -47,11 +47,11 @@ import type { SlotIdentity } from '../drivers/store.ts';
 import type { FeatureConfig } from '../feature-config.ts';
 import type { FeedJobs } from '../jobs/feed-jobs.ts';
 import type { Logger } from '../log.ts';
-import type { SessionKey, SessionRow } from '../storage/db.ts';
+import type { SessionKey, SessionKind, SessionRow } from '../storage/db.ts';
 import type { SessionFile } from '../storage/session-files.ts';
 import { MAX_DUMPS_PER_SESSION, writeDebugDump } from './debug-dump.ts';
 import { PendingDecisions, SessionRecords, type Placed } from './decision-placement.ts';
-import { carsOf, sessionRowOf, type SessionStorage } from './session-storage.ts';
+import { carsOf, sessionKindOf, sessionRowOf, type SessionStorage } from './session-storage.ts';
 import type { PublishError, SpansOf, TopicPublisher } from './topic-publisher.ts';
 
 /** The feed's player car in a session (C60's key): the player car index of its first frame, whose Session packet starts it. */
@@ -144,6 +144,8 @@ export class SessionProcessor {
   #active: string | undefined;
   /** The teammate of the row last built (`#row`): a row is written again when the engine's teammate is another. */
   #storedTeammate: CarId | null = null;
+  /** The kind of the row last built (`#row`): a row is written again once the weekend phase is decided (R9, C62). */
+  #storedKind: SessionKind = 'none';
   /** The run's profile snapshot (C62c): `undefined` until the first frame with Participants asks for it, fixed after. */
   #drivers: ProfileSnapshot | null | undefined;
   /** The human seats last handed to `onSeats`, as JSON: handed on only when they change. */
@@ -393,7 +395,9 @@ export class SessionProcessor {
     try {
       // The row stores every slot's car key from the live identity and the teammate the engine placed: whenever either
       // changes (a rewind included), the row follows (the newest wins). Then the log's new facts are appended (C24).
-      if (storage !== undefined && (result.changed.has('identity') || this.#teammate() !== this.#storedTeammate)) this.#storeRow((row) => storage.upsertSession(row));
+      // The row's kind follows the weekend phase once the machine decided it (C14, C62).
+      const rowChanged = result.changed.has('identity') || this.#teammate() !== this.#storedTeammate || sessionKindOf(this.weekendPhase) !== this.#storedKind;
+      if (storage !== undefined && rowChanged) this.#storeRow((row) => storage.upsertSession(row));
       storage?.writeLog(this.#key, result.state.log);
       // A session time that fell back with no flashback and no start: the engine keeps its race clock monotonic (spec 3.3); worth knowing.
       if (result.clockFall) log.info({ feedId, sessionUid: this.#uid, clockFall: result.clockFall }, 'session time fell back');
@@ -555,6 +559,7 @@ export class SessionProcessor {
     const { state } = this.#runner;
     return sessionRowOf({
       sessionUid: this.#uid, session: state.session, playerCar: this.#key.playerCar, teammateCar: this.#teammate(), startedAt, pwrecPath, cars: carsOf(state),
+      weekendPhase: this.weekendPhase,
     });
   }
 
@@ -562,6 +567,7 @@ export class SessionProcessor {
   #storeRow(write: (row: SessionRow) => void): void {
     const row = this.#row();
     this.#storedTeammate = row.teammateCar;
+    this.#storedKind = row.kind;
     write(row);
   }
 
