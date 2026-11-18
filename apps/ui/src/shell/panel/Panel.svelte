@@ -65,7 +65,7 @@
     group,
     defaultFeed,
     send = () => Promise.resolve({ ok: true }),
-    invoke = () => Promise.resolve({ ok: true }),
+    invoke = () => Promise.resolve({ ok: false, reason: 'notSupported' }),
     onOptions = () => {},
     onLinkGroup = () => {},
     inspection,

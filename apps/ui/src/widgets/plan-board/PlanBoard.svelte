@@ -7,7 +7,9 @@
   // SP4.3d2 Task 12: the variant (presentation.ts `variantOf`): live draws `strategy.car`, planning the planning job's
   // `plans.preview` with the race inputs line (GRID, LAPS, RAIN, N), the START column, the prefilled slots with
   // `accept` and an empty game slot's entry; every planning control, and the race's prefill accept, invokes a shell
-  // command by id through the panel (C72, C74). The cell budget is layout.ts'.
+  // command by id through the panel (C72, C74). The cell budget is layout.ts'. SP4.3e Task 8: a rejected outcome of a
+  // command or action that marks no field shows the bridge's message on the board's last line (C73).
+  import type { ActionOutcome } from '@pitwall/contracts';
   import type { NoiseCompound, Slot } from '@pitwall/domain';
   import { PLAN_SLOTS } from '@pitwall/domain';
   import { getUiActions } from '../../kit/actions.ts';
@@ -47,6 +49,8 @@
   let lapsRejected = $state<string | null>(null);
   let entries = $state<Partial<Record<Slot, Draft>>>({});
   let entryRejected = $state<Partial<Record<Slot, Rejection>>>({});
+  /** The bridge's message of the last rejected command or action that marks no field (C73). */
+  let actionRejected = $state<string | null>(null);
 
   const full = $derived(size.mode === 'full');
   const mode = $derived(full ? 'full' : 'compact');
@@ -89,6 +93,7 @@
     if (!acting || line.slot === null || line.prefill) return;
     selected = selected === line.slot ? null : line.slot;
     pickFor = null;
+    actionRejected = null;
   }
   const onKey = (line: SlotLine) => (e: KeyboardEvent): void => {
     if (e.key === 'Enter') select(line);
@@ -96,28 +101,38 @@
   function openPicker(n: StopCount): void {
     pickFor = pickFor === n ? null : n;
     selected = null;
+    actionRejected = null;
+  }
+  /**
+   * Waits for a command's or action's outcome: a rejection shows the bridge's message on the board's last line until
+   * the next control (C73: never a silent nothing).
+   */
+  async function outcomeOf(pending: Promise<ActionOutcome>): Promise<void> {
+    actionRejected = null;
+    const outcome = await pending;
+    actionRejected = outcome.ok ? null : (outcome.message ?? text.rejectedNoReason);
   }
   function pick(slot: Slot): void {
     const line = view?.dp.find((l) => l.stopCount === pickFor);
     pickFor = null;
     if (line === undefined) return;
-    if (planning) void commands.invoke('plans.prepare.save', { feedId: link.feedId, carId: link.primary, slot, policy: line.policy });
-    else void send({ kind: 'plan.save', feedId: link.feedId, carId: link.primary, slot, policy: line.policy });
+    if (planning) void outcomeOf(commands.invoke('plans.prepare.save', { feedId: link.feedId, carId: link.primary, slot, policy: line.policy }));
+    else void outcomeOf(send({ kind: 'plan.save', feedId: link.feedId, carId: link.primary, slot, policy: line.policy }));
   }
   function activate(slot: Slot): void {
-    if (planning) void commands.invoke('plans.prepare.activate', { feedId: link.feedId, carId: link.primary, slot });
-    else void send({ kind: 'plan.activate', feedId: link.feedId, carId: link.primary, slot });
+    if (planning) void outcomeOf(commands.invoke('plans.prepare.activate', { feedId: link.feedId, carId: link.primary, slot }));
+    else void outcomeOf(send({ kind: 'plan.activate', feedId: link.feedId, carId: link.primary, slot }));
   }
   function remove(slot: Slot): void {
-    if (planning) void commands.invoke('plans.prepare.remove', { feedId: link.feedId, carId: link.primary, slot });
-    else void send({ kind: 'plan.remove', feedId: link.feedId, carId: link.primary, slot });
+    if (planning) void outcomeOf(commands.invoke('plans.prepare.remove', { feedId: link.feedId, carId: link.primary, slot }));
+    else void outcomeOf(send({ kind: 'plan.remove', feedId: link.feedId, carId: link.primary, slot }));
   }
   /** `accept` on a prefilled line: the prefill becomes the slot's plan (the round's or the race's command). */
   function accept(line: SlotLine): void {
     if (line.slot === null) return;
     const args = { feedId: link.feedId, carId: link.primary, slot: line.slot, policy: line.policy };
-    if (planning) void commands.invoke('plans.prepare.accept', args);
-    else void commands.invoke('plan.accept', args);
+    if (planning) void outcomeOf(commands.invoke('plans.prepare.accept', args));
+    else void outcomeOf(commands.invoke('plan.accept', args));
   }
   function edit(line: SlotLine): void {
     if (line.slot === null) return;
@@ -153,12 +168,19 @@
   }
   async function saveEntry(slot: Slot): Promise<void> {
     const d = entry(slot);
+    actionRejected = null;
     const outcome = await commands.invoke('plans.prepare.save', { feedId: link.feedId, carId: link.primary, slot, policy: policyOfDraft(d) });
     if (entries[slot] !== undefined && entries[slot] !== d) return;
     if (outcome.ok) {
       entries = { ...entries, [slot]: undefined };
       entryRejected = { ...entryRejected, [slot]: undefined };
-    } else entryRejected = { ...entryRejected, [slot]: { message: outcome.message ?? text.rejectedNoReason, changed: changedFields(d) } };
+      return;
+    }
+    const message = outcome.message ?? text.rejectedNoReason;
+    const changed = changedFields(d);
+    entryRejected = { ...entryRejected, [slot]: { message, changed } };
+    // An unchanged entry has no field to mark: the message goes to the board's last line.
+    if (!changed.some((c) => c.lap || c.compound)) actionRejected = message;
   }
   const badEntry = (slot: Slot, i: number, field: 'lap' | 'compound'): boolean => entryRejected[slot]?.changed[i]?.[field] === true;
 
@@ -303,6 +325,13 @@
     ></div>
 {/snippet}
 
+<!-- The bridge's message of a rejected command or action in the warning role, the whole message on hover; a blank line otherwise. -->
+{#snippet rejectionLine()}
+  <div class="line">{LEAD}{#if actionRejected !== null}<span data-testid="rejection" data-role={rejectedRole} title={actionRejected}
+        ><TextCell text={text.rejected(actionRejected)} width={width - LEAD.length} role={rejectedRole} /></span
+      >{/if}</div>
+{/snippet}
+
 {#snippet inputsLine()}
   <div class="line" data-testid="inputs">{LEAD}<span style:color={role(headerRole)}>{text.inputs.grid}</span> {#if planningInputs !== null}<TextCell
         text={planningInputs.gridPlace.known ? formatPosition(planningInputs.gridPlace.value) : ''}
@@ -388,7 +417,7 @@
           {@render editor(draft)}
         {:else}
           <!-- the race: a blank, then the picker or the actions; the planning round: the last line holds them (layout.ts) -->
-          {#if !planning}<div class="line"> </div>{/if}
+          {#if !planning}{@render rejectionLine()}{/if}
           {#if pickFor !== null && acting}
             <div class="line" data-testid="picker">{LEAD}{' '.repeat(cols.slot)}{GAP}{text.arrow}{#each PLAN_SLOTS as s (s)}{GAP}<button
                   type="button"
@@ -414,7 +443,7 @@
                   onclick={() => remove(slot)}>{text.remove}</button
                 >{/if}</div>
           {:else if planning}
-            <div class="line"> </div>
+            {@render rejectionLine()}
           {/if}
         {/if}
       {/if}
