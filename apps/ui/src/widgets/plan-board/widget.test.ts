@@ -30,9 +30,10 @@ describe('plan-board declaration', () => {
     expect(widget.options.source).toMatchObject({ kind: 'choice', default: 'auto', choices: ['auto', 'live', 'planning'] });
   });
 
-  it('invokes the six planning commands, nothing else (C72, C74)', () => {
+  // SP4.3f Task 10: and the shell's `plans.save.pick` (the planning line's `save` opens the name prompt).
+  it('invokes the six planning commands and plans.save.pick, nothing else (C72, C74)', () => {
     expect([...widget.commands].sort()).toEqual(
-      ['plan.accept', 'plans.prepare.accept', 'plans.prepare.activate', 'plans.prepare.remove', 'plans.prepare.save', 'plans.race.set'],
+      ['plan.accept', 'plans.prepare.accept', 'plans.prepare.activate', 'plans.prepare.remove', 'plans.prepare.save', 'plans.race.set', 'plans.save.pick'],
     );
   });
 
@@ -52,7 +53,7 @@ describe('plan-board gallery', () => {
     expect(names).toEqual([
       'race', 'threeSlots', 'sameAsSlot', 'coldStart', 'computing', 'notApplicable',
       'gridPrefill', 'planningRound', 'planningComputing', 'planningNoLaps', 'planningNotApplicable',
-      'planningConditions', 'planningConditionsEdited', 'planningNoConditions',
+      'planningConditions', 'planningConditionsEdited', 'planningNoConditions', 'planningSaved',
     ]);
     const race = cases.race.plan.value;
     expect(race.known && race.value.rows.filter((r) => r.slot !== null).map((r) => r.slot).sort()).toEqual([...PLAN_SLOTS].sort());
@@ -84,6 +85,7 @@ describe('plan-board gallery', () => {
       planningConditions: { source: 'planning' },
       planningConditionsEdited: { source: 'planning' },
       planningNoConditions: { source: 'planning' },
+      planningSaved: { source: 'planning' },
     });
     const r = cases.planningRound;
     expect(r.prepared.open).toBe(true);

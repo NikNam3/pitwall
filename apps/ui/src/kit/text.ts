@@ -177,6 +177,7 @@ export const commandTitles = {
   planEdit: (car: number, slot: string): string => `Edit slot ${slot} of car ${car}`,
   sessionEnd: 'End session',
   basisPick: 'Basis and plan…',
+  planSavePick: 'Save plan…',
   plansPrepareLaps: 'Enter the race laps',
   plansPrepareSave: 'Save a prepared plan',
   plansPrepareAccept: 'Accept a prefilled plan',
@@ -251,6 +252,23 @@ export const planning = {
   plan: 'Plan…',
   /** The segment's parts in order. */
   segment: (parts: readonly string[]): string => [planningLabel, ...parts].join(separator),
+} as const;
+
+/**
+ * The name prompt "Save plan" (`plans.save.pick`, SP4.3f spec §4.4; the user's layout of 2026-11-18): the name, prefilled
+ * `Texas 18 Nov 17:20`, one `overwrite` radio per saved plan of the team on the track, `cancel` and `Save`.
+ */
+export const planSave = {
+  title: 'Save plan',
+  name: 'name',
+  /** The prefilled name: the track, then the day and time of day now. */
+  prefill: (track: string, dayTime: string): string => `${track} ${dayTime}`,
+  /** Before a saved plan's name: saving replaces it. */
+  overwrite: 'overwrite',
+  cancel: 'cancel',
+  confirm: 'Save',
+  /** A rejection without the bridge's message. */
+  rejected: 'rejected',
 } as const;
 
 /** The session-start calibration prompt and the top bar's calibration segment (SP4.1a spec 3.3). */

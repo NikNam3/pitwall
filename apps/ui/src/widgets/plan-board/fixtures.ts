@@ -246,7 +246,14 @@ export type RoundSpec = {
   forecast?: RoundForecast;
   /** The race's conditions as the round holds them. Default imported. */
   conditions?: RaceConditions;
+  /** The saved plan the round was last saved as (SP4.3f Task 10); omitted (absent) by default. */
+  lastSaved?: SavedPlanEntry | null;
 };
+
+/** A saved plan of the team on the track (`plans.prepared` `SavedPlanEntry`; the contracts index exports it). */
+export type SavedPlanEntry = Extract<PlanningRoundState, { open: true }>['saved'][number];
+/** The plan the round was saved as at 17:20 (SP4.3f Task 10, the user's layout). */
+export const LAST_SAVED: SavedPlanEntry = { id: 'b', name: 'Texas 18 Nov 17:20', savedAt: '2026-11-18T16:20:00Z' };
 
 /** `plans.prepared` while the round is open (`PlanningRoundState`): KUH's prepared plans, the race laps (entered or suggested). */
 export function round(spec: RoundSpec = {}): PlanningRoundState {
@@ -257,6 +264,7 @@ export function round(spec: RoundSpec = {}): PlanningRoundState {
     active = null,
     forecast = forecastOf(DEFAULT_SAMPLES),
     conditions = IMPORTED,
+    lastSaved,
   } = spec;
   return {
     open: true,
@@ -271,7 +279,8 @@ export function round(spec: RoundSpec = {}): PlanningRoundState {
     rebuilding: false,
     cars: { [KUH]: { raceNumber: KUH_NUMBER, slots, active } },
     running,
-    saved: [],
+    saved: lastSaved === undefined || lastSaved === null ? [] : [lastSaved],
+    ...(lastSaved !== undefined && { lastSaved }),
   };
 }
 /** `plans.prepared` outside the planning round: no saved plans of the team on the track (ruling R15). */
@@ -316,6 +325,9 @@ export const cases = {
   },
   // No race samples in the qualifying, none entered (C3, Review focus 3): RAIN the missing mark, never 0 %; no job result.
   planningNoConditions: { prepared: round({ forecast: forecastOf(null) }) },
+  // SP4.3f Task 10 (the user's layout, 2026-11-18): the round saved as `Texas 18 Nov 17:20`: the planning line ends
+  // with `saved · Texas 18 Nov 17:20` in place of `save`. No baseline (budget).
+  planningSaved: { preview: preview(), prepared: round({ lastSaved: LAST_SAVED }) },
 } satisfies NonNullable<GalleryEntry<typeof widget>['cases']>;
 
 /** Per case, the panel options it is drawn with (the planning cases as the plan workbook sets them: `source: planning`). */
@@ -327,6 +339,7 @@ export const caseOptions = {
   planningConditions: { source: 'planning' },
   planningConditionsEdited: { source: 'planning' },
   planningNoConditions: { source: 'planning' },
+  planningSaved: { source: 'planning' },
 } satisfies NonNullable<GalleryEntry<typeof widget>['caseOptions']>;
 
 /** The gallery's fit sizes: the two minimums (compact 37×7, full 82×13) plus a larger one per mode. */
