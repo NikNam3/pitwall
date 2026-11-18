@@ -1,16 +1,18 @@
 // The committed teammates of one car's call (SP4.3b2 Task 18f; C43): one rule for `strategy`, `pit-sweep`, `undercut`
 // and `sc-call`. A car of ours is certain input only when it is in the planned field (`plannedCars`) and committed; its
 // plan is followed as far as it can be (spec §8.2, `followable`). Pure (C2).
-import { NOISE_COMPOUNDS, type CarId, type McRow, type NoiseCompound, type Policy, type StartingPoint } from '@pitwall/domain';
+import { NOISE_COMPOUNDS, type CarId, type McRow, type Policy, type StartingPoint } from '@pitwall/domain';
 import { startLapOf } from '../../race-forecast/index.ts';
 import { plannedCars, plannedField } from './dp-input.ts';
 import type { StrategyInput } from './input.ts';
+import { takeSets } from './sets-used.ts';
 
 type Infeasible = McRow['infeasible'];
 
 /**
  * A committed policy as far as car `car` can follow it (spec §8.2): a passed stop boxes this lap (one stop a lap), a
- * stop onto a compound without a set left is dropped (the car keeps its tyres); the reason, the first found.
+ * stop onto a compound without a new set left (`takeSets`, the one set rule) is dropped (the car keeps its tyres); the
+ * reason, the first found.
  */
 export function followable(start: StartingPoint, car: CarId, policy: Policy): { policy: Policy; infeasible: Infeasible } {
   const fromLap = startLapOf(start, car);
@@ -32,18 +34,14 @@ export function followable(start: StartingPoint, car: CarId, policy: Policy): { 
     if (last !== undefined && last.lap >= lap) continue;
     onLaps.push({ lap, compound: s.compound });
   }
-  const left = new Map<NoiseCompound, number>();
-  for (const s of start.sets[car] ?? []) left.set(s.compound, (left.get(s.compound) ?? 0) + 1);
+  // the one set rule (`takeSets`, C43): a free start's set counts as used; each stop takes a new set
+  const taken = takeSets(start, car, startCompound, onLaps);
+  if (!taken.startOk) infeasible ??= 'noSetLeft';
   const stops: Policy['stops'] = [];
-  for (const s of onLaps) {
-    const n = left.get(s.compound) ?? 0;
-    if (n <= 0) {
-      infeasible ??= 'noSetLeft';
-      continue;
-    }
-    left.set(s.compound, n - 1);
-    stops.push(s);
-  }
+  onLaps.forEach((s, i) => {
+    if (taken.kept[i] === true) stops.push(s);
+    else infeasible ??= 'noSetLeft';
+  });
   if (infeasible === null) return { policy, infeasible };
   return { policy: startCompound === undefined ? { stops } : { startCompound, stops }, infeasible };
 }
