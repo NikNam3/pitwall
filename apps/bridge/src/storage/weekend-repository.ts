@@ -111,6 +111,9 @@ export class WeekendRepository {
         `SELECT ${sessionColumns} ${sessionsFrom} WHERE s.track_id = ? AND s.complete = 1 ORDER BY s.started_at, s.session_uid, s.player_car`,
       ),
       completeSessions: db.prepare(`SELECT ${sessionColumns} ${sessionsFrom} WHERE s.complete = 1 ORDER BY s.started_at, s.session_uid, s.player_car`),
+      completePracticeAndQualifying: db.prepare(
+        `SELECT ${sessionColumns} ${sessionsFrom} WHERE s.complete = 1 AND s.kind IN ('practice', 'qualifying') ORDER BY s.started_at, s.session_uid, s.player_car`,
+      ),
       incompleteSessions: db.prepare(`SELECT ${sessionColumns} ${sessionsFrom} WHERE s.complete = 0 ORDER BY s.started_at, s.session_uid, s.player_car`),
       newestWeekend: db.prepare(`SELECT weekend_id FROM sessions ORDER BY started_at DESC, session_uid DESC, player_car DESC LIMIT 1`).pluck(),
       session: db.prepare(
@@ -179,6 +182,15 @@ export class WeekendRepository {
       const difficulty = session.settings['aiDifficulty'];
       return { ...session, aiDifficulty: typeof difficulty === 'number' ? known(difficulty, 0) : unknown('notReceived') };
     });
+  }
+
+  /**
+   * Every complete stored row of kind `practice` or `qualifying` (a sprint shootout included), of every track and feed,
+   * in start order, with its cars (C62): the rows alone, no log read, so a stale one is listed as it is and nothing is
+   * rebuilt (C61). An incomplete one is left out.
+   */
+  storedSessions(): StoredSessionRow[] {
+    return (this.#statements.completePracticeAndQualifying.all() as SessionDbRow[]).map((row) => this.#toSession(row));
   }
 
   /** A complete stored row as `sessionsOnTrack` gives it: stale without its projection (C61), else with it (C34). */
