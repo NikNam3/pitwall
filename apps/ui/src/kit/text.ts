@@ -233,6 +233,26 @@ const TEAM_NAMES: Readonly<Record<number, string>> = {
 };
 export const teamName = (team: TeamId): string => TEAM_NAMES[team] ?? `team ${team}`;
 
+/**
+ * The top bar between sessions (SP4.3f spec §4.4; mockup topbar-planning): the open round as
+ * `Planning · P 17 Nov · Q 17 Nov · 56 laps · fresh · rain 1–12 %`, `rebuilding` while a pick is rebuilt, `edited`
+ * once a forecast row is overridden; without a round the quiet `Plan…` button.
+ */
+const planningLabel = 'Planning';
+export const planning = {
+  practice: (days: string): string => `P ${days}`,
+  qualifying: (day: string): string => `Q ${day}`,
+  sets: { fresh: 'fresh', carried: 'carried' },
+  /** Before the rain chance's range over the forecast rows, or its unknown mark while the rows are unknown. */
+  rain: 'rain',
+  rainRange: (min: string, max: string): string => `${min}–${max} %`,
+  rebuilding: 'rebuilding',
+  edited: 'edited',
+  plan: 'Plan…',
+  /** The segment's parts in order. */
+  segment: (parts: readonly string[]): string => [planningLabel, ...parts].join(separator),
+} as const;
+
 /** The session-start calibration prompt and the top bar's calibration segment (SP4.1a spec 3.3). */
 export const calibration = {
   /** The track, then the session's kind as the top bar names it (`Silverstone race`); the track alone without one. */

@@ -9,6 +9,8 @@
   import { role } from '../../theme/index.ts';
   import { TOP_BAR } from './layout.ts';
   import { TopBarModel } from './model.svelte.ts';
+  // Drawn next to the basis segment, in its place between sessions (SP4.3f spec §4.4); each shows only when it applies.
+  import Planning from './segments/Planning.svelte';
 
   type Props = {
     store: TopicStore;
@@ -74,6 +76,7 @@
     {#each TOP_BAR.left as name (name)}
       {@const Segment = SEGMENTS.get(name)}
       <span class="segment" data-testid="segment-{name}">{#if Segment}<Segment {bar} />{/if}</span>
+      {#if name === 'basis'}<span class="segment" data-testid="segment-planning"><Planning {bar} /></span>{/if}
     {/each}
   </div>
   <div class="side">

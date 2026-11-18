@@ -1,6 +1,6 @@
 <script lang="ts">
   // One window (spec 7.1-7.3): the active workbook's panels for this window, in a dock, saved back to the bridge.
-  import { ackToken, type FeedInfo, type LinkGroup, type PanelSpec, type ReplayControl, type SessionInfo, type TopicValue, type UiAction, type UiSettings } from '@pitwall/contracts';
+  import { ackToken, type FeedInfo, type LinkGroup, type PanelSpec, type PlanningRoundState, type ReplayControl, type SessionInfo, type TopicValue, type UiAction, type UiSettings } from '@pitwall/contracts';
   import { ourCars, type CalibrationActiveValue, type FeedId, type Insight } from '@pitwall/domain';
   import { getAllContexts, mount, onDestroy, unmount, untrack, type Component, type ComponentProps } from 'svelte';
   import type { EntryState, TopicStore } from '../../connection/topic-store.svelte.ts';
@@ -159,6 +159,23 @@
     return () => held.forEach(({ held }) => held.release());
   });
   const feeds = $derived<FeedSession[]>(feedSessions.map(({ info, state }) => ({ info, session: state.status === 'ok' ? state.value : undefined })));
+
+  // The default feed's planning round (SP4.3f spec §4.4): between sessions its cars give the panels their link.
+  let prepared = $state.raw<EntryState<PlanningRoundState> | undefined>();
+  $effect(() => {
+    const feed = defaultFeed;
+    if (feed === undefined) {
+      prepared = undefined;
+      return;
+    }
+    const held = untrack(() => store.acquire({ topic: 'plans.prepared', params: {}, feedId: feed }));
+    prepared = held.state;
+    return () => held.release();
+  });
+  const openRound = $derived.by(() => {
+    const value = prepared?.status === 'ok' ? prepared.value : undefined;
+    return value?.open === true ? value : undefined;
+  });
 
   // The calibration the default feed's run uses (SP4.1a spec 3.3): its commands and the top bar's segment.
   let calibrationActive = $state.raw<EntryState<CalibrationActiveValue> | undefined>();
@@ -397,7 +414,7 @@
             return groups === undefined ? undefined : groupOf(current().linkGroup);
           },
           get link() {
-            const next = resolveLink(groupOf(current().linkGroup), sessionInfo, defaultFeed, feeds);
+            const next = resolveLink(groupOf(current().linkGroup), sessionInfo, defaultFeed, feeds, openRound);
             if (!sameLink(link, next)) link = next;
             return link;
           },

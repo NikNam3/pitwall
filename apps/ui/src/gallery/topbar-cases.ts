@@ -3,6 +3,7 @@ import type { InsightEntry, ReplayStatus, TopicValue, UiSettings } from '@pitwal
 import { feedId, known, unknown } from '@pitwall/domain';
 import { BASIS_CASES } from './basis-cases.ts';
 import type { GalleryOverride } from './gallery-connection.ts';
+import { PLANNING_CASES } from './planning-cases.ts';
 
 /** A battle: a car within reach on the next laps (spec 7.2, moment 4); battle has no `since` (ruling R1). */
 const battle: TopicValue<'raceMoment.current'> = known(
@@ -33,4 +34,9 @@ export const TOP_BAR_CASES = {
   // The basis segment (SP4.3e Task 7c-2): every kind none; a plan computed for other race laps.
   'basis-none': BASIS_CASES.none,
   'basis-laps-differ': BASIS_CASES['laps-differ'],
+  // The top bar between sessions (SP4.3f Task 5): no round, a round, a pick being rebuilt, no race samples.
+  'planning-no-round': PLANNING_CASES['no-round'],
+  'planning-round': PLANNING_CASES.round,
+  'planning-rebuilding': PLANNING_CASES.rebuilding,
+  'planning-no-race-samples': PLANNING_CASES['no-race-samples'],
 } satisfies Record<string, GalleryOverride[]>;
