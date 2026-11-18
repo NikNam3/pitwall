@@ -73,6 +73,11 @@ type ServeBase = {
     recordingsDir: string;
     rulesVersion: string;
     rebuild?: (row: StoredSessionRow) => Promise<void>;
+    /**
+     * Handed, once the pipelines' map exists, the sessions the feeds run now (read at every call): the rebuild service
+     * behind `rebuild` checks them when a rebuild is asked for, when it starts and at its swap (C24, C59).
+     */
+    onRunning?: (running: () => ReadonlyArray<SessionKey | undefined>) => void;
   };
   staleCheck?: FeedPipelineOptions['staleCheck'];
   /** For a source that binds a socket: resolves once it is bound, rejects with a `StartupError` if it cannot be. */
@@ -173,6 +178,7 @@ export async function serve(opts: ServeOptions): Promise<number> {
     // A session a feed is running right now is no stale session: it is never rebuilt under it (C59). The bridge's
     // rebuilds run one at a time, each checked when it starts: a session stored fresh meanwhile is not rebuilt again.
     const running = (): Array<SessionKey | undefined> => [...pipelines.values()].map((pipeline) => pipeline.runningSession());
+    storage?.onRunning?.(running);
     const isRunning = (row: SessionKey): boolean => running().some((key) => key !== undefined && sameSession(row, key));
     const isFresh = (row: SessionKey): boolean => {
       const stored = calibrationRepo?.sessionOf(row);
@@ -186,10 +192,10 @@ export async function serve(opts: ServeOptions): Promise<number> {
     });
     // The stale sessions a set, a person's links or the suggestions read (C61), rebuilt from their recordings as a session
     // start's weekend context rebuilds its stale ones; a failed rebuild is logged and its session stays stale (C3).
-    // Nothing is rebuilt at bridge start (C61): what the stores read while they open is what is current.
-    let storesOpening = true;
+    // Nothing is rebuilt at bridge start (C61): the stores ask for nothing while they open, only at their first real read
+    // (a session start's snapshot, a calibration edit), always as a first read (the service's default priority).
     const rebuildStored = async (keys: readonly SessionKey[]): Promise<void> => {
-      if (storesOpening || checkedRebuild === undefined || calibrationRepo === undefined) return;
+      if (checkedRebuild === undefined || calibrationRepo === undefined) return;
       const rows = keys.flatMap((key) => calibrationRepo.sessionsOf(key.weekendId).filter((row) => sameSession(row, key)));
       await Promise.all(rows.map((row) => checkedRebuild(row).catch((error: unknown) => {
         calibrationLog.error({ sessionUid: row.sessionUid, weekendId: row.weekendId, playerCar: row.playerCar, err: error }, 'stored session not rebuilt');
@@ -218,7 +224,6 @@ export async function serve(opts: ServeOptions): Promise<number> {
       })
       : undefined;
     if (profiles) undo.push(() => profiles.close());
-    storesOpening = false;
     // A rebuild changes the stored projections the sets' sources and the persons' links rest on (C61).
     const rebuildThenRecompute = checkedRebuild && (async (row: StoredSessionRow) => {
       await checkedRebuild(row);

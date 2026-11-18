@@ -6,14 +6,16 @@ import type { SessionBasis, TrackId } from '@pitwall/domain';
 import { defineTopic, type NoParams } from '../topic-def.ts';
 
 /**
- * `sessions` is keyed by `basisKey`'s per-session part (`<sessionUid>@<weekendId>`); `date` is an ISO date.
+ * `sessions` is keyed by `basisKey`'s per-session part (`<sessionUid>@<weekendId>`): every stored session of the feed's
+ * seat on the track (the picker's candidates), the named ones included; `date` is an ISO date; `stale`: stored under
+ * another rules version, rebuilt when chosen (C61).
  * `plan.laps` is the race laps the plan was computed on (`computedOn.race.laps`), shown beside `raceLaps`, not judged.
  * `rebuilding` is `null` while every named session is current.
  */
 export type BasisActive = {
   basis: SessionBasis;
   start: SessionBasis;
-  sessions: Record<string, { date: string; kind: 'practice' | 'qualifying'; trackId: TrackId }>;
+  sessions: Record<string, { date: string; kind: 'practice' | 'qualifying'; trackId: TrackId; stale: boolean }>;
   plan: { id: string; name: string; laps: number } | null;
   raceLaps: number | null;
   rebuilding: { done: number; total: number } | null;

@@ -4,7 +4,7 @@ import { loadFeatureConfig, recordingConfig, type FeatureConfig } from '../featu
 import { FEATURES } from '../features/index.generated.ts';
 import type { Logger } from '../log.ts';
 import type { DataDir } from '../storage/data-dir.ts';
-import { openDatabase, SCHEMA_VERSION, SchemaVersionError, type Db, type StoredSessionRow } from '../storage/db.ts';
+import { openDatabase, SCHEMA_VERSION, SchemaVersionError, type Db, type SessionKey, type StoredSessionRow } from '../storage/db.ts';
 import { createRebuildService } from '../storage/rebuild-service.ts';
 import type { RebuildService } from '../storage/rebuild-service-types.ts';
 import { cliLogger, type CliIo } from './io.ts';
@@ -131,6 +131,9 @@ function openCurrent(path: string): Db | undefined {
   }
 }
 
+/** The sessions the feeds run now (C59); an entry is `undefined` for a feed that runs none. */
+export type RunningSessions = () => ReadonlyArray<SessionKey | undefined>;
+
 /**
  * The live bridge's rebuilds of stale stored sessions (C61: a log not complete, or of another rules version) from their
  * recordings, with the config stored next to each recording (else `config`), under `rulesVersion`: it delegates to the
@@ -140,9 +143,13 @@ export class StaleSessions {
   readonly #io: CliIo;
   readonly #service: RebuildService;
 
-  constructor(db: Db, config: FeatureConfig, io: CliIo, rulesVersion: string) {
+  /**
+   * `running`: the sessions the feeds run now (`serve`'s running sessions), read at every check of the service (when a
+   * rebuild is asked for, when it starts, at its swap): such a session is never rebuilt under its feed (C24, C59).
+   */
+  constructor(db: Db, config: FeatureConfig, io: CliIo, rulesVersion: string, opts: { running?: RunningSessions } = {}) {
     this.#io = io;
-    this.#service = createRebuildService({ db, config, rulesVersion, log: cliLogger(io, 'warn') });
+    this.#service = createRebuildService({ db, config, rulesVersion, log: cliLogger(io, 'warn'), ...(opts.running && { running: opts.running }) });
   }
   /**
    * Rebuilds one stale session (C61), for a first read or in the background for a session start whose weekend context
@@ -161,6 +168,12 @@ export class StaleSessions {
 }
 
 /** The live bridge's rebuild of one stale stored session (`StaleSessions.rebuild`), for `WeekendRepository` and `SessionStorage`. */
-export function sessionRebuilder(db: Db, config: FeatureConfig, io: CliIo, rulesVersion: string): (row: StoredSessionRow) => Promise<void> {
-  return new StaleSessions(db, config, io, rulesVersion).rebuild;
+export function sessionRebuilder(
+  db: Db,
+  config: FeatureConfig,
+  io: CliIo,
+  rulesVersion: string,
+  opts: { running?: RunningSessions } = {},
+): (row: StoredSessionRow) => Promise<void> {
+  return new StaleSessions(db, config, io, rulesVersion, opts).rebuild;
 }

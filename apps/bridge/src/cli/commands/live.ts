@@ -7,7 +7,7 @@ import { dataDir, type DataDir } from '../../storage/data-dir.ts';
 import { openDatabase, SchemaVersionError, type Db } from '../../storage/db.ts';
 import { rulesVersion, SOURCE_ROOT } from '../../storage/rules-version.ts';
 import { EXIT_INTERRUPTED, type CliIo } from '../io.ts';
-import { rebuildDatabase, StaleSessions, type RebuildProgress } from '../rebuild-database.ts';
+import { rebuildDatabase, StaleSessions, type RebuildProgress, type RunningSessions } from '../rebuild-database.ts';
 import { serve } from '../serve.ts';
 import { StartupServer } from '../startup-server.ts';
 import { assertUdpPortFree, udpPortError } from '../udp-port.ts';
@@ -26,7 +26,10 @@ async function currentDatabase(dirs: DataDir, io: CliIo, version: string, onProg
   }
 }
 
-type Storage = { db: Db; stale: StaleSessions; version: string };
+/** The feeds' running sessions, once `serve` hands them over (`storage.onRunning`); none before. */
+type RunningHolder = { running: RunningSessions };
+
+type Storage = { db: Db; stale: StaleSessions; version: string; holder: RunningHolder };
 
 /**
  * The current database (a schema rebuild reporting `onProgress`) and the rebuilds of stale sessions. Nothing stale is
@@ -38,7 +41,9 @@ async function openStorage(dirs: DataDir, config: FeatureConfig, io: CliIo, onPr
   const version = await rulesVersion(SOURCE_ROOT);
   const db = await currentDatabase(dirs, io, version, onProgress);
   if (db === undefined) return undefined;
-  return { db, stale: new StaleSessions(db, config, io, version), version };
+  // The rebuild service reads the running sessions through the holder at every check: `serve` fills it (C24, C59).
+  const holder: RunningHolder = { running: () => [] };
+  return { db, stale: new StaleSessions(db, config, io, version, { running: () => holder.running() }), version, holder };
 }
 
 /** `pitwall live`: records the game's UDP telemetry and serves it; `--dev` also publishes calculator timings. */
@@ -62,7 +67,7 @@ export async function run(_positionals: string[], values: { dev?: boolean | unde
     if (opened === undefined) await startup.close();
   }
   if (opened === undefined) return EXIT_INTERRUPTED;
-  const { db, stale, version } = opened;
+  const { db, stale, version, holder } = opened;
   const sources = feeds.map(({ feedId: id, port }) => ({ port, source: new UdpSource({ feedId: id, port, host: udpHost }) }));
   try {
     return await serve({
@@ -72,7 +77,7 @@ export async function run(_positionals: string[], values: { dev?: boolean | unde
       dumpsDir: dirs.dumps,
       uiDir: dirs.ui,
       config,
-      storage: { db, recordingsDir: dirs.recordings, rulesVersion: version, rebuild: stale.rebuild },
+      storage: { db, recordingsDir: dirs.recordings, rulesVersion: version, rebuild: stale.rebuild, onRunning: (running) => { holder.running = running; } },
       staleCheck: { clock: () => performance.now(), everyMs: 500 },
       // Each port was free a moment ago; this catches the race and any other bind failure.
       bound: async () => {

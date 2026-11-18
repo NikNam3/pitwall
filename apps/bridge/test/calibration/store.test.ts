@@ -1097,3 +1097,70 @@ describe('CalibrationStore: the preferred set (SP4.3b2 Task 10)', () => {
     expect(t.store.preselect(TRACK)).toBeNull();
   });
 });
+
+// SP4.3e Task 7d fix round, F3 (C61: every other reader waits at its first read; nothing at bridge start; C62a): what
+// the store reads while it opens is what is current; a stale session it reads then is neither rebuilt nor remembered.
+// The store asks for it (`rebuild(keys, { priority: 'firstRead' })`, the rebuild service's `ensureCurrent`) at its first
+// real read: the priors snapshot for a session start (`preselect`) or a calibration edit; once the rebuild settles it
+// recomputes, and the set's snapshot holds the rebuilt source's entries.
+describe('a stale source is rebuilt at the store\'s first read, never at open (C61, C62a)', () => {
+  type FirstReadRebuild = (keys: readonly SessionKey[], opts?: { priority?: 'runningBasis' | 'planning' | 'firstRead' }) => Promise<void>;
+  const src = trackSession('src', { startedAt: day(1), stints: [{ car: 0, firstLap: 1, lastLap: 5, lapMs: (n) => 91_000 + n }] });
+  const srcKey: SessionKey = { sessionUid: src.sessionUid, weekendId: src.weekendId, playerCar: src.playerCar };
+
+  /** A data dir holding one set on TRACK whose one source is `src`'s stint, made by a store that has closed again. */
+  function dirWithSet(): { dir: string; id: string } {
+    const first = setup({ sessions: [src] });
+    const id = first.createSet(TRACK, 'Set', [sourceOf(src, 0, 1)]);
+    first.close();
+    return { dir: first.dir, id };
+  }
+
+  /** The store reopened on `dir` with `src` stale (another rules version), its rebuilds held until `finish`. */
+  function reopenedStale(dir: string) {
+    const pending: Array<() => void> = [];
+    const rebuild = vi.fn<FirstReadRebuild>(() => new Promise<void>((resolve) => { pending.push(resolve); }));
+    const t = setup({ sessions: [staleOf(src)], dir, rebuild });
+    /** The rebuild finishes: the repository now serves `src` current. */
+    const finish = () => {
+      t.repo.sessions = [src];
+      for (const resolve of pending.splice(0)) resolve();
+    };
+    return { t, rebuild, finish };
+  }
+
+  it('a calibration set whose source session is stale: nothing is rebuilt at open; the first snapshot for a session start rebuilds it (firstRead) and the snapshot holds the source\'s entries', async () => {
+    const { dir, id } = dirWithSet();
+    const { t, rebuild, finish } = reopenedStale(dir);
+    await settle();
+    // nothing at bridge start: the open read nothing it asks for
+    expect(rebuild).not.toHaveBeenCalled();
+
+    // the first real read: the priors snapshot for a session start
+    const recompute = vi.spyOn(t.store, 'recompute');
+    t.store.preselect(TRACK);
+    expect(rebuild).toHaveBeenCalledTimes(1);
+    expect(rebuild).toHaveBeenCalledWith([srcKey], { priority: 'firstRead' });
+
+    finish();
+    await vi.waitFor(() => expect(recompute).toHaveBeenCalledWith('rebuild'));
+    const snapshot = t.store.preselect(TRACK);
+    expect(snapshot?.setId).toBe(id);
+    expect(valueOf(snapshot?.entries['fake.meanLapMs'])).toBe(91_003);
+    expect(fitted(t.fitOf(id, sourceOf(src, 0, 1)))).toMatchObject({ laps: 5 });
+    // asked once: nothing is stale any more
+    expect(rebuild).toHaveBeenCalledTimes(1);
+  });
+
+  it('a calibration edit is a first read: a stale source not asked for at open is asked for then (firstRead)', async () => {
+    const { dir, id } = dirWithSet();
+    const { t, rebuild } = reopenedStale(dir);
+    await settle();
+    expect(rebuild).not.toHaveBeenCalled();
+
+    t.ok({ kind: 'calibration.override.set', trackId: TRACK, setId: id, key: 'fake.limitPct', value: 80 });
+    await settle();
+    expect(rebuild).toHaveBeenCalledTimes(1);
+    expect(rebuild).toHaveBeenCalledWith([srcKey], { priority: 'firstRead' });
+  });
+});

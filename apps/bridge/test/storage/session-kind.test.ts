@@ -24,7 +24,7 @@ import { StorageWriter } from '../../src/storage/storage-writer.ts';
 import { WeekendRepository } from '../../src/storage/weekend-repository.ts';
 import { ArraySource } from '../helpers/array-source.ts';
 import { newPlace, OLD, silent, storeSegment } from './rebuild-fixtures.ts';
-import { car, key, keyOf, lap, log, session, slot, span, FERRARI_16, MERCEDES_44 } from './records.ts';
+import { car, key, keyOf, lap, log, session, slot, span, voidFact, FERRARI_16, MERCEDES_44 } from './records.ts';
 
 const file = () => join(mkdtempSync(join(tmpdir(), 'session-kind-')), 'pitwall.db');
 
@@ -106,6 +106,32 @@ describe('schema 6 → 7: a session\'s kind on its row, migrated in place (R9, C
     const repo = new WeekendRepository(db, { rulesVersion: 'current' });
     expect(repo.sessionOf(key('P'))).toMatchObject({ kind: 'practice', rulesVersion: 'old-rules', complete: true });
     expect(repo.sessionOf(key('X'))).toMatchObject({ kind: 'none', complete: false });
+    db.close();
+  });
+
+  // SP4.3e Task 7d fix round, F2 (C28, C34): the backfill reads each session's projection (the stored rows as a log,
+  // then its projection, then the kind of its weekend phase), never the raw log: a void-covered span is a hidden fact.
+  it('a version-6 session whose only weekend-phase span is inside a void range backfills none; one with a visible span after the void backfills the visible span\'s kind', () => {
+    const path = file();
+    schema6Database(path);
+    const raw = new Database(path);
+    const insertSession = raw.prepare(`INSERT INTO sessions VALUES (?, 'W1', 1, NULL, 26, ?, ?, '{"tyreTemperature":1}', 'current', 1)`);
+    insertSession.run('V', '2026-10-27T23:00:00.000Z', '/rec/V.pwrec.gz');
+    insertSession.run('R', '2026-10-28T00:00:00.000Z', '/rec/R.pwrec.gz');
+    const insertFact = raw.prepare("INSERT INTO facts VALUES (?, 'W1', 1, ?, ?, NULL, ?)");
+    const raceSpan = JSON.stringify(span('weekend-phase', 'race', { detail: { format: 'grandPrix' } }));
+    // V: its only weekend-phase span undone by a flashback (C27): log position 0 of `spans:weekend-phase` never happened
+    insertFact.run('V', 'spans:weekend-phase', 0, raceSpan);
+    insertFact.run('V', 'voids', 0, JSON.stringify(voidFact({ 'spans:weekend-phase': [0, 1] })));
+    // R: the first span undone, the one the replayed frames appended after the void visible (a qualifying)
+    insertFact.run('R', 'spans:weekend-phase', 0, raceSpan);
+    insertFact.run('R', 'voids', 0, JSON.stringify(voidFact({ 'spans:weekend-phase': [0, 1] })));
+    insertFact.run('R', 'spans:weekend-phase', 1, JSON.stringify(span('weekend-phase', 'qualifying', { detail: { format: 'grandPrix', segment: 1 } })));
+    raw.close();
+
+    const db = openDatabase(path);
+    expect(db.pragma('user_version', { simple: true })).toBe(7);
+    expect(kinds(db)).toEqual({ P: 'practice', R: 'qualifying', T: 'none', V: 'none', X: 'none' });
     db.close();
   });
 
