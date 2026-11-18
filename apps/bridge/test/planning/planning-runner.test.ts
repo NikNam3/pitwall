@@ -208,6 +208,7 @@ describe('the planning runner (Task 7b rows a, b; C51, C54, C62d)', { timeout: 1
       // the rows are the segment's race samples, if it holds any (no test asserts a fact of a recording, C84)
       forecast: { source: { ref: QUALIFYING, startedAt: stored.started_at }, rows: expect.objectContaining({ known: expect.any(Boolean) }) },
       rebuilding: false,
+      lastSaved: null,
       cars: {
         1: { raceNumber: 2, slots: {}, active: null },
         0: { raceNumber: 64, slots: {}, active: null },

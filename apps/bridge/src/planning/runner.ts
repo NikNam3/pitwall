@@ -67,6 +67,8 @@ type Picked = { row: StoredSessionRow; pwrecPath: string; practiceRows: StoredSe
 /** An open round. `input` is the replay's for the round's race (`undefined` until it arrives); `generation` counts its replays. */
 type Round = {
   feedId: FeedId;
+  /** The saved plan this round was last saved as (SP4.3f Task 10); `null` until a save. */
+  lastSaved: SavedPlanEntry | null;
   qualifying: SessionRef;
   practice: SessionRef[];
   qualifyingKey: SessionKey;
@@ -200,6 +202,7 @@ export function createPlanningRunner(o: PlanningRunnerOptions): PlanningRunner {
     cars: Object.fromEntries(round.cars),
     running: round.replaying || round.running,
     saved: savedOf(round.team, round.trackId),
+    lastSaved: round.lastSaved,
   });
 
   const publish = (round: Round): void => {
@@ -415,6 +418,7 @@ export function createPlanningRunner(o: PlanningRunnerOptions): PlanningRunner {
         cars,
         input: undefined,
         generation: 0,
+        lastSaved: null,
         rebuilding: false,
         replaying: false,
         running: false,
@@ -491,6 +495,7 @@ export function createPlanningRunner(o: PlanningRunnerOptions): PlanningRunner {
         cars: [...round.cars.values()].map((car) => structuredClone(car)),
       };
       o.store.save(plan);
+      round.lastSaved = entryOf(plan);
       // the team's last saved plan on the track (C62d); a save confirms no basis (C62): the last choice keeps its kinds
       const last = o.lastChoice.read(round.team, round.trackId);
       o.lastChoice.write(round.team, { trackId: round.trackId, basis: last?.basis ?? {}, plan: { id: plan.id, at: savedAt } });
