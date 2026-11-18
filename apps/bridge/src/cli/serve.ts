@@ -8,6 +8,7 @@ import { Planning, type PlanningAction } from '../planning/planning.ts';
 import { suggestedLapsOf } from '../planning/round.ts';
 import { createPlanningRunner } from '../planning/runner.ts';
 import { SavedPlanStore } from '../planning/saved-plans.ts';
+import { createPlanChoice } from '../planning/plan-choice.ts';
 import { createRebuildService } from '../storage/rebuild-service.ts';
 import { CalibrationStore, type ApplyResult, type CalibrationAction } from '../calibration/store.ts';
 import { createCalcStats } from '../dev/calc-stats.ts';
@@ -79,11 +80,12 @@ type ServeBase = {
     rulesVersion: string;
     rebuild?: (row: StoredSessionRow) => Promise<void>;
     /**
-     * The one rebuild service behind `rebuild` (`StaleSessions.rebuildService`): the basis's `ensureCurrent` reaches it
-     * with its priority (`runningBasis` before `planning` before `firstRead`, C61). Without it the basis goes through
-     * `rebuild`'s queue, one row at a time.
+     * The one rebuild service behind `rebuild` (`StaleSessions.rebuildService`): the basis's `ensureCurrent` and the
+     * planning round's `ensureCurrent` and `replayToEnd` reach it with their priority (`runningBasis` before `planning`
+     * before `firstRead`, C61). Without it the basis goes through `rebuild`'s queue, one row at a time, and the planning
+     * round through a rebuild service of its own.
      */
-    rebuildService?: Pick<RebuildService, 'ensureCurrent'>;
+    rebuildService?: Pick<RebuildService, 'ensureCurrent'> & Partial<Pick<RebuildService, 'replayToEnd'>>;
     /**
      * Handed, once the pipelines' map exists, the sessions the feeds run now (read at every call): the rebuild service
      * behind `rebuild` checks them when a rebuild is asked for, when it starts and at its swap (C24, C59).
@@ -266,15 +268,24 @@ export async function serve(opts: ServeOptions): Promise<number> {
       }
     };
     // The team's last confirmed choices (C62): bridge user state in `<data dir>/basis/`, so only a run with a data dir keeps them.
-    const lastChoice: Pick<LastChoiceStore, 'read' | 'write'> = opts.uiDir === undefined
-      ? { read: () => undefined, write: () => {} }
-      : createLastChoiceStore(dirname(opts.uiDir), cliLogger(io, 'warn'));
+    const lastChoiceStore: LastChoiceStore | undefined = opts.uiDir === undefined ? undefined : createLastChoiceStore(dirname(opts.uiDir), cliLogger(io, 'warn'));
+    const lastChoice: Pick<LastChoiceStore, 'read' | 'write'> = lastChoiceStore ?? { read: () => undefined, write: () => {} };
+    // The team's saved plans (C62d): bridge user state in `<data dir>/plans/`, so only a run with a data dir keeps them.
+    const savedPlans = opts.uiDir === undefined ? undefined : new SavedPlanStore(dirname(opts.uiDir), cliLogger(io, 'warn'));
+    // A plan chosen with a basis commits its decisions on each of the team's feeds then running (C1a, C62d, C76).
+    const planChoice: PlanChoice | undefined = opts.planChoice ?? (savedPlans && createPlanChoice({
+      feeds: {
+        feeds: () => [...pipelines.entries()].map(([feedId, pipeline]) => ({ feedId, target: () => pipeline.planTarget() })),
+        commitToTeam: (feedId, decisions) => teams.commitToTeam(feedId as FeedId, decisions),
+      },
+      store: savedPlans,
+    }));
     // A basis choice is a decision of the team's running sessions (C1a, C62, C76); the plan with it is the saved plans' (C62d).
     const basisRouting = new BasisRouting({
       teams,
       pipelines,
       rebuild: { ensureCurrent },
-      plans: opts.planChoice ?? { choosePlan: () => ({ ok: false, reason: 'notSupported', message: 'no saved plans' }) },
+      plans: planChoice ?? { choosePlan: () => ({ ok: false, reason: 'notSupported', message: 'no saved plans' }) },
       lastChoice,
       log: calibrationLog,
     });
@@ -367,22 +378,31 @@ export async function serve(opts: ServeOptions): Promise<number> {
     // plans in `<data dir>/plans/`; its replay runs in the rebuild service's worker, off the thread that applies frames
     // (C61), its jobs on the feeds' worker limit (C51). The suggestion reads the stored sessions on the track (§7.1 step 3).
     let planning: Planning | undefined;
-    if (storage && calibrationRepo && opts.uiDir !== undefined) {
+    if (storage && calibrationRepo && opts.uiDir !== undefined && savedPlans && lastChoiceStore) {
       const dataDirRoot = dirname(opts.uiDir);
       const warnLog = cliLogger(io, 'warn');
-      const rebuildService = createRebuildService({
-        db: storage.db,
-        ...(opts.config && { config: opts.config }),
-        rulesVersion: storage.rulesVersion,
-        log: warnLog,
-        running,
-      });
-      // Before the database closes (`undo` runs in reverse).
-      undo.push(() => rebuildService.close());
-      const store = new SavedPlanStore(dataDirRoot, warnLog);
-      const lastChoice = createLastChoiceStore(dataDirRoot, warnLog);
+      // The bridge's one rebuild service (C61): the round's practice is made current through the basis's `ensureCurrent`
+      // (the stores then see the rebuilt projections) and its replay queued behind it, both at priority `planning`. A run
+      // given no service, or one without replays (a test's `serve`), has one of its own here for the replay.
+      const replays: Pick<RebuildService, 'ensureCurrent' | 'replayToEnd'> = service?.replayToEnd ? { ensureCurrent: service.ensureCurrent.bind(service), replayToEnd: service.replayToEnd.bind(service) } : (() => {
+        const own = createRebuildService({
+          db: storage.db,
+          ...(opts.config && { config: opts.config }),
+          rulesVersion: storage.rulesVersion,
+          log: warnLog,
+          running,
+        });
+        // Before the database closes (`undo` runs in reverse).
+        undo.push(() => own.close());
+        return own;
+      })();
+      const store = savedPlans;
+      const lastChoice = lastChoiceStore;
       const runner = createPlanningRunner({
-        rebuild: rebuildService,
+        rebuild: {
+          ensureCurrent: service ? ensureCurrent : (keys, o) => replays.ensureCurrent(keys, o),
+          replayToEnd: replays.replayToEnd.bind(replays),
+        },
         jobs: { job: opts.planningJob ?? PLANNING_JOB, workerLimit },
         hub,
         store,

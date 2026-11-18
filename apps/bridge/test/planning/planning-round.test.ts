@@ -374,6 +374,7 @@ describe('the planning round (Task 7b, ported from SP4.3d2 Task 10; C62d, C54, C
     // removing the active slot
     expect(await b.send({ kind: 'plans.prepare.accept', feedId: A, carId: 0, slot: 'A', policy: POLICY_A })).toEqual({ ok: true });
     await vi.waitFor(() => expect(b.round().cars[car(0)]).toEqual({ raceNumber: RACE_NUMBER(0), slots: { A: POLICY_A }, active: 'A' }));
+    await vi.waitFor(() => expect(b.round().running).toBe(false), { timeout: 60_000 });
     await rejected({ kind: 'plans.prepare.remove', feedId: A, carId: 0, slot: 'A' });
     // an inactive slot can be removed, the active one changed
     expect(await b.send(save(A, 0, 'B', POLICY_B))).toEqual({ ok: true });

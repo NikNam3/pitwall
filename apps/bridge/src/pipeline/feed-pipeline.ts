@@ -347,6 +347,10 @@ class OverriddenBasisStorage extends SessionStorage {
   override weekendContext(_row: SessionRow, player: CarKey): BasisContext | undefined {
     return this.#basis(player);
   }
+
+  override basisContext(_basis: SessionBasis, player: CarKey): BasisContext | undefined {
+    return this.#basis(player);
+  }
 }
 
 /**

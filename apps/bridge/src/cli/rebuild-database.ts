@@ -152,7 +152,7 @@ export class StaleSessions {
     this.#service = createRebuildService({ db, config, rulesVersion, log: cliLogger(io, 'warn'), ...(opts.running && { running: opts.running }) });
   }
   /** The one rebuild service itself, for readers that ask with a priority (a running session's basis, C61, C62). */
-  get rebuildService(): Pick<RebuildService, 'ensureCurrent'> {
+  get rebuildService(): Pick<RebuildService, 'ensureCurrent' | 'replayToEnd'> {
     return this.#service;
   }
 
