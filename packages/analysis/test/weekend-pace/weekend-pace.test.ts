@@ -174,7 +174,7 @@ describe('weekend-pace: each car`s race pace from the weekend (Task 6b)', () => 
     expect(pace.sdMs).toBe(qualifyingPaceSdMs);
   });
 
-  it('3. no practice: a one-shot-qualifying weekend gives every car with a valid lap qualifying, a car without one insufficientData', () => {
+  it('3. no practice: a one-shot-qualifying weekend gives every car with a valid lap qualifying, a car without one the stand-in (SP4.3e Task 6)', () => {
     const oneShot: WeekendPhase = { kind: 'qualifying', format: 'oneShot', segment: undefined };
     const laps = [qualiLap(0, 1, 88_000), qualiLap(1, 1, 88_400), qualiLap(2, 1, 88_800), qualiLap(3, 1, 87_500, false)];
     const out = calc.compute(viewOf({ seats: seats(5), weekend: weekendOf([qualifying('q', laps, seats(5), oneShot)]) }));
@@ -184,9 +184,11 @@ describe('weekend-pace: each car`s race pace from the weekend (Task 6b)', () => 
       expect(pace.paceMs, `car ${car}`).toBe(ms + raceTrimOffsetMs);
       expect(pace.sdMs, `car ${car}`).toBe(qualifyingPaceSdMs);
     }
-    // car 3's only lap is invalid, car 4 has none
-    expect(out[carId(3)]).toEqual(unknown('insufficientData'));
-    expect(out[carId(4)]).toEqual(unknown('insufficientData'));
+    // car 3's only lap is invalid, car 4 has none: each the declared stand-in, the field's median qualifying-derived
+    // pace (car 1's) plus noPaceStandInOffsetMs (SP4.3e Task 6, C3)
+    const offset = (WEEKEND_PACE_CONFIG.defaults as Record<string, unknown>)['noPaceStandInOffsetMs'];
+    expect(typeof offset, 'noPaceStandInOffsetMs').toBe('number');
+    for (const car of [3, 4]) expect(valueOf(out, car), `car ${car}`).toMatchObject({ paceMs: 88_400 + raceTrimOffsetMs + (offset as number), source: 'standIn', sdMs: qualifyingPaceSdMs });
   });
 
   it('4. same car: a car whose slot moved between practice and qualifying keeps its long run (team and race number, C62)', () => {

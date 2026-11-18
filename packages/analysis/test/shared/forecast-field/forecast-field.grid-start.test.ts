@@ -309,7 +309,13 @@ describe('the grid start (SP4.3d2 Task 7)', () => {
     }
   });
 
-  it("6b: pace: a car without weekend-pace's pace and without degradation's stand-in makes the grid start unknown('insufficientData'), never 0 (C3)", () => {
+  it("6b: pace: weekend-pace's declared stand-in is read like any pace (SP4.3e Task 6); a car without weekend-pace's pace and without degradation's stand-in makes the grid start unknown('insufficientData'), never 0 (C3)", () => {
+    const pace = weekendPace();
+    pace[carId(3)] = known({ paceMs: 91_234, sdMs: 900, source: 'standIn', laps: 0 }, 0);
+    const standIn = gridStart(qualifyingView(), qualifyingOutputs(pace));
+    expect(standIn.paceMs[3], 'car 3: the stand-in pace').toBeCloseTo(91_234, 6);
+    expect(standIn.paceSdMs[3], 'car 3: the stand-in sd').toBeCloseTo(900, 6);
+    // without qualifying evidence in the field weekend-pace has no stand-in (G5): still insufficientData
     const missing = buildGridStart(qualifyingView(), qualifyingOutputs(weekendPace([3])), { laps: LAPS, grid: GRID, fittedCompound: planningCompound });
     expect(missing).toEqual(unknown('insufficientData'));
     const none = buildGridStart(qualifyingView(), qualifyingOutputs(null), { laps: LAPS, grid: GRID, fittedCompound: planningCompound });
