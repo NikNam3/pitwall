@@ -15,7 +15,9 @@ export type ShellOverlay =
   | { kind: 'keys' }
   | { kind: 'workbooks' }
   | { kind: 'saveAs' }
-  | { kind: 'picker'; group: number };
+  | { kind: 'picker'; group: number }
+  /** The basis and plan picker of the window's feed (SP4.3e spec §4.2). */
+  | { kind: 'basis' };
 
 /** What the commands need from the shell. */
 export type CommandContext = {
@@ -316,6 +318,14 @@ export function sessionEndCommand(ctx: Pick<CommandContext, 'send'> & { feedId: 
     group: text.commandGroups.session,
     run: () => ctx.send({ kind: 'session.end', feedId: ctx.feedId }),
   };
+}
+
+/**
+ * `basis.pick` (SP4.3e spec §4.2, C72): opens the basis and plan picker of the window's feed; the picker's Confirm sends
+ * the choice (C73). Registered only while the window has a feed.
+ */
+export function basisPickCommand(ctx: Pick<CommandContext, 'open'>): Command {
+  return { id: 'basis.pick', title: text.commandTitles.basisPick, group: text.commandGroups.session, run: () => ctx.open({ kind: 'basis' }) };
 }
 
 /** `layout.edit.toggle`: turns the window's edit mode (window-local, C73) on or off. */

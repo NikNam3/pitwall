@@ -31,7 +31,9 @@ export const cancel = 'cancel';
 /** Hovers of the buttons: the uiAction they send. */
 export const hover = { save: 'plan.save', activate: 'plan.activate', remove: 'plan.remove' } as const;
 /** SP4.3d2 Task 12, the planning round (mockup plan-board.html "Planning round"): the race inputs line's labels. */
-export const inputs = { grid: 'GRID', laps: 'LAPS', rain: 'RAIN', n: 'N' } as const;
+export const inputs = { grid: 'GRID', laps: 'LAPS', sets: 'SETS', rain: 'RAIN', n: 'N' } as const;
+/** SP4.3e Task 7c-2: the sets field's options (the race's tyre sets carried from the qualifying, or a fresh allocation). */
+export const sets = { carried: 'carried', fresh: 'fresh' } as const;
 /** A prefilled slot's hover, and its button (`accept` keeps the prefill as the slot's plan). */
 export const prefillHover = 'prefilled from the DP: accept to keep it';
 export const accept = 'accept';

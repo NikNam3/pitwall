@@ -176,6 +176,7 @@ export const commandTitles = {
   planRemove: (car: number, slot: string): string => `Remove slot ${slot} of car ${car}`,
   planEdit: (car: number, slot: string): string => `Edit slot ${slot} of car ${car}`,
   sessionEnd: 'End session',
+  basisPick: 'Basis and plan…',
   plansPrepareLaps: 'Enter the race laps',
   plansPrepareSave: 'Save a prepared plan',
   plansPrepareAccept: 'Accept a prefilled plan',
@@ -184,6 +185,39 @@ export const commandTitles = {
   planAccept: 'Accept the grid prefill',
   plansPrepareRemoveSlot: (car: number, slot: string): string => `Remove prepared slot ${slot} of car ${car}`,
   plansPrepareActivateSlot: (car: number, slot: string): string => `Activate prepared slot ${slot} for car ${car}`,
+} as const;
+
+/**
+ * The basis and plan picker (`basis.pick`) and the top bar's basis segment (SP4.3e spec §4.2, §4.3): per kind the day
+ * of the basis in use, `none` without one; a plan computed for other race laps shows `56 / 20 laps`.
+ */
+export const basis = {
+  title: 'Basis and plan',
+  practice: 'Practice',
+  qualifying: 'Qualifying',
+  plan: 'Plan',
+  none: 'none',
+  /** An option the team's last confirmed choice on the track names. */
+  lastChoice: 'last choice',
+  /** A stored session built by another rules version: rebuilt when chosen (C61). */
+  stale: 'stale',
+  staleHover: 'stored by an older version: rebuilt when chosen',
+  noSessions: 'no stored session on this track',
+  noPlans: 'no saved plan',
+  confirm: 'Confirm',
+  /** A rejection without the bridge's message. */
+  rejected: 'rejected',
+  /** Between sessions: Confirm opens a planning round, which needs a qualifying. */
+  needsQualifying: 'a planning round needs a qualifying',
+  rebuilding: (done: string, total: string): string => `rebuilding ${done} / ${total}`,
+  /** A session the basis names that `basis.active.sessions` does not list. */
+  unknownDay: '?',
+  /** The top bar's segment: `Practice 17 Nov · Qualifying 17 Nov · Plan: <name>`. */
+  segment: (practice: string, qualifying: string, plan: string): string => [`Practice ${practice}`, `Qualifying ${qualifying}`, `Plan: ${plan}`].join(separator),
+  /** The plan's race laps against the race's: `56 / 20 laps`. */
+  laps: (plan: string, race: string): string => `${plan} / ${race} laps`,
+  /** Days of several practice sessions. */
+  days: (days: readonly string[]): string => days.join(', '),
 } as const;
 
 /** The session-start calibration prompt and the top bar's calibration segment (SP4.1a spec 3.3). */
