@@ -1,5 +1,5 @@
 // What the top bar's segments read: the topics of one feed plus the global alert and settings topics.
-import type { AlertsState, CarOverview, FeedStatus, PlanningRoundState, ReplayControl, ReplayStatus, SessionInfo, UiAction, UiSettings } from '@pitwall/contracts';
+import type { AlertsState, BasisActive, CarOverview, FeedStatus, PlanningRoundState, ReplayControl, ReplayStatus, SessionInfo, UiAction, UiSettings } from '@pitwall/contracts';
 import type { MachineSpans } from '@pitwall/contracts';
 import type { CarId, DriversLinksValue, FeedId, Insight, Known, Moment, NeutralisedDetail, NeutralisedStage, OpenSpan, RaceMoment, TalkWindow } from '@pitwall/domain';
 import { untrack } from 'svelte';
@@ -37,6 +37,9 @@ export class TopBarModel {
   pickCalibration: () => void = () => {};
   /** Runs `drivers.open`, set by the top bar. */
   openDrivers: () => void = () => {};
+  /** Runs `basis.pick`, set by the top bar. */
+  pickBasis: () => void = () => {};
+  readonly #basis: EntryState<BasisActive>;
   readonly #links: EntryState<DriversLinksValue>;
   /** The talk window of the current player car; replaced when the player car changes. */
   #talk = $state.raw<EntryState<TalkWindow> | undefined>();
@@ -64,6 +67,8 @@ export class TopBarModel {
     this.#moment = take(store.acquire({ topic: 'raceMoment.current', params: {}, feedId }));
     // The planning round (SP4.3d spec §7): PLANNING while it is open.
     this.#planning = take(store.acquire({ topic: 'plans.prepared', params: {}, feedId }));
+    // The basis and plan in use (SP4.3e spec §4.2): the `basis` segment.
+    this.#basis = take(store.acquire({ topic: 'basis.active', params: {}, feedId }));
     this.#weekend = take(store.acquire({ topic: 'situation.weekendPhase', params: {}, feedId }));
     this.#clock = take(store.acquire({ topic: 'situation.clock', params: {}, feedId }));
     this.#phases = {
@@ -110,6 +115,10 @@ export class TopBarModel {
   get moment(): Moment | undefined {
     const current = okValue(this.#moment);
     return current?.known ? current.value.moment : undefined;
+  }
+  /** The feed's basis and plan (`basis.active`); undefined until published. */
+  get basis(): BasisActive | undefined {
+    return okValue(this.#basis);
   }
   /** True while the feed's planning round is open (`plans.prepared`, SP4.3d spec §7). */
   get planning(): boolean {

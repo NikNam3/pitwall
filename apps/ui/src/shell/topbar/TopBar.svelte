@@ -25,6 +25,8 @@
     onPickCalibration?: () => void;
     /** `drivers.open`, for the `unlinked` segment. */
     onOpenDrivers?: () => void;
+    /** `basis.pick`, for the `basis` segment. */
+    onPickBasis?: () => void;
     /** The window's edit mode and its toggle (`layout.edit.toggle`); the toggle shows only when the shell passes it. */
     editing?: boolean;
     onToggleEditing?: (() => void) | undefined;
@@ -40,6 +42,7 @@
     calibrationName,
     onPickCalibration = () => {},
     onOpenDrivers = () => {},
+    onPickBasis = () => {},
     editing = false,
     onToggleEditing,
   }: Props = $props();
@@ -59,6 +62,7 @@
     bar.calibrationName = calibrationName;
     bar.pickCalibration = onPickCalibration;
     bar.openDrivers = onOpenDrivers;
+    bar.pickBasis = onPickBasis;
   });
   $effect(() => {
     onShown?.(bar.shown);

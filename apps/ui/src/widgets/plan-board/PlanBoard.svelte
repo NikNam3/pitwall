@@ -10,7 +10,7 @@
   // command by id through the panel (C72, C74). The cell budget is layout.ts'. SP4.3e Task 8: a rejected outcome of a
   // command or action that marks no field shows the bridge's message on the board's last line (C73).
   import type { ActionOutcome } from '@pitwall/contracts';
-  import type { NoiseCompound, Slot } from '@pitwall/domain';
+  import type { NoiseCompound, RaceAssumptions, Slot } from '@pitwall/domain';
   import { PLAN_SLOTS } from '@pitwall/domain';
   import { getUiActions } from '../../kit/actions.ts';
   import { getWidgetCommands } from '../../kit/commands.ts';
@@ -37,6 +37,8 @@
   /** The lap field's width in cells; the race laps field's. */
   const LAP = 2;
   const RACE_LAPS = 3;
+  /** The race's tyre sets, in the sets field's order (SP4.3e spec §4.3). */
+  const RACE_SETS = ['carried', 'fresh'] as const satisfies readonly RaceAssumptions['sets'][];
 
   type Rejection = { message: string; changed: Changed };
 
@@ -47,6 +49,7 @@
   /** The planning round's window-local drafts (C73): the race laps as typed, the entries of empty game slots. */
   let lapsDraft = $state<string | null>(null);
   let lapsRejected = $state<string | null>(null);
+  let setsRejected = $state<string | null>(null);
   let entries = $state<Partial<Record<Slot, Draft>>>({});
   let entryRejected = $state<Partial<Record<Slot, Rejection>>>({});
   /** The bridge's message of the last rejected command or action that marks no field (C73). */
@@ -203,6 +206,14 @@
       lapsRejected = null;
     } else lapsRejected = outcome.message ?? text.rejectedNoReason;
   }
+  /** Commits the race's tyre sets: one command with the round's laps; nothing while the round has no laps yet (C73). */
+  async function commitSets(sets: RaceAssumptions['sets']): Promise<void> {
+    const laps = round?.race.laps ?? null;
+    if (round === undefined || laps === null) return;
+    setsRejected = null;
+    const outcome = await commands.invoke('plans.race.set', { feedId: link.feedId, race: { laps, sets } });
+    setsRejected = outcome.ok ? null : (outcome.message ?? text.rejectedNoReason);
+  }
   /** The round's race laps: the bridge's suggestion until entered; `null` while neither is known. */
   const entered = $derived(round?.race.laps ?? null);
 </script>
@@ -349,7 +360,17 @@
       value={lapsDraft ?? (entered === null ? '' : formatWhole(entered))}
       oninput={(e) => typeLaps(e.currentTarget.value)}
       onchange={() => void commitLaps()}
-    />{GAP}{GAP}{GAP}<span style:color={role(headerRole)}>{text.inputs.rain}</span> {#if planningInputs !== null}<TextCell
+    />{GAP}{GAP}{GAP}<span style:color={role(headerRole)}>{text.inputs.sets}</span> <select
+      class="pw-input fld"
+      data-testid="sets"
+      data-role={setsRejected !== null ? rejectedRole : undefined}
+      title={setsRejected ?? text.commandHover.laps}
+      style:color={setsRejected !== null ? role(rejectedRole) : undefined}
+      value={round?.race.sets}
+      onchange={(e) => void commitSets(e.currentTarget.value as RaceAssumptions['sets'])}
+    >
+      {#each RACE_SETS as s (s)}<option value={s}>{text.sets[s]}</option>{/each}
+    </select>{GAP}{GAP}{GAP}<span style:color={role(headerRole)}>{text.inputs.rain}</span> {#if planningInputs !== null}<TextCell
         text={planningInputs.rainPct.known ? formatPercent(planningInputs.rainPct.value) : ''}
         reason={planningInputs.rainPct.known ? undefined : planningInputs.rainPct.reason}
       />{/if}{GAP}{GAP}{GAP}<span style:color={role(headerRole)}>{text.inputs.n}</span> {#if value !== undefined}{formatCount(
