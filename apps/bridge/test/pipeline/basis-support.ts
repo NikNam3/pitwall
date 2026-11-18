@@ -30,7 +30,7 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, vi } from 'vitest';
-import type { UiAction } from '@pitwall/contracts';
+import type { TopicValue, UiAction } from '@pitwall/contracts';
 import { feedId, type BasisSidecar, type DecisionRecord, type FeedId, type SessionBasis, type SessionRef } from '@pitwall/domain';
 import type { EngineView, QuickCalculator } from '@pitwall/engine';
 import { ScenarioBuilder, packetBytes } from '../../../../packages/engine/test/builders/index.ts';
@@ -48,6 +48,8 @@ import { ArraySource } from '../helpers/array-source.ts';
 import { ManualSource } from '../helpers/manual-source.ts';
 
 export type Timed = ReturnType<ScenarioBuilder['packets']>;
+/** The value of `basis.active` (its topic file, C54). */
+export type BasisActive = TopicValue<'basis.active'>;
 
 export const log = createLogger({ level: 'silent' });
 export const tmp = (): string => mkdtempSync(join(tmpdir(), 'basis-'));
@@ -124,12 +126,15 @@ export function fakeRebuild(db: Db) {
   const held = new Map<string, PromiseWithResolvers<void>>();
   const ensureCurrent: RebuildService['ensureCurrent'] = vi.fn(async (refs, opts) => {
     calls.push({ refs: [...refs], priority: opts?.priority });
+    // progress as the real service reports it: none done yet, then one more per session made current
+    opts?.onProgress?.(0, refs.length);
+    let done = 0;
     for (const k of refs) {
       const gate = held.get(keyText(k));
       if (gate !== undefined) await gate.promise;
       if (rulesOf(db, k) !== undefined) markCurrent(db, k);
+      opts?.onProgress?.(++done, refs.length);
     }
-    opts?.onProgress?.(refs.length, refs.length);
   });
   return {
     service: { ensureCurrent } satisfies Pick<RebuildService, 'ensureCurrent'>,
@@ -239,13 +244,14 @@ export type Feed = { push: (packets: Timed) => void; seen: Seen[]; pipeline: Fee
 export function bridge(o: { lastChoice?: LastChoice } = {}) {
   const db = openDatabase(join(tmp(), 'live.db'));
   const hub = new TopicHub({ now: () => 0 });
+  const published = vi.spyOn(hub, 'publishState');
   const teams = new TeamFeeds();
   const pipelines = new Map<FeedId, FeedPipeline>();
   const rebuild = fakeRebuild(db);
   const lastChoice = fakeLastChoice(o.lastChoice);
   const plans = fakePlans();
   /** A live pipeline of feed `id` on a manual source, its session file and sidecars in a temp dir. */
-  const feed = (id: FeedId, wallClock = AT.race): Feed => {
+  const feed = (id: FeedId, wallClock: number = AT.race): Feed => {
     const probe = basisProbe();
     const source = new ManualSource(id);
     const dir = tmp();
@@ -292,7 +298,12 @@ export function bridge(o: { lastChoice?: LastChoice } = {}) {
     const BasisRouting = await basisRoutingClass();
     return new BasisRouting({ teams, pipelines, rebuild: rebuild.service, plans });
   };
-  return { db, feed, teams, rebuild, lastChoice, plans, routing };
+  /** The newest `basis.active` value the feed's pipeline published for `id` (C54, C55); none yet: `undefined`. */
+  const active = (id: FeedId): BasisActive | undefined => {
+    const calls = published.mock.calls.filter(([feed, topic]) => feed === id && topic === 'basis.active');
+    return calls.at(-1)?.[2]({}) as BasisActive | undefined;
+  };
+  return { db, hub, feed, teams, rebuild, lastChoice, plans, routing, active };
 }
 
 /**
