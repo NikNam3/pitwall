@@ -27,8 +27,11 @@ export type PlanningRound =
  * its practice basis and race assumptions, our team, per car slot of the qualifying its prepared plans, whether the
  * planning job is running, and the team's saved plans on the track. Not yet bound: Task 7b makes it the topic's value.
  */
+/** A saved plan as the picker lists it: the team's saved plans on the track, also while no round is open (SP4.3e R15). */
+export type SavedPlanEntry = { id: string; name: string; savedAt: string };
+
 export type PlanningRoundState =
-  | { open: false }
+  | { open: false; saved: SavedPlanEntry[] }
   | {
       open: true;
       qualifying: SessionRef;
@@ -37,7 +40,7 @@ export type PlanningRoundState =
       team: TeamId;
       cars: Record<CarId, PreparedCar>;
       running: boolean;
-      saved: { id: string; name: string; savedAt: string }[];
+      saved: SavedPlanEntry[];
     };
 
 export default defineTopic<NoParams, PlanningRound>({ owner: 'core', scope: 'feed', mode: 'state', maxHz: Infinity });
