@@ -10,7 +10,7 @@ import { createInterface } from 'node:readline';
 import { _electron as electron } from '@playwright/test';
 import type { ElectronApplication, Page } from '@playwright/test';
 import { preview } from 'vite';
-import type { BridgeHandle, GalleryHandle, GalleryOptions, LaunchPitwallOptions, PitwallApp, StartBridgeOptions } from './harness-contract.ts';
+import type { BridgeHandle, GalleryHandle, GalleryOptions, ImportRecordingOptions, LaunchPitwallOptions, PitwallApp, StartBridgeOptions } from './harness-contract.ts';
 
 const REPO_ROOT = path.resolve(import.meta.dirname, '../../..');
 const UI_DIR = path.join(REPO_ROOT, 'apps/ui');
@@ -192,6 +192,25 @@ export async function startBridge(options: StartBridgeOptions): Promise<BridgeHa
     },
     log: () => [...lines],
   };
+}
+
+/**
+ * `pitwall import <recording>` into `options.dataDir`: the recording is stored, as a live run of it would have stored it.
+ * Resolves once the command has exited with 0; rejects with its output otherwise.
+ */
+export async function importRecording(options: ImportRecordingOptions): Promise<void> {
+  const file = recordingPath(options.recording);
+  const child = spawn(process.execPath, [BRIDGE_CLI, 'import', file], {
+    cwd: REPO_ROOT,
+    env: childEnv({ PITWALL_DATA_DIR: options.dataDir }),
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  bridges.add(child);
+  const lines: string[] = [];
+  for (const stream of [child.stdout, child.stderr]) createInterface({ input: stream }).on('line', (line) => lines.push(line));
+  const code = await new Promise<number | null>((resolve) => child.once('exit', (c) => resolve(c)));
+  bridges.delete(child);
+  if (code !== 0) throw new Error(`pitwall import ${options.recording} exited (${code}):\n${lines.join('\n')}`);
 }
 
 /** The built desktop app (not `--dev`); it finds the running bridge by its probe, so no bridge command is passed. */

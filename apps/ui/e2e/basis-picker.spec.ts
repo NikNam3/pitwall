@@ -1,14 +1,14 @@
 // End to end (SP4.3e Task 7c-2, spec §4.2): confirm a basis and a plan in the shell's picker, the top bar follows.
-// One data dir, two bridges in turn: the first replays the committed segment `qualifying-texas-send` (the end of the
-// Texas one-shot qualifying of 2026-11-17, through SEND) to its end, so the qualifying is stored; the second replays
-// `race-texas-grid` (the race of that weekend: the weekend phase and the team are known from 1.526 s) to its end, so
-// the race's basis is preselected: its own weekend's qualifying. In the app the command "Basis and plan…" (palette,
+// One data dir: `pitwall import` stores the committed segment `qualifying-texas-send` (the end of the Texas one-shot
+// qualifying of 2026-11-17, through SEND); then a bridge replays `race-texas-grid` (the race of that weekend: the
+// weekend phase and the team are known from 1.526 s) to its end, reading its basis from the data dir's database (R21):
+// its own weekend's qualifying. In the app the command "Basis and plan…" (palette,
 // C72) opens the picker; confirming qualifying none and plan none sends `basis.choose`, and the top bar's basis
 // segment reads none; confirming the qualifying again brings its day back. Saved plans need a planning round, which
 // this spec does not open: the plan chosen is none both times.
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
-import { launchPitwall, startBridge } from './harness.ts';
+import { importRecording, launchPitwall, startBridge } from './harness.ts';
 import { makeDataDir, removeDataDir } from './support.ts';
 
 const QUALIFYING = 'qualifying-texas-send';
@@ -72,12 +72,11 @@ test('confirming a basis and a plan in the picker updates the top bar', async ()
   const dataDir = await makeDataDir();
   cleanups.push(() => removeDataDir(dataDir));
 
-  // The qualifying, replayed to its end: stored in the data dir.
-  const first = await startBridge({ recording: QUALIFYING, dataDir });
-  await playToEnd(first.wsPort);
-  await first.stop();
+  // The qualifying, imported: stored in the data dir (a replay stores nothing of its own session, R21).
+  await importRecording({ recording: QUALIFYING, dataDir });
 
-  // The race of that weekend: its basis is preselected from the stored qualifying.
+  // The race of that weekend, replayed: its basis is its own weekend's stored qualifying, read from the data dir's
+  // database (a recording without a basis sidecar, C62; R21).
   const bridge = await startBridge({ recording: RACE, dataDir });
   cleanups.push(() => bridge.stop());
   await playToEnd(bridge.wsPort);
