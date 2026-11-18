@@ -188,23 +188,23 @@
     lapsDraft = v;
     lapsRejected = null;
   }
-  /** Commits the race laps field: one command with its number; the bridge validates it (C73). */
+  /** Commits the race laps field: one command with its number and the round's sets; the bridge validates it (C73). */
   async function commitLaps(): Promise<void> {
     const typed = lapsDraft;
     if (typed === null) return;
-    if (typed.trim() === '') {
+    if (typed.trim() === '' || round === undefined) {
       lapsDraft = null;
       return;
     }
-    const outcome = await commands.invoke('plans.prepare.laps', { feedId: link.feedId, laps: Number(typed.trim()) });
+    const outcome = await commands.invoke('plans.race.set', { feedId: link.feedId, race: { laps: Number(typed.trim()), sets: round.race.sets } });
     if (lapsDraft !== typed) return;
     if (outcome.ok) {
       lapsDraft = null;
       lapsRejected = null;
     } else lapsRejected = outcome.message ?? text.rejectedNoReason;
   }
-  const entered = $derived(round?.laps.entered ?? null);
-  const suggested = $derived(round !== undefined && round.laps.suggested.known ? formatWhole(round.laps.suggested.value) : '');
+  /** The round's race laps: the bridge's suggestion until entered; `null` while neither is known. */
+  const entered = $derived(round?.race.laps ?? null);
 </script>
 
 {#snippet cells(l: SlotLine | DpLine, active: boolean, faint: boolean)}{#if cols.start > 0}<span data-testid={'key' in l ? `start-${l.key}` : undefined}
@@ -342,7 +342,6 @@
       spellcheck="false"
       class="pw-input fld"
       data-testid="laps"
-      placeholder={suggested}
       data-role={lapsRejected !== null ? rejectedRole : undefined}
       title={lapsRejected ?? text.commandHover.laps}
       style:width="{RACE_LAPS}ch"

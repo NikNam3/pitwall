@@ -3,8 +3,9 @@
 // sidecars gives the same log) into a database of its own, in memory, and posts each session it yields to the main
 // thread: its row, then its log in parts of at most `PART_SIZE` facts, then its end. The main thread, the only writer of
 // the pitwall database, stages the parts and swaps them in (`storage/rebuild-service.ts`). A planning replay (C62d)
-// replays a recording to its end and stores nothing; its planning result is SP4.3e Task 7b's.
+// replays a recording to its end, stores nothing, and posts the planning job's input (`planning/replay.ts`).
 import { parentPort } from 'node:worker_threads';
+import { replayForPlanning } from '../planning/replay.ts';
 import { effectiveConfig, loadFeatureConfig, recordingConfig, type FeatureConfig } from '../feature-config.ts';
 import { FEATURES } from '../features/index.generated.ts';
 import { createLogger, type Logger } from '../log.ts';
@@ -59,10 +60,16 @@ function postSessions(id: number, db: Db): void {
 
 async function run(job: WorkerJob): Promise<void> {
   try {
-    const path = job.kind === 'rebuild' ? job.pwrecPath : job.job.pwrecPath;
-    const db = await replayed(path, job.fallback, job.rulesVersion);
+    if (job.kind === 'replay') {
+      // The planning round's replay (C62d): its planning job's input, built here, off the thread that applies frames.
+      const config = recordingConfig(job.job.pwrecPath, FEATURES, fallbackOf(job.fallback), log);
+      const value = await replayForPlanning(job.job, { dbPath: job.dbPath, config, rulesVersion: job.rulesVersion, log });
+      post({ id: job.id, type: 'done', value });
+      return;
+    }
+    const db = await replayed(job.pwrecPath, job.fallback, job.rulesVersion);
     try {
-      if (job.kind === 'rebuild') postSessions(job.id, db);
+      postSessions(job.id, db);
     } finally {
       db.close();
     }

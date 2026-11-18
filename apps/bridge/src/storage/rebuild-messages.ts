@@ -21,7 +21,8 @@ export type FallbackConfig = { config?: Record<string, Record<string, ConfigValu
 /** A job the main thread hands the worker. */
 export type WorkerJob =
   | { id: number; kind: 'rebuild'; pwrecPath: string; fallback: FallbackConfig; rulesVersion: string }
-  | { id: number; kind: 'replay'; job: ReplayJob; fallback: FallbackConfig; rulesVersion: string };
+  /** `dbPath`: the pitwall database, which the planning replay reads its basis from (read only); none in memory. */
+  | { id: number; kind: 'replay'; job: ReplayJob; fallback: FallbackConfig; rulesVersion: string; dbPath: string | undefined };
 
 /** What the worker posts, in order per job: per session its row, its parts and its end; then the job's end. */
 export type WorkerReply =

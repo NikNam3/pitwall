@@ -185,8 +185,6 @@ export const decodeUiAction = (raw: unknown): UiAction | undefined => {
     }
     case 'plan.clear':
       return isString(raw.feedId) && isCarSlot(raw.carId) ? { kind: raw.kind, feedId: raw.feedId as FeedId, carId: raw.carId as CarId } : undefined;
-    case 'plans.prepare.laps':
-      return isString(raw.feedId) && isInteger(raw.laps) && raw.laps >= 1 ? { kind: raw.kind, feedId: raw.feedId as FeedId, laps: raw.laps } : undefined;
     case 'plan.save':
     case 'plan.accept':
     case 'plans.prepare.save':

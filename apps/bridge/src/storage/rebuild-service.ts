@@ -275,7 +275,8 @@ export function createRebuildService(o: RebuildServiceOptions): RebuildService {
       return new Promise<T>((resolve, reject) => {
         enqueue(RANK[priority], async () => {
           try {
-            resolve((await inWorker({ kind: 'replay', job, fallback, rulesVersion: o.rulesVersion }, () => {})) as T);
+            const dbPath = o.db.memory ? undefined : o.db.name;
+            resolve((await inWorker({ kind: 'replay', job, fallback, rulesVersion: o.rulesVersion, dbPath }, () => {})) as T);
           } catch (error) {
             reject(error instanceof Error ? error : new Error(String(error)));
           }

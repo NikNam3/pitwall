@@ -1,11 +1,14 @@
 import type { FeedInfo, ReplayControl } from '@pitwall/contracts';
-import { unknown, type FeedId, type StrategyOutput } from '@pitwall/domain';
+import type { FeedId, StrategyOutput } from '@pitwall/domain';
 import { PLANNING_JOB, type StrategyInput } from '@pitwall/analysis';
 import type { Job } from '@pitwall/engine/readers';
 import { dirname } from 'node:path';
-import { Planning, type PrepareAction } from '../planning/planning.ts';
+import { Planning, type PlanningAction } from '../planning/planning.ts';
 import { suggestedLapsOf } from '../planning/round.ts';
-import { PreparedStore } from '../planning/store.ts';
+import { createPlanningRunner } from '../planning/runner.ts';
+import { SavedPlanStore } from '../planning/saved-plans.ts';
+import { createLastChoiceStore } from '../pipeline/last-choice.ts';
+import { createRebuildService } from '../storage/rebuild-service.ts';
 import { CalibrationStore, type ApplyResult, type CalibrationAction } from '../calibration/store.ts';
 import { createCalcStats } from '../dev/calc-stats.ts';
 import { readCatalogue } from '../dev/catalogue.ts';
@@ -230,6 +233,7 @@ export async function serve(opts: ServeOptions): Promise<number> {
     // The server opens after the pipeline, and a replay's only once the startup jump has landed: a client that connects
     // earlier would be told the positions the fast-forward passes through, and a dev restart would not come back to the moment it left.
     const startServer = async (): Promise<WsServer> => {
+      const planner = planning;
       const started = await WsServer.start({
         port: opts.wsPort,
         hub,
@@ -266,10 +270,10 @@ export async function serve(opts: ServeOptions): Promise<number> {
         // A plan is a decision of the team's running sessions (C1a, C76): the plan routing takes it.
         plan: (action: PlanAction): ActionOutcome =>
           feedIds.includes(action.feedId) ? planRouting.commit(action) : { ok: false, reason: 'invalid', message: `no feed ${action.feedId}` },
-        // The planning round's prepared plans are the planning module's (C62d, C70, C73).
-        ...(planning && {
-          prepare: (action: PrepareAction): ActionOutcome =>
-            feedIds.includes(action.feedId) ? planning.apply(action) : { ok: false, reason: 'invalid', message: `no feed ${action.feedId}` },
+        // The planning round and the saved plans are the planning module's (C62d, C70, C73).
+        ...(planner && {
+          planning: (action: PlanningAction): ActionOutcome =>
+            feedIds.includes(action.feedId) ? planner.apply(action) : { ok: false, reason: 'invalid', message: `no feed ${action.feedId}` },
         }),
         ...(opts.replay && { replay: { control: (control: ReplayControl) => (controller === undefined ? false : (controller.control(control), true)) } }),
       });
@@ -303,18 +307,44 @@ export async function serve(opts: ServeOptions): Promise<number> {
     const pipelineLog = cliLogger(io, 'info');
     // One job-worker limit for every feed, so all feeds together run at most MAX_JOB_WORKERS workers (Task 18b, C1a).
     const workerLimit = new WorkerLimit();
-    // The planning round (C62d): bridge user state in `<data dir>/plans/`, so only a run with a data dir has one; its
-    // jobs share the feeds' worker limit (C51). The suggestion reads the stored sessions on the track (§7.1 step 3).
-    const planning = opts.uiDir === undefined ? undefined : new Planning({
-      hub,
-      store: new PreparedStore(dirname(opts.uiDir), cliLogger(io, 'warn')),
-      job: opts.planningJob ?? PLANNING_JOB,
-      workerLimit,
-      endedAsOf: (feedId, laps) => pipelines.get(feedId)?.endedAsOf(laps),
-      suggestedLaps: (trackId, format) => (calibrationRepo === undefined ? unknown('notReceived') : suggestedLapsOf(calibrationRepo.sessionsOnTrack(trackId), format)),
-      log: pipelineLog,
-    });
-    if (planning) undo.push(() => planning.close());
+    // The planning round (C62d): it replays a stored qualifying (so only a run that stores has one) and keeps the saved
+    // plans in `<data dir>/plans/`; its replay runs in the rebuild service's worker, off the thread that applies frames
+    // (C61), its jobs on the feeds' worker limit (C51). The suggestion reads the stored sessions on the track (§7.1 step 3).
+    let planning: Planning | undefined;
+    if (storage && calibrationRepo && opts.uiDir !== undefined) {
+      const dataDirRoot = dirname(opts.uiDir);
+      const warnLog = cliLogger(io, 'warn');
+      const rebuildService = createRebuildService({
+        db: storage.db,
+        ...(opts.config && { config: opts.config }),
+        rulesVersion: storage.rulesVersion,
+        log: warnLog,
+        running,
+      });
+      // Before the database closes (`undo` runs in reverse).
+      undo.push(() => rebuildService.close());
+      const store = new SavedPlanStore(dataDirRoot, warnLog);
+      const lastChoice = createLastChoiceStore(dataDirRoot, warnLog);
+      const runner = createPlanningRunner({
+        rebuild: rebuildService,
+        jobs: { job: opts.planningJob ?? PLANNING_JOB, workerLimit },
+        hub,
+        store,
+        lastChoice,
+        sessions: calibrationRepo,
+        seatOf: (feedId) => planning?.seatOf(feedId),
+        log: pipelineLog,
+      });
+      planning = new Planning({
+        runner,
+        store,
+        lastChoice,
+        suggestedLaps: (trackId, format) => suggestedLapsOf(calibrationRepo.sessionsOnTrack(trackId), format),
+        log: pipelineLog,
+      });
+      const made = planning;
+      undo.push(() => made.close());
+    }
     const makePipeline = (source: PacketSource, listenPort?: number): FeedPipeline => {
       const pipeline = new FeedPipeline({
       feedId: source.feedId,

@@ -7,7 +7,7 @@ import type { ClientMessage, FeedInfo, ReplayControl, ServerMessage, UiAction } 
 import { isCalibrationAction, type CalibrationStore } from '../calibration/store.ts';
 import { isDriverAction, type ProfileStore } from '../drivers/store.ts';
 import { isPlanAction, type PlanAction } from '../pipeline/plan-routing.ts';
-import { isPrepareAction, type PrepareAction } from '../planning/planning.ts';
+import { isPlanningAction, type PlanningAction } from '../planning/planning.ts';
 import type { Logger } from '../log.ts';
 import type { UiState } from '../ui-state/ui-state.ts';
 import type { TopicHub } from '../hub/topic-hub.ts';
@@ -51,10 +51,11 @@ export type WsServerOptions = {
    */
   endSession?: (action: EndSessionAction) => ActionOutcome;
   /**
-   * Takes the planning round's `plans.prepare.*` (C62d, C73): `serve` hands them to the planning module, never to the UI
-   * state. Without it they are answered with `notSupported`.
+   * Takes the planning uiActions (`plans.prepare.*`, `plans.round.open`, `plans.race.set`, `plans.save`, `plans.rename`,
+   * `plans.delete`; C62d, C73): `serve` hands them to the planning module, never to the UI state. Without it they are
+   * answered with `notSupported`.
    */
-  prepare?: (action: PrepareAction) => ActionOutcome;
+  planning?: (action: PlanningAction) => ActionOutcome;
   /** The replay transport that `replayControl` messages drive; without it (a live feed), or when its `control` returns `false`, they are answered with `notSupported`. */
   replay?: { control(control: ReplayControl): boolean | undefined };
   /** Default `127.0.0.1`. */
@@ -168,7 +169,7 @@ export class WsServer {
         // the planning round's the planning module's (C62d), every other one the UI state's.
         const { action } = message;
         // The driver-profile actions are the profile store's (C62c).
-        const owner = isPrepareAction(action) ? this.options.prepare?.(action)
+        const owner = isPlanningAction(action) ? this.options.planning?.(action)
           : action.kind === 'calibration.choose'
           ? this.options.choose?.(action)
           : isPlanAction(action) ? this.options.plan?.(action)
