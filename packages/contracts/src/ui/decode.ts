@@ -1,6 +1,7 @@
 // Structural validation of UI state (spec 7.2). Input is untrusted: decoders return `undefined`, never throw,
 // and rebuild values from the known fields only. Widget names and option values are the UI's business.
-import { NOISE_COMPOUNDS, PLAN_SLOTS, type Slot, type CalibrationSource, type CarId, type FeedId, type InsightCategory, type NoiseCompound, type Policy, type RaceAssumptions, type SessionBasis, type SessionRef, type StoredSessionRef, type SessionUid } from '@pitwall/domain';
+import { NOISE_COMPOUNDS, PLAN_SLOTS, type Slot, type CalibrationSource, type CarId, type FeedId, type ForecastSample, type InsightCategory, type NoiseCompound, type Policy, type RaceAssumptions, type RaceConditions, type SessionBasis, type SessionRef, type StoredSessionRef, type SessionUid } from '@pitwall/domain';
+import type { RoundRace } from '../topics/plans.prepared.ts';
 import type { CarRef, Geometry, LinkGroup, PanelSpec, TimeWindow, UiAction, Workbook, WorkbookWindow } from './types.ts';
 
 type Json = Record<string, unknown>;
@@ -214,9 +215,12 @@ export const decodeUiAction = (raw: unknown): UiAction | undefined => {
     case 'plans.round.open': {
       const qualifying = decodeBasisRef(raw.qualifying);
       const practice = mapAll(raw.practice, decodeBasisRef);
-      return isString(raw.feedId) && qualifying !== undefined && practice !== undefined
-        ? { kind: raw.kind, feedId: raw.feedId as FeedId, qualifying, practice }
-        : undefined;
+      const race = raw.race === undefined ? undefined : decodeRoundRace(raw.race);
+      if (!isString(raw.feedId) || qualifying === undefined || !isInteger(raw.team) || practice === undefined) return undefined;
+      if (raw.race !== undefined && race === undefined) return undefined;
+      const action: Extract<UiAction, { kind: 'plans.round.open' }> = { kind: raw.kind, feedId: raw.feedId as FeedId, qualifying, team: raw.team, practice };
+      if (race !== undefined) action.race = race;
+      return action;
     }
     case 'plans.race.set': {
       const race = decodeRaceAssumptions(raw.race);
@@ -262,9 +266,53 @@ const decodeSessionBasis = (raw: unknown): SessionBasis | undefined => {
   return practice === undefined || qualifying === undefined ? undefined : { practice, qualifying };
 };
 
-/** The race assumptions (C62d): laps a whole number of at least 1, sets `carried` or `fresh`. */
-const decodeRaceAssumptions = (raw: unknown): RaceAssumptions | undefined =>
-  isObject(raw) && isInteger(raw.laps) && raw.laps >= 1 && (raw.sets === 'carried' || raw.sets === 'fresh') ? { laps: raw.laps, sets: raw.sets } : undefined;
+/** The game's forecast array holds at most 64 samples. */
+const MAX_FORECAST_SAMPLES = 64;
+const WEATHERS: readonly string[] = ['clear', 'lightCloud', 'overcast', 'lightRain', 'heavyRain', 'storm'];
+const TRENDS: readonly string[] = ['up', 'down', 'flat'];
+
+/** One forecast row: offset a whole number of ms from 0, rain 0 to 100, known weather and trends. */
+const decodeForecastSample = (raw: unknown): ForecastSample | undefined => {
+  if (!isObject(raw) || !isInteger(raw.offsetMs) || raw.offsetMs < 0) return undefined;
+  if (!isString(raw.weather) || !WEATHERS.includes(raw.weather)) return undefined;
+  if (!isString(raw.trackTempTrend) || !TRENDS.includes(raw.trackTempTrend)) return undefined;
+  if (!isString(raw.airTempTrend) || !TRENDS.includes(raw.airTempTrend)) return undefined;
+  if (!isNumber(raw.trackTempC) || !isNumber(raw.airTempC) || !isNumber(raw.rainPct) || raw.rainPct < 0 || raw.rainPct > 100) return undefined;
+  return {
+    offsetMs: raw.offsetMs as ForecastSample['offsetMs'],
+    weather: raw.weather as ForecastSample['weather'],
+    trackTempC: raw.trackTempC as ForecastSample['trackTempC'],
+    trackTempTrend: raw.trackTempTrend as ForecastSample['trackTempTrend'],
+    airTempC: raw.airTempC as ForecastSample['airTempC'],
+    airTempTrend: raw.airTempTrend as ForecastSample['airTempTrend'],
+    rainPct: raw.rainPct as ForecastSample['rainPct'],
+  };
+};
+
+/** The race's conditions: `imported`, or 1 to 64 entered samples with strictly rising offsets. */
+const decodeRaceConditions = (raw: unknown): RaceConditions | undefined => {
+  if (!isObject(raw)) return undefined;
+  if (raw.kind === 'imported') return { kind: 'imported' };
+  if (raw.kind !== 'entered' || !Array.isArray(raw.samples) || raw.samples.length < 1 || raw.samples.length > MAX_FORECAST_SAMPLES) return undefined;
+  const samples = mapAll(raw.samples, decodeForecastSample);
+  if (samples === undefined) return undefined;
+  return samples.every((sample, i) => i === 0 || sample.offsetMs > (samples[i - 1]?.offsetMs ?? 0)) ? { kind: 'entered', samples } : undefined;
+};
+
+/** The race assumptions (C62d): laps a whole number of at least 1, sets `carried` or `fresh`, the conditions. */
+const decodeRaceAssumptions = (raw: unknown): RaceAssumptions | undefined => {
+  if (!isObject(raw) || !isInteger(raw.laps) || raw.laps < 1 || (raw.sets !== 'carried' && raw.sets !== 'fresh')) return undefined;
+  const conditions = decodeRaceConditions(raw.conditions);
+  return conditions === undefined ? undefined : { laps: raw.laps, sets: raw.sets, conditions };
+};
+
+/** A round's race (C62d): laps a whole number of at least 1 or `null` (none suggested, none entered), sets, the conditions. */
+const decodeRoundRace = (raw: unknown): RoundRace | undefined => {
+  if (!isObject(raw) || (raw.sets !== 'carried' && raw.sets !== 'fresh')) return undefined;
+  if (raw.laps !== null && !(isInteger(raw.laps) && raw.laps >= 1)) return undefined;
+  const conditions = decodeRaceConditions(raw.conditions);
+  return conditions === undefined ? undefined : { laps: raw.laps as number | null, sets: raw.sets, conditions };
+};
 
 const isInteger = (value: unknown): value is number => Number.isInteger(value);
 
