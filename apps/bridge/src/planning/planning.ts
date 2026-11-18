@@ -1,16 +1,19 @@
-// The bridge's planning module (C1a, C62, C62d, C73, C76; SP4.3e spec §4.3): the feed pipelines' planning hooks and the
-// `plans.*` uiActions, over the planning runner (`runner.ts`). At a qualifying's live end (`endsQualifying`) it opens the
-// feed's round with that qualifying, its own basis's practice and the race assumptions `{ laps: suggested, sets:
-// 'carried' }` (laps unknown without a suggestion, C3); the feed's next session start closes it. At a live race's start
-// it hands the pipeline the team's last chosen or saved plan on the track as plan decisions (`planDecisionsOf`).
-import type { ActionOutcome, UiAction } from '@pitwall/contracts';
-import { endsQualifying, IMPORTED, raceFormatOf, type CarKey, type FeedId, type Known, type RaceFormat, type SessionRef, type TrackId } from '@pitwall/domain';
+// The bridge's planning module (C1a, C62, C62d, C73, C76; SP4.3e spec §4.3, SP4.3f spec §4.0, §4.2): the feed pipelines'
+// planning hooks and the `plans.*` uiActions, over the planning runner (`runner.ts`). A round is a function of the picks
+// (`plans.round.open`: a qualifying, the team it is stored for, a practice basis of that team, the race assumptions):
+// the picks are checked first (C73), then the round opens, with the defaults when no race is given (the suggested laps,
+// `carried`, `IMPORTED`; laps unknown without a suggestion, C3) or, reopening the feed's last round's qualifying, that
+// round's race. Case A is case B with preselected picks: at a qualifying's live end (`endsQualifying`) the round opens
+// with the ended session's team, that qualifying, its own basis's practice and the defaults; the feed's next session
+// start closes it. At a live race's start it hands the pipeline the team's last chosen or saved plan on the track as
+// plan decisions (`planDecisionsOf`).
+import { decodeUiAction, type ActionOutcome, type UiAction } from '@pitwall/contracts';
+import { endsQualifying, IMPORTED, raceFormatOf, type CarKey, type FeedId, type Known, type RaceFormat, type RoundRace, type SessionRef, type TeamId, type TrackId } from '@pitwall/domain';
 import type { Logger } from '../log.ts';
 import type { EndedSession, PlanningHooks, PlanTarget, RaceStartPlan } from '../pipeline/feed-pipeline.ts';
 import type { LastChoiceStore } from '../pipeline/last-choice-types.ts';
-import type { FeedSeatStore, RememberedSeat } from './feed-seats.ts';
 import { lastPlanOf, planDecisionsOf } from './plan-choice.ts';
-import { MAX_RACE_LAPS, type PlanningRunner, type PrepareAction } from './runner.ts';
+import { MAX_RACE_LAPS, type PlanningRunner, type PrepareAction, type RaceDefaults } from './runner.ts';
 import type { SavedPlanStore } from './saved-plans.ts';
 
 /** The planning uiActions (C73): the round's slots, its race assumptions, opening it, and the saved plans. */
@@ -21,14 +24,11 @@ const PLANNING_KINDS: ReadonlySet<UiAction['kind']> = new Set(['plans.round.open
 export const isPlanningAction = (action: UiAction): action is PlanningAction => action.kind.startsWith('plans.prepare.') || PLANNING_KINDS.has(action.kind);
 
 export type PlanningOptions = {
-  /** The runner; built with `seatOf` = this module's `seatOf`. */
   runner: PlanningRunner;
   store: Pick<SavedPlanStore, 'read'>;
   lastChoice: Pick<LastChoiceStore, 'read' | 'write'>;
   /** The race laps to suggest for a race of `format` on `trackId` (`suggestedLapsOf` over the stored sessions). */
   suggestedLaps: (trackId: TrackId, format: RaceFormat) => Known<number>;
-  /** The feeds' remembered seats (R19); unset: none is remembered. */
-  seats?: FeedSeatStore;
   log: Pick<Logger, 'warn' | 'error'>;
   /** The time a basis is confirmed at (ISO). Default: now. */
   now?: () => string;
@@ -36,70 +36,53 @@ export type PlanningOptions = {
 
 const invalid = (message: string): ActionOutcome => ({ ok: false, reason: 'invalid', message });
 
-/** A remembered seat as the module keeps it: the seat and its track. */
-type Remembered = Pick<RememberedSeat, 'seat' | 'trackId'>;
-
 export class Planning implements PlanningHooks {
   readonly #o: PlanningOptions;
-  /** Per feed the seat of its newest session that named one in this run (its player car's team and race number, C62). */
-  readonly #seats = new Map<FeedId, CarKey>();
-  /** Per feed its remembered seat as read once from `seats` (R19); `null`: none. */
-  readonly #remembered = new Map<FeedId, Remembered | null>();
   /** Per feed the sessions started so far: a round waiting for its qualifying's file opens only if none started since. */
   readonly #starts = new Map<FeedId, number>();
+  /** The race assumptions a round opened without any starts from (spec §4.4): the suggested laps, `carried`, `IMPORTED`. */
+  readonly #defaults: RaceDefaults;
 
   constructor(opts: PlanningOptions) {
     this.#o = opts;
-  }
-
-  /** The feed's remembered seat (read once; a missing or corrupt file: `undefined`, C3). */
-  #rememberedOf(feedId: FeedId): Remembered | undefined {
-    if (!this.#remembered.has(feedId)) this.#remembered.set(feedId, this.#o.seats?.read(feedId) ?? null);
-    return this.#remembered.get(feedId) ?? undefined;
-  }
-
-  /** The feed's seat: its running (or newest) session's in this run, else the remembered one (R19; `undefined` without either). */
-  seatOf(feedId: FeedId): CarKey | undefined {
-    return this.#seats.get(feedId) ?? this.#rememberedOf(feedId)?.seat;
+    this.#defaults = (trackId, format) => {
+      const suggested = opts.suggestedLaps(trackId, format);
+      return { laps: suggested.known ? suggested.value : null, sets: 'carried', conditions: IMPORTED };
+    };
   }
 
   /** Feed `feedId` runs a session again (or its pipeline was made anew): its round closes, its job is cancelled. */
   sessionStarted(feedId: FeedId, trackId?: TrackId): void {
     this.#starts.set(feedId, (this.#starts.get(feedId) ?? 0) + 1);
     this.#o.runner.close(feedId);
-    // Before any session of the feed: the closed state lists the saved plans on the remembered seat's track (R19).
-    this.#o.runner.publishClosed(feedId, trackId ?? this.#rememberedOf(feedId)?.trackId);
+    this.#o.runner.publishClosed(feedId, trackId);
   }
 
   /**
-   * The running session's team became known (its seat, on `trackId`): the feed's seat now, remembered for the next
-   * bridge start (R19); the closed state is published again for the seat's team.
+   * The running session's team became known (its seat, on `trackId`): while no round is open the feed's closed state
+   * lists that team's saved plans on the track (C62d: a race chooses among them). Kept in memory only, for this run.
    */
   seatKnown(feedId: FeedId, seat: CarKey, trackId: TrackId): void {
-    this.#seats.set(feedId, { teamId: seat.teamId, raceNumber: seat.raceNumber });
-    const remembered = this.#rememberedOf(feedId);
-    if (remembered?.seat.teamId !== seat.teamId || remembered.seat.raceNumber !== seat.raceNumber || remembered.trackId !== trackId) {
-      this.#remembered.set(feedId, { seat: { ...seat }, trackId });
-      try {
-        this.#o.seats?.write(feedId, seat, trackId);
-      } catch (error) {
-        this.#o.log.error({ feedId, err: error }, 'feed seat not remembered');
-      }
-    }
-    if (!this.#o.runner.isOpen(feedId)) this.#o.runner.publishClosed(feedId, trackId);
+    if (!this.#o.runner.isOpen(feedId)) this.#o.runner.publishClosed(feedId, trackId, seat.teamId);
   }
 
-  /** Feed `feedId`'s session ended: a round opens when it ends qualifying (C62d), once its recording is closed. */
+  /**
+   * Feed `feedId`'s session ended: a round opens when it ends qualifying (C62d), once its recording is closed, with the
+   * session's team, its ref, its basis's practice and the defaults; without a known seat none opens (logged).
+   */
   sessionEnded(feedId: FeedId, ended: EndedSession): void {
-    if (ended.seat !== undefined) this.#seats.set(feedId, ended.seat);
     const { phase } = ended;
     if (phase.kind !== 'qualifying' || !endsQualifying(phase)) return;
-    const suggested = this.#o.suggestedLaps(ended.trackId, raceFormatOf(phase.format));
+    if (ended.seat === undefined) {
+      this.#o.log.warn({ feedId, sessionUid: ended.key.sessionUid }, 'planning round not opened: the qualifying\'s team is not known');
+      return;
+    }
     const spec = {
       feedId,
       qualifying: { sessionUid: ended.key.sessionUid, weekendId: ended.key.weekendId },
+      team: ended.seat.teamId,
       practice: ended.basis?.practice ?? [],
-      race: { laps: suggested.known ? suggested.value : null, sets: 'carried' as const, conditions: IMPORTED },
+      race: this.#defaults(ended.trackId as TrackId, raceFormatOf(phase.format)),
     };
     const starts = this.#starts.get(feedId) ?? 0;
     void ended.closed
@@ -117,15 +100,11 @@ export class Planning implements PlanningHooks {
   }
 
   /**
-   * The user confirmed a round's basis (R23; C62, C62d, C70): the team's last choice on the track takes its practice
-   * and qualifying, confirmed now, the plan part unchanged (`{ id: null }` without one). The track is the qualifying's
-   * stored row's, else the remembered seat's; without a team or a track nothing is written. Written whether or not the
-   * round's replay runs or succeeds.
+   * The user confirmed a round's basis (R23; C62, C62d, C70): the team's last choice on the qualifying's track takes its
+   * practice and qualifying, confirmed now, the plan part unchanged (`{ id: null }` without one). Written whether or not
+   * the round's replay runs or succeeds.
    */
-  #confirmBasis(feedId: FeedId, qualifying: SessionRef, practice: readonly SessionRef[]): void {
-    const team = this.seatOf(feedId)?.teamId;
-    const trackId = this.#o.runner.trackOf(feedId, qualifying) ?? this.#rememberedOf(feedId)?.trackId;
-    if (team === undefined || trackId === undefined) return;
+  #confirmBasis(feedId: FeedId, team: TeamId, trackId: TrackId, qualifying: SessionRef, practice: readonly SessionRef[]): void {
     const at = (this.#o.now ?? (() => new Date().toISOString()))();
     try {
       const last = this.#o.lastChoice.read(team, trackId);
@@ -146,13 +125,19 @@ export class Planning implements PlanningHooks {
   apply(action: PlanningAction): ActionOutcome {
     const { runner } = this.#o;
     switch (action.kind) {
-      case 'plans.round.open':
-        this.#confirmBasis(action.feedId, action.qualifying, action.practice);
-        void runner.open({ feedId: action.feedId, qualifying: action.qualifying, practice: action.practice, race: action.race ?? { laps: runner.laps(action.feedId) ?? null, sets: 'fresh', conditions: IMPORTED } })
-          .catch((error: unknown) => this.#o.log.error({ feedId: action.feedId, err: error }, 'planning round not opened'));
+      case 'plans.round.open': {
+        // the shape (the conditions included) as the one uiAction decoder reads it, then the picks against storage
+        if (decodeUiAction(action) === undefined) return invalid('the round\'s picks or race assumptions are malformed');
+        const spec = { feedId: action.feedId, qualifying: action.qualifying, team: action.team, practice: action.practice, ...(action.race !== undefined && { race: action.race as RoundRace }) };
+        const checked = runner.check(spec);
+        if (!checked.ok) return checked;
+        this.#confirmBasis(action.feedId, action.team, checked.trackId, action.qualifying, action.practice);
+        void runner.open(spec, this.#defaults).catch((error: unknown) => this.#o.log.error({ feedId: action.feedId, err: error }, 'planning round not opened'));
         return { ok: true };
+      }
       case 'plans.race.set':
         if (!runner.isOpen(action.feedId)) return { ok: false, reason: 'notSupported' };
+        if (decodeUiAction(action) === undefined) return invalid('the race assumptions are malformed: laps from 1, conditions with rising offsets, a known weather and rain 0 to 100');
         if (action.race.laps > MAX_RACE_LAPS) return invalid(`the race's laps are 1 to ${MAX_RACE_LAPS}`);
         runner.setRace(action.feedId, action.race);
         return { ok: true };
