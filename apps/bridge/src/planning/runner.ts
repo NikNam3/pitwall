@@ -11,8 +11,8 @@
 // shared `WorkerLimit`. It publishes `plans.preview` (the job's result per our car, `Computed<StrategyCar>`; never
 // stored, outside the determinism hash, C51) and `plans.prepared` (the round's state, `PlanningRoundState`, C54). New
 // race assumptions replay again; a slot edit re-runs the job only. `save` makes the round's slots a saved plan of the
-// round's team (C1a), and the team's last saved plan on the track. Without known race laps no replay and no job runs
-// (C3). The newest run wins; a closed round's result is never published. A closed feed lists the saved plans of its
+// round's team (C1a), and the team's last saved plan on the track. Without known race laps no job runs (C3): the
+// replay then only reads the qualifying's race samples, once, for the round's forecast rows. The newest run wins; a closed round's result is never published. A closed feed lists the saved plans of its
 // team: its newest round's in this run, or its running session's seat (`publishClosed` with a team); else none.
 import { randomUUID } from 'node:crypto';
 import type { ActionOutcome, Computed, PlanningRoundState, RoundRace, SavedPlanEntry, UiAction } from '@pitwall/contracts';
@@ -274,7 +274,8 @@ export function createPlanningRunner(o: PlanningRunnerOptions): PlanningRunner {
     round.runner.cancel();
     round.running = false;
     const stale = hasStale(round);
-    if (round.race.laps === null && round.defaults === undefined && !stale) {
+    // without race laps a replay only reads the qualifying's race samples, once (C3: no job runs)
+    if (round.race.laps === null && round.defaults === undefined && !stale && round.imported !== undefined) {
       round.replaying = false;
       publish(round);
       return;
@@ -293,7 +294,7 @@ export function createPlanningRunner(o: PlanningRunnerOptions): PlanningRunner {
         lastRaces.set(round.feedId, { qualifying: round.qualifying, team: round.team, race: copyRace(round.race) });
       }
       const { laps, sets, conditions } = round.race;
-      if (laps === null) {
+      if (laps === null && round.imported !== undefined) {
         round.replaying = false;
         publish(round);
         return;
@@ -316,7 +317,8 @@ export function createPlanningRunner(o: PlanningRunnerOptions): PlanningRunner {
     round.imported = result.imported;
     round.atEnd = result.atEnd;
     round.input = result.input;
-    run(round);
+    if (round.input === undefined) publish(round);
+    else run(round);
   };
 
   const onResult = (round: Round, result: JobResult): void => {
