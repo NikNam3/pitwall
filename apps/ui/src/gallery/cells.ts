@@ -48,7 +48,7 @@ export function hasBaseline(cell: WidgetCell, entry: CellSource, defaultTheme: s
 }
 
 /** What a shell cell shows (Task 4, spec 10): the top bar under one of its cases, or a shell overlay. */
-export type ShellCellKind = 'topbar' | 'palette' | 'key-overview' | 'settings-popover' | 'inspector';
+export type ShellCellKind = 'topbar' | 'palette' | 'key-overview' | 'settings-popover' | 'inspector' | 'basis-picker';
 
 /** One cell of the shell: the top bar, a shell overlay, or the panel overlays of `feed-status`. */
 export type ShellCell = {
@@ -63,13 +63,22 @@ export type ShellCell = {
 /**
  * The cells the gallery owes the shell. Ids are `shell/<kind>[/<detail>]`; the palette is open with the query `font`
  * and the settings popover and inspector are those of `feed-status`. The gallery draws each as a `data-gallery-id` figure.
- * Only the realism-pending and replay-transport top bars keep a baseline (SP4.3b2 budget).
+ * Only the realism-pending and replay-transport top bars and the basis picker's first case keep a baseline (SP4.3b2
+ * budget; SP4.3e Task 7c-2: one misc baseline for the picker). The basis picker's cells are its `BASIS_CASES`
+ * (`basis-cases.ts`), drawn as the overlay on the window's feed.
  */
 export const SHELL_CELLS: readonly ShellCell[] = [
   { id: 'shell/topbar/race-alert', kind: 'topbar', detail: 'race-alert', hasBaseline: false },
   { id: 'shell/topbar/realism-pending', kind: 'topbar', detail: 'realism-pending', hasBaseline: true },
   { id: 'shell/topbar/replay-transport', kind: 'topbar', detail: 'replay-transport', hasBaseline: true },
   { id: 'shell/topbar/battle', kind: 'topbar', detail: 'battle', hasBaseline: false },
+  { id: 'shell/topbar/basis-none', kind: 'topbar', detail: 'basis-none', hasBaseline: false },
+  { id: 'shell/topbar/basis-laps-differ', kind: 'topbar', detail: 'basis-laps-differ', hasBaseline: false },
+  { id: 'shell/basis-picker/own-weekend', kind: 'basis-picker', detail: 'own-weekend', hasBaseline: true },
+  { id: 'shell/basis-picker/none', kind: 'basis-picker', detail: 'none', hasBaseline: false },
+  { id: 'shell/basis-picker/last-choice', kind: 'basis-picker', detail: 'last-choice', hasBaseline: false },
+  { id: 'shell/basis-picker/rebuilding', kind: 'basis-picker', detail: 'rebuilding', hasBaseline: false },
+  { id: 'shell/basis-picker/laps-differ', kind: 'basis-picker', detail: 'laps-differ', hasBaseline: false },
   { id: 'shell/palette', kind: 'palette', detail: 'font', hasBaseline: false },
   { id: 'shell/key-overview', kind: 'key-overview', hasBaseline: false },
   { id: 'shell/settings-popover/feed-status', kind: 'settings-popover', detail: 'feed-status', hasBaseline: false },

@@ -1,6 +1,7 @@
 // The top bar's gallery cases (spec 10): topic overrides by case name, typed by the contracts. Task 4 draws them as cells.
 import type { InsightEntry, ReplayStatus, TopicValue, UiSettings } from '@pitwall/contracts';
 import { feedId, known, unknown } from '@pitwall/domain';
+import { BASIS_CASES } from './basis-cases.ts';
 import type { GalleryOverride } from './gallery-connection.ts';
 
 /** A battle: a car within reach on the next laps (spec 7.2, moment 4); battle has no `since` (ruling R1). */
@@ -29,4 +30,7 @@ export const TOP_BAR_CASES = {
   'realism-pending': [{ topic: 'ui.settings', value: realismPending }],
   'replay-transport': [{ topic: 'replay.status', value: replayStatus }],
   battle: [{ topic: 'raceMoment.current', value: battle }],
+  // The basis segment (SP4.3e Task 7c-2): every kind none; a plan computed for other race laps.
+  'basis-none': BASIS_CASES.none,
+  'basis-laps-differ': BASIS_CASES['laps-differ'],
 } satisfies Record<string, GalleryOverride[]>;
