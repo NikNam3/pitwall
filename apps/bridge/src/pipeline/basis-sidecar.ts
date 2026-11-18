@@ -1,8 +1,10 @@
 // The basis sidecar of a recording (C38, C59, C62, C62d; SP4.3e spec §4.2, ruling R20): a live session writes
 // `<file>.basis.json` at its first Participants, `{ start, preselected }`: the current sessions it started with, and, for
 // display only, the whole preselection; each plan choice that reaches the feed in a race adds an entry to `plans`
-// (`{ at, plan }`: the record index it reached the feed at, positional like the decisions sidecar's, and the plan shown,
-// `{ id, name, laps }`, or `null` for none); a rename or delete of the shown plan adds one too. A replay or reprocess
+// (`{ at, frame, plan }`: the record index it reached the feed at, positional like the decisions sidecar's, the frame
+// number its decisions describe, and the plan as committed, `{ id, name, laps }`, or `null` for none); a later edit of
+// the saved plan adds nothing (R22, C62d, C75). After a flashback the shown plan is the newest entry at or before its
+// target frame (C27a, C33). A replay or reprocess
 // starts on its `start` and shows each recorded plan before record `at`, as the live run did; the basis-chosen decisions
 // come back from the decisions sidecar (C76). A recording without one has the session's own weekend's earlier sessions
 // as its basis (C62); one without `plans` shows no plan.
@@ -15,10 +17,13 @@ import { readSidecar } from './decision-sidecars.ts';
 /** The plan `basis.active` shows: a saved plan's id, name and the race laps it was computed on; `null`: none. */
 export type ShownPlan = BasisActive['plan'];
 
-/** A plan choice as the basis sidecar records it: the record index it reached the feed at, and the plan shown. */
-export type PlanEntry = { at: number; plan: ShownPlan };
+/**
+ * A plan choice as the basis sidecar records it: the record index it reached the feed at, the frame number its
+ * decisions describe, and the plan as committed.
+ */
+export type PlanEntry = { at: number; frame: number; plan: ShownPlan };
 
-/** The basis sidecar as the bridge writes and reads it: the domain's, with the plan choices (R20). */
+/** The basis sidecar as the bridge writes and reads it (R20, R22). */
 export type RecordedBasis = BasisSidecar & { plans?: PlanEntry[] };
 
 /** Where a recording's basis sidecar lives. */
@@ -46,11 +51,12 @@ const decodeShown = (json: unknown): ShownPlan | undefined => {
 const decodePlans = (json: unknown): PlanEntry[] | undefined => {
   if (!Array.isArray(json)) return undefined;
   const plans: PlanEntry[] = [];
+  const index = (value: unknown): value is number => typeof value === 'number' && Number.isInteger(value) && value >= 0;
   for (const entry of json) {
-    if (!isRecord(entry) || typeof entry['at'] !== 'number' || !Number.isInteger(entry['at']) || entry['at'] < 0) return undefined;
+    if (!isRecord(entry) || !index(entry['at']) || !index(entry['frame'])) return undefined;
     const plan = decodeShown(entry['plan']);
     if (plan === undefined) return undefined;
-    plans.push({ at: entry['at'], plan });
+    plans.push({ at: entry['at'], frame: entry['frame'], plan });
   }
   return plans;
 };

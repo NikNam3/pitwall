@@ -18,12 +18,12 @@ type ShownPlan = BasisActive['plan'];
 
 /**
  * What takes a feed's plan decisions: its running session (`FeedPipeline.commitPlan`), and the plan choice that goes
- * with them (`showPlan`) and changes of a saved plan (`savedPlanChanged`), for `basis.active` (C62d).
+ * with them (`showPlan`, the plan as committed: a later edit of the saved plan changes nothing of it, R22), for
+ * `basis.active` (C62d).
  */
 export type PlanSink = {
   commitPlan(decision: PlanDecision): unknown;
   showPlan?(plan: ShownPlan): void;
-  savedPlanChanged?(id: string, plan: ShownPlan): void;
 };
 
 /**
@@ -126,12 +126,6 @@ export class TeamFeeds {
     const seat = this.#seats.get(feedId);
     if (seat === undefined || seat.team === null) return undefined;
     return this.#shown.get(teamKey({ sessionUid: seat.sessionUid, team: seat.team }));
-  }
-
-  /** The saved plan `id` was renamed (`plan`) or deleted (`null`): every feed showing it, and every team keeping it, follows. */
-  savedPlanChanged(id: string, plan: ShownPlan): void {
-    for (const [key, shown] of this.#shown) if (shown?.id === id) this.#shown.set(key, plan);
-    for (const sink of this.#sinks.values()) sink.savedPlanChanged?.(id, plan);
   }
 
   /** Per team of a session, its newest basis choice (C1a, C62): what a feed joining the team later is handed. */

@@ -433,7 +433,13 @@ export class SessionProcessor {
         ...publisher.publishInsights(scheduled.insights, { frameId: frame.frameId }),
       );
       this.#publishActive(result.state.history.decisions);
-      this.#o.basis?.applied({ basis: result.state.basis?.basis, phase: this.weekendPhase, totalLaps: result.state.session.totalLaps });
+      this.#o.basis?.applied({
+        basis: result.state.basis?.basis,
+        phase: this.weekendPhase,
+        totalLaps: result.state.session.totalLaps,
+        frameNumber: result.state.frameNumber,
+        rewound: rewound !== undefined,
+      });
       this.#reportSeats(result.state);
       const { cars, playerCar } = result.state;
       this.#o.jobs?.triggerRan(scheduled, { lap: cars[playerCar]?.timing.lap ?? 0, frameId: frame.frameId });
