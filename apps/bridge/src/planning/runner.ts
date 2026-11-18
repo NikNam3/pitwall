@@ -78,6 +78,8 @@ export type PlanningRunner = {
   isOpen(feedId: FeedId): boolean;
   /** The round's laps, `null` while unknown; `undefined` without a round. */
   laps(feedId: FeedId): number | null | undefined;
+  /** The track of the stored session `ref` of the feed's seat (C62); `undefined` without a seat or a stored row. */
+  trackOf(feedId: FeedId, ref: SessionRef): TrackId | undefined;
   /** A slot action on the feed's round (C73): checked; an accepted one re-runs the job. */
   edit(action: PrepareAction): ActionOutcome;
   /** Saves the feed's round's slot choices as a saved plan of the team (`replaces`: the plan it overwrites). */
@@ -313,6 +315,11 @@ export function createPlanningRunner(o: PlanningRunnerOptions): PlanningRunner {
     isOpen: (feedId) => rounds.has(feedId),
 
     laps: (feedId) => rounds.get(feedId)?.race.laps,
+
+    trackOf(feedId, ref) {
+      const seat = o.seatOf(feedId);
+      return seat === undefined ? undefined : storedOf(ref, seat)?.trackId;
+    },
 
     edit(action) {
       const round = rounds.get(action.feedId);
