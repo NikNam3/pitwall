@@ -9,7 +9,9 @@
 //   through the garage (session time up to 31.6x wall time) opens no lap and no transition.
 // - `outLap` from leaving the garage to the line; the push kind from the line; `inLap` once the car heads for the pit
 //   lane (the in-lap driver status on track during a push, the pit entry) or the session's end ends its out lap or push;
-//   `outLap` again at the pit exit without the garage; `finished` at the line once the session has ended for the car.
+//   The in-lap driver status on a push frame without a line is pending (C18): a line or the status held on the next
+//   frame with a moved lap distance opens `inLap`, the status gone clears it, a frame with an unmoved lap distance
+//   decides nothing (ruling R6). `outLap` again at the pit exit without the garage; `finished` at the line once the session has ended for the car.
 // - The line is the lap distance on track only: from below 0 to 0 or more, or a wrap (a drop of more than half the
 //   track's length). The lap number, the lap timer and the driver status are no line signal, and a line in the pit lane
 //   is no line.
@@ -32,9 +34,12 @@ type Location = 'garage' | 'pitLane' | 'track';
 
 /**
  * Per car slot: the open span (the same object while it holds, C40), how many spans the car has had, and what the frame
- * before showed of the car.
+ * before showed of the car; `pendingInLap`: the frame a push's in-lap driver status began on, awaiting its confirmation
+ * (C18).
  */
-type CarOpen = { span: OpenSpan; opened: number; location: Location; lapDistanceM: Metres; ended: boolean };
+type CarOpen = { span: OpenSpan; opened: number; location: Location; lapDistanceM: Metres; ended: boolean; pendingInLap?: FrameNumber };
+/** A car's kind on a frame and, on a push, its pending in-lap status. */
+type Next<P extends Push> = { kind: Kind<P>; pendingInLap?: FrameNumber };
 type Open = { cars: Array<CarOpen | undefined> };
 
 /** What the machine reads of one car on one frame. */
@@ -71,24 +76,40 @@ const rulesOf = <P extends Push>(push: P) => {
     return push;
   };
 
-  /** The kind on this frame given the frame before. */
-  const nextKind = (before: CarOpen, now: CarNow, trackLengthM: Metres): Kind<P> => {
+  /**
+   * The in-lap driver status on a push frame on track: at the line it opens `inLap`; without one it is a pending
+   * confirmation (C18) that the next frame with a moved lap distance resolves: a line or the status held opens `inLap`,
+   * the status gone clears it. A frame whose lap distance has not moved confirms and clears nothing (ruling R6).
+   */
+  const onPush = (before: CarOpen, now: CarNow, crossing: boolean, frame: FrameNumber): Next<P> => {
+    const status = now.signals.driverStatus === 'inLap';
+    if (before.pendingInLap !== undefined) {
+      if (now.lapDistanceM === before.lapDistanceM) return { kind: push, pendingInLap: before.pendingInLap };
+      return crossing || status ? { kind: 'inLap' } : { kind: push };
+    }
+    if (!status) return { kind: push };
+    return crossing ? { kind: 'inLap' } : { kind: push, pendingInLap: frame };
+  };
+
+  /** The kind on this frame given the frame before, and a pending in-lap status of a push. */
+  const nextKind = (before: CarOpen, now: CarNow, trackLengthM: Metres, frame: FrameNumber): Next<P> => {
     const kind = before.span.kind as Kind<P>;
-    if (now.status !== 'competing') return 'notCompeting';
-    if (now.location === 'garage') return 'garage';
-    if (kind === 'notCompeting') return kindOnJoin(now);
-    if (kind === 'garage') return 'outLap';
-    if (kind === 'finished') return 'finished';
-    if (crossesLine(before, now, trackLengthM)) {
-      if (now.ended) return 'finished';
-      if (kind === 'outLap') return push;
+    if (now.status !== 'competing') return { kind: 'notCompeting' };
+    if (now.location === 'garage') return { kind: 'garage' };
+    if (kind === 'notCompeting') return { kind: kindOnJoin(now) };
+    if (kind === 'garage') return { kind: 'outLap' };
+    if (kind === 'finished') return { kind: 'finished' };
+    const crossing = crossesLine(before, now, trackLengthM);
+    if (crossing) {
+      if (now.ended) return { kind: 'finished' };
+      if (kind === 'outLap') return { kind: push };
     }
     const lapping = kind === 'outLap' || kind === push;
-    if (lapping && before.location === 'track' && now.location === 'pitLane') return 'inLap';
-    if (kind === push && now.location === 'track' && now.signals.driverStatus === 'inLap') return 'inLap';
-    if (lapping && now.ended && !before.ended) return 'inLap';
-    if (kind === 'inLap' && before.location === 'pitLane' && now.location === 'track') return 'outLap';
-    return kind;
+    if (lapping && before.location === 'track' && now.location === 'pitLane') return { kind: 'inLap' };
+    if (lapping && now.ended && !before.ended) return { kind: 'inLap' };
+    if (kind === push && now.location === 'track') return onPush(before, now, crossing, frame);
+    if (kind === 'inLap' && before.location === 'pitLane' && now.location === 'track') return { kind: 'outLap' };
+    return { kind };
   };
 
   return { kindOnJoin, nextKind };
@@ -149,9 +170,12 @@ export const timedActivityMachine = <P extends Push>(spans: SpanDeclaration, pha
         const before = open.cars[index];
         const now = carNow(input, index, sessionEnded);
         if (now === undefined) return before;
-        const kind = before === undefined ? kindOnJoin(now) : nextKind(before, now, trackLengthM);
+        const { kind, pendingInLap } = before === undefined ? { kind: kindOnJoin(now) } : nextKind(before, now, trackLengthM, input.frameNumber);
         const seen = { location: now.location, lapDistanceM: now.lapDistanceM, ended: now.ended };
-        if (before !== undefined && before.span.kind === kind) return { ...before, ...seen };
+        if (before !== undefined && before.span.kind === kind) {
+          const { pendingInLap: _, ...held } = before;
+          return { ...held, ...seen, ...(pendingInLap === undefined ? {} : { pendingInLap }) };
+        }
         if (before !== undefined) closed.push({ ...before.span, end: input.at });
         const id = before?.opened ?? 0;
         return { span: opening(id, index, kind, input.at, input.frameNumber, before === undefined), opened: id + 1, ...seen };
