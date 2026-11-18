@@ -183,6 +183,22 @@ export const describeTimedActivity = ({ machine, spans, phase, sessionPhaseId, p
       expect(r.open[3]).toMatchObject({ kind: 'inLap', id: 1, startFrame: 4 });
       expect(r.closed[3]).toMatchObject([{ kind: push, id: 0, startFrame: 1 }]);
     });
+    it(`in-lap status, then a frame with unchanged lap distance, then the crossing: ${push} until the crossing frame, inLap from it (ruling R6)`, () => {
+      const r = run(
+        inputs().frames(2, f(pushing(4_920, 1))).frame(f(inLapOnTrack(4_990, 1))).frame(f(inLapOnTrack(4_990, 1))).frame(f(inLapOnTrack(2, 2, 33))).frame(f(inLapOnTrack(40, 2, 700))),
+      );
+      expect(kinds(r)).toEqual([push, push, push, push, 'inLap', 'inLap']);
+      expect(r.open[4]).toMatchObject({ kind: 'inLap', id: 1, startFrame: 5 });
+      expect(r.closed[4]).toMatchObject([{ kind: push, id: 0, startFrame: 1 }]);
+      expect(closedCount(r)).toBe(1);
+    });
+    it(`in-lap status, a frame with unchanged lap distance, then a moved distance mid-lap with the status held: inLap on the moved frame (ruling R6)`, () => {
+      const r = run(onPushFrames().frame(f(inLapOnTrack(2_100, 2))).frame(f(inLapOnTrack(2_100, 2))).frames(2, f(inLapOnTrack(2_150, 2))));
+      expect(kinds(r)).toEqual([push, push, push, push, push, 'inLap', 'inLap']);
+      expect(r.open[5]).toMatchObject({ kind: 'inLap', id: 1, startFrame: 6 });
+      expect(r.closed[5]).toMatchObject([{ kind: push, id: 0, startFrame: 1 }]);
+      expect(closedCount(r)).toBe(1);
+    });
     it(`in-lap status for one frame mid-lap, then gone: the pending is cleared, one ${push} span throughout`, () => {
       const r = run(onPushFrames().frame(f(inLapOnTrack(2_100, 2))).frames(3, f(pushing(2_150, 2))));
       expect(kinds(r)).toEqual(Array(7).fill(push));

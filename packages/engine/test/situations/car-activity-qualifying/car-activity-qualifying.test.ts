@@ -114,3 +114,19 @@ describe.each([
     ]);
   });
 });
+
+describe('car-activity-qualifying: qualifying-texas-2026-l1-asy, the frozen frame (ruling R6)', () => {
+  let seg: Seen;
+  beforeAll(async () => {
+    seg = await replayCars(SEGMENTS.qualifyingTexas2026L1Asy);
+  }, 120_000);
+  it('car 9: a frame between the in-lap status and the crossing repeats the lap distance of the status frame, and confirms nothing: inLap opens on the crossing frame', () => {
+    const status = firstFrame(seg, 9, (c) => c.ds === 'inLap');
+    const crossing = firstFrame(seg, 9, (c) => c.lap === 2);
+    const atStatus = seg.frames.find((f) => f.frameNumber === status)!.value[9]!;
+    const between = seg.frames.filter((f) => f.frameNumber > status && f.frameNumber < crossing).map((f) => f.value[9]!);
+    expect(between.length).toBeGreaterThan(0);
+    for (const c of between) expect([c.ds, c.lap, c.d]).toEqual(['inLap', atStatus.lap, atStatus.d]);
+    expect(spansOf(seg, ID, 9).find((s) => s.kind === 'inLap')?.startFrame).toBe(crossing);
+  });
+});

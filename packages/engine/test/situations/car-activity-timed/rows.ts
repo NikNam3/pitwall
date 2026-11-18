@@ -25,7 +25,9 @@
 //   result status turning finished mid-lap, the session phase turning finished or post-session, §2.10). The in-lap
 //   driver status on a push frame without a line is a pending confirmation (C18): the push holds; the next frame at the
 //   line opens `inLap` on that frame (the game sets the status at the line, on the tick before or after it by feed,
-//   planner report 2026-11-17 §2); the status held without a line opens `inLap` a frame later; the status gone clears it.
+//   planner report 2026-11-17 §2); the status held without a line opens `inLap` a frame later; the status gone clears it. A frame whose lap
+//   distance has not moved since the pending began confirms nothing (ruling R6, Texas ASY car 9 frame 94): the pending
+//   resolves on the car's next frame with a new lap distance by the same rules.
 // - `finished` at the line once the session has ended for the car (its result status finished, or the session phase
 //   finished or post-session): the chequered flag's last lap. A car set to finished mid-lap (the last frame of SgQ and
 //   MiP) is not finished by that alone (Review Focus 3): its push ends, `inLap`.
@@ -103,6 +105,18 @@ export const timedActivityRows = (t: Timed, push: 'pushLap' | 'flyingLap'): Tran
       from: push,
       to: 'inLap',
       input: inputs().frames(2, f(pushing(4_920, 1))).frame(f(inLapOnTrack(4_990, 1))).frame(f(inLapOnTrack(2, 2, 33))),
+    },
+    {
+      name: `in-lap status, then a frame with unchanged lap distance, then the crossing: ${push} until the crossing frame, inLap from it (Texas 2026-11-17 ASY car 9: frame 94 repeats frame 93's lap data; ruling R6): ${push} -> inLap`,
+      from: push,
+      to: 'inLap',
+      input: inputs().frames(2, f(pushing(4_920, 1))).frame(f(inLapOnTrack(4_990, 1))).frame(f(inLapOnTrack(4_990, 1))).frame(f(inLapOnTrack(2, 2, 33))),
+    },
+    {
+      name: `in-lap status, a frame with unchanged lap distance, then a moved distance mid-lap with the status held: ${push} -> inLap on the moved frame (ruling R6)`,
+      from: push,
+      to: 'inLap',
+      input: inputs().frames(2, f(pushing(2_000, 2))).frame(f(inLapOnTrack(2_100, 2))).frame(f(inLapOnTrack(2_100, 2))).frame(f(inLapOnTrack(2_150, 2))),
     },
     { name: `the pit entry with the driver status still flying (ps 0 -> 1): ${push} -> inLap`, from: push, to: 'inLap', input: onPush().frame(f(car0({ ds: 'flyingLap', ps: 'pitting', d: 4_960, lap: 2 }))) },
     {
