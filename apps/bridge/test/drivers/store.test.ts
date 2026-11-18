@@ -77,7 +77,7 @@ function driverSession(uid: string, o: { startedAt: string; slots: SlotSpec[]; w
   };
   const row: DriverSessionRow = {
     sessionUid: uid as SessionUid, weekendId: o.weekendId ?? 'W1', seasonId: 'S1', playerCar: car(0), teammateCar: null,
-    trackId: o.trackId ?? TRACK, startedAt: o.startedAt, pwrecPath: null, settings: { aiDifficulty: 90 },
+    trackId: o.trackId ?? TRACK, startedAt: o.startedAt, pwrecPath: null, settings: { aiDifficulty: 90 }, kind: phaseKind === 'pending' ? 'none' : phaseKind,
     cars: o.slots.map((s) => ({ carId: car(s.car), carKey: { teamId: s.team, raceNumber: s.number }, driver: s.name === null ? unknown('notReceived') : known(s.name, 0) })),
     rulesVersion: o.rulesVersion ?? 'current', complete: true, track: unknown('notApplicable'), aiDifficulty: known(90, 0),
     stale: false, phase, projection,
@@ -89,7 +89,7 @@ function driverSession(uid: string, o: { startedAt: string; slots: SlotSpec[]; w
 function staleOf(s: DriverSessionRow): DriverSessionRow {
   return {
     sessionUid: s.sessionUid, weekendId: s.weekendId, seasonId: s.seasonId, playerCar: s.playerCar, teammateCar: s.teammateCar, trackId: s.trackId,
-    startedAt: s.startedAt, pwrecPath: s.pwrecPath, settings: s.settings, cars: s.cars, rulesVersion: 'old', complete: s.complete, track: s.track,
+    startedAt: s.startedAt, pwrecPath: s.pwrecPath, settings: s.settings, kind: s.kind, cars: s.cars, rulesVersion: 'old', complete: s.complete, track: s.track,
     aiDifficulty: s.aiDifficulty, stale: true, projection: undefined,
   };
 }
