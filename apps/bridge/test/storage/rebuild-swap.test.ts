@@ -64,4 +64,31 @@ describe('the rebuild service replaces a stale session\'s log as a whole (C24, C
     expect(await swapped?.projection).toEqual(rebuilt);
     expect(rowOf(place.db, key)).toMatchObject({ rules_version: NEW, complete: 1 });
   });
+
+  // SP4.3e R9 (C61, C62): the session's weekend-phase kind is row metadata (`session-kind.test.ts`); a rebuild writes it
+  // with the swapped log, so a reader during the rebuild sees the old row's kind and after the swap the rebuilt one.
+  it('a rebuild\'s swap writes the session\'s kind: a wrong one is updated only at the swap, a right one kept', async () => {
+    const place = newPlace();
+    const { key } = await storeSegment(place, SEGMENT, OLD);
+    const kindOf = () => new WeekendRepository(place.db).sessionOf(key)?.kind;
+    // race-zandvoort-lap10 is a race
+    expect(kindOf()).toBe('race');
+    // as a row written before its weekend phase was decided left it
+    place.db.prepare("UPDATE sessions SET kind = 'none' WHERE session_uid = ? AND weekend_id = ? AND player_car = ?").run(key.sessionUid, key.weekendId, key.playerCar);
+    const seen: Array<{ step: string; kind: string | undefined }> = [];
+    const { writeProbe } = probe((call) => {
+      if (sameKey(call.session, key)) seen.push({ step: call.step, kind: kindOf() });
+    });
+    const service = createRebuildService({ db: place.db, dataDir: place.dirs, rulesVersion: NEW, log: silent, writeProbe });
+    services.push(service);
+    await service.ensureCurrent([key]);
+    expect(seen.filter((s) => s.step === 'part').length).toBeGreaterThan(0);
+    expect(seen.filter((s) => s.step === 'part').every((s) => s.kind === 'none')).toBe(true);
+    expect(seen.filter((s) => s.step === 'swap')).toEqual([{ step: 'swap', kind: 'race' }]);
+    // stale again (another rules version): the next rebuild keeps the kind
+    place.db.prepare('UPDATE sessions SET rules_version = ? WHERE session_uid = ? AND weekend_id = ? AND player_car = ?').run(OLD, key.sessionUid, key.weekendId, key.playerCar);
+    await service.ensureCurrent([key]);
+    expect(kindOf()).toBe('race');
+    expect(rowOf(place.db, key)).toMatchObject({ rules_version: NEW, complete: 1 });
+  });
 });
