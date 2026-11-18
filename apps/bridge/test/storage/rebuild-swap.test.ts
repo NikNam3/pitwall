@@ -7,6 +7,7 @@
 // stored by an earlier bridge under another rules version, its log then cut (its events removed) so the old log and the
 // rebuilt one differ. The reader is a repository without a rules version: it serves any complete session (C61).
 import { afterEach, describe, expect, it } from 'vitest';
+import type { SessionKey } from '../../src/storage/db.ts';
 import { WeekendRepository } from '../../src/storage/weekend-repository.ts';
 import { createRebuildService } from '../../src/storage/rebuild-service.ts';
 import type { RebuildService } from '../../src/storage/rebuild-service-types.ts';
@@ -90,5 +91,34 @@ describe('the rebuild service replaces a stale session\'s log as a whole (C24, C
     await service.ensureCurrent([key]);
     expect(kindOf()).toBe('race');
     expect(rowOf(place.db, key)).toMatchObject({ rules_version: NEW, complete: 1 });
+  });
+});
+
+// SP4.3e Task 7d fix round, F1 (C24, C59, C61): a session a feed starts running while its rebuild replays (a restarted
+// bridge continuing its recording, C59) is never swapped: the swap re-checks `running` and the feed's live log stays.
+describe('the swap never replaces a running session\'s log (C24, C59, C61)', { timeout: 120_000 }, () => {
+  it('a session that starts running between the worker\'s parts and the swap keeps its live log: no swap, its row and facts the feed\'s', async () => {
+    const place = newPlace();
+    const { key } = await storeSegment(place, SEGMENT, OLD);
+    // the earlier bridge was stopped inside the session: stored incomplete (C61: stale)
+    place.db.prepare('UPDATE sessions SET complete = 0 WHERE session_uid = ? AND weekend_id = ? AND player_car = ?').run(key.sessionUid, key.weekendId, key.playerCar);
+    const running: SessionKey[] = [];
+    const appended = { list: 'events', seq: 1_000_000, carId: null, record: { at: 999_999, kind: 'overtake', params: {}, frame: 999_999 } };
+    const { calls, writeProbe } = probe((call) => {
+      if (!sameKey(call.session, key) || call.step !== 'part' || running.length > 0) return;
+      // after the first part: the feed continues the session (C59) and appends to its log, as its writer does
+      running.push(key);
+      place.db.prepare('INSERT INTO facts (session_uid, weekend_id, player_car, list, seq, car_id, record) VALUES (?, ?, ?, ?, ?, ?, ?)')
+        .run(key.sessionUid, key.weekendId, key.playerCar, appended.list, appended.seq, appended.carId, JSON.stringify(appended.record));
+    });
+    const service = createRebuildService({ db: place.db, dataDir: place.dirs, rulesVersion: NEW, log: silent, writeProbe, running: () => running });
+    services.push(service);
+    await service.ensureCurrent([key]);
+    const live = factRows(place.db, key);
+
+    expect(calls.filter((c) => sameKey(c.session, key) && c.step === 'part').length).toBeGreaterThan(0);
+    expect(calls.filter((c) => sameKey(c.session, key) && c.step === 'swap')).toEqual([]);
+    expect(live).toContainEqual(appended);
+    expect(rowOf(place.db, key)).toMatchObject({ rules_version: OLD, complete: 0 });
   });
 });

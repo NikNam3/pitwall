@@ -47,7 +47,7 @@ import type { SlotIdentity } from '../drivers/store.ts';
 import type { FeatureConfig } from '../feature-config.ts';
 import type { FeedJobs } from '../jobs/feed-jobs.ts';
 import type { Logger } from '../log.ts';
-import type { SessionKey, SessionKind, SessionRow } from '../storage/db.ts';
+import type { SessionKey, StoredSessionKind, SessionRow } from '../storage/db.ts';
 import type { SessionFile } from '../storage/session-files.ts';
 import type { BasisRun } from './basis-run.ts';
 import { MAX_DUMPS_PER_SESSION, writeDebugDump } from './debug-dump.ts';
@@ -148,7 +148,7 @@ export class SessionProcessor {
   /** The teammate of the row last built (`#row`): a row is written again when the engine's teammate is another. */
   #storedTeammate: CarId | null = null;
   /** The kind of the row last built (`#row`): a row is written again once the weekend phase is decided (R9, C62). */
-  #storedKind: SessionKind = 'none';
+  #storedKind: StoredSessionKind = 'none';
   /** The run's profile snapshot (C62c): `undefined` until the first frame with Participants asks for it, fixed after. */
   #drivers: ProfileSnapshot | null | undefined;
   /** The human seats last handed to `onSeats`, as JSON: handed on only when they change. */
