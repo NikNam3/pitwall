@@ -14,11 +14,13 @@ describe('openDatabase', () => {
   // Task 27 (C24, C60, C1a): each session's log in generic tables, keyed per feed by the player car. SP4.1a f34 (C43,
   // C60): schema 5 stores the teammate the engine placed with the session row, so a schema-4 database is outdated.
   // SP4.1a fx2 (C60, C62): schema 6 stores each slot's driver name with its cars row, so a schema-5 database is outdated.
-  it('creates schema 6: weekends, sessions, cars and facts, with foreign keys on', () => {
+  // SP4.3e R9 (C61, C62): schema 7 stores each session's weekend-phase kind with its row; a schema-6 database is migrated
+  // in place (`session-kind.test.ts`), never refused.
+  it('creates schema 7: weekends, sessions, cars and facts, with foreign keys on', () => {
     const db = openDatabase(':memory:');
     expect(db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").pluck().all())
       .toEqual(['cars', 'facts', 'sessions', 'weekends']);
-    expect(SCHEMA_VERSION).toBe(6);
+    expect(SCHEMA_VERSION).toBe(7);
     expect(db.pragma('user_version', { simple: true })).toBe(SCHEMA_VERSION);
     expect(db.pragma('foreign_keys', { simple: true })).toBe(1);
   });
@@ -30,10 +32,11 @@ describe('openDatabase', () => {
     expect(key('cars')).toEqual(['session_uid', 'weekend_id', 'player_car', 'car_id']);
     expect(key('facts')).toEqual(['session_uid', 'weekend_id', 'player_car', 'list', 'seq']);
   });
-  it('the session row holds the recording\'s values, the player car, the teammate the engine placed, the rules version and complete; no weekend phase; a car row its driver name', () => {
+  it('the session row holds the recording\'s values, the player car, the teammate the engine placed, the rules version, complete and its weekend-phase kind; a car row its driver name', () => {
     const db = openDatabase(':memory:');
     const columns = (table: string) => db.prepare(`SELECT name FROM pragma_table_info('${table}') ORDER BY cid`).pluck().all();
-    expect(columns('sessions')).toEqual(['session_uid', 'weekend_id', 'player_car', 'teammate_car', 'track_id', 'started_at', 'pwrec_path', 'settings', 'rules_version', 'complete']);
+    // `kind` last: a new database has the columns a migrated schema-6 one has, in the same order
+    expect(columns('sessions')).toEqual(['session_uid', 'weekend_id', 'player_car', 'teammate_car', 'track_id', 'started_at', 'pwrec_path', 'settings', 'rules_version', 'complete', 'kind']);
     expect(columns('cars')).toEqual(['session_uid', 'weekend_id', 'player_car', 'car_id', 'team_id', 'race_number', 'name']);
     expect(columns('facts')).toEqual(['session_uid', 'weekend_id', 'player_car', 'list', 'seq', 'car_id', 'record']);
     expect(columns('weekends')).toEqual(['weekend_id', 'season_id', 'track_id']);
@@ -47,7 +50,7 @@ describe('openDatabase', () => {
     openDatabase(path).close();
     expect(() => openDatabase(path).close()).not.toThrow();
   });
-  it.each([[7, ''], [0, 'CREATE TABLE foreign_table (x INTEGER)']])('throws SchemaVersionError for version %i', (version, ddl) => {
+  it.each([[8, ''], [0, 'CREATE TABLE foreign_table (x INTEGER)']])('throws SchemaVersionError for version %i', (version, ddl) => {
     const path = file();
     const raw = new Database(path);
     if (ddl) raw.exec(ddl);

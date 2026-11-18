@@ -4,8 +4,9 @@ import { loadFeatureConfig, recordingConfig, type FeatureConfig } from '../featu
 import { FEATURES } from '../features/index.generated.ts';
 import type { Logger } from '../log.ts';
 import type { DataDir } from '../storage/data-dir.ts';
-import { openDatabase, SCHEMA_VERSION, SchemaVersionError, type Db, type SessionKey, type StoredSessionRow } from '../storage/db.ts';
-import { WeekendRepository } from '../storage/weekend-repository.ts';
+import { openDatabase, SCHEMA_VERSION, SchemaVersionError, type Db, type StoredSessionRow } from '../storage/db.ts';
+import { createRebuildService } from '../storage/rebuild-service.ts';
+import type { RebuildService } from '../storage/rebuild-service-types.ts';
 import { cliLogger, type CliIo } from './io.ts';
 import { processRecording } from './process-recording.ts';
 
@@ -130,106 +131,32 @@ function openCurrent(path: string): Db | undefined {
   }
 }
 
-const keyText = (row: SessionKey): string => `${row.sessionUid}/${row.weekendId}/${row.playerCar}`;
-const hasRecording = (row: StoredSessionRow): row is StoredSessionRow & { pwrecPath: string } => row.pwrecPath !== null && existsSync(row.pwrecPath);
-const rowFields = (row: StoredSessionRow) => ({ sessionUid: row.sessionUid, weekendId: row.weekendId, playerCar: row.playerCar, pwrecPath: row.pwrecPath });
-
 /**
  * The live bridge's rebuilds of stale stored sessions (C61: a log not complete, or of another rules version) from their
- * recordings, with the config stored next to each recording (else `config`), under `rulesVersion`. Each session is
- * handled once per run: a session whose recording is missing, or whose recording no longer yields it, is kept as it is
- * (C24), never served, and warned about once.
+ * recordings, with the config stored next to each recording (else `config`), under `rulesVersion`: it delegates to the
+ * one rebuild service (`createRebuildService`), which rebuilds nothing until a reader asks (none at bridge start).
  */
 export class StaleSessions {
-  readonly #db: Db;
-  readonly #config: FeatureConfig;
   readonly #io: CliIo;
-  readonly #rulesVersion: string;
-  readonly #log: Logger;
-  /** The sessions handled this run (`keyText`). */
-  readonly #handled = new Set<string>();
-  /** Rebuilds run one recording at a time. */
-  #queue: Promise<void> = Promise.resolve();
+  readonly #service: RebuildService;
 
   constructor(db: Db, config: FeatureConfig, io: CliIo, rulesVersion: string) {
-    this.#db = db;
-    this.#config = config;
     this.#io = io;
-    this.#rulesVersion = rulesVersion;
-    this.#log = cliLogger(io, 'warn');
+    this.#service = createRebuildService({ db, config, rulesVersion, log: cliLogger(io, 'warn') });
   }
-
   /**
-   * At bridge start, before input opens: rebuilds every stale session of the newest stored session's weekend, one
-   * progress line per recording, and `onProgress` before the first and after each recording (rebuilt or failed). False
-   * when `io.signal` stopped it (the sessions not rebuilt keep their stored logs and stay stale), and the user has been
-   * told so. A session whose recording holds no end (the bridge was stopped in it) is rebuilt as the stopped live run
-   * left it and stays incomplete (C59): the feed that receives its packets continues its recording, and a later rebuild
-   * (the stale sweep, a first read) may still finish it. `skip`: the sessions the startup restore replays itself
-   * (`FeedPipeline.restoreEnded`), left out so each is replayed once.
-   */
-  async rebuildNewestWeekend(onProgress?: RebuildProgress, skip: readonly SessionKey[] = []): Promise<boolean> {
-    const repo = new WeekendRepository(this.#db, { rulesVersion: this.#rulesVersion });
-    const weekendId = repo.newestWeekendId();
-    if (weekendId === undefined) return true;
-    const skipped = new Set(skip.map(keyText));
-    const stale = repo.staleSessionsOf(weekendId).filter((row) => !this.#handled.has(keyText(row)) && !skipped.has(keyText(row)));
-    for (const row of stale) {
-      this.#handled.add(keyText(row));
-      if (!hasRecording(row)) this.#log.warn(rowFields(row), 'stored session stale and its recording is missing: kept, not served');
-    }
-    const files = [...new Set(stale.filter(hasRecording).map((row) => row.pwrecPath))];
-    const rebuilt = new Set<string>();
-    onProgress?.(0, files.length);
-    for (const [i, file] of files.entries()) {
-      this.#io.err(`pitwall: rebuilding ${i + 1}/${files.length}: ${file}`);
-      try {
-        await this.#process(file, { keepUnendedOpen: true });
-        rebuilt.add(file);
-      } catch (error) {
-        if (this.#io.signal.aborted) {
-          this.#io.err('pitwall: interrupted; the sessions not rebuilt keep their stored logs');
-          return false;
-        }
-        this.#log.error({ pwrecPath: file, err: error }, 'recording not rebuilt: its stored sessions are kept, not served');
-      }
-      onProgress?.(i + 1, files.length);
-    }
-    for (const row of repo.staleSessionsOf(weekendId)) {
-      if (row.pwrecPath === null || !rebuilt.has(row.pwrecPath)) continue;
-      // kept open (C59): rebuilt under this rules version and left incomplete; a later rebuild may still finish it
-      if (!row.complete && row.rulesVersion === this.#rulesVersion) {
-        this.#handled.delete(keyText(row));
-        continue;
-      }
-      // a recording that no longer yields one of its sessions
-      this.#log.warn(rowFields(row), 'stored session not rebuilt from its recording: kept, not served');
-    }
-    return true;
-  }
-
-  /**
-   * Rebuilds one stale session, for a first read or in the background for a session start whose weekend context skipped
-   * it: queued behind the rebuilds already running.
+   * Rebuilds one stale session (C61), for a first read or in the background for a session start whose weekend context
+   * skipped it: through the one rebuild service, one session at a time. A session whose recording is missing, or whose
+   * recording no longer yields it, is kept as it is (C24), never served, and warned about once.
    */
   readonly rebuild = (row: StoredSessionRow): Promise<void> => {
-    if (this.#handled.has(keyText(row))) return Promise.resolve();
-    this.#handled.add(keyText(row));
-    if (!hasRecording(row)) {
-      this.#log.warn(rowFields(row), 'stored session stale and its recording is missing: kept, not served');
-      return Promise.resolve();
-    }
-    const path = row.pwrecPath;
-    const rebuilt = this.#queue.then(() => {
-      this.#io.err(`pitwall: rebuilding ${path} (a stale stored session)`);
-      return this.#process(path);
-    });
-    this.#queue = rebuilt.catch(() => {});
-    return rebuilt;
+    if (row.pwrecPath !== null && existsSync(row.pwrecPath)) this.#io.err(`pitwall: rebuilding ${row.pwrecPath} (a stale stored session)`);
+    return this.#service.ensureCurrent([row]);
   };
 
-  #process(file: string, opts: { keepUnendedOpen?: boolean } = {}): Promise<void> {
-    return processRecording(file, this.#db, this.#log, this.#io.signal, recordingConfig(file, FEATURES, this.#config, this.#log), this.#rulesVersion, opts);
+  /** Finishes the session being rebuilt and stops the service's worker. */
+  close(): Promise<void> {
+    return this.#service.close();
   }
 }
 
