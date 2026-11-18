@@ -17,7 +17,7 @@ import { initialSignals } from '../../signals/read.ts';
 import { STEP0_CLOCK } from '../../situations/clock/clock.ts';
 import { emptySituation } from '../../situations/situation.ts';
 import type { EngineState, OpenTrackers } from '../../state/engine-state.ts';
-import type { WeekendContext } from '../../state/weekend-context.ts';
+import type { BasisContext } from '../../state/basis-context.ts';
 import { RECORDERS } from '../step.ts';
 import { placePlayer } from './identity.ts';
 import { sessionStateFrom } from './session.ts';
@@ -108,7 +108,7 @@ export function initialState(init: {
   feedId: FeedId;
   sessionUid: bigint;
   session: SessionPacket;
-  weekend?: WeekendContext;
+  basis?: BasisContext;
   realism?: boolean;
 }): EngineState {
   const { header } = init.session;
@@ -130,7 +130,7 @@ export function initialState(init: {
     open: emptyTrackers(book),
     realism: init.realism ?? false,
     masking: { player: carId(header.playerCarIndex), teammate: undefined, realism: init.realism ?? false },
-    ...(init.weekend && { weekend: init.weekend }),
+    ...(init.basis && { basis: init.basis }),
   };
   placePlayer(state, header.playerCarIndex, state.signals);
   state.masking = { player: state.playerCar, teammate: state.teammateCar, realism: state.realism };

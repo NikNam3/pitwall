@@ -3,7 +3,7 @@ import type { FrameMetrics } from '../frame/metrics.ts';
 import type { HistoryDelta, Projection } from '../log/types.ts';
 import type { Situation } from '../situations/situation.ts';
 import type { LiveState } from '../state/live-state.ts';
-import type { WeekendContext } from '../state/weekend-context.ts';
+import type { BasisContext } from '../state/basis-context.ts';
 import type { ChangeTag } from '../step/types.ts';
 import type { DeepReadonly } from '../util/deep-readonly.ts';
 
@@ -49,7 +49,7 @@ export type FeedMetricsView = FrameMetrics & {
 /**
  * Everything a calculator or analysis may see (C39), read-only: the live state, the situation (the machine's open spans
  * and the weekend phase, C20), the history (the projection, C28; with `situation` it answers membership, so the view is
- * a `MembershipSource`, C26), the delta and change tags, the weekend's earlier sessions, the config, the priors, the
+ * a `MembershipSource`, C26), the delta and change tags, the basis's sessions, the config, the priors, the
  * track, the driver profiles, the feed health and the outputs of the units it reads.
  */
 export type EngineView = {
@@ -61,8 +61,11 @@ export type EngineView = {
   history: Projection;
   delta: HistoryDelta;
   changed: ReadonlySet<ChangeTag>;
-  /** The projections of the weekend's earlier sessions (C62); absent until the weekend context is known. */
-  weekend: DeepReadonly<WeekendContext> | undefined;
+  /**
+   * The projections of the basis's sessions (C62): of the newest `basisChosen` decision in the projection, else of the
+   * session-start basis; absent until the player's seat is known.
+   */
+  basis: DeepReadonly<BasisContext> | undefined;
   /** The effective config of the run, by section key (see `defineConfig`); fixed for the run (C47). */
   config: DeepReadonly<Record<string, Record<string, number | string | boolean>>>;
   /**

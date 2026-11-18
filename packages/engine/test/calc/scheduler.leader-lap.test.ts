@@ -28,7 +28,7 @@ const feedOf = () => {
         after: len({ laps: laps.length }),
         ...(o.rewound ? { rewound: { frameId: frame, at: frame * 100 } } : {}),
       },
-      weekend: undefined,
+      basis: undefined,
       feed,
       config: {},
       priors: NO_PRIORS,

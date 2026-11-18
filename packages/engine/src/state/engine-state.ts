@@ -12,7 +12,7 @@ import type {
 import type { Log, ProjectionBook, ProjectionState } from '../log/types.ts';
 import type { Signals } from '../signals/types.ts';
 import type { ClockOpen } from '../situations/clock/types.ts';
-import type { WeekendContext } from './weekend-context.ts';
+import type { BasisContext } from './basis-context.ts';
 
 /**
  * Work in progress behind the history. Per-car arrays are indexed by `CarId` and have `MAX_CARS` entries.
@@ -58,7 +58,8 @@ export type EngineState = {
   /** The last frame's time on the race clock: its session time plus `open.clock.offsetMs`. */
   sessionTime: SessionTime;
   open: OpenTrackers;
-  weekend?: WeekendContext | undefined;
+  /** The view's basis (C39, C62): set by the runner on every frame from the session-start basis and the projection's `basisChosen` decisions. */
+  basis?: BasisContext | undefined;
   /** Realism mode (spec 7.9): rival cars' hidden fields stay `unknown('realism')`. Fixed for the session. */
   realism: boolean;
   /**

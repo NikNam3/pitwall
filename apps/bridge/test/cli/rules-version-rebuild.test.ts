@@ -317,8 +317,8 @@ describe('stale sessions outside the start-up rebuild (C61)', { timeout: 60_000 
     const qualifying = await storeSession(dir, { uid: 21, weekend: 2, at: T0 + HOUR, version: OLD });
     const logs = [await logOf(dir, practice.key), await logOf(dir, qualifying.key)];
     const seen: unknown[] = [];
-    const probe: QuickCalculator<number> = { kind: 'quick', id: 'probe.weekend', reads: ['session'], cadence: 'frame',
-      compute: ({ weekend }) => { seen.push(weekend === undefined ? undefined : structuredClone(weekend)); return seen.length; }, insights: () => [] };
+    const probe: QuickCalculator<number> = { kind: 'quick', id: 'probe.basis', reads: ['session'], cadence: 'frame',
+      compute: ({ basis }) => { seen.push(basis === undefined ? undefined : structuredClone(basis)); return seen.length; }, insights: () => [] };
     const { io, lines } = memoryIo();
     const asked: string[] = [];
     await storeSession(dir, {
@@ -327,8 +327,8 @@ describe('stale sessions outside the start-up rebuild (C61)', { timeout: 60_000 
       rebuild: (db) => { const rebuilder = sessionRebuilder(db, config(), io, current); return (row) => { asked.push(row.sessionUid); return rebuilder(row); }; },
     });
     expect(asked.sort()).toEqual(['20', '21']);
-    // the running session started without them: its weekend context holds no stale session
-    expect(seen.at(-1)).toEqual({ weekendId: '2', player: { teamId: 0, raceNumber: 1 }, sessions: [] });
+    // the running session started without them: its basis holds no stale session
+    expect(seen.at(-1)).toEqual({ basis: { practice: [], qualifying: null }, player: { teamId: 0, raceNumber: 1 }, sessions: [] });
     expect(await rowOf(dir, practice.key)).toMatchObject({ rules_version: current, complete: 1 });
     expect(await rowOf(dir, qualifying.key)).toMatchObject({ rules_version: current, complete: 1 });
     expect([await logOf(dir, practice.key), await logOf(dir, qualifying.key)]).toEqual(logs);

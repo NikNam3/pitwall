@@ -44,7 +44,7 @@ async function lastView(): Promise<EngineView> {
     history: state.history,
     changed,
     delta,
-    weekend: state.weekend,
+    basis: state.basis,
     feed: IDLE_FEED,
     config: {},
     priors: unknown('notApplicable'),

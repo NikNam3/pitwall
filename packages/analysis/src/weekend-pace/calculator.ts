@@ -1,5 +1,5 @@
 // `weekend-pace` (SP4.3d2 Task 6b, plan call 9): each car's race pace before its first race lap, from the weekend's
-// earlier sessions (`view.weekend`, a car matched across sessions by team and race number, C62). Its practice long runs
+// earlier sessions (`view.basis`, a car matched across sessions by team and race number, C62). Its practice long runs
 // (stints of at least `minLongRunLaps` pace laps) give the median of their laps on degradation's basis (ruling R4): each
 // lap's fuel-free time is degradation's (`correctedMs`, γ = `lapModelParams`' `fuelMsPerKg`; a car's pace less fuel is
 // degradation's alone, C43), taken to tyre age 0 by the priors' slope of the compound (`view.priors`, C62a), else by
@@ -100,7 +100,7 @@ function phaseOf(projection: DeepReadonly<Projection>): WeekendPhase | undefined
  */
 function storedStints(session: DeepReadonly<StoredSession>, phase: WeekendPhase, view: AsOfView): DeepReadonly<Record<CarId, StintDegradation[]>> {
   const stored: StoredDriverSession = {
-    session: { sessionUid: session.sessionUid, weekendId: view.weekend?.weekendId ?? '', feedCar: session.playerCar },
+    session: { sessionUid: session.sessionUid, weekendId: session.weekendId, feedCar: session.playerCar },
     carId: session.playerCar,
     startedAt: '',
     phase,
@@ -201,7 +201,7 @@ export function weekendPaceAsOf(view: AsOfView): WeekendPace {
   // no qualifying session is a race: lap 1 is a pace lap there (C14)
   const classes: LapClassOptions = { isRace: false, ...configOf(LAP_CLASSES_CONFIG, view) };
   const evidence: Evidence = { longRun: new Map(), qualifying: new Map() };
-  for (const session of view.weekend?.sessions ?? []) addStored(evidence, session, view, correction, classes, config);
+  for (const session of view.basis?.sessions ?? []) addStored(evidence, session, view, correction, classes, config);
   const seatNow = (car: CarId): string | undefined => {
     const k = keys.value[car];
     return k === null || k === undefined ? undefined : seatOf(k);

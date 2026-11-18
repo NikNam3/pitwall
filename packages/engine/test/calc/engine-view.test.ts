@@ -1,5 +1,5 @@
 // The view (C39): everything a calculator or analysis may see is the live state, the situation (the open spans, C20),
-// the projection with its membership (C26, C28), the delta, the change tags, the weekend's earlier sessions, the config,
+// the projection with its membership (C26, C28), the delta, the change tags, the basis's sessions, the config,
 // the priors, the track, the feed health and the outputs of the units it reads. Nothing else.
 import { describe, expect, expectTypeOf, it } from 'vitest';
 import { unknown, type CarId, type Known, type PriorsSnapshot } from '@pitwall/domain';
@@ -16,7 +16,7 @@ import {
   type MembershipSource,
   type Projection,
   type QuickCalculator,
-  type WeekendContext,
+  type BasisContext,
 } from '../../src/index.ts';
 import type { Situation } from '../../src/situations/situation.ts';
 import type { LiveState } from '../../src/state/live-state.ts';
@@ -24,7 +24,7 @@ import { gridStart, run, script } from '../situations/script.ts';
 import { input, inputOf, viewOf } from '../support/scheduler.ts';
 
 /** The parts of the view (C39). */
-const PARTS = ['live', 'situation', 'history', 'delta', 'changed', 'weekend', 'config', 'priors', 'track', 'drivers', 'feed', 'outputs'] as const;
+const PARTS = ['live', 'situation', 'history', 'delta', 'changed', 'basis', 'config', 'priors', 'track', 'drivers', 'feed', 'outputs'] as const;
 type Part = (typeof PARTS)[number];
 
 /** A race from the grid to 60 frames after lights out: closed session-phase spans, open ones, every car's spans. */
@@ -49,7 +49,7 @@ describe('EngineView: the C39 parts', () => {
 
   it('`live` is the live state, read-only: no open trackers, log, signals, projection, weekend context or frame number (C8, C13, C28)', () => {
     expectTypeOf<EngineView['live']>().toEqualTypeOf<DeepReadonly<LiveState>>();
-    expectTypeOf<keyof EngineView['live']>().toEqualTypeOf<Exclude<keyof EngineState, 'open' | 'log' | 'signals' | 'history' | 'weekend' | 'frameNumber'>>();
+    expectTypeOf<keyof EngineView['live']>().toEqualTypeOf<Exclude<keyof EngineState, 'open' | 'log' | 'signals' | 'history' | 'basis' | 'frameNumber'>>();
     expectTypeOf<EngineView['live']['sessionTime']>().toEqualTypeOf<EngineState['sessionTime']>();
   });
 
@@ -58,8 +58,8 @@ describe('EngineView: the C39 parts', () => {
     expectTypeOf<EngineView['history']>().toEqualTypeOf<Projection>();
   });
 
-  it('`weekend` is the weekend\'s earlier sessions, read-only, absent without a weekend context; `priors` is the run\'s priors snapshot, read-only (C62, C62a)', () => {
-    expectTypeOf<EngineView['weekend']>().toEqualTypeOf<DeepReadonly<WeekendContext> | undefined>();
+  it('`basis` is the basis\'s sessions, read-only, absent without a basis; `priors` is the run\'s priors snapshot, read-only (C62, C62a)', () => {
+    expectTypeOf<EngineView['basis']>().toEqualTypeOf<DeepReadonly<BasisContext> | undefined>();
     expectTypeOf<EngineView['priors']>().toEqualTypeOf<Known<DeepReadonly<PriorsSnapshot>>>();
   });
 
@@ -67,11 +67,11 @@ describe('EngineView: the C39 parts', () => {
     const seen: EngineView[] = [];
     const s = new Scheduler(CalculatorRegistry.build([{ kind: 'quick', id: 'probe', reads: ['timing'], cadence: 'frame', compute: (v) => (seen.push(v), 0) }]));
     s.setNeeded(['probe']);
-    const given = { ...input(1000), weekend: { weekendId: 'w', player: { teamId: 0, raceNumber: 1 }, sessions: [] } as never };
+    const given = { ...input(1000), basis: { basis: { practice: [], qualifying: null }, player: { teamId: 0, raceNumber: 1 }, sessions: [] } as never };
     s.run(given);
     const [view] = seen;
     expect(Object.keys(view!).sort()).toEqual([...PARTS].sort());
-    for (const part of ['live', 'situation', 'history', 'weekend', 'config', 'track', 'feed'] as const) expect(view![part], part).toBe(given[part]);
+    for (const part of ['live', 'situation', 'history', 'basis', 'config', 'track', 'feed'] as const) expect(view![part], part).toBe(given[part]);
     // the scheduler picks `priors` from the run's priors (C62a); the input holds no snapshot
     expect(view!.priors).toEqual(unknown('notApplicable'));
     expect([...view!.changed]).toEqual([...given.changed]);
@@ -107,9 +107,9 @@ describe('EngineView is a MembershipSource (C26)', () => {
     expect(Object.keys(situationAt(view, 1))).toContain('session-phase-race');
   });
 
-  it('a stored session of the weekend is no MembershipSource: no unit asks membership of `view.weekend` (its rows hold no frame until Task 28)', () => {
-    expectTypeOf<WeekendContext['sessions'][number]>().not.toMatchTypeOf<MembershipSource>();
-    expectTypeOf<WeekendContext>().not.toMatchTypeOf<MembershipSource>();
+  it('a stored session of the weekend is no MembershipSource: no unit asks membership of `view.basis` (its rows hold no frame until Task 28)', () => {
+    expectTypeOf<BasisContext['sessions'][number]>().not.toMatchTypeOf<MembershipSource>();
+    expectTypeOf<BasisContext>().not.toMatchTypeOf<MembershipSource>();
   });
 });
 

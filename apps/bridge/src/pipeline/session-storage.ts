@@ -1,6 +1,6 @@
 // The storage of one session (C24, C59–C62): its row and cars, its log, its weekend context.
 import { carKeyOf, known, unknown, type CarId, type CarKey, type SessionState, type SessionUid } from '@pitwall/domain';
-import type { DeepReadonly, EngineState, WeekendContext } from '@pitwall/engine/readers';
+import type { DeepReadonly, EngineState, BasisContext } from '@pitwall/engine/readers';
 import type { Logger } from '../log.ts';
 import type { Db, SessionKey, SessionRow, StoredSessionRow } from '../storage/db.ts';
 import { StorageWriter } from '../storage/storage-writer.ts';
@@ -140,7 +140,7 @@ export class SessionStorage {
    * The player's earlier sessions of the weekend (C62); `undefined` when storage is off. Stale ones (not complete, or of
    * another rules version) are left out and handed to `rebuild`, in the background.
    */
-  weekendContext(row: SessionRow, player: CarKey): WeekendContext | undefined {
+  weekendContext(row: SessionRow, player: CarKey): BasisContext | undefined {
     const repo = this.#access?.repo;
     if (repo === undefined) return undefined;
     try {

@@ -140,7 +140,7 @@ function qualifyingView(o: { nextForecast?: ForecastSample[]; weatherNow?: null 
     priors: unknown('notApplicable'),
     drivers: Array.from({ length: CARS }, () => unknown('notApplicable')),
     track: TRACK,
-    weekend: undefined,
+    basis: undefined,
     outputs: new Map(),
     fixed: {
       totalLaps: known(LAPS, 0),

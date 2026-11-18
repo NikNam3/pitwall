@@ -36,7 +36,7 @@ const feedOf = () => {
         after: len({ crossings: crossings.length }),
         ...(o.rewound ? { rewound: { frameId: frame, at: frame * 100 } } : {}),
       },
-      weekend: undefined,
+      basis: undefined,
       feed,
       config: {},
       priors: NO_PRIORS, drivers: NO_DRIVERS,

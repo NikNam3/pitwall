@@ -13,7 +13,7 @@ import { runScenario } from '../support/run.ts';
 /** The live state after one frame of four cars, all of them in the session by the game's fields (numActiveCars 4). */
 const liveOfFourCars = (): LiveState => {
   const { st } = runScenario(new ScenarioBuilder({ cars: 4 }).frames(1, () => {}));
-  const { open: _open, history: _history, weekend: _weekend, signals: _signals, log: _log, ...live } = st;
+  const { open: _open, history: _history, basis: _basis, signals: _signals, log: _log, ...live } = st;
   return live;
 };
 

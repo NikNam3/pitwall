@@ -63,7 +63,7 @@ async function runSegment(file: string, keep: (state: DeepReadonly<EngineState>)
       history: state.history,
       changed,
       delta,
-      weekend: state.weekend,
+      basis: state.basis,
       feed: IDLE_FEED,
       config: {},
       priors: NO_PRIORS, drivers: NO_DRIVERS,
