@@ -783,3 +783,43 @@ describe('ProfileStore: a person\'s linked sessions (SP4.3b2 Task 10)', () => {
     expect(t.dir).not.toBe(process.env.PITWALL_DATA_DIR);
   });
 });
+
+// SP4.3e Task 7d fix round, F3 (C61: every other reader waits at its first read; nothing at bridge start; C62c): what
+// the store reads while it opens is what is current; a stale session it reads then is neither rebuilt nor remembered.
+// The store asks for it (`rebuild(keys, { priority: 'firstRead' })`, the rebuild service's `ensureCurrent`) at its first
+// real read, the profile snapshot for a session start (`snapshotFor`); once the rebuild settles it recomputes, and the
+// person's profile in the snapshot rests on the rebuilt session too.
+describe('a stale linked session is rebuilt at the store\'s first read, never at open (C61, C62c)', () => {
+  type FirstReadRebuild = (keys: readonly SessionKey[], opts?: { priority?: 'runningBasis' | 'planning' | 'firstRead' }) => Promise<void>;
+
+  it('a person\'s linked session that is stale: nothing is rebuilt at open; the first profile snapshot for a session start rebuilds it (firstRead) and the snapshot holds its entries', async () => {
+    const anna: SlotSpec = { car: 2, team: MERCEDES, number: 7, name: 'Anna R' };
+    const s1 = driverSession('1', { startedAt: day(1), slots: [HOST, anna] });
+    const s2 = driverSession('2', { startedAt: day(2), slots: [HOST, { ...anna, laps: 3 }] });
+    // a store, since closed, linked Anna's seat while both sessions were current
+    const first = setup({ sessions: [s1, s2] });
+    first.addAndLink('anna', 'Anna', s1, 2);
+    first.close();
+
+    // reopened with s2 stale (another rules version), its rebuild held
+    const pending: Array<() => void> = [];
+    const rebuild = vi.fn<FirstReadRebuild>(() => new Promise<void>((resolve) => { pending.push(resolve); }));
+    const t = setup({ sessions: [s1, staleOf(s2)], dir: first.dir, rebuild });
+    await settle();
+    // nothing at bridge start: the open read nothing it asks for
+    expect(rebuild).not.toHaveBeenCalled();
+
+    // the first real read: the profile snapshot for a session start
+    const recompute = vi.spyOn(t.store, 'recompute');
+    t.store.snapshotFor(slotsOf(s1), ref(s1));
+    expect(rebuild).toHaveBeenCalledTimes(1);
+    expect(rebuild).toHaveBeenCalledWith([{ sessionUid: s2.sessionUid, weekendId: s2.weekendId, playerCar: s2.playerCar }], { priority: 'firstRead' });
+
+    t.repo.sessions = [s1, s2];
+    for (const resolve of pending.splice(0)) resolve();
+    await vi.waitFor(() => expect(recompute).toHaveBeenCalledWith('rebuild'));
+    const snapshot = t.store.snapshotFor(slotsOf(s1), ref(s1));
+    expect(snapshot.profiles['anna']?.entries['fake.lapCount']).toMatchObject({ laps: 8, sessions: 2, newestSession: day(2) });
+    expect(rebuild).toHaveBeenCalledTimes(1);
+  });
+});
