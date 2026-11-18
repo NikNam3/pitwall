@@ -29,6 +29,7 @@ export const widget = declareWidget({
   // compact 37×7 (header, three slots, the DP line, the DP's 1- and 2-stop).
   sizes: { compact: { minCols: 37, minRows: 7 }, full: { minCols: 82, minRows: 13 } },
   actions: ['plan.save', 'plan.activate', 'plan.remove'],
-  // The planning round's controls and the race's prefill accept (SP4.3d2 call 10, C72, C74).
-  commands: ['plans.race.set', 'plans.prepare.save', 'plans.prepare.accept', 'plans.prepare.remove', 'plans.prepare.activate', 'plan.accept'],
+  // The planning round's controls and the race's prefill accept (SP4.3d2 call 10, C72, C74); the inputs line's `save`
+  // opens the shell's name prompt (SP4.3f Task 10).
+  commands: ['plans.race.set', 'plans.prepare.save', 'plans.prepare.accept', 'plans.prepare.remove', 'plans.prepare.activate', 'plan.accept', 'plans.save.pick'],
 });

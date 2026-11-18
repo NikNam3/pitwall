@@ -1,15 +1,17 @@
 // `pitwall plans` (C62d, C72, SP4.3e spec §4.3): the planning round of a running bridge from the command line.
 // `pitwall plans` lists the team's saved plans as `plans.prepared` publishes them; `pitwall plans open` opens a planning
 // round on a qualifying and a practice basis (`plans.round.open`) and, with `--laps` and `--sets`, sets its race
-// assumptions (`plans.race.set`). A refusal prints the bridge's message and exits 1 (C73). The feed is `--feed`, else
-// the bridge's only one.
-import { IMPORTED, type RaceAssumptions } from '@pitwall/domain';
+// assumptions (`plans.race.set`). The round's team is the qualifying's as stored (`plans.sessions`, C62d), never the
+// feed's; a qualifying stored for two teams needs `--team`. A refusal prints the bridge's message and exits 1 (C73). The
+// feed is `--feed`, else the bridge's only one.
+import type { PlansSessions } from '@pitwall/contracts';
+import { IMPORTED, type RaceAssumptions, type SessionRef, type TeamId } from '@pitwall/domain';
 import type { CliIo } from '../io.ts';
 import { UsageError } from '../usage.ts';
-import { chooseFeed, sendAction, withBridge } from './bridge-client.ts';
+import { chooseFeed, sendAction, topicValue, withBridge, type Bridge } from './bridge-client.ts';
 import { parsePractice, parseSessionRef, savedPlans } from './sessions.ts';
 
-export type PlansValues = { feed?: string | undefined; practice?: string[] | undefined; qualifying?: string | undefined; laps?: string | undefined; sets?: string | undefined };
+export type PlansValues = { feed?: string | undefined; practice?: string[] | undefined; qualifying?: string | undefined; team?: string | undefined; laps?: string | undefined; sets?: string | undefined };
 
 const usage = (message: string): never => {
   throw new UsageError(message);
@@ -24,6 +26,18 @@ function raceOf(values: PlansValues): RaceAssumptions | undefined {
   return { laps: Number(values.laps), sets: values.sets, conditions: IMPORTED };
 }
 
+/** The team `qualifying` is stored for (`plans.sessions`): the one, `--team` among several, or why not. */
+async function teamOf(bridge: Bridge, qualifying: SessionRef, asked: TeamId | undefined): Promise<TeamId | string> {
+  const stored = (await topicValue(bridge, 'plans.sessions', 'plans-sessions')) as PlansSessions | undefined;
+  const teams = [...new Set((stored?.sessions ?? [])
+    .filter((s) => s.kind === 'qualifying' && s.ref.sessionUid === qualifying.sessionUid && s.ref.weekendId === qualifying.weekendId)
+    .map((s) => s.team))];
+  const name = `${qualifying.sessionUid}/${qualifying.weekendId}`;
+  if (teams.length === 0) return `qualifying ${name} is not stored`;
+  if (asked !== undefined) return teams.includes(asked) ? asked : `qualifying ${name} is not stored for team ${asked} (stored for ${teams.join(', ')})`;
+  return teams.length === 1 ? teams[0]! : `qualifying ${name} is stored for teams ${teams.join(', ')}: choose one with --team`;
+}
+
 /** `pitwall plans [open --qualifying <session> [--practice <session>|none …] [--laps n --sets carried|fresh]] [--feed id]`. */
 export async function run(positionals: string[], values: PlansValues, io: CliIo): Promise<number> {
   const [verb, ...rest] = positionals;
@@ -35,6 +49,7 @@ export async function run(positionals: string[], values: PlansValues, io: CliIo)
       ? {
           qualifying: values.qualifying === undefined ? usage('plans open needs --qualifying <session>') : parseSessionRef(values.qualifying, '--qualifying'),
           practice: parsePractice(values.practice ?? []),
+          team: values.team === undefined ? undefined : /^\d+$/.test(values.team) ? Number(values.team) : usage(`--team is a team id, got "${values.team}"`),
           race: raceOf(values),
         }
       : undefined;
@@ -45,7 +60,6 @@ export async function run(positionals: string[], values: PlansValues, io: CliIo)
       return 1;
     }
     const { feed } = chosen;
-    const team = bridge.feeds.find((f) => f.feedId === feed)?.team ?? null;
     if (open === undefined) {
       const saved = await savedPlans(bridge, feed);
       if (saved === undefined) io.out('no planning round open: open one ("pitwall plans open") to list the saved plans');
@@ -53,8 +67,9 @@ export async function run(positionals: string[], values: PlansValues, io: CliIo)
       for (const plan of saved ?? []) io.out(`${plan.id}  ${plan.name}  ${plan.savedAt}`);
       return 0;
     }
-    if (team === null) {
-      io.err(`pitwall: feed ${feed} has no team yet (Participants not received); open a round once it has`);
+    const team = await teamOf(bridge, open.qualifying, open.team);
+    if (typeof team === 'string') {
+      io.err(`pitwall: ${team}`);
       return 1;
     }
     const refusal =

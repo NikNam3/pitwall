@@ -37,6 +37,12 @@ export const sets = { carried: 'carried', fresh: 'fresh' } as const;
 /** A prefilled slot's hover, and its button (`accept` keeps the prefill as the slot's plan). */
 export const prefillHover = 'prefilled from the DP: accept to keep it';
 export const accept = 'accept';
+/**
+ * SP4.3f Task 10 (the user's layout of 2026-11-18): the inputs line's last button, which opens the shell's name prompt;
+ * once the round is saved, `saved · <name>` in its place (the same button).
+ */
+export const save = 'save';
+export const saved = (name: string): string => `saved · ${name}`;
 /** The planning job runs (the computing mark on the inputs line). */
 export const computing = '…';
 export const computingHover = 'planning job running';
@@ -48,6 +54,7 @@ export const commandHover = {
   activate: 'plans.prepare.activate',
   remove: 'plans.prepare.remove',
   raceAccept: 'plan.accept',
+  saveRound: 'plans.save.pick',
 } as const;
 /**
  * SP4.3f Task 7, the race's conditions (mockup plan-board-conditions.html, gen.mjs `CT`): the RAIN button's mark, the

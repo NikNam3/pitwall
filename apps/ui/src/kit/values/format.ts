@@ -304,6 +304,10 @@ export const formatDay = (iso: string): string => {
   return month === undefined || d < 1 || d > 31 ? '' : `${day} ${month}`;
 };
 
+/** A wall-clock moment as its local day and time of day, `18 Nov 17:20`, `4 Nov 09:05`. Only for names the user keeps (a saved plan's). */
+export const formatDayTime = (at: Date): string =>
+  `${at.getDate()} ${MONTHS[at.getMonth()] ?? ''} ${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}`;
+
 // gap chart
 
 /** A y tick of the gap chart from the plotted (negated) value, as seconds behind the reference: `-5` -> `+5`, `5` -> `−5`, `0` -> `0`. */
