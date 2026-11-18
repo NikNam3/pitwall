@@ -22,13 +22,10 @@ function isLastChoice(value: unknown): value is LastChoice {
   const practice = basis['practice'];
   const qualifying = basis['qualifying'];
   return (
-    isObject(practice) &&
-    Array.isArray(practice['refs']) &&
-    practice['refs'].every(isRef) &&
-    typeof practice['at'] === 'string' &&
-    isObject(qualifying) &&
-    (qualifying['ref'] === null || isRef(qualifying['ref'])) &&
-    typeof qualifying['at'] === 'string' &&
+    (practice === undefined ||
+      (isObject(practice) && Array.isArray(practice['refs']) && practice['refs'].every(isRef) && typeof practice['at'] === 'string')) &&
+    (qualifying === undefined ||
+      (isObject(qualifying) && (qualifying['ref'] === null || isRef(qualifying['ref'])) && typeof qualifying['at'] === 'string')) &&
     (plan['id'] === null || typeof plan['id'] === 'string') &&
     typeof plan['at'] === 'string'
   );

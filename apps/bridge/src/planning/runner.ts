@@ -137,9 +137,12 @@ export function createPlanningRunner(o: PlanningRunnerOptions): PlanningRunner {
     o.hub.publishState(feedId, 'plans.prepared', () => value);
   };
 
-  /** Every open round of `team` publishes again (its saved plans changed, C1a). */
+  /** Every feed of `team` publishes again (its saved plans changed, C1a): its open round, else its closed state. */
   const republishTeam = (team: TeamId): void => {
     for (const round of rounds.values()) if (round.team === team) publish(round);
+    for (const feedId of closedTracks.keys()) {
+      if (!rounds.has(feedId) && o.seatOf(feedId)?.teamId === team) publishClosed(feedId, undefined);
+    }
   };
 
   const isCurrent = (round: Round): boolean => rounds.get(round.feedId) === round;
@@ -347,13 +350,9 @@ export function createPlanningRunner(o: PlanningRunnerOptions): PlanningRunner {
         cars: [...round.cars.values()].map((car) => structuredClone(car)),
       };
       o.store.save(plan);
-      // the team's last saved plan on the track (C62d); a last choice that exists keeps its basis
+      // the team's last saved plan on the track (C62d); a save confirms no basis (C62): the last choice keeps its kinds
       const last = o.lastChoice.read(round.team, round.trackId);
-      o.lastChoice.write(round.team, {
-        trackId: round.trackId,
-        basis: last?.basis ?? { practice: { refs: round.practice, at: savedAt }, qualifying: { ref: round.qualifying, at: savedAt } },
-        plan: { id: plan.id, at: savedAt },
-      });
+      o.lastChoice.write(round.team, { trackId: round.trackId, basis: last?.basis ?? {}, plan: { id: plan.id, at: savedAt } });
       republishTeam(round.team);
       return { ok: true };
     },

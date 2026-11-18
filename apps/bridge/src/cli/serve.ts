@@ -3,6 +3,7 @@ import type { FeedId, StrategyOutput } from '@pitwall/domain';
 import { PLANNING_JOB, type StrategyInput } from '@pitwall/analysis';
 import type { Job } from '@pitwall/engine/readers';
 import { dirname } from 'node:path';
+import { createFeedSeatStore } from '../planning/feed-seats.ts';
 import { Planning, type PlanningAction } from '../planning/planning.ts';
 import { suggestedLapsOf } from '../planning/round.ts';
 import { createPlanningRunner } from '../planning/runner.ts';
@@ -345,6 +346,8 @@ export async function serve(opts: ServeOptions): Promise<number> {
         store,
         lastChoice,
         suggestedLaps: (trackId, format) => suggestedLapsOf(calibrationRepo.sessionsOnTrack(trackId), format),
+        // Each feed's last seat, so a bridge between sessions knows the team (R19).
+        seats: createFeedSeatStore(dataDirRoot, warnLog),
         log: pipelineLog,
       });
       const made = planning;

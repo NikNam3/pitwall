@@ -9,7 +9,7 @@ import type { CalibrationStore } from '../calibration/store.ts';
 import type { ProfileStore, SlotIdentity } from '../drivers/store.ts';
 import { profilesSidecarPath, recordingProfiles } from './profile-sidecar.ts';
 import { CalculatorRegistry, SessionTracker, type Frame, type FrameMetrics, type InsightChange, type TrackerEvent } from '@pitwall/engine';
-import { decode, PacketId, peekHeader } from '@pitwall/protocol';
+import { decode, PacketId, peekHeader, type Packet } from '@pitwall/protocol';
 import { effectiveConfig, overriddenFields, recordingConfig, sessionConfigPath, sessionConfigSidecar, type FeatureConfig } from '../feature-config.ts';
 import type { Feature } from '../features/feature.ts';
 import { feedStatusOf } from '../features/feed-status/feed-status.ts';
@@ -184,6 +184,8 @@ export type PlanningHooks = {
   /** `trackId`: the starting session's track (`undefined` for a pipeline made anew, before any session). */
   sessionStarted(feedId: FeedId, trackId?: TrackId): void;
   sessionEnded(feedId: FeedId, ended: EndedSession): void;
+  /** A live session's team became known: the player car's seat (team, race number) on the session's track (R19). */
+  seatKnown?(feedId: FeedId, seat: CarKey, trackId: TrackId): void;
   /**
    * A live race's first frame with its team known, on the team's first feed (C62d, C76): the team's last chosen or
    * saved plan on the track as the plan decisions the team's feeds commit; none for "none".
@@ -366,6 +368,8 @@ export class FeedPipeline {
   #decisions: SessionDecisions | undefined;
   /** The newest session's seat as last reported to `teams`. */
   #seat: Seat | undefined;
+  /** The running session's player seat as last told to the planning module (R19); reset at each session start. */
+  #noticedSeat: CarKey | undefined;
   /** The newest session reached its race's first frame with its team known (the race-start commit's moment, C62d). */
   #raceStarted = false;
   /** Live: a stored session's recording being restored (C59); set from its first Session packet until it is live. */
@@ -908,6 +912,7 @@ export class FeedPipeline {
       const decoded = decode(bytes);
       if (decoded.ok) {
         for (const event of this.#tracker.push(decoded.packet, receivedAtMs)) this.#handle(event, receivedAtMs);
+        this.#noticeSeat(decoded.packet);
       } else {
         this.#monitor.onDecodeError(decoded.error, receivedAtMs);
         this.#log.debug({ feedId: this.#feedId, error: decoded.error }, 'datagram not decoded');
@@ -971,6 +976,25 @@ export class FeedPipeline {
     for (const decision of this.#o.teams.plansOf(this.#feedId)) this.commitPlan(decision);
   }
 
+  /**
+   * A Participants packet of the running session names the player car's seat (team, race number): the planning module
+   * is told when it changes (R19), at once, not a reorder window later as frames are. A replay run tells it nothing: the
+   * remembered seat is the live feed's.
+   */
+  #noticeSeat(packet: Packet): void {
+    const session = this.#session;
+    if (packet.packetId !== PacketId.participants || session === undefined || packet.header.sessionUid !== session.sessionUid) return;
+    if (this.#o.recorded !== undefined || this.#o.planning?.seatKnown === undefined) return;
+    const player = packet.participants[packet.header.playerCarIndex];
+    if (player === undefined) return;
+    const seat: CarKey = { teamId: player.teamId, raceNumber: player.raceNumber };
+    const noticed = this.#noticedSeat;
+    if (noticed?.teamId === seat.teamId && noticed.raceNumber === seat.raceNumber) return;
+    this.#noticedSeat = seat;
+    const { trackId } = session;
+    this.#guarded('planning', () => this.#o.planning?.seatKnown?.(this.#feedId, seat, trackId));
+  }
+
   #reportSeat(seat: Seat): void {
     this.#seat = seat;
     this.#o.teams?.report(this.#feedId, seat.sessionUid, seat.team);
@@ -1005,6 +1029,7 @@ export class FeedPipeline {
     this.#closedKey = undefined;
     this.#betweenSessions = false;
     this.#raceStarted = false;
+    this.#noticedSeat = undefined;
     this.#reportSeat({ sessionUid: String(event.sessionUid), team: null });
     this.#alerts.clearWriteFailures(this.#sessionTime());
     hub.resetFeed(feedId);

@@ -9,6 +9,7 @@ import type { Logger } from '../log.ts';
 import type { EndedSession, PlanningHooks, PlanTarget } from '../pipeline/feed-pipeline.ts';
 import type { LastChoiceStore } from '../pipeline/last-choice-types.ts';
 import type { PlanDecision } from '../pipeline/team-feeds.ts';
+import type { FeedSeatStore, RememberedSeat } from './feed-seats.ts';
 import { lastPlanOf, planDecisionsOf } from './plan-choice.ts';
 import { MAX_RACE_LAPS, type PlanningRunner, type PrepareAction } from './runner.ts';
 import type { SavedPlanStore } from './saved-plans.ts';
@@ -27,15 +28,22 @@ export type PlanningOptions = {
   lastChoice: Pick<LastChoiceStore, 'read'>;
   /** The race laps to suggest for a race of `format` on `trackId` (`suggestedLapsOf` over the stored sessions). */
   suggestedLaps: (trackId: TrackId, format: RaceFormat) => Known<number>;
+  /** The feeds' remembered seats (R19); unset: none is remembered. */
+  seats?: FeedSeatStore;
   log: Pick<Logger, 'warn' | 'error'>;
 };
 
 const invalid = (message: string): ActionOutcome => ({ ok: false, reason: 'invalid', message });
 
+/** A remembered seat as the module keeps it: the seat and its track. */
+type Remembered = Pick<RememberedSeat, 'seat' | 'trackId'>;
+
 export class Planning implements PlanningHooks {
   readonly #o: PlanningOptions;
-  /** Per feed the seat of its newest session that named one (its player car's team and race number, C62). */
+  /** Per feed the seat of its newest session that named one in this run (its player car's team and race number, C62). */
   readonly #seats = new Map<FeedId, CarKey>();
+  /** Per feed its remembered seat as read once from `seats` (R19); `null`: none. */
+  readonly #remembered = new Map<FeedId, Remembered | null>();
   /** Per feed the sessions started so far: a round waiting for its qualifying's file opens only if none started since. */
   readonly #starts = new Map<FeedId, number>();
 
@@ -43,16 +51,41 @@ export class Planning implements PlanningHooks {
     this.#o = opts;
   }
 
-  /** The feed's seat as its newest ended session named it (`undefined` before any). */
+  /** The feed's remembered seat (read once; a missing or corrupt file: `undefined`, C3). */
+  #rememberedOf(feedId: FeedId): Remembered | undefined {
+    if (!this.#remembered.has(feedId)) this.#remembered.set(feedId, this.#o.seats?.read(feedId) ?? null);
+    return this.#remembered.get(feedId) ?? undefined;
+  }
+
+  /** The feed's seat: its running (or newest) session's in this run, else the remembered one (R19; `undefined` without either). */
   seatOf(feedId: FeedId): CarKey | undefined {
-    return this.#seats.get(feedId);
+    return this.#seats.get(feedId) ?? this.#rememberedOf(feedId)?.seat;
   }
 
   /** Feed `feedId` runs a session again (or its pipeline was made anew): its round closes, its job is cancelled. */
   sessionStarted(feedId: FeedId, trackId?: TrackId): void {
     this.#starts.set(feedId, (this.#starts.get(feedId) ?? 0) + 1);
     this.#o.runner.close(feedId);
-    this.#o.runner.publishClosed(feedId, trackId);
+    // Before any session of the feed: the closed state lists the saved plans on the remembered seat's track (R19).
+    this.#o.runner.publishClosed(feedId, trackId ?? this.#rememberedOf(feedId)?.trackId);
+  }
+
+  /**
+   * The running session's team became known (its seat, on `trackId`): the feed's seat now, remembered for the next
+   * bridge start (R19); the closed state is published again for the seat's team.
+   */
+  seatKnown(feedId: FeedId, seat: CarKey, trackId: TrackId): void {
+    this.#seats.set(feedId, { teamId: seat.teamId, raceNumber: seat.raceNumber });
+    const remembered = this.#rememberedOf(feedId);
+    if (remembered?.seat.teamId !== seat.teamId || remembered.seat.raceNumber !== seat.raceNumber || remembered.trackId !== trackId) {
+      this.#remembered.set(feedId, { seat: { ...seat }, trackId });
+      try {
+        this.#o.seats?.write(feedId, seat, trackId);
+      } catch (error) {
+        this.#o.log.error({ feedId, err: error }, 'feed seat not remembered');
+      }
+    }
+    if (!this.#o.runner.isOpen(feedId)) this.#o.runner.publishClosed(feedId, trackId);
   }
 
   /** Feed `feedId`'s session ended: a round opens when it ends qualifying (C62d), once its recording is closed. */
