@@ -895,8 +895,10 @@ describe('the race-start commit takes the race slots from car-status (final revi
 // feed it is the plan named by the newest plan choice that reached the feed (the race-start commit of the team's last
 // chosen or saved plan, or a later `basis.choose` with `plan` set; `plan: null` there is none), looked up in the saved
 // plans as `{ id, name, laps: computedOn.race.laps }`, beside the race's laps (`raceLaps`), never adjusted; `null`
-// before any choice, for none, once the plan is deleted, and outside a race or sprint. Republished on each of the team's
-// feeds when the choice changes and when the plan is renamed.
+// before any choice, for none, and outside a race or sprint. Republished on each of the team's feeds when the choice
+// changes. Ruling R22 (replaces R20's rename part): the shown plan is the plan as it was committed to the race; a later
+// rename, overwrite (`replaces`) or delete of the saved plan changes nothing of it (C62d, C75); after a flashback it is
+// the newest plan entry at or before the target frame (C27a, C33).
 describe('basis.active shows the chosen plan (Task 7e; C1a, C54, C55, C62d)', { timeout: 120_000 }, () => {
   /** The race laps the plans here were computed for: not the race's, shown beside them, not judged (C65). */
   const PLAN_LAPS = 56;
@@ -966,7 +968,9 @@ describe('basis.active shows the chosen plan (Task 7e; C1a, C54, C55, C62d)', { 
     await bothShow(b, null, 'none chosen on feed B');
   });
 
-  it('(c) renaming Q republishes its new name on both feeds; deleting it gives null', async () => {
+  // Ruling R22 (ported from round 1's "renaming Q republishes its new name; deleting it gives null"): the shown plan is
+  // the plan as it was committed to the race; a saved-plan edit during the race changes nothing of it (C62d, C75).
+  it('(c) renaming Q or deleting it during the race leaves basis.active.plan unchanged on both feeds, with no new sidecar entry', async () => {
     const b = await bridge();
     choosePlan(b.dataDir, P);
     writePlan(b.dataDir, Q);
@@ -974,12 +978,116 @@ describe('basis.active shows the chosen plan (Task 7e; C1a, C54, C55, C62d)', { 
     expect(await b.send({ kind: 'basis.choose', feedId: A, basis: NO_BASIS, plan: Q.id })).toEqual({ ok: true });
     race.to(80);
     await bothShow(b, shown(Q), 'Q chosen');
+    const before = { [A]: b.actives(A).length, [B]: b.actives(B).length };
 
     expect(await b.send({ kind: 'plans.rename', feedId: A, id: Q.id, name: 'Texas final' })).toEqual({ ok: true });
-    await bothShow(b, shown(Q, 'Texas final'), 'Q renamed');
+    // more frames applied after the rename (lap 1 recorded at the crossing on frame 100)
+    race.to(140);
+    await vi.waitFor(() => expect(b.lapStored(RACE, 0, 0, 1) && b.lapStored(RACE, 1, 0, 1)).toBe(true), { timeout: 20_000 });
+    for (const feed of [A, B]) expect(b.active(feed)?.plan, `Q renamed: feed ${feed}`).toEqual(shown(Q));
 
     expect(await b.send({ kind: 'plans.delete', feedId: B, id: Q.id })).toEqual({ ok: true });
-    await bothShow(b, null, 'Q deleted');
+    race.to(240);
+    await vi.waitFor(() => expect(b.lapStored(RACE, 0, 0, 2) && b.lapStored(RACE, 1, 0, 2)).toBe(true), { timeout: 20_000 });
+    for (const feed of [A, B]) {
+      expect(b.active(feed)?.plan, `Q deleted: feed ${feed}`).toEqual(shown(Q));
+      // nothing published after the edits shows another plan
+      for (const value of b.actives(feed).slice(before[feed])) expect(value.plan, `after the edits: feed ${feed}`).toEqual(shown(Q));
+    }
+    race.to(Infinity);
+    await b.ended(2);
+    await b.stop();
+    // the basis sidecars record the two choices only: an edit adds no entry
+    for (const player of [0, 1]) {
+      expect(sidecarPlans(b.recording(RACE, player)).map((p) => p.plan), `feed of car ${player}: the sidecar's plans`).toEqual([shown(P), shown(Q)]);
+    }
+  });
+
+  // Ruling R22 (C27a, C33, C38): each plan entry carries the frame its decisions describe; after a flashback the shown
+  // plan is the newest entry at or before the target frame, as in a run that never saw the frames after it.
+  it('(f) plan P at race start, Q chosen at frame 200, a flashback to frame 150: plan P again, equal to a run that never saw the frames after 150; its replay the same', async () => {
+    const b = await bridge({ feeds: [A] });
+    choosePlan(b.dataDir, P);
+    writePlan(b.dataDir, Q);
+    const original = b.player(sessionPackets({ uid: RACE, type: 15, frames: 300, send: false }), A);
+    original.to(200);
+    await decisionsReach(b, RACE, 0, COMMIT_COUNT);
+    await vi.waitFor(() => expect(b.active(A)?.plan).toEqual(shown(P)), { timeout: 20_000 });
+    expect(await b.send({ kind: 'basis.choose', feedId: A, basis: NO_BASIS, plan: Q.id })).toEqual({ ok: true });
+    original.rest();
+    await vi.waitFor(() => expect(b.active(A)?.plan).toEqual(shown(Q)), { timeout: 20_000 });
+    await decisionsReach(b, RACE, 0, 2 * COMMIT_COUNT);
+
+    // the game flashes back to frame 150: Q's decisions are voided (C27a), and so is its choice in the display
+    const fork = sessionPackets({
+      uid: RACE, type: 15, frames: 260,
+      events: (i) => (i === 151 ? [{ code: 'FLBK', flashbackFrameIdentifier: 150, flashbackSessionTime: (150 * 16) / 1000 }] : []),
+    });
+    b.play(afterFlashback(fork, 151, 300));
+    await vi.waitFor(() => expect(b.voids(RACE, 0).length).toBeGreaterThan(0), { timeout: 20_000 });
+    await vi.waitFor(() => expect(b.active(A)?.plan, 'after the flashback').toEqual(shown(P)), { timeout: 20_000 });
+    await b.ended(1);
+    await b.stop();
+    expect(b.active(A)?.plan, 'at the race\'s end').toEqual(shown(P));
+    expect(changes(b.actives(A).map((v) => v.plan)), 'the plans shown, in order').toEqual([shown(P), shown(Q), shown(P)]);
+    expectCommitted(b.decisions(RACE, 0).map(given), [CAR0, CAR1], 'the log: P\'s commit only');
+
+    // the sidecar keeps both entries (append-only), each with the frame its decisions describe
+    const file = b.recording(RACE, 0);
+    const plans = sidecarPlans(file);
+    expect(plans.map((p) => p.plan), 'the sidecar\'s plans').toEqual([shown(P), shown(Q)]);
+    for (const p of plans) expect(Number.isInteger(p.frame) && p.frame! >= 0, `a frame number: ${JSON.stringify(p)}`).toBe(true);
+    expect(plans[0]!.frame!, 'P before the target').toBeLessThanOrEqual(150);
+    expect(plans[1]!.frame!, 'Q after the target').toBeGreaterThan(150);
+
+    // a run that never saw the frames after 150 (P only): the same plan and race laps at its end (C33)
+    const never = await bridge({ feeds: [A] });
+    choosePlan(never.dataDir, P);
+    writePlan(never.dataDir, Q);
+    never.play(sessionPackets({ uid: RACE, type: 15, frames: 260 }));
+    await never.ended(1);
+    await never.stop();
+    const reference = never.active(A)!;
+    expect(reference.plan).toEqual(shown(P));
+    expect({ plan: b.active(A)!.plan, raceLaps: b.active(A)!.raceLaps }, 'equal to the run without the undone frames').toEqual({ plan: reference.plan, raceLaps: reference.raceLaps });
+
+    // the replay: P, Q, then P again from the flashback on, as the live run showed them (C38)
+    const replayed = await replayPlans(file, A);
+    expect(replayed.length, 'the replay ran').toBeGreaterThan(260);
+    expect(changes(replayed), 'the replay\'s plans, in order').toEqual([shown(P), shown(Q), shown(P)]);
+    expect(replayed.at(-1), 'the replay\'s last frame').toEqual(shown(P));
+  });
+
+  // Ruling R22 (C62d, C75): overwriting the shown plan (`plans.save` with `replaces`) during the race changes nothing of
+  // what the race shows: the laps and name stay those committed.
+  it('(g) overwriting Q with replaces during the race leaves basis.active.plan unchanged, with no new sidecar entry', async () => {
+    const b = await bridge();
+    // feed B's Q3 ends first: its planning round stays open (feed B runs no other session)
+    b.play(sessionPackets({ uid: 130n, type: 7, player: 1 }), B);
+    await b.ended(1);
+    await vi.waitFor(() => expect(b.prepared(B).at(-1)).toMatchObject({ open: true }), { timeout: 60_000 });
+    const OVERWRITE_LAPS = 44;
+    expect(await b.send({ kind: 'plans.race.set', feedId: B, race: { laps: OVERWRITE_LAPS, sets: 'carried' } })).toEqual({ ok: true });
+    await vi.waitFor(() => expect(b.round(B)).toMatchObject({ race: { laps: OVERWRITE_LAPS, sets: 'carried' }, running: false }), { timeout: 60_000 });
+
+    // the race on feed A commits Q, the team's last choice
+    choosePlan(b.dataDir, Q);
+    const race = b.player(sessionPackets({ uid: RACE, type: 15, frames: 300 }), A);
+    for (const at of [5, 10, 20, 40]) race.to(at);
+    await decisionsReach(b, RACE, 0, COMMIT_COUNT);
+    await vi.waitFor(() => expect(b.active(A)?.plan).toEqual(shown(Q)), { timeout: 20_000 });
+    const before = b.actives(A).length;
+
+    // the round on feed B overwrites Q (another name, other laps)
+    expect(await b.send({ kind: 'plans.save', feedId: B, name: 'Texas overwritten', replaces: Q.id })).toEqual({ ok: true });
+    race.to(140);
+    await vi.waitFor(() => expect(b.lapStored(RACE, 0, 0, 1)).toBe(true), { timeout: 20_000 });
+    expect(b.active(A)?.plan, 'Q overwritten').toEqual(shown(Q));
+    for (const value of b.actives(A).slice(before)) expect(value.plan, 'after the overwrite').toEqual(shown(Q));
+    race.rest();
+    await b.ended(2);
+    await b.stop();
+    expect(sidecarPlans(b.recording(RACE, 0)).map((p) => p.plan), 'the sidecar\'s plans').toEqual([shown(Q)]);
   });
 
   it('(d) a qualifying session shows plan null', async () => {
@@ -1056,6 +1164,10 @@ describe('basis.active shows the chosen plan (Task 7e; C1a, C54, C55, C62d)', { 
     expect(bare.every((plan) => plan === null || plan === undefined), 'no plans recorded: none shown').toBe(true);
   });
 });
+
+/** A recording's basis sidecar's plan entries (`[]` without `plans`): the record index, the frame its decisions describe (R22). */
+const sidecarPlans = (file: string): Array<{ at: number; frame?: number; plan: BasisActive['plan'] }> =>
+  (JSON.parse(readFileSync(`${file}.basis.json`, 'utf8')) as { plans?: Array<{ at: number; frame?: number; plan: BasisActive['plan'] }> }).plans ?? [];
 
 /** The values of `plans`, each change once, the leading `null`s (and `undefined`s: nothing published yet) left out. */
 const changes = (plans: ReadonlyArray<BasisActive['plan'] | undefined>): Array<BasisActive['plan']> => {
