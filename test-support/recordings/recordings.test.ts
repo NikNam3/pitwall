@@ -34,6 +34,27 @@ describe('synthetic session recordings', () => {
     expect(next.map((s) => s.weather)).toEqual(['lightCloud', 'lightRain']);
   });
 
+  it("replays to a live state where the player's and the teammate's tyre sets are known", () => {
+    const tracker = new SessionTracker({ feedId: feedId('synthetic') });
+    const events = [...syntheticPackets(QUALIFYING).flatMap(({ packet, receivedAtMs }) => tracker.push(packet, receivedAtMs)), ...tracker.end()];
+    const frames = events.flatMap((e) => (e.type === 'frame' ? [e.frame] : [])) as Frame[];
+    const runner = new SessionRunner({ feedId: feedId('synthetic'), sessionUid: frames[0]!.sessionUid, session: frames[0]!.session! });
+    for (const f of frames) runner.apply(f);
+    runner.end();
+    for (const car of [19, 18]) {
+      const sets = runner.state.cars[car]!.tyres.sets;
+      expect(sets.known, `car ${car}'s sets`).toBe(true);
+      if (!sets.known) continue;
+      expect(sets.value.sets).toHaveLength(20);
+      expect(sets.value.fittedIdx).toBe(5);
+      // the race's sets: available now or reserved for it (S×3, one used; M×2; H×1; I×4; W×3)
+      const race = sets.value.sets.filter((s) => s.available || s.forNextRace === true);
+      expect(race.map((s) => s.visualCompound).sort()).toEqual(['hard', 'inter', 'inter', 'inter', 'inter', 'medium', 'medium', 'soft', 'soft', 'soft', 'wet', 'wet', 'wet']);
+      expect(race.filter((s) => s.wearPct > 0).map((s) => s.visualCompound)).toEqual(['soft']);
+    }
+    expect(runner.state.cars[0]!.tyres.sets.known, 'a rival sends no sets').toBe(false);
+  });
+
   it('writes a file under 1 MB, the same bytes for the same input', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'pitwall-synthetic-'));
     await writeSynthetic(join(dir, 'a.pwrec.gz'), QUALIFYING);

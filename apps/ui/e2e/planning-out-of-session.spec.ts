@@ -2,20 +2,26 @@
 // A fresh data dir holds two synthetic recordings (`test-support/recordings`), imported with `pitwall import`: a
 // practice and a qualifying of team 0 (#64 in slot 0, the player, and #2 in slot 1) on track 15, weekend W; the
 // qualifying's Session packets carry the race's samples +0 light cloud 12 %, +15 light cloud 12 %, +30 light rain 45 %.
-// A bridge with no session (`pitwall live` on its own UDP port, never 20777/20778, no traffic) serves the panel. Steps:
+// The synthetic sessions carry the player's and the teammate's tyre sets as a qualifying leaves them, so the round's
+// `carried` sets are known. A bridge with no session (`pitwall live` on its own UDP port, never 20777/20778, no
+// traffic) serves the panel, whose main window is 1920×1000 (the size the default `plan` workbook is laid out for; the
+// boards render full there, with their inputs line). Steps:
 //   1. no `session.info`;
 //   2. the top bar's `Plan…` opens the picker: the qualifying listed as `<day> · Mercedes #64 #2` and preselected with
 //      the practice; confirm;
 //   3. Ctrl+O to the `plan` workbook: the board of link group 1 (`player`) shows ranked rows for #64 (slot 0); LAPS 5
 //      (the job stays short); RAIN 45 % with `imported · Q <day>`;
 //   4. the conditions: +30 to rain 80, committed: the computing mark appears and goes, the label reads `edited`;
-//   5. the plan saved as `E2E plan` (a `plans.save` uiAction: the panel has no save control, see the report);
+//   5. the board's `save`: the shell's prompt, the name `E2E plan`, Save: the board reads `saved · E2E plan`;
 //   6. the bridge restarted on the same ports and data dir (Review focus 5): the saved plan survives with the conditions
 //      it was computed on, and a race of the same team in a new lobby (slots 18/19), sent live to the bridge's UDP port
 //      without its end, shows `Plan: E2E plan` in the top bar's basis segment at its first frame with the team known
-//      (the team's last saved plan on the track, C62d). The race is sent live, not replayed: a replay commits no
-//      race-start plan, it runs on its decisions sidecar (C38, C76; `feed-pipeline.ts` `#raceStart`).
-// Speed budget (spec §4.5): each wait at most 15 s, the whole spec at most 60 s; a miss is profiled and fixed, never met
+//      (the team's last saved plan on the track, C62d). The race is sent live first: a replay commits no race-start
+//      plan, it runs on its decisions sidecar (C38, C76; `feed-pipeline.ts` `#raceStart`). Then the bridge stops and
+//      `pitwall replay <the recording the live run wrote> --paused` serves the same port; played, the top bar shows
+//      `Plan: E2E plan` again from the race's first frames (user, 2026-11-18: a plan chosen during the race shows in
+//      its replay).
+// Speed budget (spec §4.5): each wait at most 15 s, the whole spec at most 90 s; a miss is profiled and fixed, never met
 // by raising a timeout.
 import { createSocket } from 'node:dgram';
 import { readdirSync, readFileSync } from 'node:fs';
@@ -26,11 +32,13 @@ import { gunzipSync } from 'node:zlib';
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { writeSynthetic, type SyntheticSession } from '../../../test-support/recordings/index.ts';
-import { freePort, importRecording, launchPitwall, startBridgeNoSession } from './harness.ts';
+import { freePort, importRecording, launchPitwall, startBridge, startBridgeNoSession } from './harness.ts';
 import { makeDataDir, openWorkbook, panelOf, removeDataDir, subscribeLines } from './support.ts';
 
 const WAIT_MS = 15_000;
-const SPEC_MS = 60_000;
+const SPEC_MS = 90_000;
+/** The main window's page: the size the default `plan` workbook is laid out for. */
+const WINDOW = { width: 1920, height: 1000 };
 const POLL_MS = 100;
 /** A day as the kit writes it (`formatDay`): `27 Oct`. */
 const DAY = /\d{1,2} [A-Z][a-z]{2}/;
@@ -140,7 +148,7 @@ async function sendLive(udpPort: number, file: string): Promise<void> {
 /** The plan board of link group 1 (`player`): the `plan` workbook's first board (`plan-board-1`). */
 const playerBoard = (page: Page) => panelOf(page, 'plan-board').first();
 
-test('case B: plan a race out of session in the panel, save it, and a race start after a restart preselects it', async () => {
+test('case B: plan a race out of session in the panel, save it; a race start after a restart preselects it, and so does its replay', async () => {
   test.setTimeout(SPEC_MS);
   const dataDir = await makeDataDir();
   cleanups.push(() => removeDataDir(dataDir));
@@ -161,6 +169,7 @@ test('case B: plan a race out of session in the panel, save it, and a race start
   const app = await launchPitwall({ wsPort, dataDir });
   cleanups.push(() => app.close());
   const page = await app.window('main');
+  await app.resize('main', WINDOW);
   await page.bringToFront();
 
   const ws = await client(wsPort);
@@ -219,8 +228,14 @@ test('case B: plan a race out of session in the panel, save it, and a race start
   await board.getByTestId('cond-done').click();
   await expect(board.getByTestId('rain')).toContainText('80%', { timeout: WAIT_MS });
 
-  // 5. The plan saved as `E2E plan`.
-  expect(await ws.send({ kind: 'plans.save', feedId: ws.feedId, name: 'E2E plan' })).toMatchObject({ ok: true });
+  // 5. The plan saved as `E2E plan` in the panel: the board's save, the shell's prompt.
+  await board.getByTestId('save').click();
+  const prompt = page.getByTestId('plan-save-picker');
+  await expect(prompt).toBeVisible({ timeout: WAIT_MS });
+  await prompt.getByTestId('plan-save-name').fill('E2E plan');
+  await prompt.getByTestId('plan-save-confirm').click();
+  await expect(prompt).toBeHidden({ timeout: WAIT_MS });
+  await expect(board.getByTestId('saved')).toHaveText('saved · E2E plan', { timeout: WAIT_MS });
   ws.close();
 
   // 6. A restart: the saved plan survives with its conditions; a race of the team in a new lobby preselects it.
@@ -239,5 +254,22 @@ test('case B: plan a race out of session in the panel, save it, and a race start
   const raceFile = path.join(sources, 'e2e-race.pwrec.gz');
   await writeSynthetic(raceFile, RACE);
   await sendLive(udpPort, raceFile);
-  await expect(page.getByTestId('segment-basis')).toContainText('Plan: E2E plan', { timeout: WAIT_MS });
+  const basis = page.getByTestId('segment-basis');
+  await expect(basis).toContainText('Plan: E2E plan', { timeout: WAIT_MS });
+
+  // The race's replay: the recording the live run wrote, on the same port; played, the plan shows from its first frames.
+  await bridge.stop();
+  const recordings = path.join(dataDir, 'recordings');
+  const uid = RACE.sessionUid.toString(16).padStart(16, '0');
+  const [written, ...others] = readdirSync(recordings).filter((f) => f.includes(`_${uid}_`) && f.endsWith('.pwrec.gz'));
+  expect(written, 'the live run wrote a recording of the race').toBeDefined();
+  expect(others, 'and only one').toEqual([]);
+  const replay = await startBridge({ recording: path.join(recordings, written ?? ''), dataDir, wsPort });
+  cleanups.push(() => replay.stop());
+  const pause = page.getByTestId('replay-pause');
+  await expect(pause).toBeVisible({ timeout: WAIT_MS });
+  // paused before its first frame: the replay's feed has no plan yet (what the live run showed is gone)
+  await expect(basis).not.toContainText('Plan: E2E plan', { timeout: WAIT_MS });
+  await pause.click();
+  await expect(basis).toContainText('Plan: E2E plan', { timeout: WAIT_MS });
 });

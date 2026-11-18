@@ -36,6 +36,8 @@ const HOST = '127.0.0.1';
 const GALLERY_WINDOW = { width: 1600, height: 1000 };
 /** How long a bridge, a window, a port or the gallery's lazy parts may take. */
 const START_TIMEOUT_MS = 30_000;
+/** How long a page may take to report its new viewport. */
+const RESIZE_TIMEOUT_MS = 5_000;
 /** How long a bridge has to exit after SIGTERM before it gets SIGKILL. */
 const STOP_TIMEOUT_MS = 5_000;
 const POLL_MS = 100;
@@ -190,12 +192,12 @@ async function stopChild(child: ChildProcess): Promise<void> {
 }
 
 /**
- * A bridge replaying `recording` paused, on a free `PITWALL_WS_PORT`. `log()` holds its stdout and stderr lines:
+ * A bridge replaying `recording` paused, on `options.wsPort` or a free `PITWALL_WS_PORT`. `log()` holds its stdout and stderr lines:
  * the pino lines (`ws subscribe` among them) go to stderr, `listening` to stdout.
  */
 export async function startBridge(options: StartBridgeOptions): Promise<BridgeHandle> {
   const file = recordingPath(options.recording);
-  const wsPort = await freePort();
+  const wsPort = options.wsPort ?? (await freePort());
   const env: Record<string, string> = {
     PITWALL_WS_PORT: String(wsPort),
     PITWALL_DATA_DIR: options.dataDir,
@@ -268,6 +270,14 @@ export async function launchPitwall(options: LaunchPitwallOptions): Promise<Pitw
     return url.includes('?') && new URLSearchParams(url.slice(url.indexOf('?'))).get('window') === id;
   };
   return {
+    // Playwright's viewport (Chromium's device metrics), not the BrowserWindow's size: a hidden window that is resized
+    // draws no more frames, so Playwright's stability check before a click would never finish.
+    resize: async (id, size) => {
+      const page = app.windows().find((p) => isWindow(p, id));
+      if (page === undefined) throw new Error(`no window "${id}" to resize`);
+      await page.setViewportSize(size);
+      await page.waitForFunction(({ width, height }) => window.innerWidth === width && window.innerHeight === height, size, { timeout: RESIZE_TIMEOUT_MS });
+    },
     window: async (id) => {
       for (const deadline = Date.now() + START_TIMEOUT_MS; Date.now() < deadline; await sleep(POLL_MS)) {
         const page = app.windows().find((p) => isWindow(p, id));
