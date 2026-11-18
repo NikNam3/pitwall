@@ -42,8 +42,8 @@ export const timedActivityRows = (t: Timed, push: 'pushLap' | 'flyingLap'): Tran
   const onPush = () => inputs().frames(3, f(pushing(2_000, 2)));
   /** Car 0 on its out lap on track, three frames. */
   const onOut = () => inputs().frames(3, f(onOutLap(2_500)));
-  /** Car 0 on an in lap: the push lap, then the in-lap driver status on track. */
-  const onIn = () => onPush().frames(2, f(inLapOnTrack(2_100, 2)));
+  /** Car 0 on an in lap: the push lap, then the in-lap driver status on track on two frames that move (R6: a frozen frame confirms nothing). */
+  const onIn = () => onPush().frame(f(inLapOnTrack(2_100, 2))).frame(f(inLapOnTrack(2_150, 2)));
   /** Car 0 in the garage, three frames. */
   const inBox = () => inputs().frames(3, f(inGarage()));
   /** Car 0 retired: three frames, car-status retired. */
@@ -78,7 +78,7 @@ export const timedActivityRows = (t: Timed, push: 'pushLap' | 'flyingLap'): Tran
     { name: 'back into the garage box from the pit lane on the out lap (not yet seen): outLap -> garage', from: 'outLap', to: 'garage', input: inBox().frames(3, f(leavingGarage())).frame(f(inGarage(70))) },
     { name: `the player’s return to the garage mid-lap, a teleport (ds 1 -> 0, ps 0, d 739 -> 33; SgQ 467.514): ${push} -> garage`, from: push, to: 'garage', input: inputs().frames(3, f(pushing(739, 4))).frame(f(car0({ ds: 'inGarage', ps: 'none', d: 33, lap: 4 }))) },
     { name: 'into the garage box: one frame of ps 2, then ds 2 -> 0 with ps 2 -> 1 (MiP 542.845 / 542.879): inLap -> garage', from: 'inLap', to: 'garage', input: onIn().frames(2, f(inPitLane(30, 2))).frame(f(car0({ ds: 'inLap', ps: 'inPitArea', d: 40, lap: 2 }))).frame(f(inGarage(40, 2))) },
-    { name: 'an AI in lap teleported into the garage under time acceleration (ds 2 -> 0, ps 0 -> 1, d 4500 -> 4929; SgQ 501.014): inLap -> garage', from: 'inLap', to: 'garage', input: onPush().frames(2, f(inLapOnTrack(4_500, 2))).frame(f(car0({ ds: 'inGarage', ps: 'pitting', d: 4_929, lap: 2 }))) },
+    { name: 'an AI in lap teleported into the garage under time acceleration (ds 2 -> 0, ps 0 -> 1, d 4500 -> 4929; SgQ 501.014): inLap -> garage', from: 'inLap', to: 'garage', input: onPush().frame(f(inLapOnTrack(4_500, 2))).frame(f(inLapOnTrack(4_550, 2))).frame(f(car0({ ds: 'inGarage', ps: 'pitting', d: 4_929, lap: 2 }))) },
     { name: 'a finished car into the garage (not yet seen): finished -> garage', from: 'finished', to: 'garage', input: finished().frame(f(car0({ ds: 'inGarage', ps: 'pitting', d: 60, lap: 3, rs: 'finished' }))) },
     // out of the garage
     { name: 'leaving the garage, ds 0 -> 3 with ps still 1 (MiP 641.422): garage -> outLap', from: 'garage', to: 'outLap', input: inBox().frame(f(leavingGarage())) },
