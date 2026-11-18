@@ -59,14 +59,14 @@ function sourceFit(source: StoredSource, ctx: PriorsCtx): FittedStint {
   return fitLaps(source.laps, fuelOf, { nuMsPerLap: config.defaultNuMsPerLap, nuSdMs: config.defaultNuSdMs }, config, classes, rate);
 }
 
-/** The fits (`fitStint`, at least two pace laps) of the sources on `compound`. */
-function fitsOf(sources: readonly StoredSource[], compound: VisualCompound, ctx: PriorsCtx): StintFitResult[] {
+/** The fits (`fitStint`, at least two pace laps) of the sources on `compound`, each with its source. */
+function fitsOf(sources: readonly StoredSource[], compound: VisualCompound, ctx: PriorsCtx): { source: StoredSource; fit: StintFitResult }[] {
   const config = configOf(DEGRADATION_CONFIG, ctx);
   const prior = { nuMsPerLap: config.defaultNuMsPerLap, nuSdMs: config.defaultNuSdMs };
   return sources.flatMap((s) => {
     if (s.stint.visualCompound !== compound) return [];
     const fit = fitStint(sourceFit(s, ctx).paceLaps, prior, config);
-    return fit.known ? [fit.value] : [];
+    return fit.known ? [{ source: s, fit: fit.value }] : [];
   });
 }
 
@@ -95,7 +95,7 @@ const overridden = (key: string, ctx: PriorsCtx, aggregate: () => Known<number>)
 };
 
 const nuPool = (sources: readonly StoredSource[], compound: VisualCompound, ctx: PriorsCtx) =>
-  pool(fitsOf(sources, compound, ctx).map((f) => ({ mean: f.nuMsPerLap, variance: f.cov[1][1] })));
+  pool(fitsOf(sources, compound, ctx).map(({ fit }) => ({ mean: fit.nuMsPerLap, variance: fit.cov[1][1] })));
 
 /** How many sources on `compound` the aggregate pools (those with a fit): the calibration panel's N column. */
 const samplesOf =
@@ -103,8 +103,37 @@ const samplesOf =
   (sources: readonly StoredSource[], ctx: PriorsCtx): number =>
     fitsOf(sources, compound, ctx).length;
 
-const alphaPool = (sources: readonly StoredSource[], compound: VisualCompound, ctx: PriorsCtx) =>
-  pool(fitsOf(sources, compound, ctx).map((f) => ({ mean: f.alphaMs, variance: f.cov[0][0] })));
+/** The pairing of a source: its car in its session (a driver's own pace cancels within it). */
+const pairKey = (s: StoredSource): string => `${s.source.sessionUid}|${s.source.car}`;
+
+/** The pooled `α` of `fits` per pairing. */
+function alphaByPair(fits: readonly { source: StoredSource; fit: StintFitResult }[]): Map<string, { mean: number; sd: number }> {
+  const groups = new Map<string, { mean: number; variance: number }[]>();
+  for (const { source, fit } of fits) {
+    const key = pairKey(source);
+    const group = groups.get(key) ?? [];
+    group.push({ mean: fit.alphaMs, variance: fit.cov[0][0] });
+    groups.set(key, group);
+  }
+  return new Map([...groups].flatMap(([key, items]) => {
+    const p = pool(items);
+    return p === undefined ? [] : [[key, p] as const];
+  }));
+}
+
+/**
+ * The paired differences of `compound` against the reference, pooled: per (session, car) the compound's `α` minus that
+ * car's reference `α` in the same session; a pairing without both gives none.
+ */
+function offsetPool(sources: readonly StoredSource[], compound: VisualCompound, ctx: PriorsCtx) {
+  const reference = alphaByPair(fitsOf(sources, REFERENCE, ctx));
+  const own = alphaByPair(fitsOf(sources, compound, ctx));
+  const diffs = [...own].flatMap(([key, o]) => {
+    const r = reference.get(key);
+    return r === undefined ? [] : [{ mean: o.mean - r.mean, variance: o.sd ** 2 + r.sd ** 2 }];
+  });
+  return pool(diffs);
+}
 
 /** `ν` of `compound`, ms per lap. `residual`: the source's `ν` minus the set's, in the set's sd. */
 const nuEntry = (compound: VisualCompound): PriorDecl => ({
@@ -147,9 +176,12 @@ const nuSdEntry = (compound: VisualCompound): PriorDecl => ({
   samples: samplesOf(compound),
 });
 
-/** The tyre-pace offset `α` of `compound` against medium's, in ms (medium is 0). */
+/**
+ * The tyre-pace offset `α` of `compound` against medium's, in ms (medium is 0, given one medium fit): the pool of paired
+ * differences (`offsetPool`). `samples` counts every fitted stint on the compound.
+ */
 const alphaEntry = (compound: VisualCompound): PriorDecl => ({
-  version: 1,
+  version: 2,
   range: [-5000, 5000],
   fallback: (ctx) => {
     const start = defaultStart(ctx, compound);
@@ -157,11 +189,9 @@ const alphaEntry = (compound: VisualCompound): PriorDecl => ({
   },
   aggregate: (sources, ctx) =>
     overridden(priorKey('alphaOffsetMs', compound), ctx, () => {
-      const reference = alphaPool(sources, REFERENCE, ctx);
-      if (reference === undefined) return unknown('insufficientData');
-      if (compound === REFERENCE) return known(0, 0);
-      const own = alphaPool(sources, compound, ctx);
-      return own === undefined ? unknown('insufficientData') : known(Math.round(own.mean - reference.mean), 0);
+      if (compound === REFERENCE) return fitsOf(sources, REFERENCE, ctx).length > 0 ? known(0, 0) : unknown('insufficientData');
+      const offset = offsetPool(sources, compound, ctx);
+      return offset === undefined ? unknown('insufficientData') : known(Math.round(offset.mean), 0);
     }),
   samples: samplesOf(compound),
 });
