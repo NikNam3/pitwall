@@ -76,7 +76,7 @@ export async function replayForPlanning(job: ReplayJob, o: { dbPath: string | un
         ? { basis: { practice: [], qualifying: null }, player: { teamId: player.teamId, raceNumber: player.raceNumber }, sessions: [] }
         : basisOf(repo, job.basisOverride, player)),
       onEnded: ({ view }) => {
-        input = planningInputFrom(asOfEnded(view, job.laps), { laps: job.laps, race, prepared: {} });
+        input = planningInputFrom(asOfEnded(view, { laps: job.laps }), { laps: job.laps, race, prepared: {} });
       },
     });
     await runToEnd(pipeline, path, new AbortController().signal);

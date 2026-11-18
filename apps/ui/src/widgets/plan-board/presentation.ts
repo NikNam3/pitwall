@@ -6,6 +6,8 @@ import type { MachineSpans, PlanningRoundState } from '@pitwall/contracts';
 import type { sessionPhaseRaceSpans } from '@pitwall/domain';
 import type { PresentationTable } from '../../kit/presentation.ts';
 import { openSpanOf } from '../../kit/situation.ts';
+import type { Role } from '../../theme/roles.ts';
+import { conditionRole } from './emphasis.ts';
 
 type SessionPhaseRaceKind = (typeof sessionPhaseRaceSpans.kinds)[number];
 
@@ -30,10 +32,23 @@ export const presentation = {
     open: { variant: 'planning' },
     closed: { variant: 'live' },
   },
+  // SP4.3f Task 7 (plan-board-conditions.html): a conditions row, imported or overridden by the user, to its emphasis and
+  // whether it carries the `edited` mark.
+  conditions: {
+    imported: { role: conditionRole(false), mark: false },
+    overridden: { role: conditionRole(true), mark: true },
+  },
 } as const satisfies PresentationTable & {
   situations: { 'session-phase-race': Readonly<Record<SessionPhaseRaceKind, PhaseRow>> };
   round: Readonly<Record<'open' | 'closed', RoundRow>>;
+  conditions: Readonly<Record<'imported' | 'overridden', ConditionRowShown>>;
 };
+
+/** A conditions row's presentation: its colour role and whether the `edited` mark is drawn. */
+export type ConditionRowShown = { readonly role: Role; readonly mark: boolean };
+
+/** The presentation of a conditions row: the overridden row's or the imported row's. */
+export const conditionShown = (overridden: boolean): ConditionRowShown => presentation.conditions[overridden ? 'overridden' : 'imported'];
 
 /** Where the board's rows come from: the race's strategy job or the planning round's job. */
 export type Variant = 'live' | 'planning';

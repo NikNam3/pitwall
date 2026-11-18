@@ -1,7 +1,8 @@
 <script lang="ts">
   // The basis and plan in use (SP4.3e spec §4.2, §4.3): `Practice 17 Nov · Qualifying 17 Nov · Plan: <name>`, `none` per
   // part, and `56 / 20 laps` when the plan was computed for other race laps than the race's; both numbers are
-  // `basis.active`'s, shown, not judged (C65). A quiet button that runs `basis.pick`.
+  // `basis.active`'s, shown, not judged (C65). A quiet button that runs `basis.pick`. Once the feed's session has ended
+  // the planning segment takes its place (SP4.3f spec §4.4).
   import * as text from '../../../kit/text.ts';
   import { formatCount, formatDay } from '../../../kit/values/format.ts';
   import { role } from '../../../theme/index.ts';
@@ -12,7 +13,7 @@
 
   const shown = $derived.by(() => {
     const b = bar.basis;
-    if (b === undefined) return undefined;
+    if (b === undefined || bar.feed?.betweenSessions === true) return undefined;
     const day = (key: string): string => {
       const date = b.sessions[key]?.date;
       const formatted = date === undefined ? '' : formatDay(date);

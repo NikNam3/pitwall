@@ -9,6 +9,7 @@ import { suggestedLapsOf } from '../planning/round.ts';
 import { createPlanningRunner } from '../planning/runner.ts';
 import { SavedPlanStore } from '../planning/saved-plans.ts';
 import { createPlanChoice } from '../planning/plan-choice.ts';
+import { publishStoredSessions } from '../planning/sessions-topic.ts';
 import { createRebuildService } from '../storage/rebuild-service.ts';
 import { CalibrationStore, type ApplyResult, type CalibrationAction } from '../calibration/store.ts';
 import { createCalcStats } from '../dev/calc-stats.ts';
@@ -197,6 +198,12 @@ export async function serve(opts: ServeOptions): Promise<number> {
       rulesVersion: storage.rulesVersion,
       track: (row) => (row.pwrecPath === null ? loadTrackFile(row.trackId, TRACKS_DIR) : recordingTrack(row.pwrecPath, row.trackId, TRACKS_DIR)),
     });
+    // The stored practice and qualifying sessions per team (`plans.sessions`, C54, C55, C62): a run that stores publishes
+    // them now from the rows alone, nothing rebuilt (C61), and again after a rebuild and after a session is stored.
+    const publishSessions = (): void => {
+      if (stores && storage && calibrationRepo) publishStoredSessions({ hub, repo: calibrationRepo, rulesVersion: storage.rulesVersion });
+    };
+    publishSessions();
     // A session a feed is running right now is no stale session: it is never rebuilt under it (C59). The bridge's
     // rebuilds run one at a time, each checked when it starts: a session stored fresh meanwhile is not rebuilt again.
     const running = (): Array<SessionKey | undefined> => [...pipelines.values()].map((pipeline) => pipeline.runningSession());
@@ -208,7 +215,7 @@ export async function serve(opts: ServeOptions): Promise<number> {
     };
     let rebuilds: Promise<void> = Promise.resolve();
     const checkedRebuild = rebuild && ((row: StoredSessionRow): Promise<void> => {
-      const turn = rebuilds.then(() => (isRunning(row) || isFresh(row) ? undefined : rebuild(row)));
+      const turn = rebuilds.then(() => (isRunning(row) || isFresh(row) ? undefined : rebuild(row))).then(publishSessions);
       rebuilds = turn.catch(() => {});
       return turn;
     });
@@ -260,6 +267,7 @@ export async function serve(opts: ServeOptions): Promise<number> {
       await service.ensureCurrent(keys, o);
       calibration?.recompute('rebuild');
       profiles?.recompute('rebuild');
+      publishSessions();
     } : async (keys, o) => {
       const stale = keys.flatMap((key) => {
         const row = calibrationRepo?.sessionOf(key);
@@ -408,7 +416,7 @@ export async function serve(opts: ServeOptions): Promise<number> {
       const lastChoice = lastChoiceStore;
       const runner = createPlanningRunner({
         rebuild: {
-          ensureCurrent: service ? ensureCurrent : (keys, o) => replays.ensureCurrent(keys, o),
+          ensureCurrent: service ? ensureCurrent : (keys, o) => replays.ensureCurrent(keys, o).then(publishSessions),
           replayToEnd: replays.replayToEnd.bind(replays),
         },
         jobs: { job: opts.planningJob ?? PLANNING_JOB, workerLimit },
@@ -454,6 +462,7 @@ export async function serve(opts: ServeOptions): Promise<number> {
           onStored: () => {
             calibration?.recompute('sessionEnd');
             profiles?.recompute('sessionEnd');
+            publishSessions();
           },
         },
       }),

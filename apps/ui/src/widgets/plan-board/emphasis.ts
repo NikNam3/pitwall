@@ -22,3 +22,6 @@ export const rejectedRole: Role = 'warning';
 
 /** The dim parts: the `L` before a lap field, `= A`. */
 export const dimRole: Role = 'textDim';
+
+/** SP4.3f Task 7 (plan-board-conditions.html): a conditions row the user changed is bright, an imported one dim. */
+export const conditionRole = (overridden: boolean): Role => (overridden ? 'text' : dimRole);

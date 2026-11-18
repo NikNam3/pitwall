@@ -1,5 +1,5 @@
 // Every fixed text of the kit and the shell (spec 4.3, 7.4): the one place UI wording changes.
-import type { Corners, DamageParts, EstimateSource, IncidentKind, InsightCategory, PitCondition, UnknownReason } from '@pitwall/domain';
+import type { Corners, DamageParts, EstimateSource, IncidentKind, InsightCategory, PitCondition, TeamId, UnknownReason } from '@pitwall/domain';
 
 /** Header state while a required topic has no value yet. */
 export const noDataYet = 'no data yet';
@@ -207,8 +207,15 @@ export const basis = {
   confirm: 'Confirm',
   /** A rejection without the bridge's message. */
   rejected: 'rejected',
-  /** Between sessions: Confirm opens a planning round, which needs a qualifying. */
-  needsQualifying: 'a planning round needs a qualifying',
+  /** Between sessions (SP4.3f spec §4.4): the picker opens a planning round. */
+  planning: {
+    title: 'Plan a race',
+    track: 'Track',
+    /** Nothing stored to plan from: a round needs a qualifying. */
+    noQualifying: 'no stored qualifying',
+    /** A qualifying as stored for one team: `17 Nov · Mercedes #64 #2`. */
+    qualifying: (day: string, team: string, cars: readonly string[]): string => [day, [team, ...cars].join(' ')].join(separator),
+  },
   rebuilding: (done: string, total: string): string => `rebuilding ${done} / ${total}`,
   /** A session the basis names that `basis.active.sessions` does not list. */
   unknownDay: '?',
@@ -218,6 +225,32 @@ export const basis = {
   laps: (plan: string, race: string): string => `${plan} / ${race} laps`,
   /** Days of several practice sessions. */
   days: (days: readonly string[]): string => days.join(', '),
+} as const;
+
+/** The team names of the F1 25 grid by team id (Participants `teamId`); another id shows its number. */
+const TEAM_NAMES: Readonly<Record<number, string>> = {
+  0: 'Mercedes', 1: 'Ferrari', 2: 'Red Bull', 3: 'Williams', 4: 'Aston Martin', 5: 'Alpine', 6: 'RB', 7: 'Haas', 8: 'McLaren', 9: 'Sauber',
+};
+export const teamName = (team: TeamId): string => TEAM_NAMES[team] ?? `team ${team}`;
+
+/**
+ * The top bar between sessions (SP4.3f spec §4.4; mockup topbar-planning): the open round as
+ * `Planning · P 17 Nov · Q 17 Nov · 56 laps · fresh · rain 1–12 %`, `rebuilding` while a pick is rebuilt, `edited`
+ * once a forecast row is overridden; without a round the quiet `Plan…` button.
+ */
+const planningLabel = 'Planning';
+export const planning = {
+  practice: (days: string): string => `P ${days}`,
+  qualifying: (day: string): string => `Q ${day}`,
+  sets: { fresh: 'fresh', carried: 'carried' },
+  /** Before the rain chance's range over the forecast rows, or its unknown mark while the rows are unknown. */
+  rain: 'rain',
+  rainRange: (min: string, max: string): string => `${min}–${max} %`,
+  rebuilding: 'rebuilding',
+  edited: 'edited',
+  plan: 'Plan…',
+  /** The segment's parts in order. */
+  segment: (parts: readonly string[]): string => [planningLabel, ...parts].join(separator),
 } as const;
 
 /** The session-start calibration prompt and the top bar's calibration segment (SP4.1a spec 3.3). */

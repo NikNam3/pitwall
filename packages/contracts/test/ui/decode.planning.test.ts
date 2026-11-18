@@ -5,7 +5,7 @@ import { decodeUiAction } from '../../src/ui/decode.ts';
 
 const PRACTICE = { sessionUid: '4011121896695002375', weekendId: '548397152' };
 const QUALIFYING = { sessionUid: '1234567890123456789', weekendId: '548397152' };
-const SAMPLE = { offsetMs: 0, weather: 'clear', trackTempC: 30, trackTempTrend: 'flat', airTempC: 24, airTempTrend: 'flat', rainPct: 12 };
+const SAMPLE = { offsetMs: 0, weather: 'clear', rainPct: 12 };
 const setWith = (conditions: unknown) => ({ kind: 'plans.race.set', feedId: 'f1', race: { laps: 28, sets: 'fresh', conditions } });
 
 describe('decodeUiAction plans.round.open', () => {
@@ -21,6 +21,10 @@ describe('decodeUiAction plans.race.set conditions', () => {
   it('decodes entered samples to themselves', () => {
     const action = setWith({ kind: 'entered', samples: [SAMPLE] });
     expect(decodeUiAction(action)).toEqual(action);
+  });
+  it('keeps only time, weather and rain of an entered row (temperatures are not entered)', () => {
+    const decoded = decodeUiAction(setWith({ kind: 'entered', samples: [{ ...SAMPLE, trackTempC: 30, airTempC: 24 }] }));
+    expect(decoded).toEqual(setWith({ kind: 'entered', samples: [SAMPLE] }));
   });
   it('decodes imported', () => {
     const action = setWith({ kind: 'imported' });
