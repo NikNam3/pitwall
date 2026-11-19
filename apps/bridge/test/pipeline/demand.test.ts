@@ -1,8 +1,9 @@
 // The demand rule (spec 7.3, rulings R13 and final review): a calculator is always needed when it raises insights, or
 // when nothing references it (no binding, no other calculator). Everything else is needed through a subscribed topic.
+// C49 (jobs always): in a session the bridge serves (`jobsAlways`), every job's trigger is needed too.
 import { describe, expect, it } from 'vitest';
 import type { TopicName } from '@pitwall/contracts';
-import { CalculatorRegistry, type Job, type QuickCalculator } from '@pitwall/engine';
+import { CalculatorRegistry, Scheduler, type Job, type QuickCalculator } from '@pitwall/engine';
 import { bindJob, bindState, defineFeature, type Feature, type TopicBinding } from '../../src/features/feature.ts';
 import { FeedJobs, jobCalculatorId } from '../../src/jobs/feed-jobs.ts';
 import { demandOf } from '../../src/pipeline/demand.ts';
@@ -66,7 +67,8 @@ describe('demandOf', () => {
     expect(needed(demand, 'session.info', 'cars.overview')).toEqual(['shared']);
   });
 
-  it('a job trigger is needed only while the job\'s topic is subscribed', () => {
+  // C49: a run that serves no UI keeps jobs on demand.
+  it('headless: a job trigger is needed only while the job\'s topic is subscribed', () => {
     const job: Job<number, number> = {
       kind: 'job', id: 'sim', reads: ['timing'], trigger: 'frame', prepare: () => 1,
       module: new URL('../jobs/fixtures/add-rng.ts', import.meta.url),
@@ -76,5 +78,51 @@ describe('demandOf', () => {
     expect(needed(demand)).toEqual([]);
     expect(needed(demand, 'cars.overview')).toEqual([]);
     expect(needed(demand, 'session.info')).toEqual([jobCalculatorId('sim')]);
+  });
+
+  it('headless: `jobsAlways: false` is the default', () => {
+    const job: Job<number, number> = {
+      kind: 'job', id: 'sim', reads: ['timing'], trigger: 'frame', prepare: () => 1,
+      module: new URL('../jobs/fixtures/add-rng.ts', import.meta.url),
+    };
+    const features = [feature([], [bindTestJob('session.info', job as Job<unknown, unknown>)], [job as Job<unknown, unknown>])];
+    const demand = demandOf(features, CalculatorRegistry.build(new FeedJobs(features, () => {}).calculators), { jobsAlways: false });
+    expect(needed(demand)).toEqual([]);
+    expect(needed(demand, 'session.info')).toEqual([jobCalculatorId('sim')]);
+  });
+
+  // C49: a job and the units it reads run on their trigger throughout a session the bridge serves, subscribed or not.
+  it('served (`jobsAlways`): the job trigger and its reads are needed with no subscription', () => {
+    const dependency = calc('dependency');
+    const job: Job<number, number> = {
+      kind: 'job', id: 'sim', reads: [{ calculator: 'dependency' }], trigger: 'frame', prepare: () => 1,
+      module: new URL('../jobs/fixtures/add-rng.ts', import.meta.url),
+    };
+    const features = [
+      feature([dependency], [bindState('cars.overview', dependency, () => undefined)]),
+      feature([], [bindTestJob('session.info', job as Job<unknown, unknown>)], [job as Job<unknown, unknown>]),
+    ];
+    const registry = CalculatorRegistry.build([dependency, ...new FeedJobs(features, () => {}).calculators]);
+    const demand = demandOf(features, registry, { jobsAlways: true });
+    expect(needed(demand)).toContain(jobCalculatorId('sim'));
+    expect(needed(demand, 'laps')).toContain(jobCalculatorId('sim'));
+    expect(needed(demand, 'session.info')).toContain(jobCalculatorId('sim'));
+    // What the trigger reads is needed through it: the scheduler adds it, as for any needed calculator.
+    expect([...new Scheduler(registry).withDependencies(needed(demand))].sort()).toEqual(['dependency', jobCalculatorId('sim')].sort());
+  });
+
+  it('served (`jobsAlways`): a bound calculator no job reads stays on demand', () => {
+    const plain = calc('plain');
+    const job: Job<number, number> = {
+      kind: 'job', id: 'sim', reads: ['timing'], trigger: 'frame', prepare: () => 1,
+      module: new URL('../jobs/fixtures/add-rng.ts', import.meta.url),
+    };
+    const features = [
+      feature([plain], [bindState('cars.overview', plain, () => undefined)]),
+      feature([], [bindTestJob('session.info', job as Job<unknown, unknown>)], [job as Job<unknown, unknown>]),
+    ];
+    const demand = demandOf(features, CalculatorRegistry.build([plain, ...new FeedJobs(features, () => {}).calculators]), { jobsAlways: true });
+    expect(needed(demand)).toEqual([jobCalculatorId('sim')]);
+    expect(needed(demand, 'cars.overview')).toEqual([jobCalculatorId('sim'), 'plain'].sort());
   });
 });

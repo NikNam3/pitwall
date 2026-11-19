@@ -57,6 +57,12 @@ export type FeedPipelineOptions = {
    */
   workerLimit?: WorkerLimit;
   /**
+   * The pipeline serves the UI (C49: `pitwall live`, `replay`, `dev --replay`): every job and the units it reads run on
+   * their trigger throughout the session, subscribed or not. Unset (a run that serves no UI: reprocess, a rebuild, a
+   * score run), a job runs on demand like every other unit.
+   */
+  servesUi?: boolean;
+  /**
    * The effective calculator config (see `loadFeatureConfig`), fixed for the pipeline's run; unset means the defaults
    * of the declared keys. Each session file gets a copy as `<file>.config.json`.
    */
@@ -451,7 +457,7 @@ export class FeedPipeline {
       opts.workerLimit,
     );
     this.#registry = CalculatorRegistry.build([...opts.features.flatMap((feature) => feature.calculators), ...this.#jobs.calculators]);
-    this.#demand = demandOf(opts.features, this.#registry);
+    this.#demand = demandOf(opts.features, this.#registry, { jobsAlways: opts.servesUi === true });
     this.#publisher = new TopicPublisher({ feedId: opts.feedId, hub: opts.hub, features: opts.features, log: opts.log });
     this.#tracker = new SessionTracker({ feedId: opts.feedId });
     this.#alerts = new FeedAlerts(opts.feedId);

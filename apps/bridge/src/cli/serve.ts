@@ -445,6 +445,8 @@ export async function serve(opts: ServeOptions): Promise<number> {
       hub,
       features: FEATURES,
       workerLimit,
+      // Every feed `serve` builds serves the UI: its jobs run all session (C49).
+      servesUi: true,
       ...(opts.config && { config: opts.config }),
       log: pipelineLog,
       dumpsDir: opts.dumpsDir,

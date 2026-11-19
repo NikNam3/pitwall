@@ -1,7 +1,7 @@
 // A flashback drops the job runs under way (final review, item 8): their input was a timeline the game has discarded,
 // so a result computed before the flashback must never reach a topic afterwards.
 import { describe, expect, it } from 'vitest';
-import type { ServerMessage, TopicName } from '@pitwall/contracts';
+import type { Computed, ServerMessage, TopicName } from '@pitwall/contracts';
 import type { FeedId } from '@pitwall/domain';
 import type { Job } from '@pitwall/engine';
 import { ScenarioBuilder, packetBytes } from '../../../../packages/engine/test/builders/index.ts';
@@ -35,9 +35,11 @@ function flashback() {
 describe('FeedPipeline: a flashback and the job runs under way', () => {
   it('a result of a run triggered before the flashback is dropped', async () => {
     let prepared = 0;
+    // The input names the timeline: 1000 before the flashback, 5000 after it.
+    let base = 1000;
     const job: Job<AddRngInput, number> = {
       kind: 'job', id: 'add-rng', reads: ['timing'], trigger: 'frame',
-      prepare: () => { prepared++; return { base: 1000, sleepMs: 400 }; },
+      prepare: () => { prepared++; return { base, sleepMs: 400 }; },
       module: new URL('../jobs/fixtures/add-rng.ts', import.meta.url),
     };
     const feature = defineFeature({ name: 'add-rng', calculators: [], topics: [bindTestJob(TOPIC, job as Job<unknown, unknown>)], jobs: [job as Job<unknown, unknown>] });
@@ -56,11 +58,13 @@ describe('FeedPipeline: a flashback and the job runs under way', () => {
     expect(prepared).toBeGreaterThan(0); // a run is under way in a worker
     hub.unsubscribe('c', 'j'); // nothing triggers again: the run from before the flashback is the only one
     push(after); // the flashback
+    base = 5000;
+    // Subscribing again starts a run at once (C49), on the new timeline: only its result may arrive.
     hub.subscribe({ clientId: 'c', id: 'k', topic: TOPIC, params: {}, feedId: F });
 
     await new Promise((resolve) => setTimeout(resolve, 900)); // longer than the run; waiting out an absence
-    const values = inbox.filter((m) => (m.type === 'update' || m.type === 'snapshot') && 'value' in m && m.value !== undefined);
-    expect(values).toEqual([]);
+    const values = inbox.flatMap((m) => ((m.type === 'update' || m.type === 'snapshot') && 'value' in m && m.value !== undefined ? [m.value as Computed<number>] : []));
+    for (const { value } of values) expect(value).toBeGreaterThanOrEqual(5000);
     await pipeline.stop();
   });
 });

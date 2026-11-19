@@ -31,7 +31,7 @@ const bindTestJob = bindJob as unknown as (topic: TopicName, job: Job<unknown, u
 type Seen = { lap: number; frameId: number };
 
 /** A job whose worker resolves to `base + rng.next()`, declared in a feature of its own that binds it to `TOPIC`. */
-function addRng(o: { trigger?: Cadence; reads?: Dependency[]; input?: Partial<AddRngInput> } = {}) {
+function addRng(o: { trigger?: Cadence; reads?: Dependency[]; input?: Partial<AddRngInput>; base?: () => number } = {}) {
   const prepared: Seen[] = [];
   const job: Job<AddRngInput, number> = {
     kind: 'job',
@@ -40,7 +40,7 @@ function addRng(o: { trigger?: Cadence; reads?: Dependency[]; input?: Partial<Ad
     trigger: o.trigger ?? 'frame',
     prepare: ({ live }) => {
       prepared.push({ lap: live.cars[live.playerCar]!.timing.lap, frameId: live.lastFrameId });
-      return { base: 1000, ...o.input };
+      return { base: o.base?.() ?? 1000, ...o.input };
     },
     module: new URL('../jobs/fixtures/add-rng.ts', import.meta.url),
   };
@@ -58,6 +58,16 @@ function probe(id: string, reads: Dependency[], cadence: Cadence, bound = false)
     topics: bound ? [bindState('cars.overview', calc, () => undefined)] : [],
   });
   return { counter, feature };
+}
+
+/** An unbound calculator (so always needed) that notes the frame of its last run: the frame the feed is at. */
+function frameClock() {
+  let last: number | undefined;
+  const calc: QuickCalculator<number> = {
+    kind: 'quick', id: 'frame-clock', reads: ['timing'], cadence: 'frame',
+    compute: ({ live }) => (last = live.lastFrameId),
+  };
+  return { feature: defineFeature({ name: 'frame-clock', calculators: [calc], topics: [] }), lastFrameId: () => last };
 }
 
 const prepared = (builder: ScenarioBuilder): PreparedPacket[] =>
@@ -158,7 +168,7 @@ describe('FeedPipeline: a job declared in a feature', () => {
   });
 });
 
-describe('FeedPipeline: a job is demand driven', () => {
+describe('FeedPipeline: a job is demand driven in a run that serves no UI (C49)', () => {
   it('without a subscriber it never runs, whatever else is subscribed', async () => {
     const { feature, prepared: seen } = addRng();
     const w = world();
@@ -171,10 +181,12 @@ describe('FeedPipeline: a job is demand driven', () => {
     expect(w.valuesOf('l')).toEqual([]);
   });
 
-  it('subscribing mid-session starts it on the next frames, unsubscribing stops it', async () => {
+  // C49: a newly needed unit runs at once against the current view; in a run that serves no UI a job is such a unit.
+  it('subscribing mid-session starts it at once, for the current frame, before the next frames; unsubscribing stops it', async () => {
     const { feature, prepared: seen } = addRng();
+    const clock = frameClock();
     const w = world();
-    const feed = w.feed(F, [feature]);
+    const feed = w.feed(F, [feature, clock.feature]);
     const [one, two] = session(77n, 10, 10);
     const three = session(77n, 20, 10)[1];
 
@@ -182,13 +194,49 @@ describe('FeedPipeline: a job is demand driven', () => {
     expect(seen).toHaveLength(0);
 
     w.subscribe('j', F);
+    // started in the demand-change pass, for the frame the feed is at: no frame was pushed since
+    expect(seen).toHaveLength(1);
+    expect(seen[0]!.frameId).toBe(clock.lastFrameId());
+    await vi.waitFor(() => expect(w.valuesOf('j').length).toBeGreaterThan(0), WAIT);
+    const first = w.valuesOf('j')[0]!;
+    expect(first.computedFor).toEqual(seen[0]);
+    expect(first.value).toBe(expectedValue(1000, first.computedFor));
+
     feed.push(two);
-    expect(seen.length).toBeGreaterThan(0);
+    expect(seen.length).toBeGreaterThan(1);
 
     w.hub.unsubscribe('c', 'j');
     const stopped = seen.length;
     feed.push(three);
     expect(seen).toHaveLength(stopped);
+  });
+
+  // C49: the run at once does not use up an event-cadence trigger: the next event still triggers it.
+  it('a job on an event cadence that becomes needed runs at once, and its next event still triggers it', async () => {
+    const { feature, prepared: seen } = addRng({ trigger: { onChange: ['session'] } });
+    const w = world();
+    const feed = w.feed(F, [feature]);
+    // One Session packet with the first frame, none in the next chunk, one more with the third chunk.
+    const builder = new ScenarioBuilder({ sessionUid: 77n, cars: 2 }).frames(10, () => {});
+    const a = builder.packets().length;
+    builder.frames(10, () => {});
+    const b = builder.packets().length;
+    builder.session().frames(5, () => {});
+    const all = prepared(builder);
+    const [one, two, three] = [all.slice(0, a), all.slice(a, b), all.slice(b)];
+
+    feed.push(one);
+    expect(seen).toHaveLength(0);
+
+    w.subscribe('j', F);
+    expect(seen).toHaveLength(1); // at once, although no Session packet arrived since
+
+    feed.push(two);
+    expect(seen).toHaveLength(1); // no new event
+
+    feed.push(three);
+    expect(seen).toHaveLength(2); // the next Session packet triggers it
+    await vi.waitFor(() => expect(w.valuesOf('j').map((v) => v.computedFor)).toContainEqual(seen[1]), WAIT);
   });
 });
 
@@ -208,7 +256,9 @@ describe('FeedPipeline: a job that fails', () => {
 
 describe('FeedPipeline: the lifetime of a job run', () => {
   it('a result that arrives after its session ended is dropped', async () => {
-    const { feature, prepared: seen } = addRng({ input: { sleepMs: 400 } });
+    // The input names the session: 1000 for session 77's runs, 5000 for session 78's.
+    let base = 1000;
+    const { feature, prepared: seen } = addRng({ input: { sleepMs: 400 }, base: () => base });
     const w = world();
     const feed = w.feed(F, [feature]);
     w.subscribe('j', F);
@@ -217,10 +267,13 @@ describe('FeedPipeline: the lifetime of a job run', () => {
 
     w.hub.unsubscribe('c', 'j'); // nothing triggers again; the run of session 77 is the only one
     feed.push(shifted(session(78n, 10, 0)[0], 60_000)); // session 77 ends, session 78 starts
-    w.subscribe('k', F); // a fresh subscriber of session 78 must not be handed session 77's result
+    base = 5000;
+    // A fresh subscriber of session 78 must not be handed session 77's result; its own subscription starts a run of
+    // session 78 at once (C49), whose result it may get.
+    w.subscribe('k', F);
 
     await new Promise((resolve) => setTimeout(resolve, 900)); // longer than the run; waiting out an absence
-    expect(w.valuesOf('k')).toEqual([]);
+    for (const { computedFor, value } of w.valuesOf('k')) expect(value).toBe(expectedValue(5000, computedFor));
     expect(w.valuesOf('j')).toEqual([]);
   });
 
