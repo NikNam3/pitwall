@@ -12,10 +12,24 @@ export const WIDGET_COMMAND_IDS = [
   'plan.accept',
 ] as const satisfies readonly UiAction['kind'][];
 
-export type WidgetCommandId = (typeof WIDGET_COMMAND_IDS)[number];
+/** A command that sends its uiAction: its id is the uiAction's kind. */
+export type ActionCommandId = (typeof WIDGET_COMMAND_IDS)[number];
 
-/** The arguments of command `K`: its uiAction without `kind` (the feed included: the widget's link's). */
-export type WidgetCommandArgs<K extends WidgetCommandId> = Omit<Extract<UiAction, { kind: K }>, 'kind'>;
+/**
+ * The ids of the shell commands without arguments a widget may invoke (SP4.3f Task 10): each opens a shell overlay and
+ * is no uiAction kind; invoking one resolves `ok` once it ran. `plans.save.pick`: the name prompt "Save plan".
+ */
+export const SHELL_WIDGET_COMMAND_IDS = ['plans.save.pick'] as const;
+
+export type ShellWidgetCommandId = (typeof SHELL_WIDGET_COMMAND_IDS)[number];
+
+export type WidgetCommandId = ActionCommandId | ShellWidgetCommandId;
+
+/** True for a shell command without arguments. */
+export const isShellWidgetCommand = (id: WidgetCommandId): id is ShellWidgetCommandId => (SHELL_WIDGET_COMMAND_IDS as readonly string[]).includes(id);
+
+/** The arguments of command `K`: its uiAction without `kind` (the feed included: the widget's link's); none for a shell command. */
+export type WidgetCommandArgs<K extends WidgetCommandId> = K extends ActionCommandId ? Omit<Extract<UiAction, { kind: K }>, 'kind'> : Record<string, never>;
 
 /** Invokes command `id` with its arguments; resolves with the uiAction's outcome. */
 export type InvokeCommand = <K extends WidgetCommandId>(id: K, args: WidgetCommandArgs<K>) => Promise<ActionOutcome>;

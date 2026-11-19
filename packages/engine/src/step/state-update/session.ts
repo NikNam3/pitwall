@@ -22,7 +22,7 @@ const SURFACE_TYPE = ['simplified', 'realistic'] as const;
 const COLLISIONS = ['off', 'playerToPlayerOff', 'on'] as const;
 
 const forecastFrom = (s: SessionPacket['weatherForecastSamples'][number]): ForecastSample => ({
-  offsetMin: s.timeOffset,
+  offsetMs: s.timeOffset * 60_000,
   weather: pick(WEATHER, s.weather),
   trackTempC: s.trackTemperature,
   trackTempTrend: pick(TREND, s.trackTemperatureChange),

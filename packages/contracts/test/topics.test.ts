@@ -62,9 +62,12 @@ describe('TOPICS', () => {
     expect(table).toHaveLength(20);
   });
   it('gives every core topic outside dev, ui, the calibration store\'s and the profile module\'s scope feed', () => {
-    const core = Object.entries(TOPICS).filter(([name, d]) => d.owner === 'core' && !/^(dev|ui)\./.test(name) && !['calibration.sets', 'calibration.values', 'calibration.candidates', 'drivers.profiles', 'drivers.links'].includes(name));
+    const core = Object.entries(TOPICS).filter(([name, d]) => d.owner === 'core' && !/^(dev|ui)\./.test(name) && !['calibration.sets', 'calibration.values', 'calibration.candidates', 'drivers.profiles', 'drivers.links', 'plans.sessions'].includes(name));
     expect(core).toHaveLength(16 + 20);
     for (const [, d] of core) expect(d.scope).toBe('feed');
+  });
+  it('has the global topic plans.sessions (C54, C62d): owner core, state', () => {
+    expect(TOPICS['plans.sessions']).toMatchObject({ name: 'plans.sessions', owner: 'core', scope: 'global', mode: 'state', maxHz: Infinity });
   });
   it.each(['calibration.sets', 'calibration.values', 'calibration.candidates'] as const)('has the global topic %s of the calibration store (C54, C62a): owner core, state', (name) => {
     expect(TOPICS[name]).toMatchObject({ name, owner: 'core', scope: 'global', mode: 'state', maxHz: Infinity });
@@ -172,7 +175,7 @@ describe('topic types', () => {
       | 'rejoin.car' | 'rejoin.ghostLines' | 'rejoinGhost.car' | 'scCall.car' | 'pitWindow.car'
       | 'calibration.sets' | 'calibration.values' | 'calibration.candidates' | 'calibration.active'
       | 'drivers.profiles' | 'drivers.links' | 'forecastScore.report' | 'config.effective' | 'strategy.plans' | 'strategyOverview.car' | 'circle.car'
-      | 'strategy.car' | 'undercut.car' | 'pitSweep.car' | 'plans.prepared' | 'plans.preview' | 'basis.active'
+      | 'strategy.car' | 'undercut.car' | 'pitSweep.car' | 'plans.prepared' | 'plans.preview' | 'plans.sessions' | 'basis.active'
       | 'situation.carActivityPractice' | 'situation.carActivityQualifying' | 'situation.carActivityRace' | 'situation.carFlags'
       | 'situation.carDriver' | 'situation.carLocation' | 'situation.carStatus' | 'situation.clock' | 'situation.compoundRule' | 'situation.lapValidity'
       | 'situation.penalties' | 'situation.raceControlPractice' | 'situation.raceControlQualifying' | 'situation.raceControlRace'

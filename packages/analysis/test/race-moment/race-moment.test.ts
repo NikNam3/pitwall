@@ -97,8 +97,8 @@ const openPhase = (kind: "SC" | "VSC" | "red", start: number, confirmed = true) 
   openNeutralisation({ kind, start: start as SessionTime, confirmed });
 
 /** The `rain-outlook` output (C43): its first rain sample, and whether it lies within the horizon. */
-const rain = (offsetMin: number, rainPct: number, withinHorizon = true): RainOutlook => ({
-  firstRain: known({ index: 0, offsetMin, rainPct }, NOW),
+const rain = (minutes: number, rainPct: number, withinHorizon = true): RainOutlook => ({
+  firstRain: known({ index: 0, offsetMs: minutes * 60_000, rainPct }, NOW),
   withinHorizon,
   samplesAhead: [],
 });
@@ -278,7 +278,7 @@ describe("race-moment calculator", () => {
     it("weather: rain-outlook has rain within the horizon, its first rain the cause params", () => {
       const v = value(run({ outlook: rain(5, 45) }));
       expect(v.moment).toBe("weather");
-      expect(v.cause).toEqual({ rule: "forecastRain", params: { rainPct: 45, offsetMin: 5 } });
+      expect(v.cause).toEqual({ rule: "forecastRain", params: { rainPct: 45, offsetMs: 300_000 } });
       expect(v.active).toEqual(["weather", "carCare"]);
     });
 

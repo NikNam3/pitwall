@@ -30,9 +30,10 @@ describe('plan-board declaration', () => {
     expect(widget.options.source).toMatchObject({ kind: 'choice', default: 'auto', choices: ['auto', 'live', 'planning'] });
   });
 
-  it('invokes the six planning commands, nothing else (C72, C74)', () => {
+  // SP4.3f Task 10: and the shell's `plans.save.pick` (the planning line's `save` opens the name prompt).
+  it('invokes the six planning commands and plans.save.pick, nothing else (C72, C74)', () => {
     expect([...widget.commands].sort()).toEqual(
-      ['plan.accept', 'plans.prepare.accept', 'plans.prepare.activate', 'plans.prepare.remove', 'plans.prepare.save', 'plans.race.set'],
+      ['plan.accept', 'plans.prepare.accept', 'plans.prepare.activate', 'plans.prepare.remove', 'plans.prepare.save', 'plans.race.set', 'plans.save.pick'],
     );
   });
 
@@ -52,6 +53,7 @@ describe('plan-board gallery', () => {
     expect(names).toEqual([
       'race', 'threeSlots', 'sameAsSlot', 'coldStart', 'computing', 'notApplicable',
       'gridPrefill', 'planningRound', 'planningComputing', 'planningNoLaps', 'planningNotApplicable',
+      'planningConditions', 'planningConditionsEdited', 'planningNoConditions', 'planningSaved',
     ]);
     const race = cases.race.plan.value;
     expect(race.known && race.value.rows.filter((r) => r.slot !== null).map((r) => r.slot).sort()).toEqual([...PLAN_SLOTS].sort());
@@ -80,6 +82,10 @@ describe('plan-board gallery', () => {
       planningComputing: { source: 'planning' },
       planningNoLaps: { source: 'planning' },
       planningNotApplicable: { source: 'planning' },
+      planningConditions: { source: 'planning' },
+      planningConditionsEdited: { source: 'planning' },
+      planningNoConditions: { source: 'planning' },
+      planningSaved: { source: 'planning' },
     });
     const r = cases.planningRound;
     expect(r.prepared.open).toBe(true);
@@ -99,6 +105,22 @@ describe('plan-board gallery', () => {
     expect(grid.known && Object.keys(grid.value.prefill).sort()).toEqual(['A', 'B']);
     expect(grid.known && grid.value.rows.every((x) => x.slot === null)).toBe(true);
     expect(cases.gridPrefill.phase.open[0]?.kind).toBe('grid');
+  });
+
+  // SP4.3f Task 7 (plan-board-conditions.html): the race's conditions imported, one row entered, and no race samples
+  // (C3: the rows unknown, no job result); the preview's rain chance agrees with the rows' highest
+  it('the conditions cases: imported, one row entered, no race samples', () => {
+    const imported = cases.planningConditions.prepared;
+    expect(imported.open && imported.race.conditions).toEqual({ kind: 'imported' });
+    expect(imported.open && imported.forecast.rows).toMatchObject({ known: true, value: [{ overridden: false }, { overridden: false }] });
+    const p = cases.planningConditions.preview.value;
+    expect(p.known && p.value.planning?.rainPct).toMatchObject({ known: true, value: 45 });
+    const edited = cases.planningConditionsEdited.prepared;
+    expect(edited.open && edited.race.conditions.kind).toBe('entered');
+    expect(edited.open && edited.forecast.rows).toMatchObject({ known: true, value: [{ overridden: false }, { overridden: true, sample: { rainPct: 80 } }] });
+    const none = cases.planningNoConditions.prepared;
+    expect(none.open && none.forecast.rows).toEqual({ known: false, reason: 'notReceived' });
+    expect('preview' in cases.planningNoConditions).toBe(false);
   });
 
   it('fits at both mode minimums', () => {

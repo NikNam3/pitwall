@@ -127,7 +127,7 @@ describe('replayToEnd: the planning replay in the same worker (C62d; its plannin
     const before = dump(place.db);
     const { calls, writeProbe } = probe();
     const service = serviceOf(place, { writeProbe });
-    await service.replayToEnd<unknown>({ pwrecPath: qualifying.file, basisOverride: [], laps: 20, sets: 'carried' }, 'planning');
+    await service.replayToEnd<unknown>({ pwrecPath: qualifying.file, basisOverride: [], laps: 20, sets: 'carried', conditions: { kind: 'imported' }, profiles: null }, 'planning');
     expect(calls).toEqual([]);
     expect(dump(place.db)).toEqual(before);
   });

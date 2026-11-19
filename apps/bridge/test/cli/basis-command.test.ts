@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { WebSocketServer } from 'ws';
 import { CONTRACT_VERSION, encodeMessage, type ClientMessage, type ServerMessage, type UiAction } from '@pitwall/contracts';
-import { feedId, type PreparedCar, type RaceAssumptions, type SessionBasis, type SessionRef, type TeamId, type TrackId } from '@pitwall/domain';
+import { feedId, IMPORTED, type PreparedCar, type RaceAssumptions, type SessionBasis, type SessionRef, type TeamId, type TrackId } from '@pitwall/domain';
 import type { CliIo } from '../../src/cli/io.ts';
 import { main } from '../../src/cli/pitwall.ts';
 
@@ -62,7 +62,7 @@ const ROUND: PlanningRoundState = {
   open: true,
   qualifying: QUALIFYING,
   practice: [PRACTICE],
-  race: { laps: 56, sets: 'carried' },
+  race: { laps: 56, sets: 'carried', conditions: IMPORTED },
   team: 0,
   cars: {},
   running: false,
@@ -81,7 +81,10 @@ afterEach(async () => {
  * A fake bridge on a free port: greets with the one feed `FEED`, answers `basis.active` and `plans.prepared` with their
  * snapshots (any other topic with `noData`) and every uiAction with `ok`, except the kinds in `reject`.
  */
-async function fakeBridge(reject: Partial<Record<UiAction['kind'], string>> = {}) {
+/** `plans.sessions` (C54): the qualifying stored for `team` (the round's team comes from it, C62d). */
+const storedFor = (team: number) => ({ sessions: [{ ref: QUALIFYING, kind: 'qualifying', trackId: 15, startedAt: '2026-11-17T22:07:29.991Z', team, cars: [], stale: false }] });
+
+async function fakeBridge(reject: Partial<Record<UiAction['kind'], string>> = {}, sessions: unknown = storedFor(0)) {
   const wss = new WebSocketServer({ host: '127.0.0.1', port: 0 });
   cleanup.push(() => new Promise<void>((resolve) => wss.close(() => resolve())));
   await new Promise<void>((resolve) => wss.once('listening', () => resolve()));
@@ -93,7 +96,7 @@ async function fakeBridge(reject: Partial<Record<UiAction['kind'], string>> = {}
       const message = JSON.parse(data.toString()) as ClientMessage;
       received.push(message);
       if (message.type === 'subscribe') {
-        const value = message.topic === 'basis.active' ? BASIS_ACTIVE : message.topic === 'plans.prepared' ? ROUND : undefined;
+        const value = message.topic === 'basis.active' ? BASIS_ACTIVE : message.topic === 'plans.prepared' ? ROUND : message.topic === 'plans.sessions' ? sessions : undefined;
         const answer: ServerMessage = value === undefined ? { type: 'topicStatus', id: message.id, status: 'noData' } : { type: 'snapshot', id: message.id, value };
         socket.send(encodeMessage(answer));
       }
@@ -187,9 +190,24 @@ describe('pitwall basis and pitwall plans', { timeout: 30_000 }, () => {
     expect(r.err).toBe('');
     expect(r.code).toBe(0);
     expect(bridge.actions()).toEqual<UiAction[]>([
-      { kind: 'plans.round.open', feedId: FEED, qualifying: QUALIFYING, practice: [PRACTICE] },
-      { kind: 'plans.race.set', feedId: FEED, race: { laps: 56, sets: 'fresh' } },
+      { kind: 'plans.round.open', feedId: FEED, team: 0, qualifying: QUALIFYING, practice: [PRACTICE] },
+      { kind: 'plans.race.set', feedId: FEED, race: { laps: 56, sets: 'fresh', conditions: IMPORTED } },
     ]);
+  });
+
+  it('pitwall plans open takes the team from the stored qualifying, not the feed (C62d)', async () => {
+    const bridge = await fakeBridge({}, storedFor(3)); // the hello's feed is team 0
+    const r = await pitwall(['plans', 'open', '--qualifying', QUALIFYING_TEXT, '--practice', 'none'], bridge.port);
+    expect(r.code).toBe(0);
+    expect(bridge.actions()).toEqual([expect.objectContaining({ kind: 'plans.round.open', team: 3 })]);
+  });
+
+  it('pitwall plans open refuses a qualifying that is not stored', async () => {
+    const bridge = await fakeBridge({}, { sessions: [] });
+    const r = await pitwall(['plans', 'open', '--qualifying', QUALIFYING_TEXT], bridge.port);
+    expect(r.code).toBe(1);
+    expect(r.err).toContain('is not stored');
+    expect(bridge.actions()).toEqual([]);
   });
 
   it('a rejection prints the bridge\'s message and exits 1', async () => {

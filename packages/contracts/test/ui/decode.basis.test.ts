@@ -31,20 +31,20 @@ describe('decodeUiAction basis.choose', () => {
 
 describe('decodeUiAction plans.round.open', () => {
   it('decodes a qualifying and its practice', () => {
-    const action = { kind: 'plans.round.open', feedId: 'f1', qualifying: QUALIFYING, practice: [PRACTICE] };
+    const action = { kind: 'plans.round.open', feedId: 'f1', qualifying: QUALIFYING, team: 3, practice: [PRACTICE] };
     expect(decodeUiAction(action)).toEqual(action);
   });
-  it('rejects a missing qualifying', () => expect(decodeUiAction({ kind: 'plans.round.open', feedId: 'f1', qualifying: null, practice: [] })).toBeUndefined());
+  it('rejects a missing qualifying', () => expect(decodeUiAction({ kind: 'plans.round.open', feedId: 'f1', qualifying: null, team: 3, practice: [] })).toBeUndefined());
 });
 
 describe('decodeUiAction plans.race.set', () => {
   it.each(['carried', 'fresh'])('decodes sets %s', (sets) => {
-    const action = { kind: 'plans.race.set', feedId: 'f1', race: { laps: 28, sets } };
+    const action = { kind: 'plans.race.set', feedId: 'f1', race: { laps: 28, sets, conditions: { kind: 'imported' } } };
     expect(decodeUiAction(action)).toEqual(action);
   });
-  it('rejects unknown sets', () => expect(decodeUiAction({ kind: 'plans.race.set', feedId: 'f1', race: { laps: 28, sets: 'new' } })).toBeUndefined());
+  it('rejects unknown sets', () => expect(decodeUiAction({ kind: 'plans.race.set', feedId: 'f1', race: { laps: 28, sets: 'new', conditions: { kind: 'imported' } } })).toBeUndefined());
   it.each([0, -1, 2.5])('rejects laps %s (a whole number of at least 1)', (laps) =>
-    expect(decodeUiAction({ kind: 'plans.race.set', feedId: 'f1', race: { laps, sets: 'fresh' } })).toBeUndefined());
+    expect(decodeUiAction({ kind: 'plans.race.set', feedId: 'f1', race: { laps, sets: 'fresh', conditions: { kind: 'imported' } } })).toBeUndefined());
 });
 
 describe('decodeUiAction saved plans', () => {

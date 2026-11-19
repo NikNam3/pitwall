@@ -17,7 +17,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import WebSocket from 'ws';
 import type { BasisActive, PlanningRoundState, ServerMessage } from '@pitwall/contracts';
-import { feedId, type SavedPlan, type SessionBasis, type StrategyOutput } from '@pitwall/domain';
+import { feedId, IMPORTED, unknown, type SavedPlan, type SessionBasis, type StrategyOutput } from '@pitwall/domain';
 import type { StrategyInput } from '@pitwall/analysis';
 import type { Job } from '@pitwall/engine/readers';
 import { ScenarioBuilder, packetBytes } from '../../../../packages/engine/test/builders/index.ts';
@@ -178,8 +178,8 @@ async function bridge(dataDir: string) {
 
 type Bridge = Awaited<ReturnType<typeof bridge>>;
 
-const raceSet = (laps: number) => ({ kind: 'plans.race.set', feedId: A, race: { laps, sets: 'carried' } });
-const roundOpen = { kind: 'plans.round.open', feedId: A, qualifying: ref(QUALIFYING), practice: [ref(PRACTICE)] };
+const raceSet = (laps: number) => ({ kind: 'plans.race.set', feedId: A, race: { laps, sets: 'carried', conditions: IMPORTED } });
+const roundOpen = { kind: 'plans.round.open', feedId: A, team: TEAM, qualifying: ref(QUALIFYING), practice: [ref(PRACTICE)] };
 
 /** Waits until feed A's round is open with its job done. */
 const roundSettles = (b: Bridge): Promise<void> =>
@@ -188,8 +188,8 @@ const roundSettles = (b: Bridge): Promise<void> =>
 /**
  * The evening before: the weekend's practice and Q3 of the seat played; the round the Q3's end opens settles, and its
  * plan "evening" is saved (the team's last saved plan, no basis confirmed). Then the bridge stops, and the next morning
- * a bridge starts on the same data dir with no session running (the feed's seat remembered, R19). The data dir, the
- * morning's bridge and the evening's plan.
+ * a bridge starts on the same data dir with no session running (SP4.3f Task 3: no seat is remembered, so the feed has no
+ * team until a round opens). The data dir, the morning's bridge and the evening's plan.
  */
 async function morning(): Promise<{ dataDir: string; b: Bridge; evening: SavedPlan }> {
   const dataDir = tmp('data');
@@ -205,7 +205,7 @@ async function morning(): Promise<{ dataDir: string; b: Bridge; evening: SavedPl
   const [evening] = savedFiles(dataDir);
   await first.stop();
   const b = await bridge(dataDir);
-  await vi.waitFor(() => expect(b.prepared().at(-1)).toEqual({ open: false, saved: [expect.objectContaining({ id: evening!.id })] }));
+  await vi.waitFor(() => expect(b.prepared().at(-1)).toEqual({ open: false, saved: [] }));
   return { dataDir, b, evening: evening! };
 }
 
@@ -283,5 +283,42 @@ describe('opening a round writes the last confirmed choice (Task 7g, R23; C62, C
     const sidecar = recordingBasis(b.recording(RACE));
     expect(sidecar?.start).toEqual(CONFIRMED);
     expect(sidecar?.preselected).toEqual(CONFIRMED);
+  });
+});
+
+// SP4.3f Task 3, case A (C62d; spec §4.0 idea 4, §4.2 "Case A"): case A is case B with preselected picks. At a
+// qualifying's live end the round opens with the ended session's team, its ref, its own basis's practice and the
+// defaults: the suggested laps, `carried`, `IMPORTED` (the qualifying's forecast for the race).
+describe('case A: a qualifying\'s live end preselects every pick (SP4.3f Task 3; C62d)', { timeout: 180_000 }, () => {
+  it('(case A) a qualifying\'s live end opens with every pick preselected (team, practice, laps suggested, carried, IMPORTED)', async () => {
+    const dataDir = tmp('data');
+    const b = await bridge(dataDir);
+    // a stored grand prix on the track in another lobby: the bridge suggests its 10 laps
+    b.play(sessionPackets({ uid: 60n, type: 15, weekend: NEW_LOBBY, structure: [15] }));
+    await b.ended(1);
+    // the weekend's practice and Q3 of the player's seat (car 0, team 3)
+    b.play(sessionPackets({ uid: PRACTICE, type: 1 }));
+    await b.ended(2);
+    b.play(sessionPackets({ uid: QUALIFYING, type: 7 }));
+    await b.ended(3);
+    await roundSettles(b);
+
+    const round = b.prepared().at(-1);
+    expect(round).toMatchObject({
+      open: true,
+      team: TEAM,
+      qualifying: ref(QUALIFYING),
+      practice: [ref(PRACTICE)],
+      trackId: TRACK,
+      playerCar: 0,
+      teammateCar: 1,
+      race: { laps: 10, sets: 'carried', conditions: IMPORTED },
+      forecast: { source: { ref: ref(QUALIFYING) } },
+      rebuilding: false,
+    });
+    // the builder sessions carry no race samples: the conditions stay missing, never 0 % (C3)
+    expect(round?.open === true && round.forecast.rows).toEqual(unknown('notReceived'));
+    // the round its live end opens by itself confirms no basis: nothing written (the guard above)
+    expect(lastChoice(dataDir)).toBeUndefined();
   });
 });

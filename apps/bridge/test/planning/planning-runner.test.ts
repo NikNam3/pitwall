@@ -1,18 +1,20 @@
 // SP4.3e Task 7b, rows (a) and (b) (C51, C54, C62d; spec §4.0 idea 3, §4.3 "PlanningRunner"): the planning round is a
 // function of a qualifying recording, a practice basis and the race assumptions. `open` replays the qualifying's
-// recording (of the opening feed's seat) to its end through the rebuild service's `replayToEnd` (priority `planning`,
-// off the thread that applies frames), with the practice basis (of the seat, made current first with `ensureCurrent`)
-// in place of the recording's basis sidecar, builds the as-of view and runs the planning job on it; it publishes
-// `plans.preview` per our car and `plans.prepared` as `PlanningRoundState`. No feed pipeline is involved: the runner is
-// made without one. `setRace` re-runs the round on new race assumptions; `close` closes it and drops a running job.
+// recording (its first stored row of the round's team, SP4.3f Task 3) to its end through the rebuild service's
+// `replayToEnd` (priority `planning`, off the thread that applies frames), with the practice basis (of the team, made
+// current first with `ensureCurrent`) in place of the recording's basis sidecar, builds the as-of view and runs the
+// planning job on it; it publishes `plans.preview` per our car and `plans.prepared` as `PlanningRoundState`. No feed
+// pipeline is involved: the runner is made without one. `setRace` re-runs the round on new race assumptions; `close`
+// closes it and drops a running job. Ported to SP4.3f Task 3: the team is the spec's (`RoundSpec.team`), no feed seat.
 //
 // Seams this file assumes (the implement phase adds them; the imports fail until then):
 //  - `apps/bridge/src/planning/runner.ts`: `createPlanningRunner(o)` with `o = { rebuild, jobs: { job, workerLimit },
-//    hub, store, lastChoice, sessions, seatOf, log }`: `rebuild` the `RebuildService`; `jobs.job` the planning job (its
+//    hub, store, lastChoice, sessions, profiles, log }`: `rebuild` the `RebuildService`; `jobs.job` the planning job (its
 //    `prepare` never called), `jobs.workerLimit` the bridge's shared `WorkerLimit`; `store` the `SavedPlanStore`;
-//    `lastChoice` the `LastChoiceStore`; `sessions` the `WeekendRepository` it resolves a `SessionRef` of the feed's seat
-//    with (the stored session of that uid and weekend whose player car has the seat's team and race number, its
-//    recording); `seatOf(feedId)` the feed's seat (`CarKey`: team and race number);
+//    `lastChoice` the `LastChoiceStore`; `sessions` the `WeekendRepository` it resolves a `SessionRef` of the spec's
+//    team with (the first stored row of that uid and weekend whose player car has the team, its recording);
+//    `profiles` the profile store (`snapshotFor`; here one that has none, `null`); `open(spec)` takes
+//    `{ feedId, qualifying, team, practice, race? }`;
 //  - `apps/bridge/src/storage/rebuild-service.ts` (Task 7d): `createRebuildService({ db, dataDir, rulesVersion, log })`;
 //    the tests spy on it: every `replayToEnd` and `ensureCurrent` call is recorded, then run by the real service, so
 //    the replay runs in its worker. What `replayToEnd` resolves to is between the worker and the runner;
@@ -28,10 +30,9 @@ import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Computed, PlanningRoundState, ServerMessage, TopicName } from '@pitwall/contracts';
-import { feedId, type BasisSidecar, type CarKey, type FeedId, type RaceAssumptions, type SessionRef, type StrategyCar, type StrategyOutput } from '@pitwall/domain';
+import { carId, feedId, IMPORTED, type BasisSidecar, type RaceAssumptions, type SessionRef, type StrategyCar, type StrategyOutput } from '@pitwall/domain';
 import type { StrategyInput } from '@pitwall/analysis';
 import type { Job } from '@pitwall/engine/readers';
-import { ScenarioBuilder, packetBytes } from '../../../../packages/engine/test/builders/index.ts';
 import { processRecording } from '../../src/cli/process-recording.ts';
 import { loadFeatureConfig } from '../../src/feature-config.ts';
 import { FEATURES } from '../../src/features/index.generated.ts';
@@ -41,14 +42,13 @@ import { createLogger } from '../../src/log.ts';
 import { createLastChoiceStore } from '../../src/pipeline/last-choice.ts';
 import { createPlanningRunner } from '../../src/planning/runner.ts';
 import { SavedPlanStore } from '../../src/planning/saved-plans.ts';
-import { PwrecWriter } from '../../src/pwrec/writer.ts';
 import { dataDir, type DataDir } from '../../src/storage/data-dir.ts';
 import { openDatabase, type Db, type SessionKey } from '../../src/storage/db.ts';
 import { createRebuildService } from '../../src/storage/rebuild-service.ts';
 import type { RebuildPriority, RebuildService, ReplayJob } from '../../src/storage/rebuild-service-types.ts';
 import { WeekendRepository } from '../../src/storage/weekend-repository.ts';
 import { segmentPath } from '../fixtures/replay.ts';
-import { META } from '../pwrec/helpers.ts';
+import { writeSynthetic } from '../../../../test-support/recordings/index.ts';
 import { SLOW_MS } from './planning-slow-stub-job.ts';
 
 const RULES = 'rules-of-this-bridge';
@@ -56,9 +56,8 @@ const F = feedId('udp-20777');
 const QUALIFYING_SEGMENT = 'qualifying-texas-2026-end-dr.pwrec.gz';
 const QUALIFYING: SessionRef = { sessionUid: '12101553556244014932', weekendId: '548397152' };
 const TRACK = 15;
+/** The DR feed's team: its player car 1 (race number 2) and the teammate car 0 (race number 64) drive for team 0. */
 const TEAM = 0;
-/** The DR feed's seat: team 0, race number 2 (player car 1); the teammate is car 0, race number 64. */
-const SEAT: CarKey = { teamId: TEAM, raceNumber: 2 };
 const OUR_CARS = [1, 0] as const;
 
 const silent = createLogger({ level: 'silent' });
@@ -105,20 +104,19 @@ async function storeQualifying(place: { dirs: DataDir; db: Db }): Promise<{ key:
 }
 
 /**
- * A builder practice on the track (session type 1) of four cars, the seat (team 0, race number 2) the player in slot 3,
+ * A builder practice on the track (session type 1) of four cars, team 0's #2 the player in slot 3 (#64 in slot 2),
  * written as a recording into the place's recordings and stored; its ref and key.
  */
 async function storePractice(place: { dirs: DataDir; db: Db }, uid: bigint, weekend: number): Promise<{ ref: SessionRef; key: SessionKey }> {
-  const packets = new ScenarioBuilder({ sessionUid: uid, cars: 4, player: 3 })
-    .session({ sessionType: 1, weekendStructure: [1, 8, 15], numSessionsInWeekend: 3, weekendLinkIdentifier: weekend, trackId: TRACK, totalLaps: 56 })
-    .participants({ participants: [{ teamId: 5, raceNumber: 10 }, { teamId: 5, raceNumber: 11 }, { teamId: TEAM, raceNumber: 64 }, { teamId: TEAM, raceNumber: 2 }] })
-    .frames(30, () => {})
-    .event({ code: 'SEND' })
-    .packets();
   const file = join(place.dirs.recordings, `practice-${uid}.pwrec.gz`);
-  const writer = PwrecWriter.create(file, META);
-  for (const { packet, receivedAtMs } of packets) writer.write(receivedAtMs, packetBytes(packet));
-  await writer.close(packets.at(-1)!.receivedAtMs);
+  await writeSynthetic(file, {
+    sessionUid: uid,
+    weekendId: weekend,
+    trackId: TRACK,
+    kind: 'practice',
+    player: 3,
+    cars: [{ teamId: 5, raceNumber: 10 }, { teamId: 5, raceNumber: 11 }, { teamId: TEAM, raceNumber: 64 }, { teamId: TEAM, raceNumber: 2 }],
+  });
   const key = await store(place, file);
   return { ref: { sessionUid: key.sessionUid, weekendId: key.weekendId }, key };
 }
@@ -166,7 +164,7 @@ function runnerOf(place: { dirs: DataDir; db: Db }, o: { planningJob?: Job<Strat
     store: new SavedPlanStore(place.dirs.root, silent),
     lastChoice: createLastChoiceStore(place.dirs.root, silent),
     sessions: new WeekendRepository(place.db, { rulesVersion: RULES }),
-    seatOf: (id: FeedId) => (id === F ? SEAT : undefined),
+    profiles: { snapshotFor: () => null },
     log: silent,
   });
   cleanup.push(() => runner.close(F));
@@ -178,17 +176,18 @@ function runnerOf(place: { dirs: DataDir; db: Db }, o: { planningJob?: Job<Strat
   return { runner, calls, replays, prepared, preview, advance };
 }
 
-const FRESH_56: RaceAssumptions = { laps: 56, sets: 'fresh' };
+const FRESH_56: RaceAssumptions = { laps: 56, sets: 'fresh', conditions: IMPORTED };
 
 describe('the planning runner (Task 7b rows a, b; C51, C54, C62d)', { timeout: 180_000 }, () => {
   it('(a) open on a qualifying segment with race { laps: 56, sets: fresh } publishes plans.preview for both our cars; the replay ran through replayToEnd with priority planning', async () => {
     const place = newPlace();
     const qualifying = await storeQualifying(place);
     const r = runnerOf(place);
-    await r.runner.open({ feedId: F, qualifying: QUALIFYING, practice: [], race: FRESH_56 });
+    await r.runner.open({ feedId: F, qualifying: QUALIFYING, team: TEAM, practice: [], race: FRESH_56 });
 
-    // one replay, in the rebuild service's worker, of the qualifying's recording of the seat, with the race assumptions
-    expect(r.replays()).toEqual([{ kind: 'replayToEnd', job: { pwrecPath: qualifying.file, basisOverride: [], laps: 56, sets: 'fresh' }, priority: 'planning' }]);
+    // one replay, in the rebuild service's worker, of the qualifying's recording of the team, with the race assumptions
+    // and the round's profile snapshot (none here)
+    expect(r.replays()).toEqual([{ kind: 'replayToEnd', job: { pwrecPath: qualifying.file, basisOverride: [], laps: 56, sets: 'fresh', conditions: IMPORTED, profiles: null }, priority: 'planning' }]);
     // the planning job's result per our car
     for (const car of OUR_CARS) {
       await vi.waitFor(() => expect(r.preview(car).length, `car ${car}`).toBeGreaterThan(0), { timeout: 60_000 });
@@ -196,12 +195,20 @@ describe('the planning runner (Task 7b rows a, b; C51, C54, C62d)', { timeout: 1
     }
     // the round's state (C54): the qualifying, its practice basis, the race assumptions, our cars by slot with their race numbers
     await vi.waitFor(() => expect(r.prepared().at(-1)).toMatchObject({ open: true, running: false }));
+    const stored = place.db.prepare('SELECT player_car, teammate_car, started_at FROM sessions WHERE session_uid = ?').get(QUALIFYING.sessionUid) as { player_car: number; teammate_car: number | null; started_at: string };
     expect(r.prepared().at(-1)).toEqual<PlanningRoundState>({
       open: true,
       qualifying: QUALIFYING,
       practice: [],
       race: FRESH_56,
       team: TEAM,
+      trackId: TRACK,
+      playerCar: carId(stored.player_car),
+      teammateCar: stored.teammate_car === null ? null : carId(stored.teammate_car),
+      // the rows are the segment's race samples, if it holds any (no test asserts a fact of a recording, C84)
+      forecast: { source: { ref: QUALIFYING, startedAt: stored.started_at }, rows: expect.objectContaining({ known: expect.any(Boolean) }) },
+      rebuilding: false,
+      lastSaved: null,
       cars: {
         1: { raceNumber: 2, slots: {}, active: null },
         0: { raceNumber: 64, slots: {}, active: null },
@@ -211,7 +218,7 @@ describe('the planning runner (Task 7b rows a, b; C51, C54, C62d)', { timeout: 1
     });
   });
 
-  it('(b) the practice override: the round\'s basis is the given practice of the seat, not the recording\'s sidecar basis', async () => {
+  it('(b) the practice override: the round\'s basis is the given practice of the team, not the recording\'s sidecar basis', async () => {
     const place = newPlace();
     const qualifying = await storeQualifying(place);
     const given = await storePractice(place, 501n, 4001);
@@ -221,9 +228,9 @@ describe('the planning runner (Task 7b rows a, b; C51, C54, C62d)', { timeout: 1
     writeFileSync(`${qualifying.file}.basis.json`, JSON.stringify(sidecar));
 
     const r = runnerOf(place);
-    await r.runner.open({ feedId: F, qualifying: QUALIFYING, practice: [given.ref], race: FRESH_56 });
+    await r.runner.open({ feedId: F, qualifying: QUALIFYING, team: TEAM, practice: [given.ref], race: FRESH_56 });
 
-    // the given practice, as the seat's stored session (its player car the seat's), made current first (C61), then
+    // the given practice, as the team's stored session (its player car the team's), made current first (C61), then
     // replayed with in place of the sidecar's basis
     const ensured = r.calls.findIndex((c) => c.kind === 'ensureCurrent' && c.refs.some((k) => k.sessionUid === given.key.sessionUid));
     const replayed = r.calls.findIndex((c) => c.kind === 'replayToEnd');
@@ -240,13 +247,13 @@ describe('the planning runner (Task 7b rows a, b; C51, C54, C62d)', { timeout: 1
     const place = newPlace();
     const qualifying = await storeQualifying(place);
     const r = runnerOf(place);
-    await r.runner.open({ feedId: F, qualifying: QUALIFYING, practice: [], race: { laps: 56, sets: 'carried' } });
+    await r.runner.open({ feedId: F, qualifying: QUALIFYING, team: TEAM, practice: [], race: { laps: 56, sets: 'carried', conditions: IMPORTED } });
     await vi.waitFor(() => expect(r.preview(1).length).toBeGreaterThan(0), { timeout: 60_000 });
     const before = r.preview(1).length;
 
     r.runner.setRace(F, FRESH_56);
     await vi.waitFor(() => expect(r.prepared().at(-1)).toMatchObject({ open: true, race: FRESH_56 }));
-    await vi.waitFor(() => expect(r.replays().at(-1)?.job).toEqual({ pwrecPath: qualifying.file, basisOverride: [], laps: 56, sets: 'fresh' }), { timeout: 60_000 });
+    await vi.waitFor(() => expect(r.replays().at(-1)?.job).toEqual({ pwrecPath: qualifying.file, basisOverride: [], laps: 56, sets: 'fresh', conditions: IMPORTED, profiles: null }), { timeout: 60_000 });
     expect(r.replays().at(-1)?.priority).toBe('planning');
     // past the preview's throttle interval (maxHz 1): the newest preview goes out on the hub's tick
     await vi.waitFor(
@@ -262,7 +269,7 @@ describe('the planning runner (Task 7b rows a, b; C51, C54, C62d)', { timeout: 1
     const place = newPlace();
     await storeQualifying(place);
     const r = runnerOf(place, { planningJob: SLOW_JOB });
-    await r.runner.open({ feedId: F, qualifying: QUALIFYING, practice: [], race: FRESH_56 });
+    await r.runner.open({ feedId: F, qualifying: QUALIFYING, team: TEAM, practice: [], race: FRESH_56 });
     await vi.waitFor(() => expect(r.prepared().at(-1)).toMatchObject({ open: true, running: true }), { timeout: 60_000 });
 
     r.runner.close(F);
@@ -279,7 +286,7 @@ describe('the planning runner (Task 7b rows a, b; C51, C54, C62d)', { timeout: 1
     await storeQualifying(place);
     const practice = await storePractice(place, 501n, 9001);
     const r = runnerOf(place);
-    await r.runner.open({ feedId: F, qualifying: QUALIFYING, practice: [practice.ref], race: FRESH_56 });
+    await r.runner.open({ feedId: F, qualifying: QUALIFYING, team: TEAM, practice: [practice.ref], race: FRESH_56 });
     await vi.waitFor(() => expect(r.prepared().at(-1)).toMatchObject({ open: true }), { timeout: 60_000 });
     expect(r.runner.save(F, { name: 'morning' })).toEqual({ ok: true });
     const [plan] = new SavedPlanStore(place.dirs.root, silent).list(TEAM, TRACK);
@@ -297,7 +304,7 @@ describe('the planning runner (Task 7b rows a, b; C51, C54, C62d)', { timeout: 1
     const last = createLastChoiceStore(place.dirs.root, silent);
     last.write(TEAM, { trackId: TRACK, basis: { qualifying: { ref: QUALIFYING, at: confirmedAt } }, plan: { id: null, at: confirmedAt } });
     const r = runnerOf(place);
-    await r.runner.open({ feedId: F, qualifying: QUALIFYING, practice: [], race: FRESH_56 });
+    await r.runner.open({ feedId: F, qualifying: QUALIFYING, team: TEAM, practice: [], race: FRESH_56 });
     await vi.waitFor(() => expect(r.prepared().at(-1)).toMatchObject({ open: true }), { timeout: 60_000 });
     expect(r.runner.save(F, { name: 'morning' })).toEqual({ ok: true });
     const choice = last.read(TEAM, TRACK);
@@ -305,10 +312,10 @@ describe('the planning runner (Task 7b rows a, b; C51, C54, C62d)', { timeout: 1
     expect(choice?.plan.id).toEqual(expect.any(String));
   });
 
-  it('a qualifying the seat has not stored opens no round (C3: no throw)', async () => {
+  it('a qualifying not stored for the team opens no round (C3: no throw)', async () => {
     const place = newPlace();
     const r = runnerOf(place);
-    await r.runner.open({ feedId: F, qualifying: QUALIFYING, practice: [], race: FRESH_56 });
+    await r.runner.open({ feedId: F, qualifying: QUALIFYING, team: TEAM, practice: [], race: FRESH_56 });
     expect(r.replays()).toEqual([]);
     expect(r.prepared().filter((v) => v.open)).toEqual([]);
   });

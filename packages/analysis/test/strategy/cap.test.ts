@@ -15,7 +15,7 @@
 //   `scripts/gen-strategy-reference.ts` builds its input through it, restating none of the candidate step.
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { CarId, StrategyOutput } from '@pitwall/domain';
+import { IMPORTED, type CarId, type StrategyOutput } from '@pitwall/domain';
 import { createRng } from '@pitwall/engine/readers';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { strategyReferenceInput } from '../../../../scripts/gen-strategy-reference.ts';
@@ -158,7 +158,7 @@ describe('strategy: the planning cap (SP4.3e Task 3)', () => {
   it("with planning set, the parts' maxScenarioPolicies sum to the planning cap (6,000 by default), not the race's", () => {
     expect((STRATEGY_CONFIG.defaults as Record<string, unknown>).planningMaxScenarioPolicies, 'the default planning cap').toBe(6_000);
     const asOf = qualifyingAsOf(RACE(), { laps: 20, config: { maxScenarioPolicies: RACE_CAP, planningMaxScenarioPolicies: PLANNING_CAP } });
-    const input = planningInputFrom(asOf, { laps: 20, race: { laps: 20, sets: 'carried' }, prepared: NO_PLANS(OURS) });
+    const input = planningInputFrom(asOf, { laps: 20, race: { laps: 20, sets: 'carried', conditions: IMPORTED }, prepared: NO_PLANS(OURS) });
     expect(input.planning, 'a planning input').not.toBeNull();
     runPlanning(input, SEED);
     const read = calls.list.map((c) => ({ ...callOf(c), cap: c.cap, config: c.input.config.maxScenarioPolicies }));

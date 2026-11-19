@@ -1,5 +1,5 @@
 // UI state shared by the bridge and every window (spec 7.2, 7.5, 7.7, 7.8). JSON-safe.
-import type { CalibrationSource, CarId, FeedId, InsightCategory, PersonId, Policy, RaceAssumptions, SessionBasis, SessionRef, StoredSessionRef, Slot, TeamId } from '@pitwall/domain';
+import type { CalibrationSource, CarId, FeedId, InsightCategory, PersonId, Policy, RaceAssumptions, RoundRace, SessionBasis, SessionRef, StoredSessionRef, Slot, TeamId } from '@pitwall/domain';
 
 export type WindowId = string;
 export type Geometry = { screen: number; x: number; y: number; width: number; height: number };
@@ -80,9 +80,9 @@ export type UiAction =
   // The basis and the saved plans (C62, C62d, C76, SP4.3e spec §4.2–4.3).
   /** Chooses the feed's basis (a `basisChosen` decision on each of the team's feeds) and its plan: an id, `null` for none, `undefined` to keep it. */
   | { kind: 'basis.choose'; feedId: FeedId; basis: SessionBasis; plan: string | null | undefined }
-  /** Opens a planning round on a qualifying (of the feed's seat) and a practice basis. */
-  | { kind: 'plans.round.open'; feedId: FeedId; qualifying: SessionRef; practice: SessionRef[] }
-  /** The round's race assumptions (laps a whole number of at least 1). */
+  /** Opens a planning round on a qualifying (of `team`'s seat) and a practice basis; `race` omitted: the bridge's defaults. */
+  | { kind: 'plans.round.open'; feedId: FeedId; qualifying: SessionRef; team: TeamId; practice: SessionRef[]; race?: RoundRace }
+  /** The round's race assumptions (laps a whole number of at least 1; conditions imported or 1 to 64 entered samples). */
   | { kind: 'plans.race.set'; feedId: FeedId; race: RaceAssumptions }
   /** Saves the round's (or the race board's) slot choices as a saved plan of the team; `replaces` names the plan it overwrites. */
   | { kind: 'plans.save'; feedId: FeedId; name?: string; replaces?: string }

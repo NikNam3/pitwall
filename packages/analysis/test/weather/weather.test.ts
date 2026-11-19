@@ -1,5 +1,5 @@
 // `weather` (spec 3.3, ruling R6; SP4.3c Task 14, O3a): `weather.forecast` holds `rain-outlook`'s `samplesAhead` as given
-// (the forecast samples with `offsetMin ≥ 0`, sorted by `offsetMin`: `rain-outlook` reads the forecast, C43, so `weather`'s
+// (the forecast samples with `offsetMs ≥ 0`, sorted by `offsetMs`: `rain-outlook` reads the forecast, C43, so `weather`'s
 // own copy of the filter is deleted and its rows 1 and 2 moved to `rain-outlook`'s tests); `accuracy` is the live
 // state's `forecastAccuracy`; `firstRainIndex` is `rain-outlook`'s `firstRain.index` (C43: `weather` holds no rain
 // threshold of its own), `notApplicable` if none (C3). Every case computes through the unit's guarded view (C41);
@@ -15,9 +15,9 @@ import { WEATHER, type WeatherOutput } from '../../src/weather/index.ts';
 /** `rain-outlook`'s output with the new fields of Task 14 (the samples ahead and the highest chance per remaining lap). */
 type Outlook = RainOutlook & { samplesAhead: ForecastSample[]; maxChanceByLap: { lap: number; rainPct: number }[] };
 
-/** A forecast sample `offsetMin` minutes ahead with `rainPct` % rain chance; the other fields as a dry sample has them. */
-const sample = (offsetMin: number, rainPct: number): ForecastSample => ({
-  offsetMin,
+/** A forecast sample `minutes` ahead with `rainPct` % rain chance; the other fields as a dry sample has them. */
+const sample = (minutes: number, rainPct: number): ForecastSample => ({
+  offsetMs: minutes * 60_000,
   weather: 'overcast',
   trackTempC: 30,
   trackTempTrend: 'flat',
@@ -29,10 +29,10 @@ const sample = (offsetMin: number, rainPct: number): ForecastSample => ({
 /** `rain-outlook` without rain ahead, with these samples ahead. */
 const dry = (samplesAhead: ForecastSample[] = []): Outlook => ({ firstRain: unknown('notApplicable'), withinHorizon: false, samplesAhead, maxChanceByLap: [] });
 
-/** `rain-outlook` with its first rain at `index` (`offsetMin`, `rainPct` as given), known at `at`, with these samples ahead. */
-const rainAt = (samplesAhead: ForecastSample[], index: number, offsetMin: number, rainPct: number, at = 0): Outlook => ({
-  firstRain: known({ index, offsetMin, rainPct }, at),
-  withinHorizon: offsetMin <= 10,
+/** `rain-outlook` with its first rain at `index` (`minutes` ahead, `rainPct` as given), known at `at`, with these samples ahead. */
+const rainAt = (samplesAhead: ForecastSample[], index: number, minutes: number, rainPct: number, at = 0): Outlook => ({
+  firstRain: known({ index, offsetMs: minutes * 60_000, rainPct }, at),
+  withinHorizon: minutes <= 10,
   samplesAhead,
   maxChanceByLap: [],
 });
@@ -52,7 +52,7 @@ const weather = (
   );
 
 describe('weather', () => {
-  // rows 1 and 2 (sorted, offsetMin < 0 left out) moved to rain-outlook's samplesAhead (SP4.3c Task 14)
+  // rows 1 and 2 (sorted, offsetMs < 0 left out) moved to rain-outlook's samplesAhead (SP4.3c Task 14)
   it('1. samples are rain-outlook samplesAhead as given: weather sorts and filters nothing itself', () => {
     const ahead = [sample(0, 0), sample(5, 5), sample(15, 10), sample(30, 20)];
     // the live forecast holds more (out of order, one behind); weather publishes rain-outlook's reading of it

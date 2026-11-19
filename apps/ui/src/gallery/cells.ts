@@ -48,7 +48,7 @@ export function hasBaseline(cell: WidgetCell, entry: CellSource, defaultTheme: s
 }
 
 /** What a shell cell shows (Task 4, spec 10): the top bar under one of its cases, or a shell overlay. */
-export type ShellCellKind = 'topbar' | 'palette' | 'key-overview' | 'settings-popover' | 'inspector' | 'basis-picker';
+export type ShellCellKind = 'topbar' | 'palette' | 'key-overview' | 'settings-popover' | 'inspector' | 'basis-picker' | 'plan-save';
 
 /** One cell of the shell: the top bar, a shell overlay, or the panel overlays of `feed-status`. */
 export type ShellCell = {
@@ -74,11 +74,21 @@ export const SHELL_CELLS: readonly ShellCell[] = [
   { id: 'shell/topbar/battle', kind: 'topbar', detail: 'battle', hasBaseline: false },
   { id: 'shell/topbar/basis-none', kind: 'topbar', detail: 'basis-none', hasBaseline: false },
   { id: 'shell/topbar/basis-laps-differ', kind: 'topbar', detail: 'basis-laps-differ', hasBaseline: false },
+  { id: 'shell/topbar/planning-no-round', kind: 'topbar', detail: 'planning-no-round', hasBaseline: false },
+  { id: 'shell/topbar/planning-round', kind: 'topbar', detail: 'planning-round', hasBaseline: false },
+  { id: 'shell/topbar/planning-rebuilding', kind: 'topbar', detail: 'planning-rebuilding', hasBaseline: false },
+  { id: 'shell/topbar/planning-no-race-samples', kind: 'topbar', detail: 'planning-no-race-samples', hasBaseline: false },
   { id: 'shell/basis-picker/own-weekend', kind: 'basis-picker', detail: 'own-weekend', hasBaseline: true },
   { id: 'shell/basis-picker/none', kind: 'basis-picker', detail: 'none', hasBaseline: false },
   { id: 'shell/basis-picker/last-choice', kind: 'basis-picker', detail: 'last-choice', hasBaseline: false },
   { id: 'shell/basis-picker/rebuilding', kind: 'basis-picker', detail: 'rebuilding', hasBaseline: false },
   { id: 'shell/basis-picker/laps-differ', kind: 'basis-picker', detail: 'laps-differ', hasBaseline: false },
+  { id: 'shell/basis-picker/planning-texas-pair', kind: 'basis-picker', detail: 'planning-texas-pair', hasBaseline: false },
+  { id: 'shell/basis-picker/planning-two-teams', kind: 'basis-picker', detail: 'planning-two-teams', hasBaseline: false },
+  { id: 'shell/basis-picker/planning-stale', kind: 'basis-picker', detail: 'planning-stale', hasBaseline: false },
+  { id: 'shell/basis-picker/planning-none-stored', kind: 'basis-picker', detail: 'planning-none-stored', hasBaseline: false },
+  // SP4.3f Task 10: the name prompt "Save plan" (`plan-save-cases.ts`), no baseline (budget).
+  { id: 'shell/plan-save/one-saved', kind: 'plan-save', detail: 'one-saved', hasBaseline: false },
   { id: 'shell/palette', kind: 'palette', detail: 'font', hasBaseline: false },
   { id: 'shell/key-overview', kind: 'key-overview', hasBaseline: false },
   { id: 'shell/settings-popover/feed-status', kind: 'settings-popover', detail: 'feed-status', hasBaseline: false },

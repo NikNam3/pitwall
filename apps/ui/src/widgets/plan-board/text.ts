@@ -1,6 +1,6 @@
 // Wording of the plan board (mockup docs/design/2026-11-16-sp4.3d/plan-board.html, gen.mjs `TEXT.board`); text shared
 // with the kit lives in kit/text.ts. No sentence in the panel; hovers may be phrases.
-import type { McRow, Slot } from '@pitwall/domain';
+import type { McRow, Slot, Weather } from '@pitwall/domain';
 
 /** Column headers: the slot column has none, `START` (the planning round), `STOPS`, `E[POS]`, `ΔPOS`, `ΔTIME`. */
 export const headers = { start: 'START', stops: 'STOPS', ePos: 'E[POS]', dPos: 'ΔPOS', dTime: 'ΔTIME' } as const;
@@ -37,6 +37,12 @@ export const sets = { carried: 'carried', fresh: 'fresh' } as const;
 /** A prefilled slot's hover, and its button (`accept` keeps the prefill as the slot's plan). */
 export const prefillHover = 'prefilled from the DP: accept to keep it';
 export const accept = 'accept';
+/**
+ * SP4.3f Task 10 (the user's layout of 2026-11-18): the inputs line's last button, which opens the shell's name prompt;
+ * once the round is saved, `saved · <name>` in its place (the same button).
+ */
+export const save = 'save';
+export const saved = (name: string): string => `saved · ${name}`;
 /** The planning job runs (the computing mark on the inputs line). */
 export const computing = '…';
 export const computingHover = 'planning job running';
@@ -48,7 +54,24 @@ export const commandHover = {
   activate: 'plans.prepare.activate',
   remove: 'plans.prepare.remove',
   raceAccept: 'plan.accept',
+  saveRound: 'plans.save.pick',
 } as const;
+/**
+ * SP4.3f Task 7, the race's conditions (mockup plan-board-conditions.html, gen.mjs `CT`): the RAIN button's mark, the
+ * source label (`imported · Q 17 Nov` while no row is overridden, `edited` once one is), the editor's header and buttons,
+ * an overridden row's mark, the weather names.
+ */
+export const conditions = {
+  more: '▸',
+  imported: (day: string): string => `imported · Q ${day}`,
+  edited: 'edited',
+  head: { at: '+MIN', weather: 'WEATHER', rain: 'RAIN' },
+  reset: 'reset',
+  done: 'done',
+  add: '+ row',
+  percent: '%',
+  weather: { clear: 'clear', lightCloud: 'light cloud', overcast: 'overcast', lightRain: 'light rain', heavyRain: 'heavy rain', storm: 'storm' },
+} as const satisfies { weather: Record<Weather, string> } & Record<string, unknown>;
 /** A rejection without the bridge's message. */
 export const rejectedNoReason = 'rejected';
 export const rejected = (message: string): string => `rejected: ${message}`;

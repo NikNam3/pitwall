@@ -1,4 +1,4 @@
-// `asOfEnded(view, laps)` (SP4.3d2 Task 10, plan call 1; C62d): the planning base is the ended run's view, as of its end:
+// `asOfEnded(view, { laps })` (SP4.3d2 Task 10, plan call 1; C62d): the planning base is the ended run's view, as of its end:
 // `asOfNow(view)` with the situation at the session's end (`situationAtEnd`, over the projection, C26, C28), the ended
 // run's live values, and `fixed.totalLaps` the race laps the engineer entered, not the session's.
 import { describe, expect, it } from 'vitest';
@@ -30,7 +30,7 @@ describe('asOfEnded (Task 10, plan call 1)', () => {
     const { live, view } = ended();
     // the ended run's own situation is empty: `finish` closed every span (C18)
     expect(identity(view.situation.byMachine)).toEqual({});
-    const v = asOfEnded(view, 44);
+    const v = asOfEnded(view, { laps: 44 });
 
     // the situation at the end: the spans that were open at the last applied frame, presented open
     expect(Object.keys(identity(live.byMachine))).toContain('car-status');
@@ -49,7 +49,7 @@ describe('asOfEnded (Task 10, plan call 1)', () => {
   it('asOfEnded is asOfNow otherwise: the projection, frame now, the ended run\'s live values', () => {
     const { view } = ended();
     const now = asOfNow(view);
-    const v = asOfEnded(view, 44);
+    const v = asOfEnded(view, { laps: 44 });
     expect(v.frame).toBe('now');
     expect(v.history).toBe(view.history);
     expect(v.at).toBe(view.live.sessionTime);

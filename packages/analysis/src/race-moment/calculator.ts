@@ -90,8 +90,8 @@ export const raceMomentCalculator: QuickCalculator<RaceMomentOutput> = {
     // "rain is coming" is rain-outlook's judgement (C43): its first rain, when within its horizon
     const outlook = view.outputs.get(RAIN_OUTLOOK) as RainOutlook | undefined;
     if (outlook?.withinHorizon === true && outlook.firstRain.known) {
-      const { rainPct, offsetMin } = outlook.firstRain.value;
-      holding.push(['weather', { since: NOT_APPLICABLE, cause: { rule: 'forecastRain', params: { rainPct, offsetMin } } }]);
+      const { rainPct, offsetMs } = outlook.firstRain.value;
+      holding.push(['weather', { since: NOT_APPLICABLE, cause: { rule: 'forecastRain', params: { rainPct, offsetMs } } }]);
     }
 
     const { drsRangeMs } = RACE_INTERACTION_CONFIG.read(view);

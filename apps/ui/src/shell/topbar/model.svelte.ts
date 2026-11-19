@@ -1,6 +1,8 @@
 // What the top bar's segments read: the topics of one feed plus the global alert and settings topics.
-import type { AlertsState, BasisActive, CarOverview, FeedStatus, PlanningRoundState, ReplayControl, ReplayStatus, SessionInfo, UiAction, UiSettings } from '@pitwall/contracts';
+import type { AlertsState, BasisActive, CarOverview, FeedStatus, PlanningRoundState, ReplayControl, ReplayStatus, SessionInfo, TopicValue, UiAction, UiSettings } from '@pitwall/contracts';
 import type { MachineSpans } from '@pitwall/contracts';
+
+type PlansSessions = TopicValue<'plans.sessions'>;
 import type { CarId, DriversLinksValue, FeedId, Insight, Known, Moment, NeutralisedDetail, NeutralisedStage, OpenSpan, RaceMoment, TalkWindow } from '@pitwall/domain';
 import { untrack } from 'svelte';
 import type { EntryState, TopicStore } from '../../connection/topic-store.svelte.ts';
@@ -24,6 +26,7 @@ export class TopBarModel {
   readonly #settings: EntryState<UiSettings>;
   readonly #moment: EntryState<Known<RaceMoment>>;
   readonly #planning: EntryState<PlanningRoundState>;
+  readonly #stored: EntryState<PlansSessions>;
   readonly #weekend: EntryState<MachineSpans>;
   readonly #clock: EntryState<MachineSpans>;
   readonly #phases: Record<'race' | 'qualifying' | 'practice', EntryState<MachineSpans>>;
@@ -67,6 +70,8 @@ export class TopBarModel {
     this.#moment = take(store.acquire({ topic: 'raceMoment.current', params: {}, feedId }));
     // The planning round (SP4.3d spec §7): PLANNING while it is open.
     this.#planning = take(store.acquire({ topic: 'plans.prepared', params: {}, feedId }));
+    // The stored sessions (SP4.3f spec §4.4): the days of the round's picks, looked up by ref.
+    this.#stored = take(store.acquire({ topic: 'plans.sessions', params: {} }));
     // The basis and plan in use (SP4.3e spec §4.2): the `basis` segment.
     this.#basis = take(store.acquire({ topic: 'basis.active', params: {}, feedId }));
     this.#weekend = take(store.acquire({ topic: 'situation.weekendPhase', params: {}, feedId }));
@@ -119,6 +124,19 @@ export class TopBarModel {
   /** The feed's basis and plan (`basis.active`); undefined until published. */
   get basis(): BasisActive | undefined {
     return okValue(this.#basis);
+  }
+  /** True between sessions (SP4.3f spec §4.4): the feed has no `session.info`, or its session has ended (`feed.status`). */
+  get betweenSessions(): boolean {
+    return this.session === undefined || this.feed?.betweenSessions === true;
+  }
+  /** The feed's open planning round; undefined while none is open or `plans.prepared` has no value. */
+  get round(): Extract<PlanningRoundState, { open: true }> | undefined {
+    const round = okValue(this.#planning);
+    return round?.open === true ? round : undefined;
+  }
+  /** The stored practice and qualifying sessions (`plans.sessions`); undefined until published. */
+  get storedSessions(): PlansSessions | undefined {
+    return okValue(this.#stored);
   }
   /** True while the feed's planning round is open (`plans.prepared`, SP4.3d spec §7). */
   get planning(): boolean {

@@ -5,8 +5,8 @@
 // from it as gen.mjs does; ΔPOS (`diffPlan`, positive = good for us, R31), ΔTIME (`deltaPlanMs`), the ranks and
 // `bestPerStops` are written as `strategy` fills them (Task 5). The display computes none of it (C65).
 import type { Computed, MachineSpans, PlanningRoundState } from '@pitwall/contracts';
-import { carId, known, toSessionTime, unknown } from '@pitwall/domain';
-import type { McRow, McSource, NoiseCompound, Policy, SessionRef, Slot, StrategyCar } from '@pitwall/domain';
+import { carId, IMPORTED, known, toSessionTime, unknown } from '@pitwall/domain';
+import type { ForecastSample, McRow, McSource, NoiseCompound, Policy, RaceConditions, SessionRef, Slot, StrategyCar } from '@pitwall/domain';
 import type { GalleryEntry } from '../../kit/gallery-types.ts';
 import type { widget } from './widget.ts';
 
@@ -191,6 +191,56 @@ export const KUH_NUMBER = 12;
 export const WEEKEND = 'spa-2026';
 export const TEAM = 0;
 
+// ---- The race's conditions (SP4.3f Task 7; mockup docs/design/2026-11-18-sp4.3f/plan-board-conditions.html, gen.mjs
+// `CT`, `conditionLines`): the round's forecast rows (the qualifying's race samples as imported, or the user's entered
+// list, each row marked overridden where it differs from the imported row at its offset).
+
+/** A forecast sample of the race: its offset after the race start (ms), weather and rain chance; the game's temperatures. */
+export const sample = (offsetMs: number, weather: ForecastSample['weather'], rainPct: number, trackTempC = 31, airTempC = 24): ForecastSample => ({
+  offsetMs,
+  weather,
+  trackTempC,
+  trackTempTrend: 'flat',
+  airTempC,
+  airTempTrend: 'up',
+  rainPct,
+});
+/** The planning round's default rows: dry, the rain chance's highest `RAIN_PCT` at +30 min (the preview's `rainPct`). */
+export const DEFAULT_SAMPLES: ForecastSample[] = [sample(0, 'clear', 1), sample(1_800_000, 'lightCloud', RAIN_PCT, 30, 23)];
+/** The plan's two imported rows (Task 7 Step 1): `+0` clear 1 %, `+30` light rain 45 %. */
+const SAMPLE_0 = sample(0, 'clear', 1);
+const SAMPLE_30 = sample(1_800_000, 'lightRain', 45, 28, 21);
+export const SAMPLES: ForecastSample[] = [SAMPLE_0, SAMPLE_30];
+/**
+ * SP4.3f Task 11 (mockup round 2, gen.mjs `SAMPLES`): the 17 Nov Texas qualifying's nine race moments, +0 to +120 min:
+ * the conditions editor's full board, 2 input lines, the header, 9 rows and `save` = 13 rows.
+ */
+export const NINE_SAMPLES: ForecastSample[] = (
+  [[0, 'clear', 1], [5, 'clear', 1], [10, 'clear', 1], [15, 'clear', 1], [30, 'lightCloud', 12], [45, 'lightCloud', 12], [60, 'lightCloud', 12], [90, 'clear', 4], [120, 'clear', 4]] as const
+).map(([min, weather, rain]) => sample(min * 60_000, weather, rain));
+/** The highest rain chance of `SAMPLES` (the preview's `rainPct` for them). */
+export const SAMPLES_RAIN = 45;
+/** The qualifying's start (ISO): the source label reads `imported · Q 17 Nov`. */
+export const QUALIFYING_STARTED = '2026-11-17T12:00:00Z';
+
+/** The qualifying the round replays (SP4.3e spec §4.3). */
+export const QUALIFYING: SessionRef = { sessionUid: '7001', weekendId: WEEKEND };
+
+/** The open round's forecast (`plans.prepared` `RoundForecast`; the contracts index exports it only through `PlanningRoundState`). */
+export type RoundForecast = Extract<PlanningRoundState, { open: true }>['forecast'];
+
+/** The planning job's table for the plan's rows (RAIN 45 %), and with row 2 entered as 80 % (RAIN 80 %). */
+export const PLANNING_45 = board({ slots: [PLAN_G1], dp: PLAN_DP, active: null, prefill: PREFILL, planning: { gridPlace: known(OUR_PLACE, at), laps: LAPS, rainPct: known(SAMPLES_RAIN, at) } });
+export const PLANNING_80 = board({ slots: [PLAN_G1], dp: PLAN_DP, active: null, prefill: PREFILL, planning: { gridPlace: known(OUR_PLACE, at), laps: LAPS, rainPct: known(80, at) } });
+
+/** The round's forecast: `samples` with the indices in `overridden` marked; `null` rows: `unknown('notReceived')` (no race samples, none entered). */
+export const forecastOf = (samples: ForecastSample[] | null, overridden: readonly number[] = []): RoundForecast => ({
+  source: { ref: QUALIFYING, startedAt: QUALIFYING_STARTED },
+  rows: samples === null ? unknown('notReceived') : known(samples.map((s, i) => ({ sample: s, overridden: overridden.includes(i) })), at),
+});
+/** `SAMPLES` with row 2's rain entered as 80 % (its weather and temperatures kept). */
+export const SAMPLES_EDITED: ForecastSample[] = [SAMPLE_0, { ...SAMPLE_30, rainPct: 80 }];
+
 export type RoundSpec = {
   /** The race laps entered; `null` until entered. Default `LAPS`. */
   entered?: number | null;
@@ -199,23 +249,45 @@ export type RoundSpec = {
   /** KUH's prepared slots. Default G1 only. */
   slots?: Partial<Record<Slot, Policy>>;
   active?: Slot | null;
+  /** The round's forecast. Default `DEFAULT_SAMPLES`, imported. */
+  forecast?: RoundForecast;
+  /** The race's conditions as the round holds them. Default imported. */
+  conditions?: RaceConditions;
+  /** The saved plan the round was last saved as (SP4.3f Task 10); omitted (absent) by default. */
+  lastSaved?: SavedPlanEntry | null;
 };
 
-/** The qualifying the round replays (SP4.3e spec §4.3). */
-export const QUALIFYING: SessionRef = { sessionUid: '7001', weekendId: WEEKEND };
+/** A saved plan of the team on the track (`plans.prepared` `SavedPlanEntry`; the contracts index exports it). */
+export type SavedPlanEntry = Extract<PlanningRoundState, { open: true }>['saved'][number];
+/** The plan the round was saved as at 17:20 (SP4.3f Task 10, the user's layout). */
+export const LAST_SAVED: SavedPlanEntry = { id: 'b', name: 'Texas 18 Nov 17:20', savedAt: '2026-11-18T16:20:00Z' };
 
 /** `plans.prepared` while the round is open (`PlanningRoundState`): KUH's prepared plans, the race laps (entered or suggested). */
 export function round(spec: RoundSpec = {}): PlanningRoundState {
-  const { entered = LAPS, running = false, slots = { G1: policyOf(PLAN_G1.stops, PLAN_G1.start) }, active = null } = spec;
+  const {
+    entered = LAPS,
+    running = false,
+    slots = { G1: policyOf(PLAN_G1.stops, PLAN_G1.start) },
+    active = null,
+    forecast = forecastOf(DEFAULT_SAMPLES),
+    conditions = IMPORTED,
+    lastSaved,
+  } = spec;
   return {
     open: true,
     qualifying: QUALIFYING,
     practice: [],
-    race: { laps: entered, sets: 'carried' },
+    race: { laps: entered, sets: 'carried', conditions },
     team: TEAM,
+    trackId: 0,
+    playerCar: KUH,
+    teammateCar: null,
+    forecast,
+    rebuilding: false,
     cars: { [KUH]: { raceNumber: KUH_NUMBER, slots, active } },
     running,
-    saved: [],
+    saved: lastSaved === undefined || lastSaved === null ? [] : [lastSaved],
+    ...(lastSaved !== undefined && { lastSaved }),
   };
 }
 /** `plans.prepared` outside the planning round: no saved plans of the team on the track (ruling R15). */
@@ -250,6 +322,19 @@ export const cases = {
   planningNoLaps: { prepared: round({ entered: null }) },
   // `source: planning` outside the planning round: the kit's notApplicable mark.
   planningNotApplicable: { plan: plan(), prepared: CLOSED },
+  // SP4.3f Task 7 (mockup plan-board-conditions.html): the qualifying's race samples imported, RAIN 45 % with
+  // `imported · Q 17 Nov`; a click on RAIN opens the rows (window-local, C73).
+  planningConditions: { preview: preview(PLANNING_45), prepared: round({ forecast: forecastOf(SAMPLES) }) },
+  // Row 2's rain entered as 80 %: the label `edited`, the row bright with its `edited` mark.
+  planningConditionsEdited: {
+    preview: preview(PLANNING_80),
+    prepared: round({ forecast: forecastOf(SAMPLES_EDITED, [1]), conditions: { kind: 'entered', samples: SAMPLES_EDITED } }),
+  },
+  // No race samples in the qualifying, none entered (C3, Review focus 3): RAIN the missing mark, never 0 %; no job result.
+  planningNoConditions: { prepared: round({ forecast: forecastOf(null) }) },
+  // SP4.3f Task 10 (the user's layout, 2026-11-18): the round saved as `Texas 18 Nov 17:20`: the planning line ends
+  // with `saved · Texas 18 Nov 17:20` in place of `save`. No baseline (budget).
+  planningSaved: { preview: preview(), prepared: round({ lastSaved: LAST_SAVED }) },
 } satisfies NonNullable<GalleryEntry<typeof widget>['cases']>;
 
 /** Per case, the panel options it is drawn with (the planning cases as the plan workbook sets them: `source: planning`). */
@@ -258,9 +343,17 @@ export const caseOptions = {
   planningComputing: { source: 'planning' },
   planningNoLaps: { source: 'planning' },
   planningNotApplicable: { source: 'planning' },
+  planningConditions: { source: 'planning' },
+  planningConditionsEdited: { source: 'planning' },
+  planningNoConditions: { source: 'planning' },
+  planningSaved: { source: 'planning' },
 } satisfies NonNullable<GalleryEntry<typeof widget>['caseOptions']>;
 
-/** The gallery's fit sizes: the two minimums (compact 37×7, full 82×13) plus a larger one per mode. */
+/**
+ * The gallery's fit sizes: the two minimums (compact 37×7, full 82×13) plus a larger one per mode. SP4.3f Task 11: the
+ * full minimum's 13 rows hold the planning round's two input lines, the header, its four slot lines, the DP rule, four
+ * DP lines and the last line (`save`) with no blank (layout.test.ts); 100×16 puts its three spare rows above `save`.
+ */
 export const fit = [
   { mode: 'compact', cols: 37, rows: 7 },
   { mode: 'compact', cols: 50, rows: 9 },

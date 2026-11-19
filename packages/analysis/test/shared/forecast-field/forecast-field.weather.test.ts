@@ -17,7 +17,7 @@ const g = generated();
 
 /** A perfect forecast on the game's grid: `rainPct` per offset in minutes. */
 const forecast = (byOffset: [number, number][]): ForecastSample[] =>
-  byOffset.map(([offsetMin, rainPct]) => ({ offsetMin, weather: rainPct >= 25 ? 'lightRain' : 'overcast', trackTempC: 30, trackTempTrend: 'flat', airTempC: 22, airTempTrend: 'flat', rainPct }));
+  byOffset.map(([minutes, rainPct]) => ({ offsetMs: minutes * 60_000, weather: rainPct >= 25 ? 'lightRain' : 'overcast', trackTempC: 30, trackTempTrend: 'flat', airTempC: 22, airTempTrend: 'flat', rainPct }));
 
 /** Dry now and at 5 minutes, raining from the 10-minute sample on. */
 const SAMPLES: [number, number][] = [

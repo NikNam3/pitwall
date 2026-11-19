@@ -16,9 +16,9 @@ export const noRain: Known<number> = unknown('notApplicable');
 
 /** One sample; temperatures flat unless given. */
 export const sample = (
-  offsetMin: number, weather: Weather, rainPct: number, trackTempC: number, airTempC: number,
+  minutes: number, weather: Weather, rainPct: number, trackTempC: number, airTempC: number,
   trackTempTrend: Trend = 'flat', airTempTrend: Trend = 'flat',
-): ForecastSample => ({ offsetMin, weather, rainPct, trackTempC, trackTempTrend, airTempC, airTempTrend });
+): ForecastSample => ({ offsetMs: minutes * 60_000, weather, rainPct, trackTempC, trackTempTrend, airTempC, airTempTrend });
 
 export const forecast = (samples: ForecastSample[], firstRainIndex: Known<number> = noRain, accuracy: WeatherForecast['accuracy'] = 'perfect'): WeatherForecast =>
   ({ samples, accuracy, firstRainIndex });

@@ -1,6 +1,7 @@
 // The rebuild service's interface (C61, SP4.3e spec §4.3 item 3a; Task 0c, built in a later task): it brings stored
 // sessions to the current rules version before they are used, one session at a time, off the thread that applies
 // frames, by priority; the planning round's replay (C62d) runs in the same worker and queue.
+import type { ProfileSnapshot, RaceConditions } from '@pitwall/domain';
 import type { SessionKey } from './db.ts';
 
 /** Who waits, highest first: a confirmed basis of a running session, a planning replay, any other first read. */
@@ -8,9 +9,12 @@ export type RebuildPriority = 'runningBasis' | 'planning' | 'firstRead';
 
 /**
  * A planning round's replay (C62d): the qualifying's recording replayed to its end with `basisOverride` as its basis in
- * place of the recording's basis sidecar and its `basisChosen` decisions, and the race assumptions (`laps`, `sets`).
+ * place of the recording's basis sidecar and its `basisChosen` decisions, the race assumptions (`laps`, `sets`,
+ * `conditions`: the race's forecast in place of the qualifying's) and `profiles`, the round's profile snapshot (the
+ * current one of the qualifying's linked drivers, C62c) in place of the recording's profiles sidecar. `laps` `null`
+ * (not known yet, C3): the replay reads the qualifying's race samples only and builds no job input.
  */
-export type ReplayJob = { pwrecPath: string; basisOverride: SessionKey[]; laps: number; sets: 'carried' | 'fresh' };
+export type ReplayJob = { pwrecPath: string; basisOverride: SessionKey[]; laps: number | null; sets: 'carried' | 'fresh'; conditions: RaceConditions; profiles: ProfileSnapshot | null };
 
 export type RebuildService = {
   /**

@@ -1,7 +1,7 @@
 // The shell's own commands and their default keys (spec 7.7). Widgets cannot register commands in the MVP.
 import { ackToken, type ActionOutcome, type LinkGroup, type PanelSpec, type ReplayControl, type UiAction, type UiSettings } from '@pitwall/contracts';
 import { PLAN_SLOTS, type CarId, type FeedId, type Insight, type Policy, type Slot } from '@pitwall/domain';
-import type { WidgetCommandArgs, WidgetCommandId } from '../../kit/command-types.ts';
+import type { ActionCommandId, WidgetCommandArgs, WidgetCommandId } from '../../kit/command-types.ts';
 import * as text from '../../kit/text.ts';
 import type { Inspection } from '../inspector/inspection.svelte.ts';
 import { THEMES, type ThemeVariant } from '../../theme/index.ts';
@@ -17,7 +17,9 @@ export type ShellOverlay =
   | { kind: 'saveAs' }
   | { kind: 'picker'; group: number }
   /** The basis and plan picker of the window's feed (SP4.3e spec §4.2). */
-  | { kind: 'basis' };
+  | { kind: 'basis' }
+  /** The name prompt "Save plan" of the window's feed's planning round (SP4.3f spec §4.4). */
+  | { kind: 'planSave' };
 
 /** What the commands need from the shell. */
 export type CommandContext = {
@@ -256,13 +258,13 @@ export function planSlotCommands(
 export function planningCommands(send: (action: UiAction) => Promise<ActionOutcome>): ArgCommand[] {
   const g = text.commandGroups.planning;
   const t = text.commandTitles;
-  const make = <K extends WidgetCommandId>(id: K, title: string): ArgCommand<K> => ({
+  const make = <K extends ActionCommandId>(id: K, title: string): ArgCommand<K> => ({
     id,
     title,
     group: g,
     run: (args: WidgetCommandArgs<K>) => send({ kind: id, ...args } as Extract<UiAction, { kind: K }>),
   });
-  const all: { [K in WidgetCommandId]: ArgCommand<K> } = {
+  const all: { [K in ActionCommandId]: ArgCommand<K> } = {
     'plans.race.set': make('plans.race.set', t.plansPrepareLaps),
     'plans.prepare.save': make('plans.prepare.save', t.plansPrepareSave),
     'plans.prepare.accept': make('plans.prepare.accept', t.plansPrepareAccept),
@@ -326,6 +328,15 @@ export function sessionEndCommand(ctx: Pick<CommandContext, 'send'> & { feedId: 
  */
 export function basisPickCommand(ctx: Pick<CommandContext, 'open'>): Command {
   return { id: 'basis.pick', title: text.commandTitles.basisPick, group: text.commandGroups.session, run: () => ctx.open({ kind: 'basis' }) };
+}
+
+/**
+ * `plans.save.pick` (SP4.3f spec §4.4, C72): opens the name prompt "Save plan" of the window's feed's planning round; the
+ * prompt's Save sends `plans.save` (C73). Registered only while the feed's `plans.prepared` is open; the plan board's
+ * `save` invokes it through its panel (C74).
+ */
+export function planSavePickCommand(ctx: Pick<CommandContext, 'open'>): Command {
+  return { id: 'plans.save.pick', title: text.commandTitles.planSavePick, group: text.commandGroups.session, run: () => ctx.open({ kind: 'planSave' }) };
 }
 
 /** `layout.edit.toggle`: turns the window's edit mode (window-local, C73) on or off. */

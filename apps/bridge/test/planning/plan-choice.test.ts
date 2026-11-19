@@ -7,7 +7,7 @@
 //
 // Assumes `apps/bridge/src/planning/plan-choice.ts` (new in the implement phase): the import fails until then.
 import { describe, expect, it } from 'vitest';
-import { carId, type CarId, type DecisionRecord, type FrameNumber, type GivenDecision, type Policy, type SavedPlan } from '@pitwall/domain';
+import { carId, IMPORTED, type CarId, type DecisionRecord, type FrameNumber, type GivenDecision, type Policy, type SavedPlan } from '@pitwall/domain';
 import { planDecisionsOf } from '../../src/planning/plan-choice.ts';
 
 const POLICY_A: Policy = { startCompound: 'medium', stops: [{ lap: 20, compound: 'hard' }] };
@@ -22,7 +22,7 @@ const plan = (cars: SavedPlan['cars']): SavedPlan => ({
   team: 0,
   trackId: 15,
   savedAt: '2026-11-18T09:40:00.000Z',
-  computedOn: { basis: { practice: [], qualifying: { sessionUid: '2745686922413294831', weekendId: '1321303722' } }, race: { laps: 56, sets: 'carried' } },
+  computedOn: { basis: { practice: [], qualifying: { sessionUid: '2745686922413294831', weekendId: '1321303722' } }, race: { laps: 56, sets: 'carried', conditions: IMPORTED }, forecast: [], profiles: null },
   cars,
 });
 

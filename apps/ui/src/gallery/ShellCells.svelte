@@ -9,6 +9,8 @@
   import * as text from '../kit/text.ts';
   import type { ResolvedLink } from '../kit/types.ts';
   import BasisPicker from '../shell/basis/BasisPicker.svelte';
+  import PlanSavePicker from '../shell/plans/PlanSavePicker.svelte';
+  import { PLAN_SAVE_CASES, type PlanSaveCaseName } from './plan-save-cases.ts';
   import Inspector from '../shell/inspector/Inspector.svelte';
   import { Inspection } from '../shell/inspector/inspection.svelte.ts';
   import { DEFAULT_KEYS, defaultCommands } from '../shell/commands/default-commands.ts';
@@ -61,6 +63,8 @@
 
   const basisStore = (name: BasisCaseName): TopicStore =>
     new TopicStore(new GalleryConnection(base ?? [], BASIS_CASES[name], [{ feedId: FEED, kind: 'udp', label: 'gallery', team: null }]));
+  const planSaveStore = (name: PlanSaveCaseName): TopicStore =>
+    new TopicStore(new GalleryConnection(base ?? [], PLAN_SAVE_CASES[name], [{ feedId: FEED, kind: 'udp', label: 'gallery', team: null }]));
 
   const topBarStore = (name: keyof typeof TOP_BAR_CASES): TopicStore =>
     new TopicStore(
@@ -149,6 +153,10 @@
     {:else if cell.kind === 'basis-picker'}
       <ShellCell id={cell.id} {theme} baseline={cell.hasBaseline} cols={stageCols(cell.kind)} rows={OVERLAY_ROWS} overlay>
         <BasisPicker store={basisStore(cell.detail as BasisCaseName)} feedId={FEED} send={() => Promise.resolve({ ok: true })} onClose={noop} />
+      </ShellCell>
+    {:else if cell.kind === 'plan-save'}
+      <ShellCell id={cell.id} {theme} baseline={cell.hasBaseline} cols={stageCols(cell.kind)} rows={OVERLAY_ROWS} overlay>
+        <PlanSavePicker store={planSaveStore(cell.detail as PlanSaveCaseName)} feedId={FEED} send={() => Promise.resolve({ ok: true })} onClose={noop} />
       </ShellCell>
     {/if}
   {/each}

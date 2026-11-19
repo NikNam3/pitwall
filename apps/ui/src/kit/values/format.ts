@@ -169,6 +169,9 @@ export const formatCelsius = (c: Celsius): string => (Number.isFinite(c) ? `${wh
 /** Minutes ahead as a signed whole number, no unit, `5` -> `+5`. */
 export const formatMinutesAhead = (min: number): string => (Number.isFinite(min) ? `+${whole(min)}` : '');
 
+/** A forecast offset in ms as signed whole minutes, no unit, `300_000` -> `+5`. */
+export const formatOffsetMinutes = (ms: Ms): string => formatMinutesAhead(ms / 60_000);
+
 /** Percentage to whole numbers, `17.6` -> `18%`. */
 export const formatPercent = (p: Percent): string => (Number.isFinite(p) ? formatPct(p) : '');
 
@@ -300,6 +303,10 @@ export const formatDay = (iso: string): string => {
   const d = Number(day);
   return month === undefined || d < 1 || d > 31 ? '' : `${day} ${month}`;
 };
+
+/** A wall-clock moment as its local day and time of day, `18 Nov 17:20`, `4 Nov 09:05`. Only for names the user keeps (a saved plan's). */
+export const formatDayTime = (at: Date): string =>
+  `${at.getDate()} ${MONTHS[at.getMonth()] ?? ''} ${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}`;
 
 // gap chart
 

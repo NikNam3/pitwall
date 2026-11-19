@@ -4,7 +4,7 @@
 // start compound; A active), each car's part at the config's `maxScenarioPolicies` within the strategy job's per-part
 // budget (`JOB_MS` of `strategy.budget.test.ts`, 7 s; ruling R29) single thread. The cap is
 // a count (C2): a miss lowers the count, never raises the budget. Best of warm passes (docs/testing.md).
-import type { CarId, Policy, Slot } from '@pitwall/domain';
+import { IMPORTED, type CarId, type Policy, type Slot } from '@pitwall/domain';
 import { createRng } from '@pitwall/engine/readers';
 import { describe, expect, it } from 'vitest';
 import { longRace } from '../../../../test-support/builders/long-race.ts';
@@ -34,7 +34,7 @@ describe('planning budget (SP4.3d2 Task 9)', () => {
     const cap = STRATEGY_CONFIG.defaults.maxScenarioPolicies;
     const asOf = qualifyingAsOf(longRace(), { laps: LAPS, sets: LONG_RACE_OURS_SETS, config: { maxScenarioPolicies: cap } });
     const prepared = Object.fromEntries(OURS.map((car) => [car, { saved: { ...SLOTS }, active: 'A' }])) as PreparedRound;
-    const input = structuredClone(planningInputFrom(asOf, { laps: LAPS, race: { laps: LAPS, sets: 'carried' }, prepared }));
+    const input = structuredClone(planningInputFrom(asOf, { laps: LAPS, race: { laps: LAPS, sets: 'carried', conditions: IMPORTED }, prepared }));
     expect(input.start.known, input.start.known ? '' : input.start.reason).toBe(true);
     const parts = planningParts().split(input);
     expect(parts.map((p) => p.planCar), 'one part per our car').toEqual([...OURS]);

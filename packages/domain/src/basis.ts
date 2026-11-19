@@ -5,6 +5,7 @@
 import type { Policy } from './forecast.ts';
 import type { SessionUid, TeamId, TrackId } from './ids.ts';
 import type { Slot } from './plan-slots.ts';
+import type { ForecastSample } from './session.ts';
 
 /** A stored session as a basis names it: its session uid and weekend id; the feed's seat picks its player car (C62). */
 export type SessionRef = { sessionUid: SessionUid; weekendId: string };
@@ -35,8 +36,26 @@ export type BasisSidecar = {
   plans?: { at: number; frame: number; plan: { id: string; name: string; laps: number } | null }[];
 };
 
-/** A planning round's race assumptions (C62d): the race laps and whether its tyre sets carry over from the qualifying. */
-export type RaceAssumptions = { laps: number; sets: 'carried' | 'fresh' };
+/** The race's forecast a round computes with (C62d): the qualifying's race samples as imported, or the user's rows. */
+/**
+ * One forecast row the user entered: the time after the race start, the weather and the rain chance. The temperatures
+ * are no planning input and not entered: the bridge takes them from the nearest imported row, else the qualifying's own
+ * at its end (never a made-up value, C3).
+ */
+export type EnteredSample = Pick<ForecastSample, 'offsetMs' | 'weather' | 'rainPct'>;
+export type RaceConditions = { kind: 'imported' } | { kind: 'entered'; samples: EnteredSample[] };
+
+/** The imported race conditions. */
+export const IMPORTED: RaceConditions = { kind: 'imported' };
+
+/**
+ * A round's race assumptions: `laps` is `null` while the bridge has no suggestion and none was entered (C3: never a
+ * made-up number); the round runs no planning job until it is known.
+ */
+export type RoundRace = { laps: number | null; sets: RaceAssumptions['sets']; conditions: RaceConditions };
+
+/** A planning round's race assumptions (C62d): the race laps, whether its tyre sets carry over from the qualifying, and its forecast. */
+export type RaceAssumptions = { laps: number; sets: 'carried' | 'fresh'; conditions: RaceConditions };
 
 /** One car's prepared plans of the planning round (SP4.3d spec §7.4): by race number, its slots and its active slot. */
 export type PreparedCar = { raceNumber: number; slots: Partial<Record<Slot, Policy>>; active: Slot | null };
@@ -51,6 +70,7 @@ export type SavedPlan = {
   team: TeamId;
   trackId: TrackId;
   savedAt: string;
-  computedOn: { basis: SessionBasis; race: RaceAssumptions };
+  /** `forecast`: the samples the plan was computed with (`[]` when unknown); `profiles`: the snapshot's fingerprint, `null` without one. */
+  computedOn: { basis: SessionBasis; race: RaceAssumptions; forecast: ForecastSample[]; profiles: string | null };
   cars: PreparedCar[];
 };

@@ -1,0 +1,38 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>SP4.3f · the top bar between sessions</title><style>
+@font-face { font-family:'JetBrains Mono'; src:url('../../../apps/ui/src/theme/font/JetBrainsMono%5Bwght%5D.woff2') format('woff2'); font-weight:100 800; font-display:block; }
+:root { --pw-text:#d9dbe0; --pw-textDim:#8d9199; --pw-textFaint:#5c6068; --pw-ownCar:#ffffff; --pw-bg:#000000; --pw-bgPanel:#000000; --pw-bgBand:#141416; --pw-bgRowBand:#0d0d0f; --pw-border:#25272c; --pw-grid:#1c1d21; --pw-dropTarget:#5c606859; --pw-focus:#8d9199; --pw-critical:#ff5c5c; --pw-warning:#f0b429; --pw-best:#b06cff; --pw-personalBest:#3fcf70; --pw-flagYellow:#ffd23f; --pw-flagGreen:#3fcf70; --pw-flagRed:#ff5c5c; --pw-flagBlue:#5ca8ff; --pw-compoundSoft:#d9dbe0; --pw-compoundMedium:#d9dbe0; --pw-compoundHard:#d9dbe0; --pw-series1:oklch(0.72 0.09 250); --pw-series2:oklch(0.72 0.09 40); --pw-series3:oklch(0.72 0.09 150); --pw-series4:oklch(0.72 0.09 310); --pw-series5:oklch(0.72 0.09 95); --pw-series6:oklch(0.72 0.09 200); --pw-font:'JetBrains Mono', monospace; --pw-font-px:14px; --pw-line:1.4; }
+* { box-sizing:border-box; margin:0; padding:0; }
+body { background:var(--pw-bg); color:var(--pw-text); font-family:var(--pw-font); font-size:var(--pw-font-px); line-height:var(--pw-line); font-variant-ligatures:none; padding:24px 28px 56px; }
+h1 { font-size:var(--pw-font-px); font-weight:600; margin-bottom:4px; }
+h2 { font-size:var(--pw-font-px); font-weight:500; color:var(--pw-textDim); margin:26px 0 8px; }
+.note { color:var(--pw-textDim); max-width:150ch; margin-bottom:10px; }
+.note b { color:var(--pw-text); font-weight:500; }
+.row { display:flex; gap:24px; align-items:flex-start; flex-wrap:wrap; } .row > div { width:min-content; }
+.panel { background:var(--pw-bgPanel); display:inline-block; vertical-align:top; outline:1px dashed var(--pw-border); }
+.ph { display:flex; gap:1ch; padding:0 1ch; background:var(--pw-bgBand); white-space:nowrap; color:var(--pw-textFaint); }
+.ph .t { color:var(--pw-textDim); } .ph .sp { flex:1; } .ph .lk { color:var(--pw-text); } .ph .w { color:var(--pw-warning); }
+pre { font-family:inherit; font-size:inherit; line-height:inherit; padding:0 1ch; white-space:pre; }
+pre svg { display:inline-block; vertical-align:top; }
+.cap { color:var(--pw-textFaint); margin:4px 0 0; min-width:44ch; }
+.d { color:var(--pw-textDim); } .f { color:var(--pw-textFaint); } .w { color:var(--pw-warning); }
+.hi { color:var(--pw-ownCar); font-weight:700; }
+.band { background:var(--pw-bgRowBand); display:inline-block; width:100%; }
+.me { color:var(--pw-ownCar); font-weight:700; box-shadow:inset 2px 0 0 var(--pw-text); display:inline-block; width:100%; }
+.sel { background:var(--pw-bgBand); display:inline-block; width:100%; }
+.tip { text-decoration:underline dotted var(--pw-textFaint); }
+.fld { box-shadow:inset 0 0 0 1px var(--pw-border); color:var(--pw-text); }
+.fld.on { box-shadow:inset 0 0 0 1px var(--pw-focus); color:var(--pw-ownCar); }
+.fld.bad { box-shadow:inset 0 0 0 1px var(--pw-warning); color:var(--pw-warning); }
+.btn { color:var(--pw-textDim); }
+.topbar { display:flex; justify-content:space-between; background:var(--pw-bgBand); padding:0 1ch; white-space:nowrap; width:150ch; color:var(--pw-textDim); }
+.topbar .side { display:flex; gap:2ch; } .topbar .t { color:var(--pw-text); }
+pre .t { color:var(--pw-text); } .d .fld { color:var(--pw-textDim); } .t .fld.on { color:var(--pw-ownCar); }
+.overlay { background:var(--pw-bgPanel); outline:1px solid var(--pw-border); display:inline-block; vertical-align:top; }
+.overlay .oh { background:var(--pw-bgBand); padding:0 1ch; color:var(--pw-text); }</style></head><body><h1>SP4.3f · the top bar between sessions</h1>
+<div class="note">With no session running, the top bar's basis segment becomes the <b>planning</b> segment (spec §4.4): the open round's practice and qualifying days, the race laps, the sets and the range of the rain chance over the forecast rows. A click runs <code>basis.pick</code>. Without a round: a quiet <code>Plan…</code> button. Formatting only (C65).</div>
+<h2>A round open</h2><div class="topbar"><div class="side"><span class="t">plan</span><span class="btn">Planning · P 17 Nov · Q 17 Nov · 56 laps · fresh · rain 1–12 %</span><span>calibration <span class="t">league</span></span></div><div class="side"><span>feed between sessions</span><span>realism on</span></div></div>
+<h2>Conditions edited</h2><div class="topbar"><div class="side"><span class="t">plan</span><span class="btn">Planning · P 17 Nov · Q 17 Nov · 56 laps · fresh · rain 1–70 % <span class="d">edited</span></span><span>calibration <span class="t">league</span></span></div><div class="side"><span>feed between sessions</span><span>realism on</span></div></div>
+<h2>A pick being rebuilt (C61)</h2><div class="topbar"><div class="side"><span class="t">plan</span><span class="btn">Planning · P 04 Nov · Q 04 Nov · rebuilding 1/2</span><span>calibration <span class="t">league</span></span></div><div class="side"><span>feed between sessions</span><span>realism on</span></div></div>
+<h2>No race samples, none entered (C3)</h2><div class="topbar"><div class="side"><span class="t">plan</span><span class="btn">Planning · P 17 Nov · Q 17 Nov · 56 laps · fresh · rain <span class="f">…</span></span><span>calibration <span class="t">league</span></span></div><div class="side"><span>feed between sessions</span><span>realism on</span></div></div>
+<h2>No round (a fresh bridge)</h2><div class="topbar"><div class="side"><span class="t">plan</span><span class="btn">Plan…</span></div><div class="side"><span>no feed data</span><span>realism on</span></div></div>
+</body></html>

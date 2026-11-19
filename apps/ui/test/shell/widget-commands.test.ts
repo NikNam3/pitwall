@@ -58,7 +58,7 @@ describe('the panel path: a widget invokes a declared command by id with argumen
     await mountProbe(invoke);
     await click('laps');
     expect(invoke).toHaveBeenCalledTimes(1);
-    expect(invoke).toHaveBeenCalledWith('plans.race.set', { feedId: FEED, race: { laps: 52, sets: 'carried' } });
+    expect(invoke).toHaveBeenCalledWith('plans.race.set', { feedId: FEED, race: { laps: 52, sets: 'carried', conditions: { kind: 'imported' } } });
     await vi.waitFor(() => expect(screen.getByTestId('outcome').textContent).toBe('invalid'));
   });
 

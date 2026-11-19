@@ -47,14 +47,14 @@ describe('the planning commands (call 10, C72)', () => {
 
   it('each, invoked with its arguments, sends its uiAction', async () => {
     const { sent, registry } = withSend();
-    await registry.invoke('plans.race.set', { feedId: FEED, race: { laps: 44, sets: 'fresh' } });
+    await registry.invoke('plans.race.set', { feedId: FEED, race: { laps: 44, sets: 'fresh', conditions: { kind: 'imported' } } });
     await registry.invoke('plans.prepare.save', { feedId: FEED, carId: CAR, slot: 'A', policy: POLICY });
     await registry.invoke('plans.prepare.accept', { feedId: FEED, carId: CAR, slot: 'B', policy: POLICY });
     await registry.invoke('plans.prepare.remove', { feedId: FEED, carId: CAR, slot: 'A' });
     await registry.invoke('plans.prepare.activate', { feedId: FEED, carId: CAR, slot: 'B' });
     await registry.invoke('plan.accept', { feedId: FEED, carId: CAR, slot: 'A', policy: POLICY });
     expect(sent).toEqual([
-      { kind: 'plans.race.set', feedId: FEED, race: { laps: 44, sets: 'fresh' } },
+      { kind: 'plans.race.set', feedId: FEED, race: { laps: 44, sets: 'fresh', conditions: { kind: 'imported' } } },
       { kind: 'plans.prepare.save', feedId: FEED, carId: CAR, slot: 'A', policy: POLICY },
       { kind: 'plans.prepare.accept', feedId: FEED, carId: CAR, slot: 'B', policy: POLICY },
       { kind: 'plans.prepare.remove', feedId: FEED, carId: CAR, slot: 'A' },
@@ -65,12 +65,12 @@ describe('the planning commands (call 10, C72)', () => {
 
   it('resolves with the uiAction\'s outcome (C73)', async () => {
     const { registry } = withSend({ ok: false, reason: 'invalid', message: 'laps' });
-    await expect(registry.invoke('plans.race.set', { feedId: FEED, race: { laps: 0, sets: 'carried' } })).resolves.toEqual({ ok: false, reason: 'invalid', message: 'laps' });
+    await expect(registry.invoke('plans.race.set', { feedId: FEED, race: { laps: 0, sets: 'carried', conditions: { kind: 'imported' } } })).resolves.toEqual({ ok: false, reason: 'invalid', message: 'laps' });
   });
 
   it('invoking an id without a registered command resolves notSupported and sends nothing', async () => {
     const registry = new CommandRegistry();
-    await expect(registry.invoke('plans.race.set', { feedId: FEED, race: { laps: 44, sets: 'carried' } })).resolves.toEqual({ ok: false, reason: 'notSupported' });
+    await expect(registry.invoke('plans.race.set', { feedId: FEED, race: { laps: 44, sets: 'carried', conditions: { kind: 'imported' } } })).resolves.toEqual({ ok: false, reason: 'notSupported' });
   });
 
   it('a removed command is gone', async () => {
@@ -132,9 +132,9 @@ describe('WindowShell registers the planning commands (C72)', () => {
     }
     const actions = () => ctx.connection.sent.flatMap((m) => (m.type === 'uiAction' ? [m.action] : []));
     registry.run(`plans.prepare.remove.7.${PLAN_SLOTS[0]}`);
-    void registry.invoke('plans.race.set', { feedId: FEED, race: { laps: 44, sets: 'carried' } });
+    void registry.invoke('plans.race.set', { feedId: FEED, race: { laps: 44, sets: 'carried', conditions: { kind: 'imported' } } });
     await tick();
     expect(actions()).toContainEqual({ kind: 'plans.prepare.remove', feedId: FEED, carId: 7, slot: PLAN_SLOTS[0] });
-    expect(actions()).toContainEqual({ kind: 'plans.race.set', feedId: FEED, race: { laps: 44, sets: 'carried' } });
+    expect(actions()).toContainEqual({ kind: 'plans.race.set', feedId: FEED, race: { laps: 44, sets: 'carried', conditions: { kind: 'imported' } } });
   });
 });

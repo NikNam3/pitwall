@@ -12,7 +12,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { Policy, SavedPlan } from '@pitwall/domain';
+import { IMPORTED, type Policy, type SavedPlan } from '@pitwall/domain';
 import { SavedPlanStore } from '../../src/planning/saved-plans.ts';
 
 const MERCEDES = 0;
@@ -42,7 +42,9 @@ const plan = (o: Partial<SavedPlan> & Pick<SavedPlan, 'id'>): SavedPlan => ({
   savedAt: '2026-11-18T09:40:00.000Z',
   computedOn: {
     basis: { practice: [{ sessionUid: '100', weekendId: '7' }], qualifying: { sessionUid: '102', weekendId: '7' } },
-    race: { laps: 56, sets: 'fresh' },
+    race: { laps: 56, sets: 'fresh', conditions: IMPORTED },
+    forecast: [],
+    profiles: null,
   },
   cars: [
     { raceNumber: 64, slots: { A: POLICY_A, B: POLICY_B }, active: 'B' },
@@ -65,7 +67,9 @@ describe('the saved plans (Task 7b row c; C62d, C70)', () => {
     expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual(morning);
     expect((JSON.parse(readFileSync(file, 'utf8')) as SavedPlan).computedOn).toEqual({
       basis: { practice: [{ sessionUid: '100', weekendId: '7' }], qualifying: { sessionUid: '102', weekendId: '7' } },
-      race: { laps: 56, sets: 'fresh' },
+      race: { laps: 56, sets: 'fresh', conditions: IMPORTED },
+    forecast: [],
+    profiles: null,
     });
     // atomic: no temp file left behind
     expect(readdirSync(join(dir, 'plans', String(MERCEDES)))).toEqual(['texas-morning.json']);
@@ -73,6 +77,37 @@ describe('the saved plans (Task 7b row c; C62d, C70)', () => {
     const again = new SavedPlanStore(dir, log);
     expect(again.list(MERCEDES, AUSTIN)).toEqual([morning]);
     expect(again.read('texas-morning')).toEqual(morning);
+    expect(log.warn).not.toHaveBeenCalled();
+  });
+
+  it('(SP4.3f) computedOn.forecast, computedOn.profiles and entered conditions read back as saved', () => {
+    const dir = dataDir();
+    const log = warnLog();
+    const samples: SavedPlan['computedOn']['forecast'] = [
+      { offsetMs: 0, weather: 'lightCloud', trackTempC: 31, trackTempTrend: 'flat', airTempC: 24, airTempTrend: 'up', rainPct: 12 },
+      { offsetMs: 1_800_000, weather: 'lightRain', trackTempC: 28, trackTempTrend: 'down', airTempC: 22, airTempTrend: 'flat', rainPct: 80 },
+    ] as SavedPlan['computedOn']['forecast'];
+    const rainy = plan({
+      id: 'rainy',
+      computedOn: { ...plan({ id: 'x' }).computedOn, race: { laps: 56, sets: 'fresh', conditions: { kind: 'entered', samples } }, forecast: samples, profiles: 'fingerprint-of-the-snapshot' },
+    });
+    new SavedPlanStore(dir, log).save(rainy);
+    const again = new SavedPlanStore(dir, log);
+    expect(again.read('rainy')).toEqual(rainy);
+    expect(again.list(MERCEDES, AUSTIN)).toEqual([rainy]);
+    expect(log.warn).not.toHaveBeenCalled();
+  });
+
+  it('(SP4.3f) an SP4.3e file without forecast and profiles reads as [] and null', () => {
+    const dir = dataDir();
+    const log = warnLog();
+    const old = plan({ id: 'old' });
+    const { forecast: _forecast, profiles: _profiles, ...computedOn } = old.computedOn;
+    // as SP4.3e wrote it: no conditions in the race, no forecast, no profiles
+    const { conditions: _conditions, ...race } = computedOn.race;
+    mkdirSync(join(dir, 'plans', String(MERCEDES)), { recursive: true });
+    writeFileSync(fileOf(dir, MERCEDES, 'old'), JSON.stringify({ ...old, computedOn: { ...computedOn, race } }));
+    expect(new SavedPlanStore(dir, log).read('old')).toEqual(old);
     expect(log.warn).not.toHaveBeenCalled();
   });
 

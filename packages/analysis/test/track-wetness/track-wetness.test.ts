@@ -171,7 +171,7 @@ describe('track-wetness (spec 5.1)', () => {
   it('the weather forecast moves only the prediction step, never a measurement', () => {
     const view = viewWithOutputs(wet, byLap35(wet));
     const forecast = (rainPct: number): ForecastSample[] =>
-      [0, 5, 10, 15].map((offsetMin) => ({ offsetMin, weather: 'lightRain', trackTempC: 28, trackTempTrend: 'flat', airTempC: 20, airTempTrend: 'flat', rainPct }));
+      [0, 5, 10, 15].map((minutes) => ({ offsetMs: minutes * 60_000, weather: 'lightRain', trackTempC: 28, trackTempTrend: 'flat', airTempC: 20, airTempTrend: 'flat', rainPct }));
     const withRain = (rainPct: number): EngineView => ({ ...view, live: { ...view.live, session: { ...view.live.session, forecast: forecast(rainPct) } } });
     const low = calc.compute(withRain(5));
     const high = calc.compute(withRain(95));

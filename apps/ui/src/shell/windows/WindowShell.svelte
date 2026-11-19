@@ -1,6 +1,6 @@
 <script lang="ts">
   // One window (spec 7.1-7.3): the active workbook's panels for this window, in a dock, saved back to the bridge.
-  import { ackToken, type FeedInfo, type LinkGroup, type PanelSpec, type ReplayControl, type SessionInfo, type TopicValue, type UiAction, type UiSettings } from '@pitwall/contracts';
+  import { ackToken, type FeedInfo, type LinkGroup, type PanelSpec, type PlanningRoundState, type ReplayControl, type SessionInfo, type TopicValue, type UiAction, type UiSettings } from '@pitwall/contracts';
   import { ourCars, type CalibrationActiveValue, type FeedId, type Insight } from '@pitwall/domain';
   import { getAllContexts, mount, onDestroy, unmount, untrack, type Component, type ComponentProps } from 'svelte';
   import type { EntryState, TopicStore } from '../../connection/topic-store.svelte.ts';
@@ -24,6 +24,7 @@
     planCommands,
     planningCommands,
     planningSlotCommands,
+    planSavePickCommand,
     planSlotCommands,
     sessionEndCommand,
     windowCommands,
@@ -36,6 +37,7 @@
   import Palette from '../commands/Palette.svelte';
   import { CommandRegistry } from '../commands/registry.ts';
   import BasisPicker from '../basis/BasisPicker.svelte';
+  import PlanSavePicker from '../plans/PlanSavePicker.svelte';
   import { mountDock, type DockHandle, type PanelView } from '../docking/index.ts';
   import { INITIAL_WINDOW, type Host } from '../host/host.ts';
   import { Inspection } from '../inspector/inspection.svelte.ts';
@@ -159,6 +161,23 @@
     return () => held.forEach(({ held }) => held.release());
   });
   const feeds = $derived<FeedSession[]>(feedSessions.map(({ info, state }) => ({ info, session: state.status === 'ok' ? state.value : undefined })));
+
+  // The default feed's planning round (SP4.3f spec §4.4): between sessions its cars give the panels their link.
+  let prepared = $state.raw<EntryState<PlanningRoundState> | undefined>();
+  $effect(() => {
+    const feed = defaultFeed;
+    if (feed === undefined) {
+      prepared = undefined;
+      return;
+    }
+    const held = untrack(() => store.acquire({ topic: 'plans.prepared', params: {}, feedId: feed }));
+    prepared = held.state;
+    return () => held.release();
+  });
+  const openRound = $derived.by(() => {
+    const value = prepared?.status === 'ok' ? prepared.value : undefined;
+    return value?.open === true ? value : undefined;
+  });
 
   // The calibration the default feed's run uses (SP4.1a spec 3.3): its commands and the top bar's segment.
   let calibrationActive = $state.raw<EntryState<CalibrationActiveValue> | undefined>();
@@ -306,6 +325,8 @@
       ? []
       : calibrationCommands(trackSets, { send, feedId: defaultFeed, pick: () => openGarage('calibration-panel') })),
     ...(defaultFeed === undefined ? [] : [sessionEndCommand({ send, feedId: defaultFeed }), basisPickCommand(commandContext)]),
+    // "Save plan…" while the feed's planning round is open (SP4.3f spec §4.4); the plan board's `save` invokes it.
+    ...(defaultFeed === undefined || openRound === undefined ? [] : [planSavePickCommand(commandContext)]),
     ...planRegistry,
     ...(editing
       ? [
@@ -397,7 +418,7 @@
             return groups === undefined ? undefined : groupOf(current().linkGroup);
           },
           get link() {
-            const next = resolveLink(groupOf(current().linkGroup), sessionInfo, defaultFeed, feeds);
+            const next = resolveLink(groupOf(current().linkGroup), sessionInfo, defaultFeed, feeds, openRound);
             if (!sameLink(link, next)) link = next;
             return link;
           },
@@ -570,6 +591,8 @@
     {/if}
   {:else if overlay?.kind === 'basis' && defaultFeed !== undefined}
     <BasisPicker {store} feedId={defaultFeed} {send} onClose={closeOverlay} />
+  {:else if overlay?.kind === 'planSave' && defaultFeed !== undefined}
+    <PlanSavePicker {store} feedId={defaultFeed} {send} onClose={closeOverlay} />
   {/if}
 </div>
 

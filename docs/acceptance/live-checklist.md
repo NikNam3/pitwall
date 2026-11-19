@@ -85,6 +85,18 @@ Follow-ups noted by the SP4.3e run (not built):
 - `kit/actions.ts` and the Panel's default `send` still answer ok outside a panel (Task 8 left them).
 - From the 2026-11-17 test (handoff §5): a hand-pinned link group stays pinned across sessions; activating a slot right after saving fails ("slot is empty"); each calibration edit blocks 12–14 s; SPI/PLA instead of person names; ERS/DRS in practice long runs; garage panel without a session; calibration SC pit loss 40.3 s.
 
+
+## 8. SP4.3f: planning out of session (2026-11-18)
+
+- [ ] **Case B, a fresh bridge** (no game running, no session since start): the top bar shows `Plan…`; it opens "Plan a race": track, the qualifying per team (`17 Nov · Mercedes #64 #2`), that team's practice; Confirm opens the round; Ctrl+O to the `plan` workbook: the boards show #64 and #2 (link groups from the round).
+- [ ] On the board: laps, sets, and `RAIN 12% ▸ imported · Q <day>`; open the rows, change one: `edited`, the plans recompute; reset returns to the imported rows.
+- [ ] Save from the board (`save`) or the palette (`Save plan…`): name prefilled, or overwrite one of the team's plans on the track; the board then shows `saved · <name>`; after a bridge restart the plan is listed.
+- [ ] Race start (live): the top bar shows `Plan: <name>` (the team's last saved plan on the track); a plan chosen during the race is in the recording: a replay of that race shows it from the same moment.
+- [ ] **A new lobby:** if the race runs in a new lobby whose weather was not set to match the practice and qualifying, the imported forecast is wrong: override it on the plan board (`RAIN ▸`) with the lobby's weather before saving the plan. The race's own forecast reaches the in-race strategy at the race's first packets anyway; only the plan made beforehand rests on the override.
+- [ ] Case A: at a live qualifying's end the round opens with every pick preselected (that qualifying, its basis's practice, the team's cars, laps suggested, `carried`, the qualifying's race forecast).
+
+Left for later: the compact plan board has no planning line (a window under about 1440×900 renders the `plan` workbook's boards compact: no LAPS/SETS/RAIN, so a case B round without suggested laps cannot start from the panel; user, 2026-11-18). Spec §7: the long qualifying format (Q1/Q2/Q3 as separate sessions: P11–P20 in slot order); a one-shot car with an invalid lap placed in slot order; planning without a qualifying; the picker's `last choice` mark; storing only the slots a session uses (storage keeps the game's 22).
+
 ## Results
 
 Record the date, the counts per topic and the flashback outcome here after the run.

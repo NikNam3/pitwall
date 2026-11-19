@@ -10,7 +10,16 @@ import { createInterface } from 'node:readline';
 import { _electron as electron } from '@playwright/test';
 import type { ElectronApplication, Page } from '@playwright/test';
 import { preview } from 'vite';
-import type { BridgeHandle, GalleryHandle, GalleryOptions, ImportRecordingOptions, LaunchPitwallOptions, PitwallApp, StartBridgeOptions } from './harness-contract.ts';
+import type {
+  BridgeHandle,
+  GalleryHandle,
+  GalleryOptions,
+  ImportRecordingOptions,
+  LaunchPitwallOptions,
+  NoSessionBridgeOptions,
+  PitwallApp,
+  StartBridgeOptions,
+} from './harness-contract.ts';
 
 const REPO_ROOT = path.resolve(import.meta.dirname, '../../..');
 const UI_DIR = path.join(REPO_ROOT, 'apps/ui');
@@ -27,6 +36,8 @@ const HOST = '127.0.0.1';
 const GALLERY_WINDOW = { width: 1600, height: 1000 };
 /** How long a bridge, a window, a port or the gallery's lazy parts may take. */
 const START_TIMEOUT_MS = 30_000;
+/** How long a page may take to report its new viewport. */
+const RESIZE_TIMEOUT_MS = 5_000;
 /** How long a bridge has to exit after SIGTERM before it gets SIGKILL. */
 const STOP_TIMEOUT_MS = 5_000;
 const POLL_MS = 100;
@@ -34,7 +45,7 @@ const POLL_MS = 100;
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
 /** A TCP port nothing listens on right now. */
-async function freePort(): Promise<number> {
+export async function freePort(): Promise<number> {
   const server = createServer();
   await new Promise<void>((resolve) => server.listen(0, HOST, resolve));
   const address = server.address();
@@ -102,8 +113,15 @@ export async function openGallery(options: GalleryOptions = {}): Promise<Gallery
   }
 }
 
-/** A recording by fixture name: a committed segment (`fixtures/segments/<name>.pwrec.gz`) or a full recording's id in `PITWALL_FIXTURES_DIR`. */
+/**
+ * A recording by fixture name: a committed segment (`fixtures/segments/<name>.pwrec.gz`) or a full recording's id in
+ * `PITWALL_FIXTURES_DIR`; an absolute path (a synthetic recording a spec wrote) is taken as it is.
+ */
 function recordingPath(name: string): string {
+  if (path.isAbsolute(name)) {
+    if (!existsSync(name)) throw new Error(`no recording ${name}`);
+    return name;
+  }
   const index = JSON.parse(readFileSync(path.join(REPO_ROOT, 'fixtures/index.json'), 'utf8')) as {
     fixtures: Array<{ id: string; file: string }>;
     segments: Array<{ file: string }>;
@@ -128,7 +146,12 @@ process.once('exit', () => {
  * `params` only there); resolves once it prints `listening`. Its stdout and stderr lines go to `lines`.
  */
 function spawnBridge(file: string, env: Record<string, string>, lines: string[]): Promise<ChildProcess> {
-  const child = spawn(process.execPath, [BRIDGE_CLI, 'replay', file, '--paused'], {
+  return spawnCli(['replay', file, '--paused'], env, lines);
+}
+
+/** `pitwall <args>` as a bridge: resolves once it prints `listening`; its stdout and stderr lines go to `lines`. */
+function spawnCli(args: string[], env: Record<string, string>, lines: string[]): Promise<ChildProcess> {
+  const child = spawn(process.execPath, [BRIDGE_CLI, ...args], {
     cwd: REPO_ROOT,
     env: childEnv({ PITWALL_WS_LOG_LEVEL: 'debug', ...env }),
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -169,12 +192,12 @@ async function stopChild(child: ChildProcess): Promise<void> {
 }
 
 /**
- * A bridge replaying `recording` paused, on a free `PITWALL_WS_PORT`. `log()` holds its stdout and stderr lines:
+ * A bridge replaying `recording` paused, on `options.wsPort` or a free `PITWALL_WS_PORT`. `log()` holds its stdout and stderr lines:
  * the pino lines (`ws subscribe` among them) go to stderr, `listening` to stdout.
  */
 export async function startBridge(options: StartBridgeOptions): Promise<BridgeHandle> {
   const file = recordingPath(options.recording);
-  const wsPort = await freePort();
+  const wsPort = options.wsPort ?? (await freePort());
   const env: Record<string, string> = {
     PITWALL_WS_PORT: String(wsPort),
     PITWALL_DATA_DIR: options.dataDir,
@@ -189,6 +212,32 @@ export async function startBridge(options: StartBridgeOptions): Promise<BridgeHa
       await stopChild(child);
       lines = [];
       child = await spawnBridge(file, env, lines);
+    },
+    log: () => [...lines],
+  };
+}
+
+/**
+ * A bridge with no session (SP4.3f Task 8): `pitwall live` on `options.udpPort` (bound to 127.0.0.1) and
+ * `options.wsPort`, on `options.dataDir`, the WebSocket log at debug as `startBridge`'s. Nothing is sent to its UDP
+ * port until the spec sends it; `restart()` starts `pitwall live` again on the same ports and data dir.
+ */
+export async function startBridgeNoSession(options: NoSessionBridgeOptions): Promise<BridgeHandle> {
+  const env: Record<string, string> = {
+    PITWALL_WS_PORT: String(options.wsPort),
+    PITWALL_UDP_PORT: String(options.udpPort),
+    PITWALL_UDP_HOST: HOST,
+    PITWALL_DATA_DIR: options.dataDir,
+  };
+  let lines: string[] = [];
+  let child = await spawnCli(['live'], env, lines);
+  return {
+    wsPort: options.wsPort,
+    stop: () => stopChild(child),
+    restart: async () => {
+      await stopChild(child);
+      lines = [];
+      child = await spawnCli(['live'], env, lines);
     },
     log: () => [...lines],
   };
@@ -221,6 +270,14 @@ export async function launchPitwall(options: LaunchPitwallOptions): Promise<Pitw
     return url.includes('?') && new URLSearchParams(url.slice(url.indexOf('?'))).get('window') === id;
   };
   return {
+    // Playwright's viewport (Chromium's device metrics), not the BrowserWindow's size: a hidden window that is resized
+    // draws no more frames, so Playwright's stability check before a click would never finish.
+    resize: async (id, size) => {
+      const page = app.windows().find((p) => isWindow(p, id));
+      if (page === undefined) throw new Error(`no window "${id}" to resize`);
+      await page.setViewportSize(size);
+      await page.waitForFunction(({ width, height }) => window.innerWidth === width && window.innerHeight === height, size, { timeout: RESIZE_TIMEOUT_MS });
+    },
     window: async (id) => {
       for (const deadline = Date.now() + START_TIMEOUT_MS; Date.now() < deadline; await sleep(POLL_MS)) {
         const page = app.windows().find((p) => isWindow(p, id));
