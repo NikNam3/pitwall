@@ -308,9 +308,17 @@ const CT = { // the plan board's new wording (its text.ts)
 const SAMPLES = [[0, 'clear', 1], [5, 'clear', 1], [10, 'clear', 1], [15, 'clear', 1], [30, 'lightCloud', 12], [45, 'lightCloud', 12], [60, 'lightCloud', 12], [90, 'clear', 4], [120, 'clear', 4]];
 const PSP = { ...PI, sets: 'SETS' };
 const rainMax = (s) => Math.max(...s.map((x) => x[2]));
-/** The board's first line in the planning round, with the RAIN button and the conditions' source label. */
-const inputsLine = ({ rain, label, open = false }) =>
-  ` ${span('f', PSP.grid)} P3   ${span('f', PSP.laps)} ${f('56')}   ${span('f', PSP.sets)} ${f('fresh ▾')}   ${span('f', PSP.rain)} ${span(open ? 'fld on' : 'btn', `${rain} ${CT.rainMore}`)} ${span('d', label)}   ${span('f', PSP.n)} 1200`;
+/**
+ * The board's first lines in the planning round (user, 2026-11-19, after the final gate's fit.spec: `save` at the end
+ * of one line overflowed the full size): line 1 what the user sets (GRID, LAPS, SETS), line 2 what is imported or
+ * computed (the conditions' source label, N, RAIN with its button; `computing` at its end while the job runs).
+ */
+const inputsLines = ({ rain, label, open = false }) => [
+  ` ${span('f', PSP.grid)} P3   ${span('f', PSP.laps)} ${f('56')}   ${span('f', PSP.sets)} ${f('fresh ▾')}`,
+  ` ${label ? span('d', label) + '   ' : ''}${span('f', PSP.n)} 1200   ${span('f', PSP.rain)} ${span(open ? 'fld on' : 'btn', `${rain} ${CT.rainMore}`)}`,
+];
+/** The board's last line in the planning round: `save` (or `saved · <name>`), next to a rejection when there is one. */
+const saveLine = (saved) => ` ${span('btn', saved ? `saved · ${saved}` : 'save')}`;
 const pct = (n) => `${n}%`;
 /** The conditions editor (window-local, C73): one line per sample, the overridden ones bright, reset and done. */
 function conditionLines(samples, { edited = new Map(), bad } = {}) {
@@ -327,19 +335,19 @@ function conditionLines(samples, { edited = new Map(), bad } = {}) {
   return lines;
 }
 const BOARD = { cols: Math.max(PLAN_FULL.cols, 84), rows: 13 };
-const boardWith = (first, rest, state = 'TEXAS', gap = true) => { const lines = gap ? [first, '', ...rest] : [first, ...rest]; if (lines.length > BOARD.rows) throw new Error(`board: ${lines.length} rows`); return panel(B.title + ' · race', { ...BOARD, link: '1 · #64', state, lines }); };
+const boardWith = (first, rest, state = 'TEXAS', gap = true, last = saveLine()) => { const top = gap ? [...first, '', ...rest] : [...first, ...rest]; const lines = last === null ? top : [...top, ...Array(Math.max(0, BOARD.rows - top.length - 1)).fill(''), last]; if (lines.length > BOARD.rows) throw new Error(`board: ${lines.length} rows`); return panel(B.title + ' · race', { ...BOARD, link: '1 · #64', state, lines }); };
 const planRows = pl.lines.slice(0, 10);
 
 page2('plan-board-conditions.html', 'SP4.3f · plan board: the race conditions', `
-<div class="note">The planning round's first line gains the race's <b>conditions</b> (spec §4.3–4.4, C62d). <code>RAIN 12% ▸</code> is the highest rain chance of the forecast rows; a click opens the rows <b>in place of the plan rows</b> (window-local, C73), one line per forecast moment the game sent for the race (minutes after the race start, its weather and rain chance). Changing a field commits one <code>plans.race.set</code> with the whole list; the round replans. The label after RAIN says where the rows come from: <code>imported · Q 17 Nov</code> while none is changed, <code>edited</code> after. Colour only to highlight (memory): imported rows dim, a changed row bright with its changed field outlined. Only the full size edits; compact shows the line's rain only. Plan rows: SP4.3d's sample, illustrative.</div>
+<div class="note"><b>Round 2 (user, 2026-11-19):</b> the inputs are two lines: what you set (GRID, LAPS, SETS), then what is imported or computed (the conditions' source, N, RAIN); <code>save</code> / <code>saved · &lt;name&gt;</code> is the board's last line (with a rejection when there is one). The planning round's inputs gain the race's <b>conditions</b> (spec §4.3–4.4, C62d). <code>RAIN 12% ▸</code> is the highest rain chance of the forecast rows; a click opens the rows <b>in place of the plan rows</b> (window-local, C73), one line per forecast moment the game sent for the race (minutes after the race start, its weather and rain chance). Changing a field commits one <code>plans.race.set</code> with the whole list; the round replans. The label after RAIN says where the rows come from: <code>imported · Q 17 Nov</code> while none is changed, <code>edited</code> after. Colour only to highlight (memory): imported rows dim, a changed row bright with its changed field outlined. Only the full size edits; compact shows the line's rain only. Plan rows: SP4.3d's sample, illustrative.</div>
 <h2>Planning round · imported, rows closed · full ${BOARD.cols}×${BOARD.rows}</h2>
-<div class="row">${fig(boardWith(inputsLine({ rain: pct(rainMax(SAMPLES)), label: CT.imported('17 Nov') }), planRows), 'the qualifying’s race forecast as the default (the best source when the race runs in the same lobby)')}</div>
+<div class="row">${fig(boardWith(inputsLines({ rain: pct(rainMax(SAMPLES)), label: CT.imported('17 Nov') }), planRows, 'TEXAS', false), 'the qualifying’s race forecast as the default (the best source when the race runs in the same lobby)')}${fig(boardWith(inputsLines({ rain: pct(rainMax(SAMPLES)), label: CT.imported('17 Nov') }), planRows, 'TEXAS', false, saveLine('Texas race 18 Nov')), 'saved: <code>saved · &lt;name&gt;</code> on the last line; a click saves again (the shell’s name prompt)')}</div>
 <h2>Rows open · imported</h2>
-<div class="row">${fig(boardWith(inputsLine({ rain: pct(12), label: CT.imported('17 Nov'), open: true }), conditionLines(SAMPLES), 'TEXAS', false), 'nine moments, +0 to +120 min; the temperatures stay the game’s (no planning input, spec §3)')}</div>
+<div class="row">${fig(boardWith(inputsLines({ rain: pct(12), label: CT.imported('17 Nov'), open: true }), conditionLines(SAMPLES), 'TEXAS', false), 'nine moments, +0 to +120 min; the temperatures stay the game’s (no planning input, spec §3)')}</div>
 <h2>Rows open · two changed (a new lobby with rain later)</h2>
-<div class="row">${fig(boardWith(inputsLine({ rain: pct(70), label: CT.edited, open: true }), conditionLines(SAMPLES, { edited: new Map([[5, { w: 'lightRain', r: 55 }], [6, { w: 'heavyRain', r: 70 }]]) }), 'TEXAS', false), '+45 and +60 changed: bright, the changed fields outlined, <code>edited</code> on the row and in the label; <b>reset</b> returns to the imported rows')}${fig(boardWith(inputsLine({ rain: pct(12), label: CT.edited, open: true }), conditionLines(SAMPLES, { bad: 4 }), 'TEXAS', false), 'a rejected value (the bridge validates, C73): amber, the reason on hover, never stored')}</div>
+<div class="row">${fig(boardWith(inputsLines({ rain: pct(70), label: CT.edited, open: true }), conditionLines(SAMPLES, { edited: new Map([[5, { w: 'lightRain', r: 55 }], [6, { w: 'heavyRain', r: 70 }]]) }), 'TEXAS', false), '+45 and +60 changed: bright, the changed fields outlined, <code>edited</code> on the row and in the label; <b>reset</b> returns to the imported rows')}${fig(boardWith(inputsLines({ rain: pct(12), label: CT.edited, open: true }), conditionLines(SAMPLES, { bad: 4 }), 'TEXAS', false), 'a rejected value (the bridge validates, C73): amber, the reason on hover, never stored')}</div>
 <h2>No race samples in the qualifying (C3)</h2>
-<div class="row">${fig(boardWith(inputsLine({ rain: span('f tip', CT.missing, 'not received yet'), label: '' }), [span('f tip', ' ' + TEXT.unknownMark.insufficientData, 'no forecast: enter the race’s conditions')]), 'rain unknown, never 0 %; the round plans once rows are entered')}${fig(boardWith(inputsLine({ rain: span('f', CT.missing), label: '', open: true }), [`${span('f', ` ${padL(CT.head.at, 4)}  ${padR(CT.head.weather, 14)}  ${padR(CT.head.rain, 16)}`)}${span('btn', CT.done)}`, ` ${padL('+0', 4)}  ${f(padR('', 11) + ' ▾')}  ${f('   ')} %`, `       ${span('btn', CT.add)}`], 'TEXAS', false), 'entering: one row at +0, more with <b>+ row</b>')}</div>
+<div class="row">${fig(boardWith(inputsLines({ rain: span('f tip', CT.missing, 'not received yet'), label: '' }), [span('f tip', ' ' + TEXT.unknownMark.insufficientData, 'no forecast: enter the race’s conditions')]), 'rain unknown, never 0 %; the round plans once rows are entered')}${fig(boardWith(inputsLines({ rain: span('f', CT.missing), label: '', open: true }), [`${span('f', ` ${padL(CT.head.at, 4)}  ${padR(CT.head.weather, 14)}  ${padR(CT.head.rain, 16)}`)}${span('btn', CT.done)}`, ` ${padL('+0', 4)}  ${f(padR('', 11) + ' ▾')}  ${f('   ')} %`, `       ${span('btn', CT.add)}`], 'TEXAS', false), 'entering: one row at +0, more with <b>+ row</b>')}</div>
 <h2>Compact</h2>
 <div class="row">${fig(panel(B.title, { cols: BOARD_COMPACT.cols, rows: 2, link: '1 · #64', lines: [` ${span('f', PSP.rain)} 12%  ${span('d', 'imported')}`] }), 'compact: the rain and its source only; edit in the full size')}</div>
 `);
