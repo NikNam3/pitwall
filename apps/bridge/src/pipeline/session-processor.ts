@@ -294,19 +294,14 @@ export class SessionProcessor {
 
   /**
    * The set of needed calculators changed: the running scheduler takes the new set, and the calculators that became
-   * needed are evaluated at once against the current state (ruling R9), so a late subscriber gets a value without
-   * waiting for the next frame, or after the session ended. Before the runner starts, nothing to do yet.
+   * needed are evaluated at once against the current state (ruling R9, C49), so a late subscriber gets a value without
+   * waiting for the next frame, or after the session ended. A job whose trigger became needed is started then, for the
+   * frame the feed is at. Before the runner starts, nothing to do yet.
    */
   demandChanged(): void {
     if (!this.#started) return;
-    const scheduler = this.#scheduler;
-    const needed = [...this.#o.needed()];
-    const added = scheduler.setNeeded(needed);
-    // Job triggers, and what only they read, sit the pass out: a job runs for a frame (`computedFor`), so the next due
-    // frame starts it, and an event-cadence trigger is not used up before then.
-    const forTopics = scheduler.withDependencies(needed.filter((id) => this.#o.jobs?.isTrigger(id) !== true));
-    const only = new Set(added.filter((id) => forTopics.has(id)));
-    if (only.size > 0) this.#evaluateNow(only);
+    const added = this.#scheduler.setNeeded(this.#o.needed());
+    if (added.length > 0) this.#evaluateNow(new Set(added));
     // A newly subscribed situation topic gets its machine's spans at once (C49).
     for (const { error, topic } of this.#o.publisher.publishNewSituations(this.#spansOf)) {
       this.#o.log.error({ feedId: this.#o.feedId, sessionUid: this.#uid, topic, err: error }, 'topic not published on a demand change, marked errored');
@@ -541,6 +536,9 @@ export class SessionProcessor {
     for (const { error, topic } of unpublished) {
       log.error({ feedId, sessionUid: this.#uid, ...(topic && { topic }), err: error }, 'topic not published on a demand change, marked errored');
     }
+    // A job whose trigger ran starts for the frame the feed is at (C49); once the session ended its runs are dropped
+    // (`FeedJobs.sessionEnded`), so none starts.
+    if (this.#endedPhase === undefined) this.#o.jobs?.triggerRan(scheduled, { lap: state.cars[state.playerCar]?.timing.lap ?? 0, frameId: state.lastFrameId });
   }
 
   /** Logs every failure of the frame and dumps the frame once, with the first failure. */
