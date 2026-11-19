@@ -211,6 +211,13 @@ export const DEFAULT_SAMPLES: ForecastSample[] = [sample(0, 'clear', 1), sample(
 const SAMPLE_0 = sample(0, 'clear', 1);
 const SAMPLE_30 = sample(1_800_000, 'lightRain', 45, 28, 21);
 export const SAMPLES: ForecastSample[] = [SAMPLE_0, SAMPLE_30];
+/**
+ * SP4.3f Task 11 (mockup round 2, gen.mjs `SAMPLES`): the 17 Nov Texas qualifying's nine race moments, +0 to +120 min:
+ * the conditions editor's full board, 2 input lines, the header, 9 rows and `save` = 13 rows.
+ */
+export const NINE_SAMPLES: ForecastSample[] = (
+  [[0, 'clear', 1], [5, 'clear', 1], [10, 'clear', 1], [15, 'clear', 1], [30, 'lightCloud', 12], [45, 'lightCloud', 12], [60, 'lightCloud', 12], [90, 'clear', 4], [120, 'clear', 4]] as const
+).map(([min, weather, rain]) => sample(min * 60_000, weather, rain));
 /** The highest rain chance of `SAMPLES` (the preview's `rainPct` for them). */
 export const SAMPLES_RAIN = 45;
 /** The qualifying's start (ISO): the source label reads `imported · Q 17 Nov`. */
@@ -342,7 +349,11 @@ export const caseOptions = {
   planningSaved: { source: 'planning' },
 } satisfies NonNullable<GalleryEntry<typeof widget>['caseOptions']>;
 
-/** The gallery's fit sizes: the two minimums (compact 37×7, full 82×13) plus a larger one per mode. */
+/**
+ * The gallery's fit sizes: the two minimums (compact 37×7, full 82×13) plus a larger one per mode. SP4.3f Task 11: the
+ * full minimum's 13 rows hold the planning round's two input lines, the header, its four slot lines, the DP rule, four
+ * DP lines and the last line (`save`) with no blank (layout.test.ts); 100×16 puts its three spare rows above `save`.
+ */
 export const fit = [
   { mode: 'compact', cols: 37, rows: 7 },
   { mode: 'compact', cols: 50, rows: 9 },

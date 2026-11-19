@@ -2,11 +2,14 @@
 // The plan board's race conditions in the planning round (SP4.3f Task 7; spec §4.3, §4.4; mockup
 // docs/design/2026-11-18-sp4.3f/plan-board-conditions.html, gen.mjs `CT`, `inputsLine`, `conditionLines`; C3, C65,
 // C66, C68, C72–C74). Contract assumed of `PlanBoard.svelte` on top of PlanBoard.planning.test.ts:
-//  - full planning variant: the inputs line `[data-testid="inputs"]` holds, after `RAIN`, `<button data-testid="rain">`
-//    with the rain chance (the preview's `planning.rainPct`, `45%`) and `▸`; with the round's forecast rows unknown it
-//    shows the kit's missing mark (`…`, C3), never a number; after it the source label
-//    `[data-testid="conditions-source"]`: `imported · Q 17 Nov` (the round's `forecast.source.startedAt`) while no row is
-//    overridden, `edited` once one is;
+//  - full planning variant: the inputs `[data-testid="inputs"]` (two lines since SP4.3f Task 11, mockup round 2; see
+//    PlanBoard.planning.test.ts) hold, after `RAIN`, `<button data-testid="rain">` with the rain chance (the preview's
+//    `planning.rainPct`, `45%`) and `▸`; with the round's forecast rows unknown it shows the kit's missing mark (`…`,
+//    C3), never a number; the source label `[data-testid="conditions-source"]` opens the second line:
+//    `imported · Q 17 Nov` (the round's `forecast.source.startedAt`) while no row is overridden, `edited` once one is;
+//  - the editor keeps both inputs lines on top and `save` on the body's last row (its last `div.line`): at 13 rows nine
+//    rows fill the board (2 inputs lines, the header, 9 rows, save; no `+ row`), eight leave `+ row` (layout.ts
+//    `addRowFits`);
 //  - a click on `rain` opens the conditions editor `[data-testid="conditions"]` in place of the plan rows (no `row-*`,
 //    no `dp-*` while open; window-local, C73): a header line (`+MIN`, `WEATHER`, `RAIN`) with
 //    `<button data-testid="cond-reset">reset</button>` and `<button data-testid="cond-done">done</button>`; per row
@@ -30,7 +33,7 @@ import type { Component } from 'svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ActionsHarness from '../../../test/kit/ActionsHarness.svelte';
 import type { ResolvedLink } from '../../kit/types.ts';
-import { KUH, LAPS, SAMPLES_EDITED, cases } from './fixtures.ts';
+import { KUH, LAPS, NINE_SAMPLES, SAMPLES_EDITED, cases, forecastOf, preview, round } from './fixtures.ts';
 import PlanBoard from './PlanBoard.svelte';
 import { widget } from './widget.ts';
 
@@ -87,6 +90,8 @@ const all = (c: Element, prefix: string): Element[] => [...c.querySelectorAll(`[
 /** The editor's row ids `cond-<i>` (not their fields). */
 const condRows = (c: Element): string[] => all(c, 'cond-').map((e) => e.getAttribute('data-testid') ?? '').filter((id) => /^cond-\d+$/.test(id));
 const textOf = (el: Element | null): string => (el?.textContent ?? '').replace(/\s+/g, ' ').trim();
+/** The board's lines in document order (every `div.line`). */
+const lines = (c: Element): Element[] => [...c.querySelectorAll('div.line')];
 const hovers = (el: Element): string[] => [el.closest('[title]'), ...el.querySelectorAll('[title]')].flatMap((e) => (e === null ? [] : [e.getAttribute('title') ?? '']));
 /** Sets a field's value and commits it (input then change). */
 async function type(el: HTMLElement, value: string): Promise<void> {
@@ -184,6 +189,40 @@ describe('plan board: the race conditions per the mockup', () => {
     expect((get(c, 'cond-0-rain') as HTMLInputElement).value).toBe('');
     expect(textOf(get(c, 'cond-add'))).toBe('+ row');
     expect(mocks.invoke).not.toHaveBeenCalled();
+  });
+
+  it('the conditions editor at full size: 2 input lines, header, 9 rows, save = 13 rows', async () => {
+    const { container: c } = mount({ preview: preview(), prepared: round({ forecast: forecastOf(NINE_SAMPLES) }) });
+    await fireEvent.click(get(c, 'rain'));
+    const ls = lines(c);
+    expect(ls).toHaveLength(13);
+    expect(ls.slice(0, 2).map((l) => l.getAttribute('data-testid'))).toEqual(['inputs-set', 'inputs-imported']);
+    expect(textOf(ls[2] ?? null)).toContain('+MIN');
+    expect(ls.slice(3, 12).map((l) => l.getAttribute('data-testid'))).toEqual(condRows(c));
+    expect(condRows(c)).toHaveLength(9);
+    expect(textOf(get(c, 'cond-8-at'))).toBe('+120');
+    expect(find(ls[12]!, 'save')).not.toBeNull();
+    expect(find(c, 'cond-add')).toBeNull();
+  });
+
+  it('eight rows at full size: + row still fits above save (13 lines)', async () => {
+    const { container: c } = mount({ preview: preview(), prepared: round({ forecast: forecastOf(NINE_SAMPLES.slice(0, 8)) }) });
+    await fireEvent.click(get(c, 'rain'));
+    const ls = lines(c);
+    expect(ls).toHaveLength(13);
+    expect(condRows(c)).toHaveLength(8);
+    expect(find(ls[11]!, 'cond-add')).not.toBeNull();
+    expect(find(ls[12]!, 'save')).not.toBeNull();
+  });
+
+  it('the editor keeps both inputs lines on top and save on the last row', async () => {
+    const { container: c } = mount(cases.planningConditions);
+    await fireEvent.click(get(c, 'rain'));
+    const ls = lines(c);
+    expect(ls.slice(0, 2).map((l) => l.getAttribute('data-testid'))).toEqual(['inputs-set', 'inputs-imported']);
+    expect(find(ls.at(-1)!, 'save')).not.toBeNull();
+    expect(find(get(c, 'inputs'), 'save')).toBeNull();
+    expect(find(get(c, 'conditions'), 'cond-add')).not.toBeNull();
   });
 
   it('in compact size the editor is not offered', () => {

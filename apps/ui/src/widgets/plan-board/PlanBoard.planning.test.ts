@@ -5,11 +5,19 @@
 // option `source: auto | live | planning`, default `auto`):
 //  - the variant: `live` draws `plan` (strategy.car), `planning` draws `preview` (plans.preview); `auto` is the
 //    presentation table's (`presentation.ts` `variantOf`): planning while `prepared.open`, live otherwise;
-//  - planning variant, full: the race inputs line `[data-testid="inputs"]` (mockup `planInputs`): `GRID` and the grid
-//    place (`P8`, the preview's `planning.gridPlace`), `LAPS` and the laps field `<input data-testid="laps">` (its value
-//    the round's race laps `prepared.race.laps`, the bridge's suggestion or entered; `''` while `null`, SP4.3e R16),
-//    `RAIN` and the rain chance (`10%`), `N` and the scenarios (`1200`); then the header with `START` and the slot and
-//    DP lines as in the race; each slot line's start compound letter in `[data-testid="start-<slot>"]`;
+//  - planning variant, full: the race inputs `[data-testid="inputs"]` (SP4.3f Task 11, mockup round 2, gen.mjs
+//    `inputsLines`): a block of two lines, not itself a `div.line`, the board's first two lines:
+//    - line 1 `[data-testid="inputs-set"]`, what the user sets, and nothing else: `GRID` and the grid place (`P8`, the
+//      preview's `planning.gridPlace`), `LAPS` and the laps field `<input data-testid="laps">` (its value the round's
+//      race laps `prepared.race.laps`, the bridge's suggestion or entered; `''` while `null`, SP4.3e R16), `SETS` and
+//      its select `[data-testid="sets"]`;
+//    - line 2 `[data-testid="inputs-imported"]`, what is imported or computed, in this order: the conditions' source
+//      label (nothing while there is none), `N` and the scenarios (`1200`), `RAIN` and its button (the rain chance,
+//      `10%`), then `computing` while the job runs;
+//    then, with no blank, the header with `START` and the slot and DP lines as in the race; each slot line's start
+//    compound letter in `[data-testid="start-<slot>"]`; the body's last row is the last line (`save`, a rejection);
+//    spare rows (a size taller than the round's lines) are blank lines between the content and the last row (layout.ts
+//    `PLANNING_FIXED`), so the board draws `size.rows` lines (mockup `boardWith`);
 //  - LAPS (C73): typing is window-local; committing the field (its `change`) invokes the command `plans.race.set`
 //    once with `{ feedId: link.feedId, race: { laps: <the number>, sets: <the round's sets> } }` (SP4.3e Task 7b); a rejected value (`{ ok: false, message }`) marks the
 //    field with the warning role (`data-role="warning"`) and the bridge's message as its hover;
@@ -65,16 +73,19 @@ afterEach(() => {
 });
 
 const SIZE = { mode: 'full', cols: 88, rows: 13, px: { width: 88 * 8, height: 13 * 19.6 }, dpr: 1 } as const;
+/** The gallery's larger full fit size (fixtures.ts `fit`): three spare rows in the planning round. */
+const TALL = { mode: 'full', cols: 100, rows: 16, px: { width: 100 * 8, height: 16 * 19.6 }, dpr: 1 } as const;
 const LINK: ResolvedLink = { group: 1, feedId: feedId('20778'), primary: KUH, compare: [], window: { kind: 'live' } };
 
 type Data = Record<string, unknown>;
 type Source = 'auto' | 'live' | 'planning';
+type Size = typeof SIZE | typeof TALL;
 
-function mount(data: Data, source: Source = 'planning') {
+function mount(data: Data, source: Source = 'planning', size: Size = SIZE) {
   vi.stubEnv('DEV', true);
   vi.stubEnv('PROD', false);
   const sent: UiAction[] = [];
-  const props = (d: Data, s: Source) => ({ data: d, options: { source: s }, size: SIZE, link: LINK });
+  const props = (d: Data, s: Source) => ({ data: d, options: { source: s }, size, link: LINK });
   const { container, rerender } = render(ActionsHarness, {
     send: (action: UiAction) => {
       sent.push(action);
@@ -103,6 +114,10 @@ async function type(el: HTMLElement, value: string): Promise<void> {
   await fireEvent.input(el);
   await fireEvent.change(el);
 }
+/** The board's lines in document order (every `div.line`). */
+const lines = (c: Element): Element[] => [...c.querySelectorAll('div.line')];
+/** The test ids inside `el` (itself excluded). */
+const idsIn = (el: Element): string[] => [...el.querySelectorAll('[data-testid]')].map((e) => e.getAttribute('data-testid') ?? '');
 /** The preview row holding `policy` (the prefill's cells come from it). */
 const rowOf = (policy: object) => PLANNING.rows.find((r) => JSON.stringify(r.policy) === JSON.stringify(policy))!;
 
@@ -163,6 +178,77 @@ describe('plan board: the planning round per the mockup', () => {
     const { container: c } = mount(cases.planningNotApplicable);
     expect(find(c, 'inputs')).toBeNull();
     expect(all(c, 'row-')).toHaveLength(0);
+  });
+});
+
+describe('plan board: the planning inputs as two lines (SP4.3f Task 11, mockup round 2)', () => {
+  it('line 1 holds GRID, LAPS, SETS and nothing else', () => {
+    const { container: c } = mount(cases.planningRound);
+    const set = get(get(c, 'inputs'), 'inputs-set');
+    expect(set.matches('div.line')).toBe(true);
+    expect(textOf(set)).toMatch(/^GRID\s+P8\s+LAPS\s+SETS\b/);
+    expect(idsIn(set)).toEqual(['laps', 'sets']);
+    expect(set.querySelectorAll('button')).toHaveLength(0);
+    for (const part of ['RAIN', 'imported', 'save']) expect(textOf(set), part).not.toContain(part);
+    expect(textOf(set)).not.toMatch(/\bN\b/);
+  });
+
+  it('line 2 holds the source label, N, RAIN in that order', () => {
+    const { container: c } = mount(cases.planningRound);
+    const got = get(get(c, 'inputs'), 'inputs-imported');
+    expect(got.matches('div.line')).toBe(true);
+    expect(textOf(got)).toMatch(/^imported · Q 17 Nov\s+N\s+1200\s+RAIN\s+10%\s*▸$/);
+    expect(idsIn(got)).toEqual(['conditions-source', 'rain']);
+    expect(get(got, 'rain').tagName).toBe('BUTTON');
+    expect(find(got, 'save')).toBeNull();
+  });
+
+  it('line 2 ends with computing while the job runs', () => {
+    const { container: c } = mount({ ...cases.planningRound, prepared: round({ running: true }) });
+    const got = get(c, 'inputs-imported');
+    expect(textOf(got)).toMatch(/^imported · Q 17 Nov\s+N\s+1200\s+RAIN\s+10%\s*▸\s+…$/);
+    const computing = get(got, 'computing');
+    expect(get(got, 'rain').compareDocumentPosition(computing) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(find(get(c, 'inputs-set'), 'computing')).toBeNull();
+  });
+
+  it('line 2 without a source label starts with N', () => {
+    const { container: c } = mount(cases.planningNoConditions);
+    const got = get(c, 'inputs-imported');
+    expect(find(got, 'conditions-source')).toBeNull();
+    expect(textOf(got)).toMatch(/^N\s+RAIN\b/);
+  });
+
+  it('the inputs are the board\'s first two lines, with no blank line after them', () => {
+    for (const size of [SIZE, TALL]) {
+      const { container: c } = mount(cases.planningRound, 'planning', size);
+      const ls = lines(c);
+      expect(ls[0]?.getAttribute('data-testid'), `${size.rows} rows`).toBe('inputs-set');
+      expect(ls[1]?.getAttribute('data-testid'), `${size.rows} rows`).toBe('inputs-imported');
+      // the header follows at once (no blank, mockup round 2)
+      expect(textOf(ls[2] ?? null), `${size.rows} rows`).toContain('START');
+      expect(get(c, 'inputs').matches('div.line')).toBe(false);
+      cleanup();
+    }
+  });
+
+  it('at 13 rows the round draws 13 lines: two inputs, header, four slot lines, the DP rule, four DP lines, save last', () => {
+    const { container: c } = mount(cases.planningRound);
+    const ls = lines(c);
+    expect(ls).toHaveLength(13);
+    expect(ls.slice(3, 7).map((l) => l.getAttribute('data-testid'))).toEqual(['row-A', 'row-B', 'row-G1', 'entry-G2']);
+    expect(ls[8]?.getAttribute('data-testid')).toBe('dp-0');
+    expect(ls[11]?.getAttribute('data-testid')).toBe('dp-3');
+    expect(find(ls[12]!, 'save')).not.toBeNull();
+  });
+
+  it('full 100×16: the spare rows sit between the content and the last row', () => {
+    const { container: c } = mount(cases.planningRound, 'planning', TALL);
+    const ls = lines(c);
+    expect(ls).toHaveLength(16);
+    expect(ls[11]?.getAttribute('data-testid')).toBe('dp-3');
+    expect(ls.slice(12, 15).map((l) => textOf(l))).toEqual(['', '', '']);
+    expect(find(ls[15]!, 'save')).not.toBeNull();
   });
 });
 
