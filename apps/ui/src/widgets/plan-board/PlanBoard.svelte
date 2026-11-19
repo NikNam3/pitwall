@@ -11,7 +11,10 @@
   // command or action that marks no field shows the bridge's message on the board's last line (C73). SP4.3f Task 7
   // (mockup docs/design/2026-11-18-sp4.3f/plan-board-conditions.html): the inputs line shows whenever the round is open
   // (full), its RAIN button opens the race's conditions in place of the plan rows (window-local); a committed field, `+ row`
-  // once its rain is typed, and reset each invoke `plans.race.set` (conditions.ts builds the list; C72–C74).
+  // once its rain is typed, and reset each invoke `plans.race.set` (conditions.ts builds the list; C72–C74). SP4.3f Task 11
+  // (mockup round 2, gen.mjs `inputsLines`, `saveLine`, `boardWith`): the inputs are two lines (what the user sets; what
+  // is imported or computed), the last line (`save` with a rejection, or the actions or the picker) is pinned at the
+  // bottom, spare rows are blank lines above it; DP lines that do not fit are dropped, bottom up (layout.ts).
   import type { ActionOutcome } from '@pitwall/contracts';
   import type { NoiseCompound, RaceAssumptions, Slot, Weather } from '@pitwall/domain';
   import { IMPORTED, PLAN_SLOTS } from '@pitwall/domain';
@@ -28,7 +31,7 @@
   import * as draftOps from './draft.ts';
   import { changedFields, COMPOUNDS, draftOf as slotDraftOf, entryOf, NEW_START, policyOfDraft, type Changed, type Draft } from './draft.ts';
   import { dimRole, headerRole, lineRole, rejectedRole } from './emphasis.ts';
-  import { addRowFits, blankAfterInputs, columnsOf, CONDITIONS_COLS, GAME_SLOTS, GAP, LEAD, widthOf } from './layout.ts';
+  import { addRowFits, beforeSave, columnsOf, CONDITIONS_COLS, dpLinesFit, GAME_SLOTS, GAP, INPUTS_LINES, LEAD, widthOf } from './layout.ts';
   import { actionsShown, conditionShown, variantOf } from './presentation.ts';
   import { boardRows, freeSlot, type BoardTable, type DpLine, type SlotLine, type StopCount } from './rows.ts';
   import * as text from './text.ts';
@@ -94,7 +97,10 @@
     };
     return [...lines, ...empty.map((slot): Item => ({ kind: 'entry', slot }))].sort((a, b) => order(a) - order(b));
   });
-  const blank = $derived(full && blankAfterInputs(items.length, size.rows));
+  /** The planning round's full board: the inputs lines on top, the last line pinned at the bottom (layout.ts). */
+  const pinned = $derived(full && round !== undefined);
+  /** The DP lines drawn: in the pinned board those that fit, dropped bottom up (layout.ts `dpLinesFit`). */
+  const dpShown = $derived(view === undefined ? [] : pinned ? view.dp.slice(0, dpLinesFit(items.length, size.rows)) : view.dp);
 
   const planningInputs = $derived(value?.planning ?? null);
 
@@ -252,6 +258,23 @@
 
   const rowShown = (i: number) => conditionShown(shownRows?.known === true && shownRows.value[i]?.overridden === true);
   const badCondition = (i: number, field: 'weather' | 'rain'): boolean => conditionRejected?.index === i && conditionRejected.field === field;
+  const addShown = $derived(addRowFits(drafts.length, size.rows));
+
+  // ---- SP4.3f Task 11: the pinned board's line budget (mockup round 2 `boardWith`)
+  /** The pinned board's lines between the inputs and the last line: the editor's, the reason's or the plan's. */
+  const bodyLines = $derived(
+    editing
+      ? 1 + drafts.length + (addShown ? 1 : 0)
+      : reason !== undefined
+        ? 1
+        : view === undefined
+          ? 0
+          : 1 + items.length + 1 + dpShown.length,
+  );
+  /** The spare rows, drawn as blank lines above the last line, so the board draws `size.rows` lines. */
+  const spare = $derived(pinned ? Math.max(0, size.rows - INPUTS_LINES - bodyLines - 1) : 0);
+  /** The last line's `save` (or `saved · <name>`), the shell's name prompt (C72, C74). */
+  const saveLabel = $derived(lastSaved !== undefined ? text.saved(lastSaved.name) : text.save);
 
   function toggleConditions(): void {
     conditionsOpen = !conditionsOpen;
@@ -438,8 +461,11 @@
       >{/if}</div>
 {/snippet}
 
-{#snippet inputsLine()}
-  <div class="line" data-testid="inputs">{LEAD}<span style:color={role(headerRole)}>{text.inputs.grid}</span> {#if planningInputs !== null}<TextCell
+<!-- The inputs (mockup round 2 `inputsLines`): line 1 what the user sets (GRID, LAPS, SETS); line 2 what is imported or
+     computed (the conditions' source label, N, RAIN with its button, `computing` while the job runs). -->
+{#snippet inputsLines()}
+  <div class="block" data-testid="inputs">
+  <div class="line" data-testid="inputs-set">{LEAD}<span style:color={role(headerRole)}>{text.inputs.grid}</span> {#if planningInputs !== null}<TextCell
         text={planningInputs.gridPlace.known ? formatPosition(planningInputs.gridPlace.value) : ''}
         reason={planningInputs.gridPlace.known ? undefined : planningInputs.gridPlace.reason}
       />{/if}{GAP}{GAP}{GAP}<span style:color={role(headerRole)}>{text.inputs.laps}</span> <input
@@ -465,24 +491,62 @@
       onchange={(e) => void commitSets(e.currentTarget.value as RaceAssumptions['sets'])}
     >
       {#each RACE_SETS as s (s)}<option value={s}>{text.sets[s]}</option>{/each}
-    </select>{GAP}{GAP}{GAP}<span style:color={role(headerRole)}>{text.inputs.rain}</span> <button
+    </select></div>
+  <div class="line" data-testid="inputs-imported">{LEAD}{#if sourceLabel !== null}<span data-testid="conditions-source" style:color={role(dimRole)}
+        >{sourceLabel}</span
+      >{GAP}{GAP}{GAP}{/if}<span style:color={role(headerRole)}>{text.inputs.n}</span> {#if value !== undefined}{formatCount(
+        value.scenarios,
+      )}{/if}{GAP}{GAP}{GAP}<span style:color={role(headerRole)}>{text.inputs.rain}</span> <button
       type="button"
       class="pw-button"
       class:on={editing}
       data-testid="rain"
       onclick={toggleConditions}
       >{@render rainValue()} {text.conditions.more}</button
-    >{#if sourceLabel !== null} <span data-testid="conditions-source" style:color={role(dimRole)}>{sourceLabel}</span>{/if}{GAP}{GAP}{GAP}<span style:color={role(headerRole)}>{text.inputs.n}</span> {#if value !== undefined}{formatCount(
-        value.scenarios,
-      )}{/if}{#if round?.running === true}{GAP}{GAP}{GAP}<span data-testid="computing" style:color={role(dimRole)} title={text.computingHover}
+    >{#if round?.running === true}{GAP}{GAP}{GAP}<span data-testid="computing" style:color={role(dimRole)} title={text.computingHover}
         >{text.computing}</span
-      >{/if}{GAP}{GAP}{#if lastSaved !== undefined}<button
+      >{/if}</div>
+  </div>
+{/snippet}
+
+<!-- The pinned board's last line (mockup round 2 `saveLine`): a rejection, cut to leave room, then `save` or `saved · <name>`. -->
+{#snippet saveLine()}
+  <div class="line">{LEAD}{#if actionRejected !== null}<span data-testid="rejection" data-role={rejectedRole} title={actionRejected}
+        ><TextCell text={text.rejected(actionRejected)} width={beforeSave(width, saveLabel)} role={rejectedRole} /></span
+      >{GAP}{GAP}{/if}<button
+      type="button"
+      class="pw-button"
+      data-testid={lastSaved !== undefined ? 'saved' : 'save'}
+      title={text.commandHover.saveRound}
+      onclick={saveRound}>{saveLabel}</button
+    ></div>
+{/snippet}
+
+<!-- The slot picker for a DP line's `→ slot`; the selected slot's actions (the last line in both variants). -->
+{#snippet pickerLine()}
+  <div class="line" data-testid="picker">{LEAD}{' '.repeat(cols.slot)}{GAP}{text.arrow}{#each PLAN_SLOTS as s (s)}{GAP}<button
         type="button"
-        class="pw-button"
-        data-testid="saved"
-        title={text.commandHover.saveRound}
-        onclick={saveRound}>{text.saved(lastSaved.name)}</button
-      >{:else}<button type="button" class="pw-button" data-testid="save" title={text.commandHover.saveRound} onclick={saveRound}>{text.save}</button
+        class="pw-button act"
+        data-testid="pick-{s}"
+        title={planning ? text.commandHover.save : text.hover.save}
+        onclick={() => pick(s)}>{s}</button
+      >{/each}</div>
+{/snippet}
+
+{#snippet actionsLine(line: SlotLine, slot: Slot)}
+  <div class="line" data-testid="actions">{LEAD}<span style:color={role(dimRole)}>{slot}</span>{#if !line.active}{GAP}{GAP}<button
+        type="button"
+        class="pw-button act"
+        data-testid="activate"
+        title={planning ? text.commandHover.activate : text.hover.activate}
+        onclick={() => activate(slot)}>{text.activate}</button
+      >{/if}{#if !planning}{GAP}{GAP}<button type="button" class="pw-button act" data-testid="edit" onclick={() => edit(line)}>{text.edit}</button
+      >{/if}{#if !line.active}{GAP}{GAP}<button
+        type="button"
+        class="pw-button act"
+        data-testid="remove"
+        title={planning ? text.commandHover.remove : text.hover.remove}
+        onclick={() => remove(slot)}>{text.remove}</button
       >{/if}</div>
 {/snippet}
 
@@ -534,24 +598,22 @@
           onchange={() => commitRain(i)}
         /> {text.conditions.percent}{#if shown.mark}{GAP}{GAP}{text.conditions.edited}{/if}</div>
     {/each}
-    {#if addRowFits(drafts.length, size.rows)}
+    {#if addShown}
       <div class="line">{LEAD}{' '.repeat(CONDITIONS_COLS.at)}{GAP}{GAP}<button type="button" class="pw-button act" data-testid="cond-add" onclick={addRow}
           >{text.conditions.add}</button
         ></div>
     {/if}
-    {#if actionRejected !== null}{@render rejectionLine()}{/if}
   </div>
 {/snippet}
 
-{#if round !== undefined && full}
-  {@render inputsLine()}
+{#if pinned}
+  {@render inputsLines()}
 {/if}
 {#if editing}
   {@render conditionsEditor()}
 {:else if reason !== undefined}
   <div class="line"><TextCell text="" {reason} /></div>
 {:else}
-  {#if round !== undefined && full && blank && view !== undefined}<div class="line"> </div>{/if}
   {#if view !== undefined}
     <div class="block">
       <div class="line" style:color={role(headerRole)}>{LEAD}{' '.repeat(cols.slot)}{GAP}{#if cols.start > 0}<TextCell
@@ -594,45 +656,35 @@
         {/if}
       {/each}
       <div class="line" style:color={role(headerRole)}>{text.dpRule(width)}</div>
-      {#each view.dp as l (l.stopCount)}
+      {#each dpShown as l (l.stopCount)}
         <div class="line" data-testid="dp-{l.stopCount}">{LEAD}{' '.repeat(cols.slot)}{GAP}{@render cells(l, false, false)}{#if full}{GAP}{@render dpAct(l)}{/if}</div>
       {/each}
-      {#if full}
+      <!-- the race: a blank (or the rejection), then the picker or the actions; the planning round: the pinned last line -->
+      {#if full && !pinned}
         {#if draft !== null && acting && !planning}
           {@render editor(draft)}
         {:else}
-          <!-- the race: a blank, then the picker or the actions; the planning round: the last line holds them (layout.ts) -->
-          {#if !planning}{@render rejectionLine()}{/if}
+          {@render rejectionLine()}
           {#if pickFor !== null && acting}
-            <div class="line" data-testid="picker">{LEAD}{' '.repeat(cols.slot)}{GAP}{text.arrow}{#each PLAN_SLOTS as s (s)}{GAP}<button
-                  type="button"
-                  class="pw-button act"
-                  data-testid="pick-{s}"
-                  title={planning ? text.commandHover.save : text.hover.save}
-                  onclick={() => pick(s)}>{s}</button
-                >{/each}</div>
+            {@render pickerLine()}
           {:else if sel !== undefined && sel.slot !== null}
-            {@const slot = sel.slot}
-            <div class="line" data-testid="actions">{LEAD}<span style:color={role(dimRole)}>{slot}</span>{#if !sel.active}{GAP}{GAP}<button
-                  type="button"
-                  class="pw-button act"
-                  data-testid="activate"
-                  title={planning ? text.commandHover.activate : text.hover.activate}
-                  onclick={() => activate(slot)}>{text.activate}</button
-                >{/if}{#if !planning}{GAP}{GAP}<button type="button" class="pw-button act" data-testid="edit" onclick={() => edit(sel)}>{text.edit}</button
-                >{/if}{#if !sel.active}{GAP}{GAP}<button
-                  type="button"
-                  class="pw-button act"
-                  data-testid="remove"
-                  title={planning ? text.commandHover.remove : text.hover.remove}
-                  onclick={() => remove(slot)}>{text.remove}</button
-                >{/if}</div>
-          {:else if planning}
-            {@render rejectionLine()}
+            {@render actionsLine(sel, sel.slot)}
           {/if}
         {/if}
       {/if}
     </div>
+  {/if}
+{/if}
+<!-- The planning round's spare rows, then its last line: the picker or the selected slot's actions while open, else the
+     rejection and `save` (mockup round 2 `boardWith`). -->
+{#if pinned}
+  {#each { length: spare }, i (i)}<div class="line"> </div>{/each}
+  {#if !editing && view !== undefined && pickFor !== null}
+    {@render pickerLine()}
+  {:else if !editing && sel !== undefined && sel.slot !== null}
+    {@render actionsLine(sel, sel.slot)}
+  {:else}
+    {@render saveLine()}
   {/if}
 {/if}
 

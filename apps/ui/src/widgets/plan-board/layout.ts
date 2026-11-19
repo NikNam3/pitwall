@@ -5,9 +5,10 @@
 //    E[POS] 9, ΔPOS 6, ΔTIME 6, the places strip (20), the action 8: 82 cells. Full planning adds START (5, its header;
 //    the compound letter left in it) and narrows the rest: STOPS 21 (three stops `L11 H · L23 H · L35 S`), ΔPOS 5,
 //    ΔTIME 5, the action 6 (`accept`, `→ slot`): 82 cells. Compact (both variants): SLOT, STOPS 15, E[POS], ΔPOS: 37;
-//  - lines, full planning: the inputs line, the header, one line per slot (a saved plan, a prefill or an empty game
-//    slot's entry: five at most), the DP rule, four DP lines and the last line (the actions or the picker): 13 at most;
-//    the blank after the inputs line (the mockup's) only while a line is to spare;
+//  - lines, full planning (SP4.3f Task 11, mockup docs/design/2026-11-18-sp4.3f/plan-board-conditions.html round 2):
+//    the two inputs lines, the header, one line per slot (a saved plan, a prefill or an empty game slot's entry: five at
+//    most), the DP rule, the DP lines and the last line (`save` with a rejection, or the actions or the picker), pinned
+//    at the bottom; spare rows are blank lines above it, no blank after the inputs;
 //  - compact draws no START, no inputs line and no entry (R16): the live compact layout, 37×7.
 import type { Slot } from '@pitwall/domain';
 
@@ -38,19 +39,33 @@ export function widthOf(c: Columns, mode: Mode, places: number): number {
   return mode === 'full' ? lead + col(c.dTime) + col(places) + col(c.act) : lead;
 }
 
-/** The planning round's full lines besides the slot lines: inputs, header, DP rule, four DP lines, the last line. */
-const PLANNING_FIXED = 1 + 1 + 1 + 4 + 1;
-
-/** Whether the blank after the inputs line fits in `rows` with `slotLines` slot lines (saved, prefilled, entries). */
-export const blankAfterInputs = (slotLines: number, rows: number): boolean => PLANNING_FIXED + slotLines + 1 <= rows;
+/** The planning round's inputs lines (SP4.3f Task 11, mockup round 2 `inputsLines`): what the user sets; what is imported or computed. */
+export const INPUTS_LINES = 2;
+/** The DP lines the planning round draws when they fit: one per stop count, 0 to 3. */
+const DP_LINES = 4;
 
 /**
- * SP4.3f Task 7 (plan-board-conditions.html): the conditions editor's full lines besides its rows, in place of the plan
- * rows: the inputs line, the header (with reset and done) and the `+ row` line.
+ * The planning round's full lines besides the slot lines (SP4.3f Task 11): the two inputs lines, the header, the DP
+ * rule, four DP lines and the last line (`save`, with a rejection when there is one); no blank after the inputs.
  */
-const CONDITIONS_FIXED = 1 + 1 + 1;
+export const PLANNING_FIXED = INPUTS_LINES + 1 + 1 + DP_LINES + 1;
 
-/** Whether `+ row` is offered: one more row still fits in `rows` with `rowCount` conditions rows. */
+/**
+ * The DP lines that fit in `rows` with `slotLines` slot lines (saved, prefilled, entries), at most four: when the
+ * planning lines exceed the rows, the DP lines are dropped first, bottom up (five slot lines at 13 rows: three).
+ */
+export const dpLinesFit = (slotLines: number, rows: number): number => Math.max(0, Math.min(DP_LINES, rows - (PLANNING_FIXED - DP_LINES) - slotLines));
+
+/** The cells a rejection takes on the last line of a board `width` cells wide, before two gap cells and `save` (its label). */
+export const beforeSave = (width: number, saveLabel: string): number => Math.max(1, width - LEAD.length - 2 * GAP.length - saveLabel.length);
+
+/**
+ * SP4.3f Task 7 (plan-board-conditions.html), Task 11: the conditions editor's full lines besides its rows and `+ row`,
+ * in place of the plan rows: the two inputs lines, the header (with reset and done) and the last line (`save`).
+ */
+const CONDITIONS_FIXED = INPUTS_LINES + 1 + 1;
+
+/** Whether `+ row` is offered: its line still fits in `rows` with `rowCount` conditions rows (and `save` below it). */
 export const addRowFits = (rowCount: number, rows: number): boolean => CONDITIONS_FIXED + rowCount + 1 <= rows;
 
 /** The conditions editor's cells (gen.mjs `conditionLines`): the offset (right-aligned), the weather and rain columns. */
