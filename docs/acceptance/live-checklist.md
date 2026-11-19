@@ -227,3 +227,33 @@ Recording `2026-11-16_23-49-46_5929b668ce223b5d_car19.pwrec.gz` (726 MB; the bri
 - Practice: both cars on 7-lap hard stints first.
 - **Practice long runs: ERS and DRS use is not known to `weekend-pace` or degradation (finding, user, 2026-11-17).** Asymetrisch's hard stint (laps 1–9, ~1:41.6–1:43.9) ran without ERS, DR's with ERS and DRS (~1:37.9–1:40.5); in the race both use ERS. `weekend-pace` takes the median of every long run, so Asymetrisch's race pace mixes the no-ERS hard run with the race-like medium run (from lap ~11) and comes out too slow; there is no way to leave one practice stint out of `weekend-pace`. Wanted: per-lap ERS/DRS conditions, or at least a way to mark a stint as not race-like. The calibration set gets only race-like stints.
 - **`minLongRunLaps` 8 is strict for a 1-hour practice** with three compounds to cover (lap 1 from the garage may count as an out-lap); check against this weekend.
+
+### 2026-11-18: Texas race night (warm-up practice + race in a new lobby; DR feed 20777 car 1 #2, Asymetrisch feed 20778 car 0 #64, both Mercedes; main 0edda9de)
+
+Details, numbers and scripts: `~/dev/personal/pitwall-research/live-test-2026-11-18/notes.md`. Result: DR P1 (won by 26 s, ~43 s without a stop for fun on lap 51), Asymetrisch P16 (front-wing damage on lap 1, boxed lap 4 for a wing and hards, second stop lap 39).
+
+- **Contract findings (C89), to fix within the contract:**
+  - **C61, C62d: the planning round's replay runs on the thread that applies frames.** Opening a round during the live warm-up stalled the bridge 10–20 s and dropped ~14,000 packets; every `plans.prepare.*` edit stalled it again.
+  - **C49: a newly needed job does not run at once** (`demandChanged` lets job triggers "sit the pass out"): strategy and pit sweep showed "no data yet" for up to a lap after every workbook switch. Superseded by the approved C49 change "On demand; jobs always" (served sessions).
+  - **C84: a `test:ui` test wrote recordings into the real data dir** (`bbda17a651868614`, Netherlands, at every gate run). The gates now run with `PITWALL_DATA_DIR` set to a temporary dir; the test itself still needs fixing.
+- **Live stability:**
+  - **Freeze at ~21:56 (race lap ~14):** main thread 100 % for minutes, no log line, no recording, no WebSocket; restarted 21:58. The restart's replay passed the same frames, so not the frames: subscriptions, a job or a panel action. The frozen run's log was overwritten by the restart (one log file per run from now on).
+  - **Main-thread stalls at the race start (basis load, ~30 s), the session end and every restart:** the UDP receive buffer is the kernel default (212,992 B, < 1 s of a feed), so every stall over ~0.5 s drops packets. Target design: receive and record in a worker per feed, buffer in memory (notes 2b); `setRecvBufferSize` 4 MiB as a cushion.
+  - **A restart restores the feeds one after the other at ~3×,** the second feed unread meanwhile (~46,000 drops on 20777 at the 22:59 restart).
+  - **The desktop app stops a bridge it started when its window closes** (by design): for live runs start `pnpm pitwall live` first, then `pnpm desktop`.
+- **Planning:**
+  - `pitwall plans open --laps n --sets s` sends `plans.race.set` before the round is open (`notSupported`).
+  - Main's remembered seat (`feeds/`) is read once; a missing file stays missing until a restart.
+  - A cancelled planning job kept a worker busy after the session start closed its round.
+  - The saved plan "Texas 18 Nov" had no slots (saving without slots is allowed).
+  - The planning line overflowed at full size with `save` at its end: fixed in SP4.3f Task 11 (two input lines, `save` on the last line).
+- **Analyses and the model** (deferred strategy items 23–30 in memory):
+  - **Lap-time loss per % of wear:** hard C1 ~43–50 ms/% linear (default 22), no convex drop-off to 63–66 % (soft and hard); fit per compound and driver type.
+  - **Pit loss:** the game's 17.7 s at Texas vs the track file's 20.2 s (OpenF1): the calibration had no pit-stop sources. Humans lose 0.6–2.3 s more per stop than the AI, all on the in-lap: per-driver stop cost as profile entries.
+  - **AI race pace ~0.9 s faster than in practice on the medium** (same difficulty 80; practice and warm-up identical; more ERS in the race): an AI race offset to the practice pace.
+  - **DR's pre-race win chance 62 %:** his profile σ 1.08 s vs 0.32 s in the race, mistake rate 2× too high, human retire and big-event priors (0.002/lap each, no data) add ~20 % of tail. AI retirements ~10 % per race vs the model's ~5.5 %.
+  - **Damage is not in the model:** wing damage ~1–2 s/lap (Singapore 66 % FR: 1.0 s/lap), repair +5.2 s stationary.
+  - **Cold tyres:** the AI's first flying lap on a new set +0.34 s (model 0). The profiles' hard wear factors are 16–28 % too low.
+  - **False fuel alarm at the race start** (DR "−18.8 laps" while `fuel.car` showed +1.5); the formation lap burns no fuel; the practice burn predicted the race exactly (1.87 / 1.91 kg/lap).
+  - **Undercut forecast weak** (AI 8.7 s mean error); rejoin biased by the pit loss.
+- **Wanted (user):** a second wear rate over the last 3 laps; the default race workbook by actual use (tyre life, timing tower, pit sweep, battle cards, fuel, strategy, field plans, track; circle of doom and damage occasionally); the driver's name in the panels when the player car is chosen through the palette (Ctrl+P).
